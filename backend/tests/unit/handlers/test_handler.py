@@ -3,6 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import src.handlers.handler as handler_module
 from src.handlers.handler import _detect_event_type, _is_api_gateway_event, _is_sqs_event
 
 
@@ -109,3 +110,38 @@ class TestHandlerRouting:
         assert result["statusCode"] == 500
         body = json.loads(result["body"])
         assert "Critical failure" in body["error"]
+
+
+class TestGetStorageSingleton:
+    def setup_method(self):
+        """Reset the module-level singleton before each test."""
+        handler_module._storage = None
+
+    def teardown_method(self):
+        """Clean up the singleton after each test."""
+        handler_module._storage = None
+
+    @patch("src.handlers.handler.DynamoDBStorageProvider")
+    def test_first_call_creates_instance(self, mock_provider_cls):
+        from src.handlers.handler import _get_storage
+
+        mock_instance = MagicMock()
+        mock_provider_cls.return_value = mock_instance
+
+        result = _get_storage()
+
+        assert result is mock_instance
+        mock_provider_cls.assert_called_once()
+
+    @patch("src.handlers.handler.DynamoDBStorageProvider")
+    def test_second_call_returns_same_instance(self, mock_provider_cls):
+        from src.handlers.handler import _get_storage
+
+        mock_instance = MagicMock()
+        mock_provider_cls.return_value = mock_instance
+
+        first = _get_storage()
+        second = _get_storage()
+
+        assert first is second
+        mock_provider_cls.assert_called_once()

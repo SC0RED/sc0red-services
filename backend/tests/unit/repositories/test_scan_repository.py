@@ -1,5 +1,7 @@
 """Tests for DynamoDBScanRepository."""
 
+import json
+
 from moto import mock_aws
 
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
@@ -62,3 +64,71 @@ class TestScanRepository:
 
         repo.delete(scan_id)
         assert repo.get_by_id(scan_id) is None
+
+    @mock_aws
+    def test_create_with_portfolio_companies(self, dynamodb_table):
+        """portfolio_companies list is JSON-serialized on create."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        companies = [{"name": "Acme", "url": "https://acme.com"}]
+        scan_id = repo.create({
+            "status": "pending",
+            "org_id": "org-1",
+            "portfolio_companies": companies,
+        })
+
+        # Read raw item to verify serialization
+        raw = dynamodb_table.get_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
+        assert isinstance(raw["portfolio_companies"], str)
+        assert json.loads(raw["portfolio_companies"]) == companies
+
+        # get_by_id should deserialize it back
+        result = repo.get_by_id(scan_id)
+        assert isinstance(result["portfolio_companies"], list)
+        assert result["portfolio_companies"] == companies
+
+    @mock_aws
+    def test_create_without_org_id(self, dynamodb_table):
+        """When org_id is absent, no GSI2 attributes are written."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"status": "pending"})
+
+        raw = dynamodb_table.get_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
+        assert "GSI2PK" not in raw
+        assert "GSI2SK" not in raw
+
+    @mock_aws
+    def test_update_with_dict_and_list_fields(self, dynamodb_table):
+        """Dict and list values are JSON-serialized during update."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"status": "pending", "org_id": "org-1"})
+
+        repo.update(scan_id, {
+            "status": "complete",
+            "portfolio_companies": [{"name": "X"}],
+            "metadata": {"key": "value"},
+        })
+
+        raw = dynamodb_table.get_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
+        assert raw["status"] == "complete"
+        assert isinstance(raw["portfolio_companies"], str)
+        assert json.loads(raw["portfolio_companies"]) == [{"name": "X"}]
+        assert isinstance(raw["metadata"], str)
+        assert json.loads(raw["metadata"]) == {"key": "value"}
+
+    @mock_aws
+    def test_deserialize_invalid_json_fallback(self, dynamodb_table):
+        """Invalid JSON in portfolio_companies falls back to []."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = "test-invalid"
+
+        # Write a raw item with invalid JSON directly
+        dynamodb_table.put_item({
+            "pk": f"SCAN#{scan_id}",
+            "sk": "SCAN#METADATA",
+            "id": scan_id,
+            "entity_type": "scan",
+            "portfolio_companies": "not-valid-json{{{",
+        })
+
+        result = repo.get_by_id(scan_id)
+        assert result["portfolio_companies"] == []

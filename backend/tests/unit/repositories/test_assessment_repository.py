@@ -1,5 +1,7 @@
 """Tests for DynamoDBAssessmentRepository."""
 
+import json
+
 from moto import mock_aws
 
 from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
@@ -81,3 +83,49 @@ class TestAssessmentRepository:
         assert repo.get_by_id("assess-del") is None
         assert repo.get_risk_scores("assess-del") == []
         assert repo.get_opportunities("assess-del") == []
+
+    @mock_aws
+    def test_save_with_top_risks_list(self, dynamodb_table):
+        """top_risks list is JSON-serialized on save."""
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        risks = [{"category": "market", "score": 8}, {"category": "tech", "score": 5}]
+        assessment_id = repo.save({
+            "id": "assess-risks",
+            "company_id": "comp-1",
+            "top_risks": risks,
+        })
+
+        # Read raw item to verify serialization
+        raw = dynamodb_table.get_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="ASSESSMENT#METADATA",
+        )
+        assert isinstance(raw["top_risks"], str)
+        assert json.loads(raw["top_risks"]) == risks
+
+    @mock_aws
+    def test_save_without_company_id(self, dynamodb_table):
+        """When company_id is absent, no GSI3 attributes are written."""
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        assessment_id = repo.save({
+            "id": "assess-no-company",
+            "tier": "medium",
+        })
+
+        raw = dynamodb_table.get_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="ASSESSMENT#METADATA",
+        )
+        assert "GSI3PK" not in raw
+        assert "GSI3SK" not in raw
+
+    @mock_aws
+    def test_save_assessment_wrapper(self, dynamodb_table):
+        """save_assessment() sets the id and delegates to save()."""
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save_assessment("custom-id-123", {"tier": "high", "company_id": "comp-5"})
+
+        result = repo.get_by_id("custom-id-123")
+        assert result is not None
+        assert result["tier"] == "high"
+        assert result["id"] == "custom-id-123"

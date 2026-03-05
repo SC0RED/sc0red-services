@@ -203,3 +203,196 @@ class TestPortfolioDiscoveryStrategy:
         parsed = json.loads(raw_json)
         assert isinstance(parsed, list)
         assert meta["count"] == len(parsed)
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_relative_url_without_leading_slash(self, mock_scrape):
+        """href="portfolio/company" gets resolved to base_origin/portfolio/company."""
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {"text": "Zeta Corp", "href": "portfolio/zeta"},
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        # Relative link to same domain with /portfolio/ path → treated as internal portfolio
+        urls = [c["url"] for c in meta["companies"]]
+        assert any("pefirm.com/portfolio/zeta" in u for u in urls)
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_same_domain_non_portfolio_links_filtered(self, mock_scrape):
+        """Same-domain links that aren't under /portfolio/, /companies/, /investments/ are filtered."""
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {"text": "About Us Page", "href": "https://pefirm.com/about"},
+                {"text": "Contact Info", "href": "https://pefirm.com/contact-us"},
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        assert meta["companies"] == []
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_link_text_matching_skip_patterns(self, mock_scrape):
+        """Links starting with 'The', 'Login', etc. are skipped."""
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {"text": "The Company", "href": "https://thecompany.com"},
+                {"text": "Login Here", "href": "https://login.com"},
+                {"text": "Contact Support", "href": "https://contact.com"},
+                {"text": "Valid Corp", "href": "https://validcorp.com"},
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = [c["name"] for c in meta["companies"]]
+        assert "The Company" not in names
+        assert "Login Here" not in names
+        assert "Contact Support" not in names
+        assert "Valid Corp" in names
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_malformed_link_causes_graceful_skip(self, mock_scrape):
+        """A link dict missing 'href' key causes exception → graceful skip."""
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {"text": "Bad Link"},  # missing 'href'
+                {"text": "Good Link", "href": "https://good.com"},
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = [c["name"] for c in meta["companies"]]
+        assert "Good Link" in names
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_max_companies_limit(self, mock_scrape):
+        """Once 30 companies are collected, processing stops."""
+        links = [
+            {"text": f"Company {i}", "href": f"https://company{i}.com"}
+            for i in range(50)
+        ]
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": links,
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        assert len(meta["companies"]) == 30
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
+    def test_fallback_data_attributes(self, mock_httpx_client, mock_scrape):
+        """When no links found, fallback to data-company-name/data-company-link attributes."""
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [],
+            "meta_keywords": "",
+        }
+
+        html = """
+        <html><body>
+            <div data-company-name="DataCo" data-company-link="https://dataco.com"></div>
+            <div data-company-name="BetaInc" data-company-link="https://betainc.com"></div>
+        </body></html>
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=MagicMock(get=MagicMock(return_value=mock_response)))
+        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = [c["name"] for c in meta["companies"]]
+        assert "DataCo" in names
+        assert "BetaInc" in names
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
+    def test_fallback_invalid_data_attributes(self, mock_httpx_client, mock_scrape):
+        """Fallback skips: empty name, non-http URL, duplicate URLs."""
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [],
+            "meta_keywords": "",
+        }
+
+        html = """
+        <html><body>
+            <div data-company-name="" data-company-link="https://empty.com"></div>
+            <div data-company-name="NoHttp" data-company-link="ftp://nohttp.com"></div>
+            <div data-company-name="ValidCo" data-company-link="https://valid.com"></div>
+            <div data-company-name="DupeCo" data-company-link="https://valid.com"></div>
+        </body></html>
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html
+        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=MagicMock(get=MagicMock(return_value=mock_response)))
+        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = [c["name"] for c in meta["companies"]]
+        assert "ValidCo" in names
+        assert "" not in names
+        assert "NoHttp" not in names
+        # Duplicate URL should not produce a second entry
+        assert len([c for c in meta["companies"] if c["url"] == "https://valid.com"]) == 1
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
+    def test_fallback_http_error(self, mock_httpx_client, mock_scrape):
+        """HTTP error during fallback path is handled gracefully."""
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [],
+            "meta_keywords": "",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=MagicMock(get=MagicMock(return_value=mock_response)))
+        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        assert meta["companies"] == []
