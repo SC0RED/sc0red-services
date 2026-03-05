@@ -1,0 +1,60 @@
+name: Pull Request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, development, testing, demo, production]
+
+jobs:
+  # ===========================================================================
+  # CI Checks (lint, test, security)
+  # ===========================================================================
+  ci:
+    name: CI
+    uses: ./.github/workflows/_ci-checks.yml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ===========================================================================
+  # Naming Convention Validation
+  # ===========================================================================
+  naming:
+    name: Naming
+    uses: ./.github/workflows/_naming-validation.yml
+
+  # ===========================================================================
+  # Summary Job
+  # ===========================================================================
+  summary:
+    runs-on: ubuntu-latest
+    name: PR Summary
+    needs: [ci, naming]
+    if: always()
+    steps:
+      - name: Generate PR Summary
+        run: |
+          echo "## Pull Request Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### CI Checks" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.ci.result }}" == "success" ]; then
+            echo "- CI (lint, test, security): **Passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- CI (lint, test, security): **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Naming Validation" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.naming.result }}" == "success" ]; then
+            echo "- Naming conventions: **Passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Naming conventions: **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.ci.result }}" != "success" ] || \
+             [ "${{ needs.naming.result }}" != "success" ]; then
+            echo "**Some checks failed. Please review the individual job results above.**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**All checks passed! Ready for review.**" >> $GITHUB_STEP_SUMMARY
+          fi

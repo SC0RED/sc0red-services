@@ -1,0 +1,56 @@
+"""FastAPI wrapper around the Lambda handler for local development.
+
+Run with: uvicorn src.local_server:app --port 8001 --reload
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+
+from src.handlers.handler import handler
+
+app = FastAPI(title="Janus Backend (Local Dev)")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+async def _lambda_proxy(request: Request, method: str) -> Response:
+    """Convert a FastAPI request into a Lambda API Gateway event."""
+    body = None
+    if method in ("POST", "PUT", "PATCH"):
+        raw = await request.body()
+        body = raw.decode("utf-8") if raw else None
+
+    # Build API Gateway v1 event
+    event: dict[str, Any] = {
+        "httpMethod": method,
+        "path": request.url.path,
+        "headers": dict(request.headers),
+        "queryStringParameters": dict(request.query_params) or None,
+        "body": body,
+        "requestContext": {"stage": "local"},
+    }
+
+    result = handler(event, None)
+
+    return Response(
+        content=result.get("body", ""),
+        status_code=result.get("statusCode", 200),
+        headers=result.get("headers", {}),
+        media_type="application/json",
+    )
+
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def catch_all(request: Request) -> Response:
+    return await _lambda_proxy(request, request.method)

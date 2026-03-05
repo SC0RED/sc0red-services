@@ -1,0 +1,157 @@
+.PHONY: help install lint lint-quick test check check-all format security naming setup-db dev backend frontend clean
+
+# Colors for output
+BLUE := \033[0;34m
+YELLOW := \033[0;33m
+RED := \033[0;31m
+GREEN := \033[0;32m
+NC := \033[0m # No Color
+
+# =============================================================================
+# SETUP
+# =============================================================================
+
+install: ## Install all dependencies
+	cd backend && pip install -e ".[dev]"
+	cd frontend && npm install
+
+# =============================================================================
+# LINTING & TYPE CHECKING
+# =============================================================================
+
+lint-quick: ## Quick lint checks (ruff + pyright only)
+	@echo "$(BLUE)Running quick lint checks...$(NC)"
+	cd backend && ruff check src/
+	cd backend && pyright src/
+	@echo "$(GREEN)Quick lint passed$(NC)"
+
+lint: lint-quick ## Full lint checks (ruff + pyright + format check + vulture)
+	cd backend && ruff format --check src/
+	cd backend && vulture src/
+	@echo "$(GREEN)Full lint passed$(NC)"
+
+# =============================================================================
+# TESTING
+# =============================================================================
+
+test: ## Run backend tests with 95% coverage requirement
+	cd backend && pytest -v --cov=src --cov-fail-under=95 --cov-report=term-missing tests/
+
+# =============================================================================
+# SECURITY & NAMING CHECKS
+# =============================================================================
+
+security: ## Run security checks (bandit + pip-audit)
+	cd backend && bandit -r src/
+	cd backend && pip-audit
+
+naming: ## Check naming conventions, abbreviations, imports, and skip comments
+	@echo "$(BLUE)Checking naming conventions...$(NC)"
+	cd backend && python scripts/check_naming_conventions.py
+	cd backend && python scripts/check_abbreviations.py
+	cd backend && python scripts/check_imports.py
+	cd backend && python scripts/check_skip_comments.py
+	backend/scripts/check_branch_name.sh
+	@echo "$(GREEN)Naming checks passed$(NC)"
+
+# =============================================================================
+# COMBINED CHECKS
+# =============================================================================
+
+check: lint test security naming ## Run ALL checks (lint + test + security + naming)
+	@echo "$(GREEN)All local checks passed$(NC)"
+
+check-all: check ## Run all checks (same as check)
+	@echo "$(GREEN)Completed all checks$(NC)"
+
+# =============================================================================
+# FORMATTING
+# =============================================================================
+
+format: ## Auto-fix lint issues and format code
+	cd backend && ruff check --fix src/ tests/
+	cd backend && ruff format src/ tests/
+	@echo "$(GREEN)Code formatted$(NC)"
+
+# =============================================================================
+# DEVELOPMENT
+# =============================================================================
+
+setup-db: ## Create DynamoDB table with GSIs (for local dev)
+	cd backend && python -c "\
+	import boto3; \
+	ddb = boto3.client('dynamodb', endpoint_url='http://localhost:8000', region_name='us-east-1'); \
+	try: \
+	    ddb.create_table( \
+	        TableName='janus-dev', \
+	        KeySchema=[{'AttributeName': 'pk', 'KeyType': 'HASH'}, {'AttributeName': 'sk', 'KeyType': 'RANGE'}], \
+	        AttributeDefinitions=[ \
+	            {'AttributeName': 'pk', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'sk', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI1PK', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI1SK', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI2PK', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI2SK', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI3PK', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI3SK', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI4PK', 'AttributeType': 'S'}, \
+	            {'AttributeName': 'GSI4SK', 'AttributeType': 'S'}, \
+	        ], \
+	        GlobalSecondaryIndexes=[ \
+	            {'IndexName': 'GSI1', 'KeySchema': [{'AttributeName': 'GSI1PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI1SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
+	            {'IndexName': 'GSI2', 'KeySchema': [{'AttributeName': 'GSI2PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI2SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
+	            {'IndexName': 'GSI3', 'KeySchema': [{'AttributeName': 'GSI3PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI3SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
+	            {'IndexName': 'GSI4', 'KeySchema': [{'AttributeName': 'GSI4PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI4SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
+	        ], \
+	        BillingMode='PAY_PER_REQUEST', \
+	    ); \
+	    print('Table created') \
+	except ddb.exceptions.ResourceInUseException: \
+	    print('Table already exists') \
+	"
+
+dev: lint-quick ## Start all services (lint must pass first)
+	@echo ""
+	@echo "$(GREEN)All checks passed - Starting services...$(NC)"
+	@echo "Starting DynamoDB Local..."
+	docker compose up -d dynamodb-local
+	@sleep 2
+	$(MAKE) setup-db
+	@echo "Starting backend on :8001..."
+	cd backend && uvicorn src.local_server:app --port 8001 --reload &
+	@echo "Starting frontend on :3000..."
+	cd frontend && npm run dev
+
+backend: lint-quick ## Start backend only (lint must pass first)
+	@echo "$(GREEN)Lint passed - Starting backend...$(NC)"
+	cd backend && uvicorn src.local_server:app --port 8001 --reload
+
+frontend: ## Start frontend only
+	cd frontend && npm run dev
+
+dev-unsafe: ## Start dev without lint checks (debugging only)
+	@echo "$(RED)WARNING: Running WITHOUT lint checks!$(NC)"
+	docker compose up -d dynamodb-local
+	@sleep 2
+	$(MAKE) setup-db
+	cd backend && uvicorn src.local_server:app --port 8001 --reload &
+	cd frontend && npm run dev
+
+# =============================================================================
+# CLEANUP
+# =============================================================================
+
+clean: ## Remove build artifacts and caches
+	find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find backend -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	find backend -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
+	rm -rf backend/dist backend/*.egg-info backend/.coverage backend/coverage.xml
+	docker compose down -v
+
+# =============================================================================
+# HELP
+# =============================================================================
+
+help: ## Show this help message
+	@echo "Available targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-15s$(NC) %s\n", $$1, $$2}'

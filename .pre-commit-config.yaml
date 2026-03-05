@@ -1,0 +1,152 @@
+# Pre-commit configuration for Janus monorepo
+# Install: pre-commit install && pre-commit install --hook-type commit-msg && pre-commit install --hook-type pre-push
+
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+
+repos:
+  # =============================================================================
+  # STANDARD FILE CHECKS
+  # =============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of files
+      - id: check-yaml
+        name: Check YAML syntax
+        args: [--unsafe]
+      - id: check-json
+        name: Check JSON syntax
+      - id: check-toml
+        name: Check TOML syntax
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+        name: Detect private keys
+        exclude: '^\.gitleaks\.toml$'
+      - id: no-commit-to-branch
+        name: Prevent commits to protected branches
+        args: ['--branch', 'main', '--branch', 'production', '--branch', 'demo']
+
+  # =============================================================================
+  # SECRET DETECTION
+  # =============================================================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        name: Detect secrets with gitleaks
+
+  # =============================================================================
+  # COMMIT MESSAGE VALIDATION
+  # =============================================================================
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.13.0
+    hooks:
+      - id: commitizen
+        name: Validate commit message format
+        stages: [commit-msg]
+
+  # =============================================================================
+  # PYTHON CODE QUALITY - RUFF (backend only)
+  # =============================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        name: Ruff linter (with auto-fix)
+        args: [--fix, --config, backend/pyproject.toml]
+        files: ^backend/
+      - id: ruff-format
+        name: Ruff formatter
+        args: [--config, backend/pyproject.toml]
+        files: ^backend/
+
+  # =============================================================================
+  # LOCAL HOOKS - TYPE CHECKING, SECURITY, NAMING
+  # =============================================================================
+  - repo: local
+    hooks:
+      # Type checking
+      - id: pyright
+        name: Pyright type checker (strict mode)
+        entry: bash -c 'cd backend && pyright src/'
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+      # Dead code detection
+      - id: vulture
+        name: Vulture dead code detector
+        entry: bash -c 'cd backend && vulture src/'
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      # Security scanning
+      - id: bandit
+        name: Bandit security scanner
+        entry: bash -c 'cd backend && bandit -r src/ -ll -q'
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      # Naming conventions
+      - id: naming-conventions
+        name: Check naming conventions
+        entry: bash -c 'cd backend && python scripts/check_naming_conventions.py'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Import location check
+      - id: import-check
+        name: Check import locations (must be at top)
+        entry: bash -c 'cd backend && python scripts/check_imports.py'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Abbreviation check
+      - id: abbreviation-check
+        name: Check forbidden abbreviations
+        entry: bash -c 'cd backend && python scripts/check_abbreviations.py'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Skip comments check (noqa, type: ignore, etc.)
+      - id: skip-comments-check
+        name: Check for forbidden skip comments
+        entry: bash -c 'cd backend && python scripts/check_skip_comments.py'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  # =============================================================================
+  # PRE-PUSH HOOKS
+  # =============================================================================
+  - repo: local
+    hooks:
+      # Branch name validation
+      - id: branch-name
+        name: Validate branch name format
+        entry: backend/scripts/check_branch_name.sh
+        language: script
+        stages: [pre-push]
+        always_run: true
+
+      # Dependency vulnerability check
+      - id: pip-audit
+        name: Check dependency vulnerabilities
+        entry: bash -c 'cd backend && pip-audit'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true

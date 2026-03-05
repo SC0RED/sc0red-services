@@ -1,0 +1,74 @@
+"""Stage 0+1: Scrape initial URL and resolve actual company URL.
+
+Ports analyzeCompany.ts:72-131.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from signalfield_core.pipeline.step import RequestStep
+
+from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
+from src.data_strategies.web_scraper_strategy import WebScraperStrategy, scrape_url
+from src.facades.company_accessor import CompanyAccessor
+
+logger = logging.getLogger(__name__)
+
+
+class ScrapeAndResolveURL(RequestStep):
+    """Scrapes the initial URL, then resolves the actual company website.
+
+    If the URL is a PE portfolio listing, AI identifies the real company URL
+    and scrapes that too. Combines both content sources.
+    """
+
+    def __init__(self, openai_api_key: str = "", model: str = "gpt-4o") -> None:
+        super().__init__()
+        self._openai_api_key = openai_api_key
+        self._model = model
+
+    def execute(self) -> None:
+        accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
+        url = accessor.company.url
+
+        # Stage 0: Scrape initial URL
+        scraper = WebScraperStrategy({"url": url})
+        text, metadata = scraper.execute()
+
+        if not text or len(text.strip()) < 50:
+            msg = f"Insufficient content scraped from {url}"
+            raise ValueError(msg)
+
+        accessor.set_scraped_text(text)
+        accessor.set_scraped_links(metadata.get("links", []))
+        accessor.set_scraped_title(metadata.get("title", ""))
+
+        # Stage 1: Resolve actual URL
+        resolver = URLResolutionStrategy({
+            "url": url,
+            "scraped_text": text,
+            "scraped_title": metadata.get("title", ""),
+            "scraped_links": metadata.get("links", []),
+            "openai_api_key": self._openai_api_key,
+            "model": self._model,
+        })
+        actual_url, resolve_meta = resolver.execute()
+        accessor.set_actual_url(actual_url)
+
+        # If resolved to a different URL, scrape it and combine content
+        if resolve_meta.get("resolved"):
+            try:
+                actual_result = scrape_url(actual_url)
+                actual_text = actual_result.get("text", "")
+                if actual_text and len(actual_text.strip()) >= 50:
+                    combined = (
+                        f"[Context from portfolio listing ({url}):\n{text[:2000]}]\n\n"
+                        f"[Content from actual company website ({actual_url}):\n{actual_text}]"
+                    )
+                    accessor.set_scraped_text(combined)
+            except Exception:
+                logger.warning("Failed to scrape resolved URL %s, using original", actual_url)
+                accessor.set_actual_url(url)
+
+        self.request_executor.mark_question_complete("scrape_and_resolve")

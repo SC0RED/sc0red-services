@@ -1,0 +1,118 @@
+"""EntityAccessor implementation for PE risk assessment companies.
+
+Much simpler than Engine's FacilityFetcher (306 lines) since companies
+have a flatter data model than facilities.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from src.models.model_company import (
+    Company,
+    CompanyProfile,
+    OpportunityResult,
+    RiskAssessment,
+)
+
+
+class CompanyAccessor:
+    """Implements EntityAccessor protocol for Company entities.
+
+    Provides the 7 read methods required by the SDK, plus PE-specific
+    setters for pipeline steps to populate during execution.
+    """
+
+    def __init__(self, company: Company | None = None) -> None:
+        self._company = company or Company()
+
+    @property
+    def company(self) -> Company:
+        return self._company
+
+    # ── EntityAccessor protocol (7 read methods) ─────────────────────
+
+    def get_entity_id(self) -> str:
+        return self._company.id
+
+    def get_entity_name(self) -> str:
+        if self._company.profile:
+            return self._company.profile.company_name
+        return self._company.company_name
+
+    def get_region(self) -> str:
+        """Maps to industry_sector for the PE domain."""
+        if self._company.profile:
+            return self._company.profile.industry_sector
+        return ""
+
+    def get_probability(self) -> float:
+        """Maps to overall_risk_score / 10 for the PE domain."""
+        if self._company.risk_assessment:
+            return self._company.risk_assessment.overall_score / 10.0
+        return 0.0
+
+    def get_total_score(self) -> float:
+        """Returns the overall risk score (1-10 scale)."""
+        if self._company.risk_assessment:
+            return self._company.risk_assessment.overall_score
+        return 0.0
+
+    def get_categories(self) -> list[dict[str, Any]]:
+        """Returns risk scores as category dicts."""
+        if self._company.risk_assessment:
+            return [rs.model_dump() for rs in self._company.risk_assessment.risk_scores]
+        return []
+
+    def get_dealbreaker_triggered(self) -> bool:
+        """Returns True if risk tier is 'critical'."""
+        if self._company.risk_assessment:
+            return self._company.risk_assessment.tier == "critical"
+        return False
+
+    # ── PE-specific setters ──────────────────────────────────────────
+
+    def set_profile(self, profile: CompanyProfile) -> None:
+        self._company.profile = profile
+
+    def set_risk_assessment(self, assessment: RiskAssessment) -> None:
+        self._company.risk_assessment = assessment
+
+    def set_opportunities(self, result: OpportunityResult) -> None:
+        self._company.opportunity_result = result
+
+    def set_url(self, url: str) -> None:
+        self._company.url = url
+
+    def set_actual_url(self, actual_url: str) -> None:
+        self._company.actual_url = actual_url
+
+    def set_id(self, entity_id: str) -> None:
+        self._company.id = entity_id
+
+    def set_scan_id(self, scan_id: str) -> None:
+        self._company.scan_id = scan_id
+
+    def set_org_id(self, org_id: str) -> None:
+        self._company.org_id = org_id
+
+    def set_error(self, error: str) -> None:
+        self._company.error = error
+
+    def set_scraped_text(self, text: str) -> None:
+        self._company.scraped_text = text
+
+    def get_scraped_text(self) -> str:
+        return self._company.scraped_text
+
+    def set_scraped_links(self, links: list[dict[str, str]]) -> None:
+        self._company.scraped_links = links
+
+    def get_scraped_links(self) -> list[dict[str, str]]:
+        return self._company.scraped_links
+
+    def set_scraped_title(self, title: str) -> None:
+        self._company.scraped_title = title
+
+    def get_scraped_title(self) -> str:
+        return self._company.scraped_title
