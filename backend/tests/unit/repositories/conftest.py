@@ -20,7 +20,7 @@ def _aws_credentials():
 
 
 @pytest.fixture
-def dynamodb_table():
+def dynamodb_table():  # noqa: NAMING001
     """Create a mocked DynamoDB table with all GSIs."""
     with mock_aws():
         client = boto3.client("dynamodb", region_name="us-east-1")

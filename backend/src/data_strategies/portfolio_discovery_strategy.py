@@ -70,7 +70,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         super().__init__()
         self._config = config or {}
 
-    def execute(self) -> tuple[str, dict[str, Any]]:  # noqa: PLR0912, PLR0915
+    def execute(self) -> tuple[str, dict[str, Any]]:
         """Crawl portfolio pages and return discovered companies."""
         firm_url = self._config.get("url", "")
         if not firm_url:
@@ -90,7 +90,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             try:
                 result = scrape_url(page_url)
                 all_links.extend({**link, "source": page_url} for link in result["links"])
-            except Exception:  # noqa: BLE001  # scrape_url raises httpx + parsing errors
+            except Exception:  # scrape_url raises httpx + parsing errors
                 logger.debug("Skipping portfolio path %s", page_url, exc_info=True)
                 continue
 
@@ -141,7 +141,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 seen_urls.add(full_url)
                 companies.append({"name": text, "url": full_url, "description": ""})
 
-            except Exception:  # noqa: BLE001  # urlparse and link access raise various errors
+            except Exception:  # urlparse and link access raise various errors
                 logger.debug("Skipping malformed link", exc_info=True)
                 continue
 
@@ -163,7 +163,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             page_url = f"{base_origin}{path}" if path else base_origin
             try:
                 with httpx.Client(follow_redirects=True, timeout=15.0) as client:
-                    resp = client.get(
+                    response = client.get(
                         page_url,
                         headers={
                             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -173,10 +173,10 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                             ),
                         },
                     )
-                    if resp.status_code != _HTTP_OK:
+                    if response.status_code != _HTTP_OK:
                         continue
 
-                soup = BeautifulSoup(resp.text, "html.parser")
+                soup = BeautifulSoup(response.text, "html.parser")
                 attrs = {"data-company-name": True, "data-company-link": True}
                 for el in soup.find_all(attrs=attrs):
                     name = (el.get("data-company-name") or "").strip()
@@ -193,7 +193,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
 
                 if len(companies) >= _MAX_COMPANIES:
                     break
-            except Exception:  # noqa: BLE001  # httpx + BeautifulSoup can raise various errors
+            except Exception:  # httpx + BeautifulSoup can raise various errors
                 logger.debug("Skipping fallback path %s", page_url, exc_info=True)
                 continue
 

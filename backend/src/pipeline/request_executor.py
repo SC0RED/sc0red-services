@@ -74,8 +74,8 @@ class JanusRequestExecutor:
                     new_step.entity_accessor = self._entity_accessor
                 self._pipeline.insert(i + 1, new_step)
                 return
-        msg = f"Step '{step_name}' not found in pipeline"
-        raise ValueError(msg)
+        message = f"Step '{step_name}' not found in pipeline"
+        raise ValueError(message)
 
     def add_step_before(self, step_name: str, new_step: RequestStep) -> None:
         """Insert a new step immediately before the named step in the pipeline."""
@@ -86,10 +86,10 @@ class JanusRequestExecutor:
                     new_step.entity_accessor = self._entity_accessor
                 self._pipeline.insert(i, new_step)
                 return
-        msg = f"Step '{step_name}' not found in pipeline"
-        raise ValueError(msg)
+        message = f"Step '{step_name}' not found in pipeline"
+        raise ValueError(message)
 
-    def step_exists(self, step_name: str) -> bool:
+    def has_step(self, step_name: str) -> bool:
         """Return True if a step with the given name exists in the pipeline."""
         return any(s.step_name() == step_name for s in self._pipeline)
 

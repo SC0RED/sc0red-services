@@ -47,7 +47,7 @@ class TestCompanyAnalysisFactory:
             step.step_name.return_value = f"Step{i}"
         factory.get_pipeline = MagicMock(return_value=mock_steps)
 
-        executor = factory.execute_pipeline()
+        _executor = factory.execute_pipeline()
         for step in mock_steps:
             step.execute.assert_called_once()
 

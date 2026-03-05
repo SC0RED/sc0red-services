@@ -4,11 +4,11 @@ import json
 from unittest.mock import MagicMock, patch
 
 from src.data_strategies.portfolio_discovery_strategy import (
-    PortfolioDiscoveryStrategy,
     _GENERIC_CTA_PATTERNS,
     _MAX_COMPANIES,
     _PORTFOLIO_PATHS,
     _SOCIAL_DOMAINS,
+    PortfolioDiscoveryStrategy,
 )
 
 
@@ -53,7 +53,7 @@ class TestPortfolioDiscoveryStrategy:
         }
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
-        raw_json, meta = strategy.execute()
+        _raw_json, meta = strategy.execute()
 
         companies = meta["companies"]
         assert len(companies) >= 1
@@ -147,7 +147,7 @@ class TestPortfolioDiscoveryStrategy:
         mock_scrape.side_effect = RuntimeError("Connection error")
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
-        raw_json, meta = strategy.execute()
+        _raw_json, meta = strategy.execute()
 
         # Should not raise, just returns empty
         assert meta["companies"] == []
@@ -226,7 +226,7 @@ class TestPortfolioDiscoveryStrategy:
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     def test_same_domain_non_portfolio_links_filtered(self, mock_scrape):
-        """Same-domain links that aren't under /portfolio/, /companies/, /investments/ are filtered."""
+        """Same-domain non-portfolio/companies/investments links are filtered."""
         mock_scrape.return_value = {
             "text": "content",
             "title": "title",
@@ -291,10 +291,7 @@ class TestPortfolioDiscoveryStrategy:
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     def test_max_companies_limit(self, mock_scrape):
         """Once 30 companies are collected, processing stops."""
-        links = [
-            {"text": f"Company {i}", "href": f"https://company{i}.com"}
-            for i in range(50)
-        ]
+        links = [{"text": f"Company {i}", "href": f"https://company{i}.com"} for i in range(50)]
         mock_scrape.return_value = {
             "text": "content",
             "title": "title",
@@ -329,7 +326,8 @@ class TestPortfolioDiscoveryStrategy:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = html
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=MagicMock(get=MagicMock(return_value=mock_response)))
+        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
+        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
@@ -362,7 +360,8 @@ class TestPortfolioDiscoveryStrategy:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = html
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=MagicMock(get=MagicMock(return_value=mock_response)))
+        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
+        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
@@ -389,7 +388,8 @@ class TestPortfolioDiscoveryStrategy:
 
         mock_response = MagicMock()
         mock_response.status_code = 500
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=MagicMock(get=MagicMock(return_value=mock_response)))
+        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
+        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
         mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})

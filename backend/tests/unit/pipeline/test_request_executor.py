@@ -1,5 +1,6 @@
 """Tests for JanusRequestExecutor."""
 
+import contextlib
 from unittest.mock import MagicMock
 
 import pytest
@@ -69,19 +70,17 @@ class TestRequestExecutor:
 
         executor = JanusRequestExecutor("t", "r", [step])
 
-        try:
+        with contextlib.suppress(ValueError):
             executor.execute_all()
-        except ValueError:
-            pass
 
         assert len(executor.exceptions) == 1
 
-    def test_step_exists(self):
+    def test_has_step(self):
         step = _make_mock_step("ExtractProfile")
 
         executor = JanusRequestExecutor("t", "r", [step])
-        assert executor.step_exists("ExtractProfile") is True
-        assert executor.step_exists("NonExistent") is False
+        assert executor.has_step("ExtractProfile") is True
+        assert executor.has_step("NonExistent") is False
 
     def test_add_step_after(self):
         step1 = _make_mock_step("Step1")
@@ -91,7 +90,7 @@ class TestRequestExecutor:
         executor = JanusRequestExecutor("t", "r", [step1, step2])
         executor.add_step_after("Step1", new_step)
 
-        assert executor.step_exists("NewStep") is True
+        assert executor.has_step("NewStep") is True
 
     def test_add_step_before(self):
         step1 = _make_mock_step("Step1")
@@ -101,7 +100,7 @@ class TestRequestExecutor:
         executor = JanusRequestExecutor("t", "r", [step1, step2])
         executor.add_step_before("Step2", new_step)
 
-        assert executor.step_exists("NewStep") is True
+        assert executor.has_step("NewStep") is True
 
     def test_add_step_after_not_found_raises(self):
         step1 = _make_mock_step("Step1")

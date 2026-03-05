@@ -35,5 +35,5 @@ class TestPortfolioScanFactory:
         mock_step.step_name.return_value = "DiscoverPortfolio"
         factory.get_pipeline = MagicMock(return_value=[mock_step])
 
-        executor = factory.execute_pipeline()
+        _executor = factory.execute_pipeline()
         mock_step.execute.assert_called_once()

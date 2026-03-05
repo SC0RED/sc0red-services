@@ -12,13 +12,15 @@ class TestUserRepository:
     @mock_aws
     def test_create_and_get(self, dynamodb_table):
         repo = DynamoDBUserRepository(dynamodb_table)
-        user_id = repo.create({
-            "name": "Test User",
-            "email": "test@example.com",
-            "password_hash": "hashed",
-            "org_id": "org-1",
-            "role": "admin",
-        })
+        user_id = repo.create(
+            {
+                "name": "Test User",
+                "email": "test@example.com",
+                "password_hash": "hashed",
+                "org_id": "org-1",
+                "role": "admin",
+            }
+        )
 
         assert user_id is not None
 
@@ -29,11 +31,13 @@ class TestUserRepository:
     @mock_aws
     def test_find_by_email(self, dynamodb_table):
         repo = DynamoDBUserRepository(dynamodb_table)
-        repo.create({
-            "email": "alice@example.com",
-            "name": "Alice",
-            "org_id": "org-1",
-        })
+        repo.create(
+            {
+                "email": "alice@example.com",
+                "name": "Alice",
+                "org_id": "org-1",
+            }
+        )
 
         result = repo.find_by_email("alice@example.com")
         assert result is not None
@@ -46,12 +50,12 @@ class TestUserRepository:
         assert result is None
 
     @mock_aws
-    def test_email_exists(self, dynamodb_table):
+    def test_has_email(self, dynamodb_table):
         repo = DynamoDBUserRepository(dynamodb_table)
         repo.create({"email": "exists@test.com", "org_id": "org-1"})
 
-        assert repo.email_exists("exists@test.com") is True
-        assert repo.email_exists("missing@test.com") is False
+        assert repo.has_email("exists@test.com") is True
+        assert repo.has_email("missing@test.com") is False
 
 
 class TestOrganizationRepository:

@@ -48,7 +48,7 @@ class DynamoDBUserRepository:
         self._table.put_item(item)
         return user_id
 
-    def email_exists(self, email: str) -> bool:
+    def has_email(self, email: str) -> bool:
         """Return True if a user with the given email address exists."""
         return self.find_by_email(email) is not None
 

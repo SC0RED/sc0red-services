@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import openai
 from signalfield_core.pipeline.step import RequestStep
@@ -116,13 +116,13 @@ class GenerateOpportunities(RequestStep):
 
     def execute(self) -> None:
         """Generate AI opportunity recommendations from the company risk profile."""
-        accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
+        accessor = cast("CompanyAccessor", self.entity_accessor)
         profile = accessor.company.profile
         risk_assessment = accessor.company.risk_assessment
 
         if not profile or not risk_assessment:
-            msg = "Cannot generate opportunities: profile or risk assessment missing"
-            raise ValueError(msg)
+            message = "Cannot generate opportunities: profile or risk assessment missing"
+            raise ValueError(message)
 
         user_prompt = _build_opportunity_prompt(profile.model_dump(), risk_assessment.model_dump())
 

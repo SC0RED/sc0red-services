@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 
 from src.data_strategies.web_scraper_strategy import (
     WebScraperStrategy,
@@ -61,7 +60,7 @@ class TestScrapeUrl:
         assert result["description"] == "A test page"
         assert result["meta_keywords"] == "test,page"
         assert "content about a company" in result["text"]
-        assert any(l["text"] == "Link Text" for l in result["links"])
+        assert any(link["text"] == "Link Text" for link in result["links"])
 
     @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
     def test_scrape_fallback_h1_title(self, mock_client_cls):
@@ -131,7 +130,7 @@ class TestScrapeUrl:
         mock_client_cls.return_value = mock_client
 
         result = scrape_url("https://example.com")
-        assert any(l["text"] == "Company Logo" for l in result["links"])
+        assert any(link["text"] == "Company Logo" for link in result["links"])
 
     @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
     def test_scrape_aria_label_fallback(self, mock_client_cls):
@@ -147,17 +146,17 @@ class TestScrapeUrl:
         mock_client_cls.return_value = mock_client
 
         result = scrape_url("https://example.com")
-        assert any(l["text"] == "Visit Company" for l in result["links"])
+        assert any(link["text"] == "Visit Company" for link in result["links"])
 
     @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
     def test_scrape_skips_hash_and_mailto_links(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.text = (
-            '<html><body>'
+            "<html><body>"
             '<a href="#section">Anchor</a>'
             '<a href="mailto:test@test.com">Email</a>'
             '<a href="https://good.com">Good Link</a>'
-            '</body></html>'
+            "</body></html>"
         )
         mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
@@ -197,7 +196,11 @@ class TestWebScraperStrategy:
     def test_execute_http_error(self, mock_scrape):
         mock_response = MagicMock()
         mock_response.status_code = 404
-        mock_scrape.side_effect = httpx.HTTPStatusError("Not found", request=MagicMock(), response=mock_response)
+        mock_scrape.side_effect = httpx.HTTPStatusError(
+            "Not found",
+            request=MagicMock(),
+            response=mock_response,
+        )
         strategy = WebScraperStrategy(config={"url": "https://example.com"})
         text, meta = strategy.execute()
         assert text == ""

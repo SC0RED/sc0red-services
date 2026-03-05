@@ -34,14 +34,14 @@ def validate_token(authorization: str) -> AuthContext:
         ValueError: If the token is missing, invalid, or expired.
     """
     if not authorization or not authorization.startswith("Bearer "):
-        msg = "Missing or invalid Authorization header"
-        raise ValueError(msg)
+        message = "Missing or invalid Authorization header"
+        raise ValueError(message)
 
     token = authorization[7:]
     secret = os.environ.get("NEXTAUTH_SECRET", "")
     if not secret:
-        msg = "NEXTAUTH_SECRET not configured"
-        raise ValueError(msg)
+        message = "NEXTAUTH_SECRET not configured"
+        raise ValueError(message)
 
     try:
         payload = jwt.decode(
@@ -51,11 +51,11 @@ def validate_token(authorization: str) -> AuthContext:
             options={"verify_exp": True},
         )
     except jwt.ExpiredSignatureError:
-        msg = "Token expired"
-        raise ValueError(msg) from None
+        message = "Token expired"
+        raise ValueError(message) from None
     except jwt.InvalidTokenError as e:
-        msg = f"Invalid token: {e}"
-        raise ValueError(msg) from None
+        message = f"Invalid token: {e}"
+        raise ValueError(message) from None
 
     return AuthContext(
         user_id=payload.get("id", payload.get("sub", "")),
@@ -66,7 +66,7 @@ def validate_token(authorization: str) -> AuthContext:
     )
 
 
-def require_auth(headers: dict[str, str]) -> AuthContext:
-    """Extract and validate auth from request headers."""
-    auth_header = headers.get("Authorization") or headers.get("authorization", "")
-    return validate_token(auth_header)
+def require_authentication(headers: dict[str, str]) -> AuthContext:
+    """Extract and validate authentication from request headers."""
+    authentication_header = headers.get("Authorization") or headers.get("authorization", "")
+    return validate_token(authentication_header)

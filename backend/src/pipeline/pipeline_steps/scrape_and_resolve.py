@@ -6,7 +6,7 @@ Ports analyzeCompany.ts:72-131.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
@@ -35,7 +35,7 @@ class ScrapeAndResolveURL(RequestStep):
 
     def execute(self) -> None:
         """Scrape the initial URL and resolve the actual company website."""
-        accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
+        accessor = cast("CompanyAccessor", self.entity_accessor)
         url = accessor.company.url
 
         # Stage 0: Scrape initial URL
@@ -43,8 +43,8 @@ class ScrapeAndResolveURL(RequestStep):
         text, metadata = scraper.execute()
 
         if not text or len(text.strip()) < _MIN_CONTENT_LENGTH:
-            msg = f"Insufficient content scraped from {url}"
-            raise ValueError(msg)
+            message = f"Insufficient content scraped from {url}"
+            raise ValueError(message)
 
         accessor.set_scraped_text(text)
         accessor.set_scraped_links(metadata.get("links", []))
@@ -75,7 +75,7 @@ class ScrapeAndResolveURL(RequestStep):
                         f"[Content from actual company website ({actual_url}):\n{actual_text}]"
                     )
                     accessor.set_scraped_text(combined)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning("Failed to scrape resolved URL %s, using original", actual_url)
                 accessor.set_actual_url(url)
 

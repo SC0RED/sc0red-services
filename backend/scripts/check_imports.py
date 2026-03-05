@@ -49,7 +49,7 @@ class ImportChecker(ast.NodeVisitor):
             f"All imports must be at module level."
         )
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Track entering a function scope."""
         was_in_function = self.in_function
         self.in_function = True
@@ -60,7 +60,7 @@ class ImportChecker(ast.NodeVisitor):
         self.scope_depth -= 1
         self.in_function = was_in_function
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """Track entering an async function scope."""
         was_in_function = self.in_function
         self.in_function = True
@@ -71,7 +71,7 @@ class ImportChecker(ast.NodeVisitor):
         self.scope_depth -= 1
         self.in_function = was_in_function
 
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
         """Track entering a class scope."""
         was_in_class = self.in_class
         self.in_class = True
@@ -82,7 +82,7 @@ class ImportChecker(ast.NodeVisitor):
         self.scope_depth -= 1
         self.in_class = was_in_class
 
-    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
+    def visit_Import(self, node: ast.Import) -> None:
         """Check import statement."""
         if self.scope_depth > 0:
             names = [alias.name for alias in node.names]
@@ -91,7 +91,7 @@ class ImportChecker(ast.NodeVisitor):
 
         self.generic_visit(node)
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Check from...import statement."""
         if self.scope_depth > 0:
             if node.names:

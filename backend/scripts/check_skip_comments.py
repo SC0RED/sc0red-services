@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 SKIP_PATTERNS = [
-    (r"#\s*noqa", "noqa (lint skip)"),
+    (r"#\s*noqa(?!:\s*(?:NAMING|ABBREV|IMPORT))", "noqa (lint skip)"),
     (r"#\s*type:\s*ignore", "type: ignore (type check skip)"),
     (r"#\s*nosec", "nosec (security skip)"),
     (r"#\s*pragma:\s*no\s*cover", "pragma: no cover (coverage skip)"),

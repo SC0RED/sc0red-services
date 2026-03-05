@@ -6,7 +6,7 @@ Ports buildProfilePrompt from pe-scan/src/lib/ai/prompts.ts:42-65.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import openai
 from signalfield_core.pipeline.step import RequestStep
@@ -61,7 +61,7 @@ class ExtractProfile(RequestStep):
 
     def execute(self) -> None:
         """Extract a structured company profile from scraped website content."""
-        accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
+        accessor = cast("CompanyAccessor", self.entity_accessor)
         scraped_text = accessor.get_scraped_text()
         actual_url = accessor.company.actual_url or accessor.company.url
 
@@ -86,8 +86,10 @@ class ExtractProfile(RequestStep):
         profile = CompanyProfile(**data)
 
         if not profile.company_name or not profile.industry:
-            msg = "Profile extraction returned incomplete data — company_name or industry missing"
-            raise ValueError(msg)
+            message = (
+                "Profile extraction returned incomplete data — company_name or industry missing"
+            )
+            raise ValueError(message)
 
         accessor.set_profile(profile)
         self.request_executor.mark_question_complete("extract_profile")
