@@ -14,7 +14,6 @@ from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 from src.data_strategies.web_scraper_strategy import scrape_url
@@ -41,9 +40,14 @@ _GENERIC_CTA_PATTERNS = [
     "see all",
 ]
 
-_STARTS_WITH_SKIP = re.compile(r"^(the|our|a|an|login|sign|contact|about|terms|privacy)", re.IGNORECASE)
+_STARTS_WITH_SKIP = re.compile(
+    r"^(the|our|a|an|login|sign|contact|about|terms|privacy)", re.IGNORECASE
+)
 
 _MAX_COMPANIES = 30
+_HTTP_OK = 200
+_MIN_COMPANY_NAME_LENGTH = 2
+_MAX_COMPANY_NAME_LENGTH = 60
 
 _PORTFOLIO_PATHS = [
     "",  # root URL
@@ -66,7 +70,8 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         super().__init__()
         self._config = config or {}
 
-    def execute(self) -> tuple[str, dict[str, Any]]:
+    def execute(self) -> tuple[str, dict[str, Any]]:  # noqa: PLR0912, PLR0915
+        """Crawl portfolio pages and return discovered companies."""
         firm_url = self._config.get("url", "")
         if not firm_url:
             return "", {"companies": [], "error": "No URL provided"}
@@ -84,10 +89,10 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
                 result = scrape_url(page_url)
-                for link in result["links"]:
-                    all_links.append({**link, "source": page_url})
-            except Exception:
-                continue  # Page doesn't exist, skip
+                all_links.extend({**link, "source": page_url} for link in result["links"])
+            except Exception:  # noqa: BLE001  # scrape_url raises httpx + parsing errors
+                logger.debug("Skipping portfolio path %s", page_url, exc_info=True)
+                continue
 
         # Filter for portfolio company links
         companies: list[dict[str, str]] = []
@@ -99,7 +104,8 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 if href.startswith("http"):
                     link_url = urlparse(href)
                 else:
-                    link_url = urlparse(f"{base_origin}{href}" if href.startswith("/") else f"{base_origin}/{href}")
+                    suffix = href if href.startswith("/") else f"/{href}"
+                    link_url = urlparse(f"{base_origin}{suffix}")
 
                 domain = link_url.hostname or ""
                 path_lower = link_url.path.lower()
@@ -122,7 +128,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
 
                 # Filter link text to look like company names
                 text = link["text"].strip()
-                if len(text) <= 2 or len(text) >= 60:
+                if len(text) <= _MIN_COMPANY_NAME_LENGTH or len(text) >= _MAX_COMPANY_NAME_LENGTH:
                     continue
 
                 text_lower = text.lower()
@@ -135,7 +141,8 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 seen_urls.add(full_url)
                 companies.append({"name": text, "url": full_url, "description": ""})
 
-            except Exception:
+            except Exception:  # noqa: BLE001  # urlparse and link access raise various errors
+                logger.debug("Skipping malformed link", exc_info=True)
                 continue
 
             if len(companies) >= _MAX_COMPANIES:
@@ -147,9 +154,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
 
         return json.dumps(companies), {"companies": companies, "count": len(companies)}
 
-    def _fallback_data_attributes(
-        self, base_origin: str, firm_domain: str
-    ) -> list[dict[str, str]]:
+    def _fallback_data_attributes(self, base_origin: str, firm_domain: str) -> list[dict[str, str]]:
         """Check for data-company-name/data-company-link attributes."""
         companies: list[dict[str, str]] = []
         seen: set[str] = set()
@@ -163,20 +168,23 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                         headers={
                             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            "Accept": (
+                                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                            ),
                         },
                     )
-                    if resp.status_code != 200:
+                    if resp.status_code != _HTTP_OK:
                         continue
 
                 soup = BeautifulSoup(resp.text, "html.parser")
-                for el in soup.find_all(attrs={"data-company-name": True, "data-company-link": True}):
+                attrs = {"data-company-name": True, "data-company-link": True}
+                for el in soup.find_all(attrs=attrs):
                     name = (el.get("data-company-name") or "").strip()
                     url = (el.get("data-company-link") or "").strip()
                     if (
                         name
                         and url
-                        and len(name) < 60
+                        and len(name) < _MAX_COMPANY_NAME_LENGTH
                         and url.startswith("http")
                         and url not in seen
                     ):
@@ -185,7 +193,8 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
 
                 if len(companies) >= _MAX_COMPANIES:
                     break
-            except Exception:
+            except Exception:  # noqa: BLE001  # httpx + BeautifulSoup can raise various errors
+                logger.debug("Skipping fallback path %s", page_url, exc_info=True)
                 continue
 
         return companies

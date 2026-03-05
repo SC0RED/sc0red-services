@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
-from src.models.model_event import JanusEvent
 from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnalysisFactory
 from src.pipeline.pipeline_factories.portfolio_scan_factory import PortfolioScanFactory
-from src.pipeline.request_executor import JanusRequestExecutor
 
 if TYPE_CHECKING:
+    from src.models.model_event import JanusEvent
+    from src.pipeline.request_executor import JanusRequestExecutor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 

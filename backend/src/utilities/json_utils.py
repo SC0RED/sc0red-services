@@ -19,5 +19,5 @@ def parse_json_response(text: str) -> dict[str, Any]:
         end = text.rfind("}")
         if start == -1 or end == -1:
             msg = "No JSON object found in response"
-            raise ValueError(msg)
+            raise ValueError(msg) from None
         return json.loads(text[start : end + 1])

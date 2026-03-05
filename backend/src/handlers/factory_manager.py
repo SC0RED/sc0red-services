@@ -22,6 +22,7 @@ class FactoryManager:
 
     @property
     def storage(self) -> DynamoDBStorageProvider:
+        """Return the storage provider."""
         return self._storage
 
     def run_company_analysis(

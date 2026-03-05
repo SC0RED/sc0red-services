@@ -6,12 +6,17 @@ Individual company analyses are dispatched separately (via SQS in production).
 
 from __future__ import annotations
 
-from signalfield_core.pipeline.factory import PipelineFactory
-from signalfield_core.pipeline.step import RequestStep
+from typing import TYPE_CHECKING
 
-from src.facades.company_accessor import CompanyAccessor
+from signalfield_core.pipeline.factory import PipelineFactory
+
 from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
 from src.pipeline.request_executor import JanusRequestExecutor
+
+if TYPE_CHECKING:
+    from signalfield_core.pipeline.step import RequestStep
+
+    from src.facades.company_accessor import CompanyAccessor
 
 
 class PortfolioScanFactory(PipelineFactory):
@@ -28,9 +33,11 @@ class PortfolioScanFactory(PipelineFactory):
         self._request_id = request_id
 
     def get_pipeline(self) -> list[RequestStep]:
+        """Return the ordered list of pipeline steps for portfolio scanning."""
         return [DiscoverPortfolio()]
 
     def build_executor(self) -> JanusRequestExecutor:
+        """Build and wire a JanusRequestExecutor with the portfolio scan pipeline."""
         pipeline = self.get_pipeline()
         executor = JanusRequestExecutor(
             tenant_id=self._tenant_id,

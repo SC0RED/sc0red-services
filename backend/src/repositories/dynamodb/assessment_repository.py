@@ -9,11 +9,13 @@ Single-table keys:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.repositories.dynamodb.client import DynamoDBTable
+if TYPE_CHECKING:
+    from src.repositories.dynamodb.client import DynamoDBTable
 
 
 class DynamoDBAssessmentRepository:
@@ -25,12 +27,14 @@ class DynamoDBAssessmentRepository:
     # ── Assessment operations ────────────────────────────────────────
 
     def get_by_id(self, assessment_id: str) -> dict[str, Any] | None:
+        """Return the assessment metadata item for the given ID, or None if not found."""
         return self._table.get_item(
             pk=f"ASSESSMENT#{assessment_id}",
             sk="ASSESSMENT#METADATA",
         )
 
     def save(self, assessment: dict[str, Any]) -> str:
+        """Persist a full assessment document and return its ID."""
         assessment_id = assessment.get("id") or str(uuid.uuid4())
         item = {
             "pk": f"ASSESSMENT#{assessment_id}",
@@ -55,10 +59,12 @@ class DynamoDBAssessmentRepository:
         return assessment_id
 
     def save_assessment(self, assessment_id: str, doc: dict[str, Any]) -> None:
+        """Save an assessment document under the given ID."""
         doc["id"] = assessment_id
         self.save(doc)
 
     def find_by_company(self, company_id: str) -> list[dict[str, Any]]:
+        """Return all assessments associated with the given company ID."""
         return self._table.query_gsi(
             index_name="GSI3",
             pk_attr="GSI3PK",
@@ -66,6 +72,7 @@ class DynamoDBAssessmentRepository:
         )
 
     def delete(self, assessment_id: str) -> None:
+        """Delete an assessment and all its child items (risk scores, opportunities)."""
         # Delete all items under this assessment (metadata, risk scores, opportunities)
         items = self._table.query(pk=f"ASSESSMENT#{assessment_id}")
         keys = [{"pk": item["pk"], "sk": item["sk"]} for item in items]
@@ -73,9 +80,8 @@ class DynamoDBAssessmentRepository:
 
     # ── Risk score operations ────────────────────────────────────────
 
-    def save_risk_score(
-        self, assessment_id: str, category: str, data: dict[str, Any]
-    ) -> None:
+    def save_risk_score(self, assessment_id: str, category: str, data: dict[str, Any]) -> None:
+        """Persist a single risk score item for the given assessment and category."""
         item = {
             "pk": f"ASSESSMENT#{assessment_id}",
             "sk": f"RISK#{category}",
@@ -87,6 +93,7 @@ class DynamoDBAssessmentRepository:
         self._table.put_item(item)
 
     def get_risk_scores(self, assessment_id: str) -> list[dict[str, Any]]:
+        """Return all risk score items for the given assessment ID."""
         return self._table.query(
             pk=f"ASSESSMENT#{assessment_id}",
             sk_prefix="RISK#",
@@ -94,9 +101,8 @@ class DynamoDBAssessmentRepository:
 
     # ── Opportunity operations ───────────────────────────────────────
 
-    def save_opportunity(
-        self, assessment_id: str, sort_order: int, data: dict[str, Any]
-    ) -> None:
+    def save_opportunity(self, assessment_id: str, sort_order: int, data: dict[str, Any]) -> None:
+        """Persist a single opportunity item for the given assessment."""
         item = {
             "pk": f"ASSESSMENT#{assessment_id}",
             "sk": f"OPP#{sort_order:04d}",
@@ -115,6 +121,7 @@ class DynamoDBAssessmentRepository:
         self._table.put_item(item)
 
     def get_opportunities(self, assessment_id: str) -> list[dict[str, Any]]:
+        """Return all opportunity items for the given assessment ID."""
         items = self._table.query(
             pk=f"ASSESSMENT#{assessment_id}",
             sk_prefix="OPP#",
@@ -123,8 +130,6 @@ class DynamoDBAssessmentRepository:
         for item in items:
             for field in ("implementation_steps", "related_services"):
                 if field in item and isinstance(item[field], str):
-                    try:
+                    with contextlib.suppress(json.JSONDecodeError):
                         item[field] = json.loads(item[field])
-                    except json.JSONDecodeError:
-                        pass
         return items

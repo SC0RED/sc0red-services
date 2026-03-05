@@ -6,14 +6,19 @@ Ports analyzeCompany.ts:72-131.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
 from src.data_strategies.web_scraper_strategy import WebScraperStrategy, scrape_url
-from src.facades.company_accessor import CompanyAccessor
+
+if TYPE_CHECKING:
+    from src.facades.company_accessor import CompanyAccessor
 
 logger = logging.getLogger(__name__)
+
+_MIN_CONTENT_LENGTH = 50
 
 
 class ScrapeAndResolveURL(RequestStep):
@@ -29,6 +34,7 @@ class ScrapeAndResolveURL(RequestStep):
         self._model = model
 
     def execute(self) -> None:
+        """Scrape the initial URL and resolve the actual company website."""
         accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
         url = accessor.company.url
 
@@ -36,7 +42,7 @@ class ScrapeAndResolveURL(RequestStep):
         scraper = WebScraperStrategy({"url": url})
         text, metadata = scraper.execute()
 
-        if not text or len(text.strip()) < 50:
+        if not text or len(text.strip()) < _MIN_CONTENT_LENGTH:
             msg = f"Insufficient content scraped from {url}"
             raise ValueError(msg)
 
@@ -45,14 +51,16 @@ class ScrapeAndResolveURL(RequestStep):
         accessor.set_scraped_title(metadata.get("title", ""))
 
         # Stage 1: Resolve actual URL
-        resolver = URLResolutionStrategy({
-            "url": url,
-            "scraped_text": text,
-            "scraped_title": metadata.get("title", ""),
-            "scraped_links": metadata.get("links", []),
-            "openai_api_key": self._openai_api_key,
-            "model": self._model,
-        })
+        resolver = URLResolutionStrategy(
+            {
+                "url": url,
+                "scraped_text": text,
+                "scraped_title": metadata.get("title", ""),
+                "scraped_links": metadata.get("links", []),
+                "openai_api_key": self._openai_api_key,
+                "model": self._model,
+            }
+        )
         actual_url, resolve_meta = resolver.execute()
         accessor.set_actual_url(actual_url)
 
@@ -61,13 +69,13 @@ class ScrapeAndResolveURL(RequestStep):
             try:
                 actual_result = scrape_url(actual_url)
                 actual_text = actual_result.get("text", "")
-                if actual_text and len(actual_text.strip()) >= 50:
+                if actual_text and len(actual_text.strip()) >= _MIN_CONTENT_LENGTH:
                     combined = (
                         f"[Context from portfolio listing ({url}):\n{text[:2000]}]\n\n"
                         f"[Content from actual company website ({actual_url}):\n{actual_text}]"
                     )
                     accessor.set_scraped_text(combined)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("Failed to scrape resolved URL %s, using original", actual_url)
                 accessor.set_actual_url(url)
 

@@ -120,8 +120,6 @@ ignore = [
     "D107",   # Missing docstring in __init__
 
     # Type annotations - some flexibility
-    "ANN101", # Missing type annotation for self (deprecated in ruff 0.5+)
-    "ANN102", # Missing type annotation for cls (deprecated in ruff 0.5+)
     "ANN401", # Dynamically typed expressions (Any) - handled by pyright
 
     # PEP 695 type parameters
@@ -153,6 +151,9 @@ ignore = [
     "D",       # Docstrings optional in tests
     "TCH",     # Type-checking imports OK at runtime in tests
 ]
+"src/pipeline/pipeline_steps/assess_risk.py" = ["E501"]     # LLM prompt strings
+"src/pipeline/pipeline_steps/extract_profile.py" = ["E501"] # LLM prompt strings
+"src/pipeline/pipeline_steps/generate_opportunities.py" = ["E501"] # LLM prompt strings
 "scripts/**/*.py" = [
     "T20",     # Print allowed in scripts
     "S",       # Security checks less strict in scripts

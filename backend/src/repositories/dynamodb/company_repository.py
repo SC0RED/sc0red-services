@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.repositories.dynamodb.client import DynamoDBTable
+if TYPE_CHECKING:
+    from src.repositories.dynamodb.client import DynamoDBTable
 
 
 class DynamoDBCompanyRepository:
@@ -23,12 +24,14 @@ class DynamoDBCompanyRepository:
     # ── EntityRepository-style methods ───────────────────────────────
 
     def get_by_id(self, company_id: str) -> dict[str, Any] | None:
+        """Return the company metadata item for the given ID, or None if not found."""
         return self._table.get_item(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
         )
 
     def save(self, entity: dict[str, Any]) -> str:
+        """Persist a full company entity document and return its ID."""
         company_id = entity.get("id") or str(uuid.uuid4())
         item = {
             "pk": f"COMPANY#{company_id}",
@@ -48,10 +51,12 @@ class DynamoDBCompanyRepository:
         return company_id
 
     def save_company(self, company_id: str, doc: dict[str, Any]) -> None:
+        """Save a company document under the given ID."""
         doc["id"] = company_id
         self.save(doc)
 
     def update(self, company_id: str, changes: dict[str, Any]) -> None:
+        """Apply attribute-level updates to an existing company item."""
         self._table.update_item(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
@@ -59,15 +64,18 @@ class DynamoDBCompanyRepository:
         )
 
     def update_company_metadata(self, company_id: str, metadata: dict[str, Any]) -> None:
+        """Serialize and store arbitrary metadata on a company item."""
         self.update(company_id, {"metadata_json": json.dumps(metadata)})
 
     def delete(self, company_id: str) -> None:
+        """Delete the company metadata item for the given ID."""
         self._table.delete_item(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
         )
 
     def find_by_org(self, org_id: str) -> list[dict[str, Any]]:
+        """Return all companies belonging to the given organisation ID."""
         return self._table.query_gsi(
             index_name="GSI1",
             pk_attr="GSI1PK",

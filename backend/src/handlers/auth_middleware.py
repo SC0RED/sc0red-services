@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any
 
 import jwt
 
@@ -53,10 +52,10 @@ def validate_token(authorization: str) -> AuthContext:
         )
     except jwt.ExpiredSignatureError:
         msg = "Token expired"
-        raise ValueError(msg)
+        raise ValueError(msg) from None
     except jwt.InvalidTokenError as e:
         msg = f"Invalid token: {e}"
-        raise ValueError(msg)
+        raise ValueError(msg) from None
 
     return AuthContext(
         user_id=payload.get("id", payload.get("sub", "")),

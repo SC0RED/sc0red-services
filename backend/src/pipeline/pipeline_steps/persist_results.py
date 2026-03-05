@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from signalfield_core.pipeline.step import RequestStep
 
-from src.facades.company_accessor import CompanyAccessor
-
 if TYPE_CHECKING:
+    from src.facades.company_accessor import CompanyAccessor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 
@@ -34,6 +33,7 @@ class PersistResults(RequestStep):
         self._assessment_repo = assessment_repo
 
     def execute(self) -> None:
+        """Persist company, assessment, risk scores, and opportunities to DynamoDB."""
         accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
         company = accessor.company
 
@@ -59,7 +59,7 @@ class PersistResults(RequestStep):
             "risk_tier": risk_assessment.tier if risk_assessment else None,
             "scan_id": company.scan_id,
             "org_id": company.org_id,
-            "analyzed_at": datetime.now(timezone.utc).isoformat(),
+            "analyzed_at": datetime.now(UTC).isoformat(),
         }
         self._company_repo.save_company(company_id, company_doc)
 
@@ -103,9 +103,7 @@ class PersistResults(RequestStep):
                         "timeline": opp.timeline,
                         "investment_range": opp.investment_range,
                         "roi_estimate": opp.roi_estimate,
-                        "related_services": [
-                            svc.model_dump() for svc in opp.related_services
-                        ],
+                        "related_services": [svc.model_dump() for svc in opp.related_services],
                     },
                 )
 

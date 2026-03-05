@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 import openai
-
 from signalfield_core.pipeline.step import RequestStep
 
-from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Opportunity, OpportunityResult, RelatedService, Vendor
+
+if TYPE_CHECKING:
+    from src.facades.company_accessor import CompanyAccessor
 from src.utilities.json_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
@@ -42,9 +44,9 @@ COMPANY PROFILE:
 {json.dumps(profile_dict, indent=2)}
 
 RISK ASSESSMENT:
-Overall Score: {assessment_dict.get('overall_score', 0)}/10 ({assessment_dict.get('tier', 'low')} risk)
+Overall Score: {assessment_dict.get("overall_score", 0)}/10 ({assessment_dict.get("tier", "low")} risk)
 Top Risks: {top_risks}
-Risk Summary: {assessment_dict.get('analysis_summary', '')}
+Risk Summary: {assessment_dict.get("analysis_summary", "")}
 
 DETAILED RISK SCORES:
 {risk_scores_json}
@@ -113,6 +115,7 @@ class GenerateOpportunities(RequestStep):
         self._model = model
 
     def execute(self) -> None:
+        """Generate AI opportunity recommendations from the company risk profile."""
         accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
         profile = accessor.company.profile
         risk_assessment = accessor.company.risk_assessment
@@ -121,9 +124,7 @@ class GenerateOpportunities(RequestStep):
             msg = "Cannot generate opportunities: profile or risk assessment missing"
             raise ValueError(msg)
 
-        user_prompt = _build_opportunity_prompt(
-            profile.model_dump(), risk_assessment.model_dump()
-        )
+        user_prompt = _build_opportunity_prompt(profile.model_dump(), risk_assessment.model_dump())
 
         client = openai.OpenAI(api_key=self._openai_api_key)
         response = client.chat.completions.create(
@@ -157,5 +158,3 @@ class GenerateOpportunities(RequestStep):
 
         accessor.set_opportunities(result)
         self.request_executor.mark_question_complete("generate_opportunities")
-
-

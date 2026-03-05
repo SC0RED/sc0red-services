@@ -9,11 +9,15 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import bcrypt
 
-from src.handlers.auth_middleware import AuthContext, require_auth
+from src.handlers.auth_middleware import require_auth
+
+if TYPE_CHECKING:
+    from src.handlers.auth_middleware import AuthContext
+
 from src.handlers.factory_manager import FactoryManager
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
@@ -46,7 +50,8 @@ class APIGatewayHandler:
         self._storage = storage or DynamoDBStorageProvider()
         self._factory_manager = FactoryManager(self._storage)
 
-    def handle(self, event: dict[str, Any]) -> LambdaResponse:
+    def handle(self, event: dict[str, Any]) -> LambdaResponse:  # noqa: PLR0911
+        """Route an API Gateway event to the appropriate handler."""
         method = event.get("httpMethod", "GET")
         path = event.get("path", "")
         headers = event.get("headers") or {}
@@ -98,15 +103,17 @@ class APIGatewayHandler:
         scan_repo = self._storage.create_scan_repository()
         scan_id = str(uuid.uuid4())
 
-        scan_repo.create({
-            "id": scan_id,
-            "org_id": auth.org_id,
-            "created_by": auth.user_id,
-            "type": scan_type,
-            "source_url": url,
-            "status": "running",
-            "progress": 0,
-        })
+        scan_repo.create(
+            {
+                "id": scan_id,
+                "org_id": auth.org_id,
+                "created_by": auth.user_id,
+                "type": scan_type,
+                "source_url": url,
+                "status": "running",
+                "progress": 0,
+            }
+        )
 
         if scan_type == "portfolio":
             try:
@@ -118,30 +125,38 @@ class APIGatewayHandler:
                     scan_id=scan_id,
                 )
                 companies = result.get("details", {}).get("portfolio_companies", [])
-                scan_repo.update(scan_id, {
-                    "status": "awaiting_confirmation",
-                    "progress": 20,
-                    "portfolio_companies": companies,
-                })
-                return _json_response({
-                    "scanId": scan_id,
-                    "status": "awaiting_confirmation",
-                    "portfolioCompanies": companies,
-                })
+                scan_repo.update(
+                    scan_id,
+                    {
+                        "status": "awaiting_confirmation",
+                        "progress": 20,
+                        "portfolio_companies": companies,
+                    },
+                )
+                return _json_response(
+                    {
+                        "scanId": scan_id,
+                        "status": "awaiting_confirmation",
+                        "portfolioCompanies": companies,
+                    }
+                )
             except Exception as e:
-                logger.error("Portfolio discovery failed: %s", e)
+                logger.exception("Portfolio discovery failed")
                 scan_repo.update(scan_id, {"status": "failed"})
                 return _error(f"Portfolio discovery failed: {e}", 500)
 
         # Single company analysis
         company_id = str(uuid.uuid4())
         company_repo = self._storage.create_company_repository()
-        company_repo.save_company(company_id, {
-            "scan_id": scan_id,
-            "org_id": auth.org_id,
-            "company_url": url,
-            "company_name": "",
-        })
+        company_repo.save_company(
+            company_id,
+            {
+                "scan_id": scan_id,
+                "org_id": auth.org_id,
+                "company_url": url,
+                "company_name": "",
+            },
+        )
 
         try:
             scan_repo.update(scan_id, {"progress": 10})
@@ -152,13 +167,15 @@ class APIGatewayHandler:
                 scan_id=scan_id,
             )
             scan_repo.update(scan_id, {"status": "complete", "progress": 100})
-            return _json_response({
-                "scanId": scan_id,
-                "status": "complete",
-                "analysisId": company_id,
-            })
+            return _json_response(
+                {
+                    "scanId": scan_id,
+                    "status": "complete",
+                    "analysisId": company_id,
+                }
+            )
         except Exception as e:
-            logger.error("Analysis failed for %s: %s", url, e)
+            logger.exception("Analysis failed for %s", url)
             company_repo.update(company_id, {"error": str(e)})
             scan_repo.update(scan_id, {"status": "failed", "progress": 0})
             return _error(str(e), 500)
@@ -180,30 +197,32 @@ class APIGatewayHandler:
             if company_id:
                 full = company_repo.get_by_id(company_id)
                 if full:
-                    analyses.append({
-                        "id": full.get("id"),
-                        "company_name": full.get("company_name", ""),
-                        "company_url": full.get("company_url", ""),
-                        "industry": full.get("industry", ""),
-                        "overall_risk_score": full.get("overall_risk_score"),
-                        "risk_tier": full.get("risk_tier"),
-                        "error": full.get("error"),
-                        "analyzed_at": full.get("analyzed_at"),
-                    })
+                    analyses.append(
+                        {
+                            "id": full.get("id"),
+                            "company_name": full.get("company_name", ""),
+                            "company_url": full.get("company_url", ""),
+                            "industry": full.get("industry", ""),
+                            "overall_risk_score": full.get("overall_risk_score"),
+                            "risk_tier": full.get("risk_tier"),
+                            "error": full.get("error"),
+                            "analyzed_at": full.get("analyzed_at"),
+                        }
+                    )
 
-        return _json_response({
-            "status": scan.get("status"),
-            "progress": scan.get("progress", 0),
-            "type": scan.get("type"),
-            "portfolioCompanies": scan.get("portfolio_companies", []),
-            "analyses": analyses,
-        })
+        return _json_response(
+            {
+                "status": scan.get("status"),
+                "progress": scan.get("progress", 0),
+                "type": scan.get("type"),
+                "portfolioCompanies": scan.get("portfolio_companies", []),
+                "analyses": analyses,
+            }
+        )
 
     # ── POST /api/scan/{scanId}/confirm ──────────────────────────────
 
-    def _handle_scan_confirm(
-        self, event: dict, auth: AuthContext, scan_id: str
-    ) -> LambdaResponse:
+    def _handle_scan_confirm(self, event: dict, auth: AuthContext, scan_id: str) -> LambdaResponse:
         body = json.loads(event.get("body") or "{}")
         companies = body.get("companies", [])
         if not companies:
@@ -222,12 +241,15 @@ class APIGatewayHandler:
 
         for idx, company in enumerate(companies):
             company_id = str(uuid.uuid4())
-            company_repo.save_company(company_id, {
-                "scan_id": scan_id,
-                "org_id": auth.org_id,
-                "company_name": company.get("name", ""),
-                "company_url": company.get("url", ""),
-            })
+            company_repo.save_company(
+                company_id,
+                {
+                    "scan_id": scan_id,
+                    "org_id": auth.org_id,
+                    "company_name": company.get("name", ""),
+                    "company_url": company.get("url", ""),
+                },
+            )
             scan_repo.link_company(scan_id, company_id, company.get("name", ""))
 
             try:
@@ -238,9 +260,11 @@ class APIGatewayHandler:
                     scan_id=scan_id,
                     company_name=company.get("name", ""),
                 )
-                results.append({"name": company["name"], "status": "complete", "analysisId": company_id})
+                results.append(
+                    {"name": company["name"], "status": "complete", "analysisId": company_id}
+                )
             except Exception as e:
-                logger.error("Analysis failed for %s: %s", company.get("name"), e)
+                logger.exception("Analysis failed for %s", company.get("name"))
                 company_repo.update(company_id, {"error": str(e)})
                 results.append({"name": company["name"], "status": "failed", "error": str(e)})
 
@@ -278,23 +302,27 @@ class APIGatewayHandler:
         metadata_json = company.get("metadata_json", "")
         if metadata_json:
             try:
-                meta = json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
+                meta = (
+                    json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
+                )
                 analysis_summary = analysis_summary or meta.get("analysis_summary", "")
                 top_actions = meta.get("top_actions", [])
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        return _json_response({
-            "companyName": company.get("company_name", ""),
-            "companyUrl": company.get("company_url", ""),
-            "industry": company.get("industry", ""),
-            "overallRiskScore": company.get("overall_risk_score"),
-            "riskTier": company.get("risk_tier"),
-            "analysisSummary": analysis_summary,
-            "topActions": top_actions,
-            "riskScores": risk_scores,
-            "opportunities": opportunities,
-        })
+        return _json_response(
+            {
+                "companyName": company.get("company_name", ""),
+                "companyUrl": company.get("company_url", ""),
+                "industry": company.get("industry", ""),
+                "overallRiskScore": company.get("overall_risk_score"),
+                "riskTier": company.get("risk_tier"),
+                "analysisSummary": analysis_summary,
+                "topActions": top_actions,
+                "riskScores": risk_scores,
+                "opportunities": opportunities,
+            }
+        )
 
     # ── DELETE /api/analysis/{id} ────────────────────────────────────
 
@@ -328,21 +356,23 @@ class APIGatewayHandler:
     def _handle_list_analyses(self, auth: AuthContext) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
         companies = company_repo.find_by_org(auth.org_id)
-        return _json_response({
-            "analyses": [
-                {
-                    "id": c.get("id"),
-                    "companyName": c.get("company_name", ""),
-                    "companyUrl": c.get("company_url", ""),
-                    "industry": c.get("industry", ""),
-                    "overallRiskScore": c.get("overall_risk_score"),
-                    "riskTier": c.get("risk_tier"),
-                    "error": c.get("error"),
-                    "analyzedAt": c.get("analyzed_at"),
-                }
-                for c in companies
-            ]
-        })
+        return _json_response(
+            {
+                "analyses": [
+                    {
+                        "id": c.get("id"),
+                        "companyName": c.get("company_name", ""),
+                        "companyUrl": c.get("company_url", ""),
+                        "industry": c.get("industry", ""),
+                        "overallRiskScore": c.get("overall_risk_score"),
+                        "riskTier": c.get("risk_tier"),
+                        "error": c.get("error"),
+                        "analyzedAt": c.get("analyzed_at"),
+                    }
+                    for c in companies
+                ]
+            }
+        )
 
     # ── POST /api/auth/register ──────────────────────────────────────
 
@@ -368,13 +398,15 @@ class APIGatewayHandler:
         password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(10)).decode()
 
         org_repo.create({"id": org_id, "name": org_name, "type": org_type})
-        user_repo.create({
-            "id": user_id,
-            "org_id": org_id,
-            "email": email,
-            "password_hash": password_hash,
-            "name": name,
-            "role": "admin",
-        })
+        user_repo.create(
+            {
+                "id": user_id,
+                "org_id": org_id,
+                "email": email,
+                "password_hash": password_hash,
+                "name": name,
+                "role": "admin",
+            }
+        )
 
         return _json_response({"success": True})

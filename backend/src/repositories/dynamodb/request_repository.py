@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.repositories.dynamodb.client import DynamoDBTable
+if TYPE_CHECKING:
+    from src.repositories.dynamodb.client import DynamoDBTable
 
 
 class DynamoDBRequestRepository:
@@ -20,6 +21,7 @@ class DynamoDBRequestRepository:
         self._table = table
 
     def create(self, request: dict[str, Any]) -> str:
+        """Persist a new pipeline request document and return its ID."""
         request_id = request.get("request_id") or str(uuid.uuid4())
         item = {
             "pk": f"REQUEST#{request_id}",
@@ -33,6 +35,7 @@ class DynamoDBRequestRepository:
         return request_id
 
     def update_status(self, request_id: str, update_data: dict[str, Any]) -> None:
+        """Apply attribute-level updates to an existing request status item."""
         self._table.update_item(
             pk=f"REQUEST#{request_id}",
             sk="REQUEST#STATUS",
@@ -51,12 +54,14 @@ class DynamoDBRequestRepository:
         )
 
     def find_by_request_id(self, request_id: str) -> dict[str, Any] | None:
+        """Return the request status item for the given ID, or None if not found."""
         return self._table.get_item(
             pk=f"REQUEST#{request_id}",
             sk="REQUEST#STATUS",
         )
 
     def delete(self, request_id: str) -> None:
+        """Delete the request status item for the given ID."""
         self._table.delete_item(
             pk=f"REQUEST#{request_id}",
             sk="REQUEST#STATUS",

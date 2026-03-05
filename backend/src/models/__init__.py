@@ -26,8 +26,8 @@ __all__ = [
     "OpportunityResult",
     "RelatedService",
     "RiskAssessment",
-    "RiskScore",
     "RiskScopeLiterals",
+    "RiskScore",
     "StrategicCategoryLiterals",
     "Vendor",
 ]

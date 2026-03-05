@@ -45,16 +45,20 @@ class DynamoDBTable:
 
     @property
     def table_name(self) -> str:
+        """Return the DynamoDB table name."""
         return self._table_name
 
     def put_item(self, item: dict[str, Any]) -> None:
+        """Write a single item to the table, converting floats to Decimal."""
         self._table.put_item(Item=_convert_floats(item))
 
     def get_item(self, pk: str, sk: str) -> dict[str, Any] | None:
+        """Retrieve a single item by primary key, or None if not found."""
         response = self._table.get_item(Key={"pk": pk, "sk": sk})
         return response.get("Item")
 
     def delete_item(self, pk: str, sk: str) -> None:
+        """Delete a single item by primary key."""
         self._table.delete_item(Key={"pk": pk, "sk": sk})
 
     def query(
@@ -63,8 +67,9 @@ class DynamoDBTable:
         sk_prefix: str | None = None,
         index_name: str | None = None,
         limit: int | None = None,
-        scan_forward: bool = True,
+        scan_forward: bool = True,  # noqa: FBT001, FBT002
     ) -> list[dict[str, Any]]:
+        """Query items by partition key, with optional sort-key prefix and pagination."""
         kwargs: dict[str, Any] = {}
         if index_name:
             kwargs["IndexName"] = index_name
@@ -90,6 +95,7 @@ class DynamoDBTable:
         sk_attr: str | None = None,
         sk_prefix: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Query a Global Secondary Index by partition key with optional sort-key prefix."""
         key_condition = Key(pk_attr).eq(pk_value)
         if sk_attr and sk_prefix:
             key_condition = key_condition & Key(sk_attr).begins_with(sk_prefix)
@@ -106,6 +112,7 @@ class DynamoDBTable:
         sk: str,
         updates: dict[str, Any],
     ) -> None:
+        """Update specific attributes on an existing item using a SET expression."""
         if not updates:
             return
 
@@ -128,6 +135,7 @@ class DynamoDBTable:
         )
 
     def batch_delete(self, keys: list[dict[str, str]]) -> None:
+        """Delete multiple items by their primary keys using a batch writer."""
         with self._table.batch_writer() as batch:
             for key in keys:
                 batch.delete_item(Key=key)

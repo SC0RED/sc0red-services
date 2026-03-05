@@ -12,15 +12,21 @@ import logging
 from typing import Any
 
 import openai
-
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are a data extraction assistant. Your task is to find the actual website URL of the primary company described in the provided web page content.
-If the provided URL is already the company's actual operating website (not a private equity firm's portfolio listing), return that same URL.
-If the provided URL is a portfolio listing or directory, look at the provided text and links to find the actual external website of the company.
-Respond with ONLY a JSON object containing "actual_url" (string)."""
+_SYSTEM_PROMPT = (
+    "You are a data extraction assistant. Your task is to find the actual "
+    "website URL of the primary company described in the provided web page "
+    "content.\n"
+    "If the provided URL is already the company's actual operating website "
+    "(not a private equity firm's portfolio listing), return that same URL.\n"
+    "If the provided URL is a portfolio listing or directory, look at the "
+    "provided text and links to find the actual external website of the "
+    "company.\n"
+    'Respond with ONLY a JSON object containing "actual_url" (string).'
+)
 
 
 class URLResolutionStrategy(DataStrategyExecutor):
@@ -40,6 +46,7 @@ class URLResolutionStrategy(DataStrategyExecutor):
         self._config = config or {}
 
     def execute(self) -> tuple[str, dict[str, Any]]:
+        """Resolve the actual company URL from a potentially indirect page."""
         url = self._config.get("url", "")
         scraped_text = self._config.get("scraped_text", "")
         scraped_title = self._config.get("scraped_title", "")
@@ -77,7 +84,7 @@ class URLResolutionStrategy(DataStrategyExecutor):
                 resolved = actual_url.rstrip("/") != url.rstrip("/")
                 return actual_url, {"resolved": resolved, "original_url": url}
 
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("URL resolution failed for %s, using original", url, exc_info=True)
 
         return url, {"resolved": False, "original_url": url}

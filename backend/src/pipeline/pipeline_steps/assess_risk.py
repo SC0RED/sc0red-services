@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 import openai
-
 from signalfield_core.pipeline.step import RequestStep
 
-from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import RiskAssessment, RiskScore
+
+if TYPE_CHECKING:
+    from src.facades.company_accessor import CompanyAccessor
 from src.models.model_literals import RISK_SCOPE_DISPLAY
 from src.utilities.json_utils import parse_json_response
 
@@ -95,6 +97,7 @@ class AssessRisk(RequestStep):
         self._model = model
 
     def execute(self) -> None:
+        """Run the 8-category AI risk assessment and store results on the accessor."""
         accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
         profile = accessor.company.profile
         if not profile:
@@ -132,5 +135,3 @@ class AssessRisk(RequestStep):
 
         accessor.set_risk_assessment(assessment)
         self.request_executor.mark_question_complete("assess_risk")
-
-

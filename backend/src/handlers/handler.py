@@ -6,7 +6,6 @@ import json
 import logging
 import sys
 import threading
-import traceback
 from typing import Any
 
 from src.handlers.api_gateway_handler import APIGatewayHandler
@@ -22,7 +21,8 @@ _storage_lock = threading.Lock()
 
 
 def _get_storage() -> DynamoDBStorageProvider:
-    global _storage
+    """Return the singleton storage provider, initialising it on first call."""
+    global _storage  # noqa: PLW0603
     if _storage is None:
         with _storage_lock:
             if _storage is None:
@@ -30,7 +30,7 @@ def _get_storage() -> DynamoDBStorageProvider:
     return _storage
 
 
-def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     """Main Lambda handler — routes to API Gateway or SQS handler."""
     logger.info("Incoming event type: %s", _detect_event_type(event))
 
@@ -50,8 +50,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error("Critical error in handler: %s", e)
-        logger.error(traceback.format_exc())
+        logger.exception("Critical error in handler")
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)}),

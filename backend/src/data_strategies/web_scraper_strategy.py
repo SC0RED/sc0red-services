@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 logger = logging.getLogger(__name__)
@@ -38,7 +37,7 @@ def normalize_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
 
-def scrape_url(url: str) -> dict[str, Any]:
+def scrape_url(url: str) -> dict[str, Any]:  # noqa: PLR0912
     """Scrape a URL and return structured data.
 
     Returns:
@@ -53,9 +52,7 @@ def scrape_url(url: str) -> dict[str, Any]:
     soup = BeautifulSoup(response.text, "html.parser")
 
     # Remove script, style, nav clutter (matches Cheerio removals)
-    for tag in soup.find_all(
-        ["script", "style", "noscript", "nav", "footer", "header", "aside"]
-    ):
+    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
         tag.decompose()
 
     # Remove elements by class name patterns
@@ -131,6 +128,7 @@ class WebScraperStrategy(DataStrategyExecutor):
         self._config = config or {}
 
     def execute(self) -> tuple[str, dict[str, Any]]:
+        """Scrape the configured URL and return structured text and metadata."""
         url = self._config.get("url", "")
         if not url:
             return "", {"error": "No URL provided"}

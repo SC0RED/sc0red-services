@@ -5,10 +5,12 @@ Run with: uvicorn src.local_server:app --port 8001 --reload
 
 from __future__ import annotations
 
-import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Response
+
+if TYPE_CHECKING:
+    from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.handlers.handler import handler
@@ -53,4 +55,5 @@ async def _lambda_proxy(request: Request, method: str) -> Response:
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def catch_all(request: Request) -> Response:
+    """Route all HTTP methods to the Lambda handler proxy."""
     return await _lambda_proxy(request, request.method)

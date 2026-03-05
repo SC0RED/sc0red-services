@@ -6,6 +6,8 @@ pe-scan/src/lib/ai/prompts.ts system prompts.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 
 class RiskScopeManager:
     """Implements ScopeConfiguration protocol for a single PE risk scope.
@@ -15,7 +17,7 @@ class RiskScopeManager:
     AI prompts for each risk category.
     """
 
-    _SCOPE_CONFIG: dict[str, dict[str, str]] = {
+    _SCOPE_CONFIG: ClassVar[dict[str, dict[str, str]]] = {
         "competitive_displacement": {
             "role_identity": (
                 "You are a senior AI strategy consultant specializing in competitive dynamics "
@@ -24,7 +26,8 @@ class RiskScopeManager:
             ),
             "context_description": (
                 "companies facing potential displacement by AI-native competitors "
-                "entering their market with fundamentally different cost structures and capabilities"
+                "entering their market with fundamentally different cost structures "
+                "and capabilities"
             ),
             "target_type": "companies vulnerable to AI-native competitive displacement",
             "assessment_type_description": "AI competitive displacement risk assessment",
@@ -124,19 +127,24 @@ class RiskScopeManager:
 
     def __init__(self, scope: str) -> None:
         if scope not in self._SCOPE_CONFIG:
-            msg = f"Unknown risk scope: {scope}. Valid scopes: {sorted(self._SCOPE_CONFIG.keys())}"
+            valid = sorted(self._SCOPE_CONFIG.keys())
+            msg = f"Unknown risk scope: {scope}. Valid scopes: {valid}"
             raise ValueError(msg)
         self._scope = scope
         self._config = self._SCOPE_CONFIG[scope]
 
     def get_role_identity(self) -> str:
+        """Return the AI role identity prompt for this risk scope."""
         return self._config["role_identity"]
 
     def get_context_description(self) -> str:
+        """Return the context description for this risk scope."""
         return self._config["context_description"]
 
     def get_target_type(self) -> str:
+        """Return the target type label for this risk scope."""
         return self._config["target_type"]
 
     def get_assessment_type_description(self) -> str:
+        """Return the assessment type description for this risk scope."""
         return self._config["assessment_type_description"]

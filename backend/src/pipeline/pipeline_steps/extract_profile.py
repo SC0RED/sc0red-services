@@ -6,13 +6,15 @@ Ports buildProfilePrompt from pe-scan/src/lib/ai/prompts.ts:42-65.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import openai
-
 from signalfield_core.pipeline.step import RequestStep
 
-from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import CompanyProfile
+
+if TYPE_CHECKING:
+    from src.facades.company_accessor import CompanyAccessor
 from src.utilities.json_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
@@ -58,6 +60,7 @@ class ExtractProfile(RequestStep):
         self._model = model
 
     def execute(self) -> None:
+        """Extract a structured company profile from scraped website content."""
         accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
         scraped_text = accessor.get_scraped_text()
         actual_url = accessor.company.actual_url or accessor.company.url
@@ -88,5 +91,3 @@ class ExtractProfile(RequestStep):
 
         accessor.set_profile(profile)
         self.request_executor.mark_question_complete("extract_profile")
-
-

@@ -9,9 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from signalfield_core.pipeline.factory import PipelineFactory
-from signalfield_core.pipeline.step import RequestStep
 
-from src.facades.company_accessor import CompanyAccessor
 from src.pipeline.pipeline_steps.assess_risk import AssessRisk
 from src.pipeline.pipeline_steps.extract_profile import ExtractProfile
 from src.pipeline.pipeline_steps.generate_opportunities import GenerateOpportunities
@@ -20,6 +18,9 @@ from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
 from src.pipeline.request_executor import JanusRequestExecutor
 
 if TYPE_CHECKING:
+    from signalfield_core.pipeline.step import RequestStep
+
+    from src.facades.company_accessor import CompanyAccessor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 
@@ -46,6 +47,7 @@ class CompanyAnalysisFactory(PipelineFactory):
         self._assessment_repo = assessment_repo
 
     def get_pipeline(self) -> list[RequestStep]:
+        """Return the ordered list of pipeline steps for company analysis."""
         return [
             ScrapeAndResolveURL(
                 openai_api_key=self._openai_api_key,
@@ -70,6 +72,7 @@ class CompanyAnalysisFactory(PipelineFactory):
         ]
 
     def build_executor(self) -> JanusRequestExecutor:
+        """Build and wire a JanusRequestExecutor with the company analysis pipeline."""
         pipeline = self.get_pipeline()
         executor = JanusRequestExecutor(
             tenant_id=self._tenant_id,

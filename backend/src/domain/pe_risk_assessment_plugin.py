@@ -26,42 +26,55 @@ class PERiskAssessmentPlugin:
 
     @property
     def domain_name(self) -> str:
+        """Return the domain identifier for this plugin."""
         return "pe_risk_assessment"
 
     @property
     def event_source(self) -> str:
+        """Return the event source identifier for this plugin."""
         return "signalfield.janus"
 
     def get_scope_names(self) -> list[str]:
-        return sorted(RiskScopeManager._SCOPE_CONFIG.keys())
+        """Return sorted list of available risk scope names."""
+        return sorted(RiskScopeManager._SCOPE_CONFIG.keys())  # noqa: SLF001
 
     def get_scope_configuration(self, scope: str) -> ScopeConfiguration:
+        """Return the ScopeConfiguration instance for the given scope name."""
         return RiskScopeManager(scope)
 
     def create_entity_accessor(self, **kwargs: Any) -> EntityAccessor:
+        """Create and return a CompanyAccessor for the given company entity."""
         company = kwargs.get("company")
         if isinstance(company, Company):
             return CompanyAccessor(company)
         return CompanyAccessor()
 
     def register_data_strategies(self, registry: DataStrategyRegistry) -> None:
-        from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy  # noqa: IMPORT (lazy to avoid circular deps)
-        from src.data_strategies.url_resolution_strategy import URLResolutionStrategy  # noqa: IMPORT (lazy to avoid circular deps)
-        from src.data_strategies.web_scraper_strategy import WebScraperStrategy  # noqa: IMPORT (lazy to avoid circular deps)
+        """Register all PE-domain data strategies with the provided registry."""
+        from src.data_strategies.portfolio_discovery_strategy import (  # noqa: PLC0415
+            PortfolioDiscoveryStrategy,
+        )
+        from src.data_strategies.url_resolution_strategy import (  # noqa: PLC0415
+            URLResolutionStrategy,
+        )
+        from src.data_strategies.web_scraper_strategy import (  # noqa: PLC0415
+            WebScraperStrategy,
+        )
 
         registry.register(
             "web_scrape",
-            lambda config: WebScraperStrategy(config),
+            WebScraperStrategy,
         )
         registry.register(
             "url_resolution",
-            lambda config: URLResolutionStrategy(config),
+            URLResolutionStrategy,
             dependencies=["web_scrape"],
         )
         registry.register(
             "portfolio_discovery",
-            lambda config: PortfolioDiscoveryStrategy(config),
+            PortfolioDiscoveryStrategy,
         )
 
     def get_assessment_types(self) -> list[str]:
+        """Return the list of assessment types supported by this domain."""
         return ["company_analysis", "portfolio_scan"]

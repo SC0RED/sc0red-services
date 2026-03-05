@@ -24,6 +24,7 @@ class SQSHandler:
         self._factory_manager = FactoryManager(self._storage)
 
     def handle(self, event: dict[str, Any]) -> dict[str, Any]:
+        """Process all SQS records in the event and return batch failure info."""
         records = event.get("Records", [])
         results: list[dict[str, Any]] = []
 
@@ -33,12 +34,13 @@ class SQSHandler:
                 result = self._process_message(body)
                 results.append(result)
             except Exception as e:
-                logger.error("SQS message processing failed: %s", e)
+                logger.exception("SQS message processing failed")
                 results.append({"error": str(e)})
 
         return {"batchItemFailures": []}
 
     def _process_message(self, message: dict[str, Any]) -> dict[str, Any]:
+        """Process a single SQS message and run the company analysis pipeline."""
         url = message.get("url", "")
         org_id = message.get("org_id", "")
         user_id = message.get("user_id", "")
