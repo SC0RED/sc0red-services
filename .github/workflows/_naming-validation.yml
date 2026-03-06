@@ -2,6 +2,9 @@ name: Reusable Naming Validation
 
 on:
   workflow_call:
+    secrets:
+      GH_PAT:
+        required: false
 
 jobs:
   validate-branch-name:
@@ -50,6 +53,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
+        with:
+          gh-pat: ${{ secrets.GH_PAT }}
 
       - name: Run Ruff naming checks
         working-directory: backend
