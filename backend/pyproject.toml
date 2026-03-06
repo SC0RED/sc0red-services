@@ -56,6 +56,7 @@ venv = ".venv"
 include = ["src"]
 exclude = ["**/__pycache__"]
 reportMissingImports = "warning"
+reportMissingTypeStubs = "warning"
 
 # =============================================================================
 # RUFF - Comprehensive Linting
