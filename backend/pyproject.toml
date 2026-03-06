@@ -38,6 +38,9 @@ dev = [
     "boto3-stubs[dynamodb]>=1.34",
 ]
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
