@@ -6,10 +6,14 @@ Uses PortfolioDiscoveryStrategy to find companies from a PE firm's website.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
+
+if TYPE_CHECKING:
+    from src.facades.company_accessor import CompanyAccessor
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +23,13 @@ class DiscoverPortfolio(RequestStep):
 
     def execute(self) -> None:
         """Discover portfolio companies from the PE firm URL and store results."""
-        accessor = self.entity_accessor
+        accessor = cast("CompanyAccessor", self.entity_accessor)
         # The URL is stored on the company accessor
-        url = ""
-        if hasattr(accessor, "company"):
-            url = accessor.company.url  # type: ignore[union-attr]
+        url = accessor.company.url
 
         if not url:
-            msg = "No URL provided for portfolio discovery"
-            raise ValueError(msg)
+            message = "No URL provided for portfolio discovery"
+            raise ValueError(message)
 
         strategy = PortfolioDiscoveryStrategy({"url": url})
         raw_json, metadata = strategy.execute()

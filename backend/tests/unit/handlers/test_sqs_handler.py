@@ -25,17 +25,23 @@ class TestSQSHandler:
         storage.create_scan_repository.return_value = scan_repo
         handler._factory_manager.run_company_analysis.return_value = {"request_id": "r-1"}
 
-        result = handler.handle({
-            "Records": [{
-                "body": json.dumps({
-                    "url": "https://example.com",
-                    "org_id": "org-1",
-                    "user_id": "user-1",
-                    "scan_id": "scan-1",
-                    "company_name": "Test Co",
-                }),
-            }],
-        })
+        result = handler.handle(
+            {
+                "Records": [
+                    {
+                        "body": json.dumps(
+                            {
+                                "url": "https://example.com",
+                                "org_id": "org-1",
+                                "user_id": "user-1",
+                                "scan_id": "scan-1",
+                                "company_name": "Test Co",
+                            }
+                        ),
+                    }
+                ],
+            }
+        )
         assert result == {"batchItemFailures": []}
         handler._factory_manager.run_company_analysis.assert_called_once()
         scan_repo.update.assert_called_once()
@@ -47,22 +53,26 @@ class TestSQSHandler:
         storage.create_scan_repository.return_value = scan_repo
         handler._factory_manager.run_company_analysis.return_value = {}
 
-        result = handler.handle({
-            "Records": [
-                {"body": json.dumps({"url": "https://a.com", "scan_id": "s-1"})},
-                {"body": json.dumps({"url": "https://b.com", "scan_id": "s-1"})},
-            ],
-        })
+        result = handler.handle(
+            {
+                "Records": [
+                    {"body": json.dumps({"url": "https://a.com", "scan_id": "s-1"})},
+                    {"body": json.dumps({"url": "https://b.com", "scan_id": "s-1"})},
+                ],
+            }
+        )
         assert result == {"batchItemFailures": []}
         assert handler._factory_manager.run_company_analysis.call_count == 2
 
     def test_handle_message_processing_error(self):
-        handler, storage = self._make_handler()
+        handler, _storage = self._make_handler()
         handler._factory_manager.run_company_analysis.side_effect = RuntimeError("fail")
 
-        result = handler.handle({
-            "Records": [{"body": json.dumps({"url": "https://a.com", "scan_id": "s-1"})}],
-        })
+        result = handler.handle(
+            {
+                "Records": [{"body": json.dumps({"url": "https://a.com", "scan_id": "s-1"})}],
+            }
+        )
         # Should not raise, returns empty failures
         assert result == {"batchItemFailures": []}
 
@@ -73,12 +83,14 @@ class TestSQSHandler:
         storage.create_scan_repository.return_value = scan_repo
         handler._factory_manager.run_company_analysis.return_value = {}
 
-        handler._process_message({
-            "url": "https://example.com",
-            "org_id": "org-1",
-            "user_id": "user-1",
-            "scan_id": "scan-1",
-        })
+        handler._process_message(
+            {
+                "url": "https://example.com",
+                "org_id": "org-1",
+                "user_id": "user-1",
+                "scan_id": "scan-1",
+            }
+        )
         # Progress capped at 95
         scan_repo.update.assert_called_once_with("scan-1", {"progress": 90})
 
@@ -89,10 +101,12 @@ class TestSQSHandler:
         storage.create_scan_repository.return_value = scan_repo
         handler._factory_manager.run_company_analysis.return_value = {}
 
-        handler._process_message({
-            "url": "https://example.com",
-            "scan_id": "scan-1",
-        })
+        handler._process_message(
+            {
+                "url": "https://example.com",
+                "scan_id": "scan-1",
+            }
+        )
         scan_repo.update.assert_called_once_with("scan-1", {"progress": 95})
 
     def test_process_message_scan_not_found(self):

@@ -37,7 +37,7 @@ def normalize_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
 
-def scrape_url(url: str) -> dict[str, Any]:  # noqa: PLR0912
+def scrape_url(url: str) -> dict[str, Any]:
     """Scrape a URL and return structured data.
 
     Returns:

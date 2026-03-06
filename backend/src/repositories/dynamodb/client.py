@@ -17,15 +17,15 @@ from boto3.dynamodb.conditions import Key
 logger = logging.getLogger(__name__)
 
 
-def _convert_floats(obj: Any) -> Any:
+def _convert_floats(value: Any) -> Any:
     """Recursively convert float values to Decimal for DynamoDB compatibility."""
-    if isinstance(obj, float):
-        return Decimal(str(obj))
-    if isinstance(obj, dict):
-        return {k: _convert_floats(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_convert_floats(v) for v in obj]
-    return obj
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _convert_floats(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_convert_floats(v) for v in value]
+    return value
 
 
 class DynamoDBTable:
@@ -67,7 +67,7 @@ class DynamoDBTable:
         sk_prefix: str | None = None,
         index_name: str | None = None,
         limit: int | None = None,
-        scan_forward: bool = True,  # noqa: FBT001, FBT002
+        scan_forward: bool = True,
     ) -> list[dict[str, Any]]:
         """Query items by partition key, with optional sort-key prefix and pagination."""
         kwargs: dict[str, Any] = {}

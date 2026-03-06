@@ -9,7 +9,7 @@ description = "Janus PE Risk Assessment — Python backend powered by signalfiel
 authors = [{name = "SignalField Team"}]
 requires-python = ">=3.12"
 dependencies = [
-    "signalfield-core[all] @ git+https://github.com/SignalField/signalfield-core.git@main",
+    "signalfield-core[all] @ git+https://github.com/SignalField/signalfield-core.git@development",
     "pydantic>=2.0",
     "boto3>=1.34",
     "httpx>=0.27",
@@ -38,6 +38,9 @@ dev = [
     "boto3-stubs[dynamodb]>=1.34",
 ]
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
@@ -48,9 +51,12 @@ packages = ["src"]
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
 include = ["src"]
 exclude = ["**/__pycache__"]
 reportMissingImports = "warning"
+reportMissingTypeStubs = "warning"
 
 # =============================================================================
 # RUFF - Comprehensive Linting
@@ -62,6 +68,9 @@ line-length = 100
 src = ["src"]
 
 [tool.ruff.lint]
+# Custom rule codes from local scripts (prevent ruff from stripping # noqa comments for these)
+external = ["NAMING001", "ABBREV001", "IMPORT001"]
+
 select = [
     # Core
     "E",      # pycodestyle errors
@@ -130,6 +139,9 @@ ignore = [
 
     # Function complexity - handled by CodeRabbit with more context
     "PLR0913", # Too many arguments (>5)
+    "PLR0911", # Too many return statements
+    "PLR0912", # Too many branches
+    "PLR0915", # Too many statements
 
     # Sometimes needed for API compatibility
     "ARG002", # Unused method argument (sometimes needed for interface compliance)
@@ -140,10 +152,26 @@ ignore = [
 
     # Try-except - some patterns are valid
     "TRY003", # Avoid specifying long messages outside exception class
+
+    # Global statement - valid for singleton patterns
+    "PLW0603", # Using the global statement
+
+    # Boolean arguments - sometimes needed for API compatibility
+    "FBT001", # Boolean-typed positional argument
+    "FBT002", # Boolean default positional argument
+
+    # Blind except - valid in scraping/IO code with proper logging
+    "BLE001", # Do not catch blind exception: Exception
+
+    # Import not at top of file - valid for deferred plugin imports
+    "PLC0415", # import outside top-level
+
+    # Private member access - sometimes needed for framework integration
+    "SLF001", # Private member accessed
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = [
+"**/tests/**/*.py" = [
     "S101",    # Assert allowed in tests
     "ARG",     # Unused args OK (fixtures)
     "PLR2004", # Magic values OK in tests
@@ -151,10 +179,10 @@ ignore = [
     "D",       # Docstrings optional in tests
     "TCH",     # Type-checking imports OK at runtime in tests
 ]
-"src/pipeline/pipeline_steps/assess_risk.py" = ["E501"]     # LLM prompt strings
-"src/pipeline/pipeline_steps/extract_profile.py" = ["E501"] # LLM prompt strings
-"src/pipeline/pipeline_steps/generate_opportunities.py" = ["E501"] # LLM prompt strings
-"scripts/**/*.py" = [
+"**/pipeline_steps/assess_risk.py" = ["E501"]     # LLM prompt strings
+"**/pipeline_steps/extract_profile.py" = ["E501"] # LLM prompt strings
+"**/pipeline_steps/generate_opportunities.py" = ["E501"] # LLM prompt strings
+"**/scripts/**/*.py" = [
     "T20",     # Print allowed in scripts
     "S",       # Security checks less strict in scripts
     "ANN",     # Type annotations less strict in scripts
@@ -166,6 +194,12 @@ ignore = [
     "PIE810",  # startswith/endswith tuple not required
     "E501",    # Line length relaxed in scripts
 ]
+
+[tool.ruff.lint.extend-per-file-ignores]
+# Security checks relaxed in test configs (moto credentials)
+"**/conftest.py" = ["S105"]
+# Boolean positional args OK in tests
+"**/tests/**/*.py" = ["FBT003"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

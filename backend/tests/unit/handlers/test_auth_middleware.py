@@ -1,12 +1,13 @@
-"""Tests for auth middleware."""
+"""Tests for authentication middleware."""
 
 import os
+import time
 from unittest.mock import patch
 
 import jwt
 import pytest
 
-from src.handlers.auth_middleware import AuthContext, require_auth, validate_token
+from src.handlers.auth_middleware import AuthContext, require_authentication, validate_token
 
 
 class TestValidateToken:
@@ -64,7 +65,7 @@ class TestRequireAuth:
         payload = {"id": "user-1", "orgId": "org-1"}
         token = jwt.encode(payload, "test-key", algorithm="HS256")
 
-        context = require_auth({"Authorization": f"Bearer {token}"})
+        context = require_authentication({"Authorization": f"Bearer {token}"})
         assert context.user_id == "user-1"
 
     @patch.dict(os.environ, {"NEXTAUTH_SECRET": "test-key"})
@@ -72,12 +73,12 @@ class TestRequireAuth:
         payload = {"id": "user-1", "orgId": "org-1"}
         token = jwt.encode(payload, "test-key", algorithm="HS256")
 
-        context = require_auth({"authorization": f"Bearer {token}"})
+        context = require_authentication({"authorization": f"Bearer {token}"})
         assert context.user_id == "user-1"
 
-    def test_missing_auth_header(self):
+    def test_missing_authentication_header(self):
         with pytest.raises(ValueError, match="Missing"):
-            require_auth({})
+            require_authentication({})
 
     @patch.dict(os.environ, {}, clear=True)
     def test_no_secret_configured(self):
@@ -86,8 +87,6 @@ class TestRequireAuth:
 
     @patch.dict(os.environ, {"NEXTAUTH_SECRET": "test-secret-key-long-enough"})
     def test_expired_token(self):
-        import time
-
         payload = {"id": "user-1", "exp": int(time.time()) - 3600}
         token = jwt.encode(payload, "test-secret-key-long-enough", algorithm="HS256")
         with pytest.raises(ValueError, match="expired"):

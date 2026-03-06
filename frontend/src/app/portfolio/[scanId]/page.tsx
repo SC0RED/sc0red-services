@@ -1,9 +1,28 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/authOptions'
-import { getDb, initializeDb } from '@/lib/db/client'
+import { backendFetch } from '@/lib/api/serverToken'
 import { getRiskTierLabel, getRiskTier } from '@/lib/utils/riskUtils'
 import Link from 'next/link'
 import DashboardSidebar from '@/components/DashboardSidebar'
+
+interface ScanAnalysis {
+    id: string
+    companyName: string
+    companyUrl: string
+    industry: string
+    overallRiskScore: number | null
+    riskTier: string | null
+    error: string | null
+    analyzedAt: string | null
+}
+
+interface ScanData {
+    status: string
+    progress: number
+    type: string
+    portfolioCompanies: Array<{ name: string; url: string }>
+    analyses: ScanAnalysis[]
+}
 
 export default async function PortfolioPage({ params }: { params: { scanId: string } }) {
     const session = await getServerSession(authOptions)
@@ -14,26 +33,18 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
         redirect('/login')
     }
 
-    await initializeDb()
-    const db = getDb()
+    let scan: ScanData
+    try {
+        scan = await backendFetch<ScanData>(`/api/scan/${params.scanId}`)
+    } catch {
+        return <div style={{ padding: '2rem', color: 'var(--risk-critical)' }}>Scan not found</div>
+    }
 
-    const scanResult = await db.execute({
-        sql: `SELECT * FROM scans WHERE id = ? AND org_id = ?`,
-        args: [params.scanId, orgId],
-    })
-    const scan = scanResult.rows[0] as any
-    if (!scan) return <div style={{ padding: '2rem', color: 'var(--risk-critical)' }}>Scan not found</div>
-
-    const analysesResult = await db.execute({
-        sql: `SELECT ca.* FROM company_analyses ca WHERE ca.scan_id = ? ORDER BY ca.overall_risk_score DESC`,
-        args: [params.scanId],
-    })
-    const analyses = analysesResult.rows as any[]
-
-    const completed = analyses.filter((a: any) => a.overall_risk_score !== null)
-    const avgScore = completed.length ? completed.reduce((s: number, a: any) => s + Number(a.overall_risk_score), 0) / completed.length : 0
+    const analyses = scan.analyses
+    const completed = analyses.filter(a => a.overallRiskScore !== null)
+    const avgScore = completed.length ? completed.reduce((s, a) => s + Number(a.overallRiskScore), 0) / completed.length : 0
     const tierCounts = { critical: 0, high: 0, moderate: 0, low: 0 }
-    completed.forEach((a: any) => { if (a.risk_tier) tierCounts[a.risk_tier as keyof typeof tierCounts]++ })
+    completed.forEach(a => { if (a.riskTier) tierCounts[a.riskTier as keyof typeof tierCounts]++ })
 
     const tierColors: Record<string, string> = { low: 'var(--risk-low)', moderate: 'var(--risk-moderate)', high: 'var(--risk-high)', critical: 'var(--risk-critical)' }
 
@@ -51,7 +62,7 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
                     </div>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>Portfolio Analysis</h1>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
-                        {scan.source_url} · {analyses.length} companies · Scanned {new Date(scan.created_at as string).toLocaleDateString()}
+                        {analyses.length} companies
                     </p>
                 </div>
 
@@ -78,18 +89,18 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
                 <div style={{ marginBottom: '2rem' }}>
                     <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>Risk Heatmap</h2>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.875rem' }}>
-                        {analyses.map((a: any) => {
-                            const tier = (a.risk_tier || (a.overall_risk_score ? getRiskTier(Number(a.overall_risk_score)) : null)) as string | null
+                        {analyses.map((a) => {
+                            const tier = (a.riskTier || (a.overallRiskScore ? getRiskTier(Number(a.overallRiskScore)) : null)) as string | null
                             const color = tier ? tierColors[tier] : 'var(--text-tertiary)'
-                            const isAnalyzed = a.overall_risk_score !== null
+                            const isAnalyzed = a.overallRiskScore !== null
                             return (
-                                <Link key={a.id as string} href={`/analysis/${a.id as string}`} style={{ textDecoration: 'none' }}>
+                                <Link key={a.id} href={`/analysis/${a.id}`} style={{ textDecoration: 'none' }}>
                                     <div className="card" style={{ padding: '1.125rem', borderTop: tier ? `3px solid ${color}` : '3px solid var(--border-subtle)', opacity: isAnalyzed ? 1 : 0.6 }}>
-                                        <div className="truncate" style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.375rem' }}>{(a.company_name as string) || 'Analyzing...'}</div>
-                                        {a.industry && <div className="truncate" style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.625rem' }}>{a.industry as string}</div>}
+                                        <div className="truncate" style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.375rem' }}>{a.companyName || 'Analyzing...'}</div>
+                                        {a.industry && <div className="truncate" style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '0.625rem' }}>{a.industry}</div>}
                                         {isAnalyzed ? (
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '1.5rem', fontWeight: 800, color }}>{(Number(a.overall_risk_score)).toFixed(1)}</span>
+                                                <span style={{ fontSize: '1.5rem', fontWeight: 800, color }}>{(Number(a.overallRiskScore)).toFixed(1)}</span>
                                                 {tier && <span className={`badge badge-${tier}`} style={{ fontSize: '0.7rem' }}>{getRiskTierLabel(tier)}</span>}
                                             </div>
                                         ) : (
@@ -116,19 +127,19 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
                                 </tr>
                             </thead>
                             <tbody>
-                                {analyses.map((a: any, i: number) => {
-                                    const tier = (a.risk_tier || (a.overall_risk_score ? getRiskTier(Number(a.overall_risk_score)) : null)) as string | null
+                                {analyses.map((a, i: number) => {
+                                    const tier = (a.riskTier || (a.overallRiskScore ? getRiskTier(Number(a.overallRiskScore)) : null)) as string | null
                                     return (
-                                        <tr key={a.id as string} style={{ borderBottom: i < analyses.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                                        <tr key={a.id} style={{ borderBottom: i < analyses.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                <div style={{ fontWeight: 500 }}>{a.company_name as string || '—'}</div>
-                                                {a.company_url && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>{a.company_url as string}</div>}
+                                                <div style={{ fontWeight: 500 }}>{a.companyName || '—'}</div>
+                                                {a.companyUrl && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>{a.companyUrl}</div>}
                                             </td>
-                                            <td style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{(a.industry as string) || '—'}</td>
+                                            <td style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{a.industry || '—'}</td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                {a.overall_risk_score ? (
+                                                {a.overallRiskScore ? (
                                                     <span style={{ fontWeight: 700, fontSize: '1.1rem', color: tier ? tierColors[tier] : 'var(--text-secondary)' }}>
-                                                        {Number(a.overall_risk_score).toFixed(1)}
+                                                        {Number(a.overallRiskScore).toFixed(1)}
                                                     </span>
                                                 ) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
                                             </td>
@@ -136,8 +147,8 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
                                                 {tier && <span className={`badge badge-${tier}`}>{getRiskTierLabel(tier)}</span>}
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                {a.overall_risk_score && (
-                                                    <Link href={`/analysis/${a.id as string}`} className="btn btn-ghost btn-sm">View Report</Link>
+                                                {a.overallRiskScore && (
+                                                    <Link href={`/analysis/${a.id}`} className="btn btn-ghost btn-sm">View Report</Link>
                                                 )}
                                             </td>
                                         </tr>

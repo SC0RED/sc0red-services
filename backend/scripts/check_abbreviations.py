@@ -98,7 +98,7 @@ class AbbreviationChecker(ast.NodeVisitor):
                 )
                 break
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Check function names and parameters."""
         if node.name.startswith("__") and node.name.endswith("__"):
             self.generic_visit(node)
@@ -111,23 +111,23 @@ class AbbreviationChecker(ast.NodeVisitor):
 
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """Check async function names."""
         self.visit_FunctionDef(node)  # type: ignore
 
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
         """Check class names."""
         self.check_name(node.name, node.lineno, "Class")
         self.generic_visit(node)
 
-    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
+    def visit_Assign(self, node: ast.Assign) -> None:
         """Check variable names."""
         for target in node.targets:
             if isinstance(target, ast.Name):
                 self.check_name(target.id, node.lineno, "Variable")
         self.generic_visit(node)
 
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         """Check annotated variable names."""
         if isinstance(node.target, ast.Name):
             self.check_name(node.target.id, node.lineno, "Variable")

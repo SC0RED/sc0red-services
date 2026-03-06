@@ -69,7 +69,7 @@ class CompanyAccessor:
             return [rs.model_dump() for rs in self._company.risk_assessment.risk_scores]
         return []
 
-    def get_dealbreaker_triggered(self) -> bool:
+    def has_dealbreaker_triggered(self) -> bool:
         """Returns True if risk tier is 'critical'."""
         if self._company.risk_assessment:
             return self._company.risk_assessment.tier == "critical"

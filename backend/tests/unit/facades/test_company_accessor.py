@@ -87,13 +87,13 @@ class TestCompanyAccessorRead:
         assert len(categories) == 2
         assert categories[0]["category"] == "competitive_displacement"
 
-    def test_get_dealbreaker_triggered(self):
+    def test_has_dealbreaker_triggered(self):
         company = Company(
             url="https://example.com",
             risk_assessment=RiskAssessment(tier="critical"),
         )
         accessor = CompanyAccessor(company)
-        assert accessor.get_dealbreaker_triggered() is True
+        assert accessor.has_dealbreaker_triggered() is True
 
     def test_get_dealbreaker_not_triggered(self):
         company = Company(
@@ -101,7 +101,7 @@ class TestCompanyAccessorRead:
             risk_assessment=RiskAssessment(tier="moderate"),
         )
         accessor = CompanyAccessor(company)
-        assert accessor.get_dealbreaker_triggered() is False
+        assert accessor.has_dealbreaker_triggered() is False
 
 
 class TestCompanyAccessorSetters:
@@ -180,7 +180,7 @@ class TestCompanyAccessorNullBranches:
 
     def test_get_dealbreaker_without_risk(self):
         accessor = CompanyAccessor(Company(url="https://example.com"))
-        assert accessor.get_dealbreaker_triggered() is False
+        assert accessor.has_dealbreaker_triggered() is False
 
     def test_set_scan_id(self):
         accessor = CompanyAccessor(Company(url="https://example.com"))

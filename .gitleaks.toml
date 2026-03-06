@@ -76,6 +76,17 @@ regex = '''(?i)(secret|password|passwd|pwd)\s*[=:]\s*['\"]?([^\s'\"]{8,})['\"]?'
 secretGroup = 2
 tags = ["secret", "password"]
 
+[rules.allowlist]
+description = "Allow code references to password/secret variables (not real secrets)"
+paths = [
+    '''backend/src/handlers/api_gateway_handler\.py$''',
+    '''frontend/src/lib/auth/authOptions\.ts$''',
+    '''frontend/src/lib/api/serverToken\.ts$''',
+    '''docker-compose\.yml$''',
+    '''scripts/e2e-test\.sh$''',
+    '''\.env\.local\.example$''',
+]
+
 [[rules]]
 id = "private-key"
 description = "Private Key"

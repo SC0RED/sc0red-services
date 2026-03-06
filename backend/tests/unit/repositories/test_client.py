@@ -72,7 +72,7 @@ class TestDynamoDBTable:
             mock_boto3.resource.return_value = mock_resource
             mock_resource.Table.return_value = MagicMock()
 
-            table = DynamoDBTable(table_name="janus-test", endpoint_url="http://localhost:8000")
+            DynamoDBTable(table_name="janus-test", endpoint_url="http://localhost:8000")
 
             mock_boto3.resource.assert_called_once()
             call_kwargs = mock_boto3.resource.call_args
@@ -102,10 +102,12 @@ class TestDynamoDBTable:
     def test_query_with_limit(self, dynamodb_table):
         """query() respects limit parameter."""
         for i in range(5):
-            dynamodb_table.put_item({
-                "pk": "BATCH#1",
-                "sk": f"ITEM#{i:04d}",
-            })
+            dynamodb_table.put_item(
+                {
+                    "pk": "BATCH#1",
+                    "sk": f"ITEM#{i:04d}",
+                }
+            )
 
         results = dynamodb_table.query(pk="BATCH#1", limit=2)
         assert len(results) == 2

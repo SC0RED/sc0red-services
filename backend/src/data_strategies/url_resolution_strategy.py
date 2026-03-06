@@ -84,7 +84,7 @@ class URLResolutionStrategy(DataStrategyExecutor):
                 resolved = actual_url.rstrip("/") != url.rstrip("/")
                 return actual_url, {"resolved": resolved, "original_url": url}
 
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("URL resolution failed for %s, using original", url, exc_info=True)
 
         return url, {"resolved": False, "original_url": url}

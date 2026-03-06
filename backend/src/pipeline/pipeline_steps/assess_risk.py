@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import openai
 from signalfield_core.pipeline.step import RequestStep
@@ -98,11 +98,11 @@ class AssessRisk(RequestStep):
 
     def execute(self) -> None:
         """Run the 8-category AI risk assessment and store results on the accessor."""
-        accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
+        accessor = cast("CompanyAccessor", self.entity_accessor)
         profile = accessor.company.profile
         if not profile:
-            msg = "Cannot assess risk: no company profile available"
-            raise ValueError(msg)
+            message = "Cannot assess risk: no company profile available"
+            raise ValueError(message)
 
         user_prompt = _build_risk_prompt(profile.model_dump())
 
@@ -122,8 +122,8 @@ class AssessRisk(RequestStep):
 
         risk_scores = [RiskScore(**rs) for rs in data.get("risk_scores", [])]
         if not risk_scores:
-            msg = "Risk assessment returned no risk scores"
-            raise ValueError(msg)
+            message = "Risk assessment returned no risk scores"
+            raise ValueError(message)
 
         assessment = RiskAssessment(
             risk_scores=risk_scores,

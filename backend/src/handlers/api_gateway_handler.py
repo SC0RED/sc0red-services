@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import bcrypt
 
-from src.handlers.auth_middleware import require_auth
+from src.handlers.auth_middleware import require_authentication
 
 if TYPE_CHECKING:
     from src.handlers.auth_middleware import AuthContext
@@ -50,7 +50,7 @@ class APIGatewayHandler:
         self._storage = storage or DynamoDBStorageProvider()
         self._factory_manager = FactoryManager(self._storage)
 
-    def handle(self, event: dict[str, Any]) -> LambdaResponse:  # noqa: PLR0911
+    def handle(self, event: dict[str, Any]) -> LambdaResponse:
         """Route an API Gateway event to the appropriate handler."""
         method = event.get("httpMethod", "GET")
         path = event.get("path", "")
@@ -60,39 +60,43 @@ class APIGatewayHandler:
         if method == "OPTIONS":
             return _json_response({}, 200)
 
-        # Public routes (no auth required)
+        # Public routes (no authentication required)
         if path == "/api/auth/register" and method == "POST":
             return self._handle_register(event)
+        if path == "/api/auth/login" and method == "POST":
+            return self._handle_login(event)
 
-        # All other routes require auth
+        # All other routes require authentication
         try:
-            auth = require_auth(headers)
+            authentication = require_authentication(headers)
         except ValueError as e:
             return _error(str(e), 401)
 
         # Route to handlers
         if path == "/api/scan/start" and method == "POST":
-            return self._handle_scan_start(event, auth)
+            return self._handle_scan_start(event, authentication)
         if path.startswith("/api/scan/") and path.endswith("/confirm") and method == "POST":
             scan_id = path.split("/")[3]
-            return self._handle_scan_confirm(event, auth, scan_id)
+            return self._handle_scan_confirm(event, authentication, scan_id)
         if path.startswith("/api/scan/") and method == "GET":
             scan_id = path.split("/")[3]
-            return self._handle_scan_status(auth, scan_id)
+            return self._handle_scan_status(authentication, scan_id)
         if path.startswith("/api/analysis/") and method == "GET":
             analysis_id = path.split("/")[3]
-            return self._handle_get_analysis(auth, analysis_id)
+            return self._handle_get_analysis(authentication, analysis_id)
         if path.startswith("/api/analysis/") and method == "DELETE":
             analysis_id = path.split("/")[3]
-            return self._handle_delete_analysis(auth, analysis_id)
+            return self._handle_delete_analysis(authentication, analysis_id)
         if path == "/api/analyses" and method == "GET":
-            return self._handle_list_analyses(auth)
+            return self._handle_list_analyses(authentication)
+        if path == "/api/dashboard" and method == "GET":
+            return self._handle_dashboard(authentication)
 
         return _error("Not found", 404)
 
     # ── POST /api/scan/start ─────────────────────────────────────────
 
-    def _handle_scan_start(self, event: dict, auth: AuthContext) -> LambdaResponse:
+    def _handle_scan_start(self, event: dict, authentication: AuthContext) -> LambdaResponse:
         body = json.loads(event.get("body") or "{}")
         url = body.get("url", "")
         scan_type = body.get("type", "")
@@ -106,8 +110,8 @@ class APIGatewayHandler:
         scan_repo.create(
             {
                 "id": scan_id,
-                "org_id": auth.org_id,
-                "created_by": auth.user_id,
+                "org_id": authentication.org_id,
+                "created_by": authentication.user_id,
                 "type": scan_type,
                 "source_url": url,
                 "status": "running",
@@ -120,8 +124,8 @@ class APIGatewayHandler:
                 scan_repo.update(scan_id, {"progress": 5})
                 result = self._factory_manager.run_portfolio_discovery(
                     url=url,
-                    org_id=auth.org_id,
-                    user_id=auth.user_id,
+                    org_id=authentication.org_id,
+                    user_id=authentication.user_id,
                     scan_id=scan_id,
                 )
                 companies = result.get("details", {}).get("portfolio_companies", [])
@@ -152,7 +156,7 @@ class APIGatewayHandler:
             company_id,
             {
                 "scan_id": scan_id,
-                "org_id": auth.org_id,
+                "org_id": authentication.org_id,
                 "company_url": url,
                 "company_name": "",
             },
@@ -162,8 +166,8 @@ class APIGatewayHandler:
             scan_repo.update(scan_id, {"progress": 10})
             self._factory_manager.run_company_analysis(
                 url=url,
-                org_id=auth.org_id,
-                user_id=auth.user_id,
+                org_id=authentication.org_id,
+                user_id=authentication.user_id,
                 scan_id=scan_id,
             )
             scan_repo.update(scan_id, {"status": "complete", "progress": 100})
@@ -182,10 +186,10 @@ class APIGatewayHandler:
 
     # ── GET /api/scan/{scanId} ───────────────────────────────────────
 
-    def _handle_scan_status(self, auth: AuthContext, scan_id: str) -> LambdaResponse:
+    def _handle_scan_status(self, authentication: AuthContext, scan_id: str) -> LambdaResponse:
         scan_repo = self._storage.create_scan_repository()
         scan = scan_repo.get_by_id(scan_id)
-        if not scan or scan.get("org_id") != auth.org_id:
+        if not scan or scan.get("org_id") != authentication.org_id:
             return _error("Not found", 404)
 
         # Get full company records linked to this scan
@@ -200,13 +204,13 @@ class APIGatewayHandler:
                     analyses.append(
                         {
                             "id": full.get("id"),
-                            "company_name": full.get("company_name", ""),
-                            "company_url": full.get("company_url", ""),
+                            "companyName": full.get("company_name", ""),
+                            "companyUrl": full.get("company_url", ""),
                             "industry": full.get("industry", ""),
-                            "overall_risk_score": full.get("overall_risk_score"),
-                            "risk_tier": full.get("risk_tier"),
+                            "overallRiskScore": full.get("overall_risk_score"),
+                            "riskTier": full.get("risk_tier"),
                             "error": full.get("error"),
-                            "analyzed_at": full.get("analyzed_at"),
+                            "analyzedAt": full.get("analyzed_at"),
                         }
                     )
 
@@ -222,7 +226,12 @@ class APIGatewayHandler:
 
     # ── POST /api/scan/{scanId}/confirm ──────────────────────────────
 
-    def _handle_scan_confirm(self, event: dict, auth: AuthContext, scan_id: str) -> LambdaResponse:
+    def _handle_scan_confirm(
+        self,
+        event: dict,
+        authentication: AuthContext,
+        scan_id: str,
+    ) -> LambdaResponse:
         body = json.loads(event.get("body") or "{}")
         companies = body.get("companies", [])
         if not companies:
@@ -230,7 +239,7 @@ class APIGatewayHandler:
 
         scan_repo = self._storage.create_scan_repository()
         scan = scan_repo.get_by_id(scan_id)
-        if not scan or scan.get("org_id") != auth.org_id:
+        if not scan or scan.get("org_id") != authentication.org_id:
             return _error("Scan not found", 404)
 
         scan_repo.update(scan_id, {"status": "running", "progress": 25})
@@ -245,7 +254,7 @@ class APIGatewayHandler:
                 company_id,
                 {
                     "scan_id": scan_id,
-                    "org_id": auth.org_id,
+                    "org_id": authentication.org_id,
                     "company_name": company.get("name", ""),
                     "company_url": company.get("url", ""),
                 },
@@ -255,18 +264,24 @@ class APIGatewayHandler:
             try:
                 self._factory_manager.run_company_analysis(
                     url=company.get("url", ""),
-                    org_id=auth.org_id,
-                    user_id=auth.user_id,
+                    org_id=authentication.org_id,
+                    user_id=authentication.user_id,
                     scan_id=scan_id,
                     company_name=company.get("name", ""),
                 )
                 results.append(
-                    {"name": company["name"], "status": "complete", "analysisId": company_id}
+                    {
+                        "name": company.get("name", ""),
+                        "status": "complete",
+                        "analysisId": company_id,
+                    }
                 )
             except Exception as e:
                 logger.exception("Analysis failed for %s", company.get("name"))
                 company_repo.update(company_id, {"error": str(e)})
-                results.append({"name": company["name"], "status": "failed", "error": str(e)})
+                results.append(
+                    {"name": company.get("name", ""), "status": "failed", "error": str(e)}
+                )
 
             progress = round(25 + ((idx + 1) / total) * 70)
             scan_repo.update(scan_id, {"progress": progress})
@@ -276,10 +291,10 @@ class APIGatewayHandler:
 
     # ── GET /api/analysis/{id} ───────────────────────────────────────
 
-    def _handle_get_analysis(self, auth: AuthContext, analysis_id: str) -> LambdaResponse:
+    def _handle_get_analysis(self, authentication: AuthContext, analysis_id: str) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
         company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != auth.org_id:
+        if not company or company.get("org_id") != authentication.org_id:
             return _error("Not found", 404)
 
         # Get assessment + risk scores + opportunities
@@ -288,7 +303,7 @@ class APIGatewayHandler:
 
         risk_scores = []
         opportunities = []
-        analysis_summary = None
+        analysis_summary = ""
         top_actions: list[str] = []
 
         if assessments:
@@ -296,16 +311,15 @@ class APIGatewayHandler:
             assessment_id = assessment.get("id", "")
             risk_scores = assessment_repo.get_risk_scores(assessment_id)
             opportunities = assessment_repo.get_opportunities(assessment_id)
-            analysis_summary = assessment.get("analysis_summary", "")
 
-        # Parse metadata for top actions
+        # Parse metadata for analysis_summary and top actions
         metadata_json = company.get("metadata_json", "")
         if metadata_json:
             try:
                 meta = (
                     json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
                 )
-                analysis_summary = analysis_summary or meta.get("analysis_summary", "")
+                analysis_summary = meta.get("analysis_summary", "")
                 top_actions = meta.get("top_actions", [])
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -326,10 +340,14 @@ class APIGatewayHandler:
 
     # ── DELETE /api/analysis/{id} ────────────────────────────────────
 
-    def _handle_delete_analysis(self, auth: AuthContext, analysis_id: str) -> LambdaResponse:
+    def _handle_delete_analysis(
+        self,
+        authentication: AuthContext,
+        analysis_id: str,
+    ) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
         company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != auth.org_id:
+        if not company or company.get("org_id") != authentication.org_id:
             return _error("Not found", 404)
 
         # Delete assessment + children
@@ -353,9 +371,9 @@ class APIGatewayHandler:
 
     # ── GET /api/analyses ────────────────────────────────────────────
 
-    def _handle_list_analyses(self, auth: AuthContext) -> LambdaResponse:
+    def _handle_list_analyses(self, authentication: AuthContext) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
-        companies = company_repo.find_by_org(auth.org_id)
+        companies = company_repo.find_by_org(authentication.org_id)
         return _json_response(
             {
                 "analyses": [
@@ -371,6 +389,86 @@ class APIGatewayHandler:
                     }
                     for c in companies
                 ]
+            }
+        )
+
+    # ── POST /api/auth/login ─────────────────────────────────────────
+
+    def _handle_login(self, event: dict) -> LambdaResponse:
+        body = json.loads(event.get("body") or "{}")
+        email = body.get("email", "")
+        password = body.get("password", "")
+
+        if not email or not password:
+            return _error("Email and password required")
+
+        user_repo = self._storage.create_user_repository()
+        user_info = user_repo.verify_password(email, password)
+        if not user_info:
+            return _error("Invalid credentials", 401)
+
+        return _json_response({"success": True, "user": user_info})
+
+    # ── GET /api/dashboard ─────────────────────────────────────────
+
+    def _handle_dashboard(self, authentication: AuthContext) -> LambdaResponse:
+        company_repo = self._storage.create_company_repository()
+        scan_repo = self._storage.create_scan_repository()
+
+        companies = company_repo.find_by_org(authentication.org_id)
+        analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
+
+        total_analyses = len(analyzed)
+        avg_risk_score = (
+            round(sum(float(c["overall_risk_score"]) for c in analyzed) / total_analyses, 1)
+            if total_analyses
+            else 0
+        )
+        critical_count = sum(1 for c in analyzed if c.get("risk_tier") == "critical")
+
+        all_scans = scan_repo.find_recent_by_org(authentication.org_id, limit=None)
+        scan_count = len(all_scans)
+        recent_scans = all_scans[:10]
+
+        # Build scan_id → type mapping so company records can resolve scan_type
+        scan_type_map = {s.get("id", ""): s.get("type", "") for s in all_scans}
+
+        # Build recent analyses (sorted by analyzed_at desc)
+        analyzed.sort(key=lambda c: c.get("analyzed_at", ""), reverse=True)
+        recent_analyses = [
+            {
+                "id": c.get("id"),
+                "companyName": c.get("company_name", ""),
+                "companyUrl": c.get("company_url", ""),
+                "overallRiskScore": c.get("overall_risk_score"),
+                "riskTier": c.get("risk_tier"),
+                "analyzedAt": c.get("analyzed_at"),
+                "scanType": scan_type_map.get(c.get("scan_id", ""), ""),
+            }
+            for c in analyzed[:8]
+        ]
+
+        recent_scan_list = [
+            {
+                "id": s.get("id"),
+                "sourceUrl": s.get("source_url", ""),
+                "type": s.get("type", ""),
+                "status": s.get("status", ""),
+                "progress": s.get("progress", 0),
+                "completedCount": len(scan_repo.get_scan_companies(s.get("id", ""))),
+                "createdAt": s.get("created_at", ""),
+            }
+            for s in recent_scans
+        ]
+
+        return _json_response(
+            {
+                "totalAnalyses": total_analyses,
+                "avgRiskScore": avg_risk_score,
+                "criticalCount": critical_count,
+                "scanCount": scan_count,
+                "recentAnalyses": recent_analyses,
+                "recentScans": recent_scan_list,
             }
         )
 
@@ -390,7 +488,7 @@ class APIGatewayHandler:
         user_repo = self._storage.create_user_repository()
         org_repo = self._storage.create_organization_repository()
 
-        if user_repo.email_exists(email):
+        if user_repo.has_email(email):
             return _error("Email already registered")
 
         org_id = str(uuid.uuid4())

@@ -1,10 +1,36 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/authOptions'
-import { getDb, initializeDb } from '@/lib/db/client'
+import { backendFetch } from '@/lib/api/serverToken'
+import DashboardSidebar from '@/components/DashboardSidebar'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = { title: 'Dashboard — Janus' }
+
+interface DashboardData {
+    totalAnalyses: number
+    avgRiskScore: number
+    criticalCount: number
+    scanCount: number
+    recentAnalyses: Array<{
+        id: string
+        companyName: string
+        companyUrl: string
+        overallRiskScore: number
+        riskTier: string
+        analyzedAt: string
+        scanType: string
+    }>
+    recentScans: Array<{
+        id: string
+        sourceUrl: string
+        type: string
+        status: string
+        progress: number
+        completedCount: number
+        createdAt: string
+    }>
+}
 
 export default async function DashboardPage() {
     const session = await getServerSession(authOptions)
@@ -15,57 +41,15 @@ export default async function DashboardPage() {
         redirect('/login')
     }
 
-    await initializeDb()
-    const db = getDb()
-
-    const scansResult = await db.execute({
-        sql: `SELECT s.*, (SELECT COUNT(*) FROM company_analyses ca WHERE ca.scan_id = s.id AND ca.overall_risk_score IS NOT NULL) as completed_count FROM scans s WHERE s.org_id = ? ORDER BY s.created_at DESC LIMIT 10`,
-        args: [orgId],
-    })
-    const scans = scansResult.rows as any[]
-
-    // Fetch recent individual company analyses
-    const recentAnalysesResult = await db.execute({
-        sql: `SELECT ca.id, ca.company_name, ca.company_url, ca.overall_risk_score, ca.risk_tier, ca.analyzed_at, s.type as scan_type, s.source_url
-              FROM company_analyses ca
-              JOIN scans s ON s.id = ca.scan_id
-              WHERE s.org_id = ? AND ca.overall_risk_score IS NOT NULL
-              ORDER BY ca.analyzed_at DESC LIMIT 8`,
-        args: [orgId],
-    })
-    const recentAnalyses = recentAnalysesResult.rows as any[]
-
-    const statsResult = await db.execute({
-        sql: `SELECT COUNT(*) as total FROM company_analyses ca JOIN scans s ON s.id = ca.scan_id WHERE s.org_id = ? AND ca.overall_risk_score IS NOT NULL`,
-        args: [orgId],
-    })
-    const totalAnalyses = Number((statsResult.rows[0] as any)?.total ?? 0)
-
-    const avgResult = await db.execute({
-        sql: `SELECT AVG(ca.overall_risk_score) as avg_score FROM company_analyses ca JOIN scans s ON s.id = ca.scan_id WHERE s.org_id = ? AND ca.overall_risk_score IS NOT NULL`,
-        args: [orgId],
-    })
-    const avgScore = Number((avgResult.rows[0] as any)?.avg_score ?? 0)
-
-    const criticalResult = await db.execute({
-        sql: `SELECT COUNT(*) as cnt FROM company_analyses ca JOIN scans s ON s.id = ca.scan_id WHERE s.org_id = ? AND ca.risk_tier = 'critical'`,
-        args: [orgId],
-    })
-    const criticalCount = Number((criticalResult.rows[0] as any)?.cnt ?? 0)
-
-    const scanCountResult = await db.execute({
-        sql: `SELECT COUNT(*) as cnt FROM scans WHERE org_id = ?`,
-        args: [orgId],
-    })
-    const scanCount = Number((scanCountResult.rows[0] as any)?.cnt ?? 0)
+    const data = await backendFetch<DashboardData>('/api/dashboard')
 
     const userName = (session?.user as any)?.name?.split(' ')?.[0] || 'there'
 
     const stats = [
-        { label: 'Companies Analyzed', value: totalAnalyses, color: 'var(--accent-blue)' },
-        { label: 'Avg Risk Score', value: avgScore > 0 ? avgScore.toFixed(1) : '—', color: 'var(--accent-cyan)' },
-        { label: 'Critical Risks', value: criticalCount, color: 'var(--risk-critical)' },
-        { label: 'Total Scans', value: scanCount, color: 'var(--text-secondary)' },
+        { label: 'Companies Analyzed', value: data.totalAnalyses, color: 'var(--accent-blue)' },
+        { label: 'Avg Risk Score', value: data.avgRiskScore > 0 ? data.avgRiskScore.toFixed(1) : '—', color: 'var(--accent-cyan)' },
+        { label: 'Critical Risks', value: data.criticalCount, color: 'var(--risk-critical)' },
+        { label: 'Total Scans', value: data.scanCount, color: 'var(--text-secondary)' },
     ]
 
     const tierColors: Record<string, string> = {
@@ -83,6 +67,8 @@ export default async function DashboardPage() {
     }
 
     return (
+        <>
+        <DashboardSidebar />
         <main style={{ flex: 1, marginLeft: 'var(--sidebar-width)', padding: '2rem', maxWidth: '1100px' }}>
             <div style={{ marginBottom: '2rem' }}>
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
@@ -101,7 +87,7 @@ export default async function DashboardPage() {
                 ))}
             </div>
 
-            {totalAnalyses === 0 ? (
+            {data.totalAnalyses === 0 ? (
                 <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
                     <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🔍</div>
                     <h2 style={{ fontWeight: 700, marginBottom: '0.75rem' }}>Run your first analysis</h2>
@@ -140,14 +126,14 @@ export default async function DashboardPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {recentAnalyses.map((analysis: any, i: number) => {
-                                        const tier = analysis.risk_tier || 'moderate'
-                                        const score = Number(analysis.overall_risk_score || 0)
+                                    {data.recentAnalyses.map((analysis, i: number) => {
+                                        const tier = analysis.riskTier || 'moderate'
+                                        const score = Number(analysis.overallRiskScore || 0)
                                         return (
-                                            <tr key={analysis.id} style={{ borderBottom: i < recentAnalyses.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                                            <tr key={analysis.id} style={{ borderBottom: i < data.recentAnalyses.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
                                                 <td style={{ padding: '1rem 1.25rem' }}>
-                                                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{analysis.company_name || 'Unknown'}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{analysis.company_url}</div>
+                                                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{analysis.companyName || 'Unknown'}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{analysis.companyUrl}</div>
                                                 </td>
                                                 <td style={{ padding: '1rem 1.25rem' }}>
                                                     <span style={{ fontSize: '1.125rem', fontWeight: 700, color: tierColors[tier] || 'var(--text-primary)' }}>
@@ -165,12 +151,12 @@ export default async function DashboardPage() {
                                                     </span>
                                                 </td>
                                                 <td style={{ padding: '1rem 1.25rem' }}>
-                                                    <span className={`badge badge-${analysis.scan_type === 'portfolio' ? 'blue' : 'cyan'}`}>
-                                                        {analysis.scan_type}
+                                                    <span className={`badge badge-${analysis.scanType === 'portfolio' ? 'blue' : 'cyan'}`}>
+                                                        {analysis.scanType}
                                                     </span>
                                                 </td>
                                                 <td style={{ padding: '1rem 1.25rem', color: 'var(--text-tertiary)', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                                    {analysis.analyzed_at ? new Date(analysis.analyzed_at as string).toLocaleDateString() : '—'}
+                                                    {analysis.analyzedAt ? new Date(analysis.analyzedAt).toLocaleDateString() : '—'}
                                                 </td>
                                                 <td style={{ padding: '1rem 1.25rem' }}>
                                                     <Link href={`/analysis/${analysis.id}`} className="btn btn-ghost btn-sm">View Report</Link>
@@ -198,10 +184,10 @@ export default async function DashboardPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {scans.map((scan: any, i: number) => (
-                                        <tr key={scan.id} style={{ borderBottom: i < scans.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                                    {data.recentScans.map((scan, i: number) => (
+                                        <tr key={scan.id} style={{ borderBottom: i < data.recentScans.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
                                             <td style={{ padding: '1rem 1.25rem', maxWidth: '280px' }}>
-                                                <div className="truncate" style={{ fontSize: '0.875rem' }}>{scan.source_url}</div>
+                                                <div className="truncate" style={{ fontSize: '0.875rem' }}>{scan.sourceUrl}</div>
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
                                                 <span className={`badge badge-${scan.type === 'portfolio' ? 'blue' : 'cyan'}`}>{scan.type}</span>
@@ -216,10 +202,10 @@ export default async function DashboardPage() {
                                                 )}
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                                                {scan.completed_count || 0}
+                                                {scan.completedCount || 0}
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem', color: 'var(--text-tertiary)', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                                {new Date(scan.created_at as string).toLocaleDateString()}
+                                                {new Date(scan.createdAt).toLocaleDateString()}
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
                                                 {scan.type === 'portfolio' ? (
@@ -238,5 +224,6 @@ export default async function DashboardPage() {
                 </div>
             )}
         </main>
+        </>
     )
 }

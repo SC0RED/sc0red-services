@@ -9,19 +9,64 @@ services:
     volumes:
       - dynamodb-data:/home/dynamodblocal/data
     command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/shell/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   dynamodb-admin:
     image: aaronshaf/dynamodb-admin:latest
     container_name: janus-dynamodb-admin
     ports:
-      - "8001:8001"
+      - "8002:8001"
     environment:
       DYNAMO_ENDPOINT: http://dynamodb-local:8000
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
     depends_on:
-      - dynamodb-local
+      dynamodb-local:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: janus-backend
+    ports:
+      - "8001:8001"
+    environment:
+      DYNAMODB_TABLE: janus-dev
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder}
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: janus-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_URL: http://backend:8001
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}
+      NEXTAUTH_URL: http://localhost:3000
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   dynamodb-data:

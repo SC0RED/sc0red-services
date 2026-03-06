@@ -3,8 +3,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.handlers.api_gateway_handler import APIGatewayHandler, _error, _json_response
 
 
@@ -46,100 +44,116 @@ class TestAPIGatewayHandler:
         result = handler.handle({"httpMethod": "OPTIONS", "path": "/api/scan/start"})
         assert result["statusCode"] == 200
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_not_found_route(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_not_found_route(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, _ = self._make_handler()
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/nonexistent",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/nonexistent",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 404
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_auth_failure(self, mock_auth):
-        mock_auth.side_effect = ValueError("Invalid token")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_authentication_failure(self, mock_authentication):
+        mock_authentication.side_effect = ValueError("Invalid token")
         handler, _ = self._make_handler()
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/analyses",
-            "headers": {},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analyses",
+                "headers": {},
+            }
+        )
         assert result["statusCode"] == 401
 
     def test_register_missing_fields(self):
-        handler, storage = self._make_handler()
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/auth/register",
-            "headers": {},
-            "body": json.dumps({"name": "Test"}),
-        })
+        handler, _storage = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/register",
+                "headers": {},
+                "body": json.dumps({"name": "Test"}),
+            }
+        )
         assert result["statusCode"] == 400
         assert "required" in json.loads(result["body"])["error"].lower()
 
     def test_register_duplicate_email(self):
         handler, storage = self._make_handler()
         user_repo = MagicMock()
-        user_repo.email_exists.return_value = True
+        user_repo.has_email.return_value = True
         storage.create_user_repository.return_value = user_repo
         storage.create_organization_repository.return_value = MagicMock()
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/auth/register",
-            "headers": {},
-            "body": json.dumps({
-                "name": "Test",
-                "email": "test@example.com",
-                "password": "password123",
-                "orgName": "Test Org",
-            }),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/register",
+                "headers": {},
+                "body": json.dumps(
+                    {
+                        "name": "Test",
+                        "email": "test@example.com",
+                        "password": "password123",
+                        "orgName": "Test Org",
+                    }
+                ),
+            }
+        )
         assert result["statusCode"] == 400
         assert "already registered" in json.loads(result["body"])["error"]
 
     def test_register_success(self):
         handler, storage = self._make_handler()
         user_repo = MagicMock()
-        user_repo.email_exists.return_value = False
+        user_repo.has_email.return_value = False
         org_repo = MagicMock()
         storage.create_user_repository.return_value = user_repo
         storage.create_organization_repository.return_value = org_repo
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/auth/register",
-            "headers": {},
-            "body": json.dumps({
-                "name": "Test User",
-                "email": "test@example.com",
-                "password": "password123",
-                "orgName": "Test Org",
-            }),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/register",
+                "headers": {},
+                "body": json.dumps(
+                    {
+                        "name": "Test User",
+                        "email": "test@example.com",
+                        "password": "password123",
+                        "orgName": "Test Org",
+                    }
+                ),
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["success"] is True
         org_repo.create.assert_called_once()
         user_repo.create.assert_called_once()
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_start_missing_fields(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_start_missing_fields(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, _ = self._make_handler()
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/start",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({"url": ""}),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/start",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"url": ""}),
+            }
+        )
         assert result["statusCode"] == 400
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_start_single_company_success(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_start_single_company_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
@@ -148,20 +162,22 @@ class TestAPIGatewayHandler:
         storage.create_company_repository.return_value = company_repo
         handler._factory_manager = MagicMock()
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/start",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({"url": "https://example.com", "type": "single"}),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/start",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"url": "https://example.com", "type": "single"}),
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["status"] == "complete"
         assert "scanId" in body
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_start_single_company_failure(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_start_single_company_failure(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
@@ -171,17 +187,19 @@ class TestAPIGatewayHandler:
         handler._factory_manager = MagicMock()
         handler._factory_manager.run_company_analysis.side_effect = RuntimeError("AI error")
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/start",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({"url": "https://example.com", "type": "single"}),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/start",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"url": "https://example.com", "type": "single"}),
+            }
+        )
         assert result["statusCode"] == 500
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_start_portfolio_success(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_start_portfolio_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
@@ -191,20 +209,22 @@ class TestAPIGatewayHandler:
             "details": {"portfolio_companies": [{"name": "Co1", "url": "https://co1.com"}]},
         }
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/start",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({"url": "https://pefirm.com/portfolio", "type": "portfolio"}),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/start",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"url": "https://pefirm.com/portfolio", "type": "portfolio"}),
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["status"] == "awaiting_confirmation"
         assert len(body["portfolioCompanies"]) == 1
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_start_portfolio_failure(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_start_portfolio_failure(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
@@ -212,53 +232,63 @@ class TestAPIGatewayHandler:
         handler._factory_manager = MagicMock()
         handler._factory_manager.run_portfolio_discovery.side_effect = RuntimeError("fail")
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/start",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({"url": "https://pefirm.com", "type": "portfolio"}),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/start",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"url": "https://pefirm.com", "type": "portfolio"}),
+            }
+        )
         assert result["statusCode"] == 500
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_status_not_found(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_status_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = None
         storage.create_scan_repository.return_value = scan_repo
 
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/scan/scan-123",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 404
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_status_wrong_org(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_status_wrong_org(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "other-org"}
         storage.create_scan_repository.return_value = scan_repo
 
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/scan/scan-123",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 404
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_status_success(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_status_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
-        scan_repo.get_by_id.return_value = {"org_id": "org-1", "status": "complete", "type": "single"}
+        scan_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "status": "complete",
+            "type": "single",
+        }
         scan_repo.get_scan_companies.return_value = [{"company_id": "c-1"}]
         company_repo = MagicMock()
         company_repo.get_by_id.return_value = {
@@ -269,47 +299,54 @@ class TestAPIGatewayHandler:
         storage.create_scan_repository.return_value = scan_repo
         storage.create_company_repository.return_value = company_repo
 
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/scan/scan-123",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["status"] == "complete"
         assert len(body["analyses"]) == 1
+        assert body["analyses"][0]["companyName"] == "Test"
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_confirm_no_companies(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_confirm_no_companies(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, _ = self._make_handler()
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/scan-123/confirm",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({"companies": []}),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/confirm",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"companies": []}),
+            }
+        )
         assert result["statusCode"] == 400
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_confirm_not_found(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_confirm_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = None
         storage.create_scan_repository.return_value = scan_repo
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/scan-123/confirm",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({"companies": [{"name": "Co", "url": "https://co.com"}]}),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/confirm",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"companies": [{"name": "Co", "url": "https://co.com"}]}),
+            }
+        )
         assert result["statusCode"] == 404
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_confirm_success(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_confirm_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
@@ -318,25 +355,29 @@ class TestAPIGatewayHandler:
         storage.create_company_repository.return_value = company_repo
         handler._factory_manager = MagicMock()
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/scan-123/confirm",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({
-                "companies": [
-                    {"name": "Co1", "url": "https://co1.com"},
-                    {"name": "Co2", "url": "https://co2.com"},
-                ],
-            }),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/confirm",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "companies": [
+                            {"name": "Co1", "url": "https://co1.com"},
+                            {"name": "Co2", "url": "https://co2.com"},
+                        ],
+                    }
+                ),
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["ok"] is True
         assert len(body["results"]) == 2
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_scan_confirm_partial_failure(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_confirm_partial_failure(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
@@ -346,40 +387,46 @@ class TestAPIGatewayHandler:
         handler._factory_manager = MagicMock()
         handler._factory_manager.run_company_analysis.side_effect = [None, RuntimeError("fail")]
 
-        result = handler.handle({
-            "httpMethod": "POST",
-            "path": "/api/scan/scan-123/confirm",
-            "headers": {"Authorization": "Bearer token"},
-            "body": json.dumps({
-                "companies": [
-                    {"name": "Co1", "url": "https://co1.com"},
-                    {"name": "Co2", "url": "https://co2.com"},
-                ],
-            }),
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/confirm",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "companies": [
+                            {"name": "Co1", "url": "https://co1.com"},
+                            {"name": "Co2", "url": "https://co2.com"},
+                        ],
+                    }
+                ),
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["results"][0]["status"] == "complete"
         assert body["results"][1]["status"] == "failed"
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_get_analysis_not_found(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
         company_repo.get_by_id.return_value = None
         storage.create_company_repository.return_value = company_repo
 
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/analysis/a-1",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 404
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_get_analysis_success(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
         company_repo.get_by_id.return_value = {
@@ -400,19 +447,21 @@ class TestAPIGatewayHandler:
         storage.create_company_repository.return_value = company_repo
         storage.create_assessment_repository.return_value = assessment_repo
 
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/analysis/a-1",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["companyName"] == "Test"
         assert len(body["riskScores"]) == 1
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_get_analysis_with_metadata_json(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_with_metadata_json(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
         company_repo.get_by_id.return_value = {
@@ -425,33 +474,37 @@ class TestAPIGatewayHandler:
         storage.create_company_repository.return_value = company_repo
         storage.create_assessment_repository.return_value = assessment_repo
 
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/analysis/a-1",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         body = json.loads(result["body"])
         assert body["topActions"] == ["Action 1"]
         assert body["analysisSummary"] == "Good"
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_delete_analysis_not_found(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_analysis_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
         company_repo.get_by_id.return_value = None
         storage.create_company_repository.return_value = company_repo
 
-        result = handler.handle({
-            "httpMethod": "DELETE",
-            "path": "/api/analysis/a-1",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 404
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_delete_analysis_success(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_analysis_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
         company_repo.get_by_id.return_value = {"org_id": "org-1", "scan_id": "scan-1"}
@@ -463,19 +516,21 @@ class TestAPIGatewayHandler:
         storage.create_assessment_repository.return_value = assessment_repo
         storage.create_scan_repository.return_value = scan_repo
 
-        result = handler.handle({
-            "httpMethod": "DELETE",
-            "path": "/api/analysis/a-1",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 200
         assessment_repo.delete.assert_called_once_with("assess-1")
         company_repo.delete.assert_called_once_with("a-1")
         scan_repo.delete.assert_called_once_with("scan-1")
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_delete_analysis_keeps_scan_with_remaining(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_analysis_keeps_scan_with_remaining(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
         company_repo.get_by_id.return_value = {"org_id": "org-1", "scan_id": "scan-1"}
@@ -487,17 +542,19 @@ class TestAPIGatewayHandler:
         storage.create_assessment_repository.return_value = assessment_repo
         storage.create_scan_repository.return_value = scan_repo
 
-        result = handler.handle({
-            "httpMethod": "DELETE",
-            "path": "/api/analysis/a-1",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 200
         scan_repo.delete.assert_not_called()
 
-    @patch("src.handlers.api_gateway_handler.require_auth")
-    def test_list_analyses(self, mock_auth):
-        mock_auth.return_value = MagicMock(org_id="org-1", user_id="user-1")
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_list_analyses(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
         company_repo.find_by_org.return_value = [
@@ -505,12 +562,195 @@ class TestAPIGatewayHandler:
         ]
         storage.create_company_repository.return_value = company_repo
 
-        result = handler.handle({
-            "httpMethod": "GET",
-            "path": "/api/analyses",
-            "headers": {"Authorization": "Bearer token"},
-        })
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analyses",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert len(body["analyses"]) == 1
         assert body["analyses"][0]["companyName"] == "Test"
+
+
+class TestLoginEndpoint:
+    def _make_handler(self):
+        storage = MagicMock()
+        return APIGatewayHandler(storage=storage), storage
+
+    def test_login_missing_fields(self):
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": json.dumps({"email": "test@example.com"}),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "required" in json.loads(result["body"])["error"].lower()
+
+    def test_login_invalid_credentials(self):
+        handler, storage = self._make_handler()
+        user_repo = MagicMock()
+        user_repo.verify_password.return_value = None
+        storage.create_user_repository.return_value = user_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": json.dumps({"email": "test@example.com", "password": "wrong"}),
+            }
+        )
+        assert result["statusCode"] == 401
+        assert "Invalid credentials" in json.loads(result["body"])["error"]
+
+    def test_login_success(self):
+        handler, storage = self._make_handler()
+        user_repo = MagicMock()
+        user_repo.verify_password.return_value = {
+            "id": "user-1",
+            "email": "test@example.com",
+            "name": "Test User",
+            "orgId": "org-1",
+            "role": "admin",
+        }
+        storage.create_user_repository.return_value = user_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": json.dumps({"email": "test@example.com", "password": "correct"}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["success"] is True
+        assert body["user"]["email"] == "test@example.com"
+        assert body["user"]["orgId"] == "org-1"
+
+    def test_login_empty_body(self):
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": "{}",
+            }
+        )
+        assert result["statusCode"] == 400
+
+
+class TestDashboardEndpoint:
+    def _make_handler(self):
+        storage = MagicMock()
+        return APIGatewayHandler(storage=storage), storage
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_dashboard_empty_org(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.find_by_org.return_value = []
+        scan_repo = MagicMock()
+        scan_repo.find_recent_by_org.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/dashboard",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["totalAnalyses"] == 0
+        assert body["avgRiskScore"] == 0
+        assert body["criticalCount"] == 0
+        assert body["scanCount"] == 0
+        assert body["recentAnalyses"] == []
+        assert body["recentScans"] == []
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_dashboard_with_data(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.find_by_org.return_value = [
+            {
+                "id": "c-1",
+                "company_name": "Company A",
+                "company_url": "https://a.com",
+                "overall_risk_score": 7.5,
+                "risk_tier": "high",
+                "analyzed_at": "2026-03-01T00:00:00",
+                "scan_id": "s-1",
+            },
+            {
+                "id": "c-2",
+                "company_name": "Company B",
+                "company_url": "https://b.com",
+                "overall_risk_score": 9.2,
+                "risk_tier": "critical",
+                "analyzed_at": "2026-03-02T00:00:00",
+                "scan_id": "s-1",
+            },
+            {
+                "id": "c-3",
+                "company_name": "Pending",
+                "overall_risk_score": None,
+                "scan_id": "s-2",
+            },
+        ]
+        scan_repo = MagicMock()
+        all_scans = [
+            {
+                "id": "s-1",
+                "source_url": "https://pe.com",
+                "type": "portfolio",
+                "status": "complete",
+                "progress": 100,
+                "created_at": "2026-03-01",
+            },
+            {
+                "id": "s-2",
+                "source_url": "https://pe.com/other",
+                "type": "standalone",
+                "status": "complete",
+                "progress": 100,
+                "created_at": "2026-02-28",
+            },
+        ]
+        scan_repo.find_recent_by_org.return_value = all_scans
+        scan_repo.get_scan_companies.return_value = [{"company_id": "c-1"}, {"company_id": "c-2"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/dashboard",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["totalAnalyses"] == 2
+        assert body["avgRiskScore"] == 8.3
+        assert body["criticalCount"] == 1
+        assert body["scanCount"] == 2
+        assert len(body["recentAnalyses"]) == 2
+        assert body["recentAnalyses"][0]["companyName"] == "Company B"
+        assert body["recentAnalyses"][0]["scanType"] == "portfolio"
+        assert len(body["recentScans"]) == 2
+        assert body["recentScans"][0]["completedCount"] == 2

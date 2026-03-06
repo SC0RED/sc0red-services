@@ -16,7 +16,7 @@ from src.pipeline.pipeline_steps.persist_results import PersistResults
 
 class TestPersistResults:
     def _make_full_company(self):
-        company = Company(
+        return Company(
             id="comp-1",
             url="https://example.com",
             org_id="org-1",
@@ -42,7 +42,6 @@ class TestPersistResults:
                 top_three_immediate_actions=["Action 1"],
             ),
         )
-        return company
 
     def test_persist_with_repos(self):
         company = self._make_full_company()

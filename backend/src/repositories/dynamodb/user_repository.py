@@ -10,6 +10,8 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
+import bcrypt
+
 if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
 
@@ -48,9 +50,30 @@ class DynamoDBUserRepository:
         self._table.put_item(item)
         return user_id
 
-    def email_exists(self, email: str) -> bool:
+    def has_email(self, email: str) -> bool:
         """Return True if a user with the given email address exists."""
         return self.find_by_email(email) is not None
+
+    def verify_password(self, email: str, password: str) -> dict[str, Any] | None:
+        """Verify credentials and return user info if valid, None otherwise."""
+        user = self.find_by_email(email)
+        if not user:
+            return None
+
+        stored_hash = user.get("password_hash", "")
+        if not stored_hash:
+            return None
+
+        if not bcrypt.checkpw(password.encode(), stored_hash.encode()):
+            return None
+
+        return {
+            "id": user.get("id", ""),
+            "email": user.get("email", ""),
+            "name": user.get("name", ""),
+            "orgId": user.get("org_id", ""),
+            "role": user.get("role", "analyst"),
+        }
 
 
 class DynamoDBOrganizationRepository:

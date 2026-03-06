@@ -5,6 +5,14 @@ inputs:
     description: 'Python version to use'
     required: false
     default: '3.12'
+  app-id:
+    description: 'GitHub App ID for generating installation token'
+    required: false
+    default: ''
+  app-private-key:
+    description: 'GitHub App private key for generating installation token'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -12,6 +20,24 @@ runs:
     - uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
+
+    - name: Generate GitHub App token
+      id: app-token
+      if: inputs.app-id != '' && inputs.app-private-key != ''
+      uses: actions/create-github-app-token@v1
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.app-private-key }}
+        owner: SignalField
+
+    - name: Configure git for private dependencies
+      shell: bash
+      run: |
+        TOKEN="${APP_TOKEN:-${GITHUB_TOKEN}}"
+        git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+      env:
+        APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        GITHUB_TOKEN: ${{ github.token }}
 
     - name: Install dependencies
       shell: bash

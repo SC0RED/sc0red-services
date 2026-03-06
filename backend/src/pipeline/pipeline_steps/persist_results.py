@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
@@ -34,7 +34,7 @@ class PersistResults(RequestStep):
 
     def execute(self) -> None:
         """Persist company, assessment, risk scores, and opportunities to DynamoDB."""
-        accessor: CompanyAccessor = self.entity_accessor  # type: ignore[assignment]
+        accessor = cast("CompanyAccessor", self.entity_accessor)
         company = accessor.company
 
         if not self._company_repo or not self._assessment_repo:

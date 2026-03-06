@@ -1,5 +1,6 @@
 """Tests for DynamoDBUserRepository and DynamoDBOrganizationRepository."""
 
+import bcrypt
 from moto import mock_aws
 
 from src.repositories.dynamodb.user_repository import (
@@ -12,13 +13,15 @@ class TestUserRepository:
     @mock_aws
     def test_create_and_get(self, dynamodb_table):
         repo = DynamoDBUserRepository(dynamodb_table)
-        user_id = repo.create({
-            "name": "Test User",
-            "email": "test@example.com",
-            "password_hash": "hashed",
-            "org_id": "org-1",
-            "role": "admin",
-        })
+        user_id = repo.create(
+            {
+                "name": "Test User",
+                "email": "test@example.com",
+                "password_hash": "hashed",
+                "org_id": "org-1",
+                "role": "admin",
+            }
+        )
 
         assert user_id is not None
 
@@ -29,11 +32,13 @@ class TestUserRepository:
     @mock_aws
     def test_find_by_email(self, dynamodb_table):
         repo = DynamoDBUserRepository(dynamodb_table)
-        repo.create({
-            "email": "alice@example.com",
-            "name": "Alice",
-            "org_id": "org-1",
-        })
+        repo.create(
+            {
+                "email": "alice@example.com",
+                "name": "Alice",
+                "org_id": "org-1",
+            }
+        )
 
         result = repo.find_by_email("alice@example.com")
         assert result is not None
@@ -46,12 +51,66 @@ class TestUserRepository:
         assert result is None
 
     @mock_aws
-    def test_email_exists(self, dynamodb_table):
+    def test_has_email(self, dynamodb_table):
         repo = DynamoDBUserRepository(dynamodb_table)
         repo.create({"email": "exists@test.com", "org_id": "org-1"})
 
-        assert repo.email_exists("exists@test.com") is True
-        assert repo.email_exists("missing@test.com") is False
+        assert repo.has_email("exists@test.com") is True
+        assert repo.has_email("missing@test.com") is False
+
+    @mock_aws
+    def test_verify_password_valid(self, dynamodb_table):
+        repo = DynamoDBUserRepository(dynamodb_table)
+        password_hash = bcrypt.hashpw(b"correct-password", bcrypt.gensalt(10)).decode()
+        repo.create(
+            {
+                "email": "user@example.com",
+                "name": "User",
+                "org_id": "org-1",
+                "role": "admin",
+                "password_hash": password_hash,
+            }
+        )
+
+        result = repo.verify_password("user@example.com", "correct-password")
+        assert result is not None
+        assert result["email"] == "user@example.com"
+        assert result["orgId"] == "org-1"
+        assert result["role"] == "admin"
+
+    @mock_aws
+    def test_verify_password_invalid(self, dynamodb_table):
+        repo = DynamoDBUserRepository(dynamodb_table)
+        password_hash = bcrypt.hashpw(b"correct-password", bcrypt.gensalt(10)).decode()
+        repo.create(
+            {
+                "email": "user@example.com",
+                "password_hash": password_hash,
+                "org_id": "org-1",
+            }
+        )
+
+        result = repo.verify_password("user@example.com", "wrong-password")
+        assert result is None
+
+    @mock_aws
+    def test_verify_password_no_user(self, dynamodb_table):
+        repo = DynamoDBUserRepository(dynamodb_table)
+        result = repo.verify_password("nobody@example.com", "password")
+        assert result is None
+
+    @mock_aws
+    def test_verify_password_no_hash(self, dynamodb_table):
+        repo = DynamoDBUserRepository(dynamodb_table)
+        repo.create(
+            {
+                "email": "nohash@example.com",
+                "org_id": "org-1",
+            }
+        )
+
+        result = repo.verify_password("nohash@example.com", "password")
+        assert result is None
 
 
 class TestOrganizationRepository:
