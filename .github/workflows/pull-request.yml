@@ -14,7 +14,8 @@ jobs:
     uses: ./.github/workflows/_ci-checks.yml
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      GH_PAT: ${{ secrets.GH_PAT }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   # ===========================================================================
   # Naming Convention Validation
@@ -23,7 +24,8 @@ jobs:
     name: Naming
     uses: ./.github/workflows/_naming-validation.yml
     secrets:
-      GH_PAT: ${{ secrets.GH_PAT }}
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   # ===========================================================================
   # Summary Job
