@@ -1,10 +1,21 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/authOptions'
-import { getDb, initializeDb } from '@/lib/db/client'
+import { backendFetch } from '@/lib/api/serverToken'
 import { getRiskTierLabel } from '@/lib/utils/riskUtils'
 import Link from 'next/link'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+
+interface AnalysisItem {
+    id: string
+    companyName: string
+    companyUrl: string
+    industry: string
+    overallRiskScore: number | null
+    riskTier: string | null
+    analyzedAt: string | null
+    scanType?: string
+}
 
 export default async function AnalysesPage() {
     const session = await getServerSession(authOptions)
@@ -15,14 +26,8 @@ export default async function AnalysesPage() {
         redirect('/login')
     }
 
-    await initializeDb()
-    const db = getDb()
-
-    const result = await db.execute({
-        sql: `SELECT ca.id, ca.company_name, ca.company_url, ca.industry, ca.overall_risk_score, ca.risk_tier, ca.analyzed_at, s.type as scan_type FROM company_analyses ca JOIN scans s ON s.id = ca.scan_id WHERE s.org_id = ? AND ca.overall_risk_score IS NOT NULL ORDER BY ca.analyzed_at DESC LIMIT 50`,
-        args: [orgId],
-    })
-    const analyses = result.rows as any[]
+    const data = await backendFetch<{ analyses: AnalysisItem[] }>('/api/analyses')
+    const analyses = data.analyses
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -49,35 +54,35 @@ export default async function AnalysesPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {analyses.map((a: any, i: number) => {
-                                    const tier = a.risk_tier as string
+                                {analyses.map((a, i: number) => {
+                                    const tier = a.riskTier as string
                                     const tierColors: Record<string, string> = { low: 'var(--risk-low)', moderate: 'var(--risk-moderate)', high: 'var(--risk-high)', critical: 'var(--risk-critical)' }
                                     return (
-                                        <tr key={a.id as string} style={{ borderBottom: i < analyses.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                                        <tr key={a.id} style={{ borderBottom: i < analyses.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                <div style={{ fontWeight: 500 }}>{a.company_name as string}</div>
-                                                {a.company_url && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.company_url as string}</div>}
+                                                <div style={{ fontWeight: 500 }}>{a.companyName}</div>
+                                                {a.companyUrl && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.companyUrl}</div>}
                                             </td>
-                                            <td style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{(a.industry as string) || '—'}</td>
+                                            <td style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{a.industry || '—'}</td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                <span className={`badge badge-${a.scan_type === 'portfolio' ? 'blue' : 'cyan'}`} style={{ fontSize: '0.7rem' }}>
-                                                    {a.scan_type === 'portfolio' ? 'Portfolio' : 'Standalone'}
+                                                <span className={`badge badge-${a.scanType === 'portfolio' ? 'blue' : 'cyan'}`} style={{ fontSize: '0.7rem' }}>
+                                                    {a.scanType === 'portfolio' ? 'Portfolio' : 'Standalone'}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
                                                 <span style={{ fontWeight: 700, fontSize: '1.1rem', color: tierColors[tier] }}>
-                                                    {(a.overall_risk_score as number)?.toFixed(1)}
+                                                    {a.overallRiskScore?.toFixed(1)}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
                                                 {tier && <span className={`badge badge-${tier}`}>{getRiskTierLabel(tier)}</span>}
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem', color: 'var(--text-tertiary)', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                                {new Date(a.analyzed_at as string).toLocaleDateString()}
+                                                {a.analyzedAt ? new Date(a.analyzedAt).toLocaleDateString() : '—'}
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                <Link href={`/analysis/${a.id as string}`} className="btn btn-ghost btn-sm">View</Link>
-                                                <DeleteAnalysisButton analysisId={a.id as string} companyName={a.company_name as string} />
+                                                <Link href={`/analysis/${a.id}`} className="btn btn-ghost btn-sm">View</Link>
+                                                <DeleteAnalysisButton analysisId={a.id} companyName={a.companyName} />
                                             </td>
                                         </tr>
                                     )

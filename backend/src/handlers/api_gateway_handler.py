@@ -63,6 +63,8 @@ class APIGatewayHandler:
         # Public routes (no authentication required)
         if path == "/api/auth/register" and method == "POST":
             return self._handle_register(event)
+        if path == "/api/auth/login" and method == "POST":
+            return self._handle_login(event)
 
         # All other routes require authentication
         try:
@@ -87,6 +89,8 @@ class APIGatewayHandler:
             return self._handle_delete_analysis(authentication, analysis_id)
         if path == "/api/analyses" and method == "GET":
             return self._handle_list_analyses(authentication)
+        if path == "/api/dashboard" and method == "GET":
+            return self._handle_dashboard(authentication)
 
         return _error("Not found", 404)
 
@@ -200,13 +204,13 @@ class APIGatewayHandler:
                     analyses.append(
                         {
                             "id": full.get("id"),
-                            "company_name": full.get("company_name", ""),
-                            "company_url": full.get("company_url", ""),
+                            "companyName": full.get("company_name", ""),
+                            "companyUrl": full.get("company_url", ""),
                             "industry": full.get("industry", ""),
-                            "overall_risk_score": full.get("overall_risk_score"),
-                            "risk_tier": full.get("risk_tier"),
+                            "overallRiskScore": full.get("overall_risk_score"),
+                            "riskTier": full.get("risk_tier"),
                             "error": full.get("error"),
-                            "analyzed_at": full.get("analyzed_at"),
+                            "analyzedAt": full.get("analyzed_at"),
                         }
                     )
 
@@ -266,12 +270,18 @@ class APIGatewayHandler:
                     company_name=company.get("name", ""),
                 )
                 results.append(
-                    {"name": company["name"], "status": "complete", "analysisId": company_id}
+                    {
+                        "name": company.get("name", ""),
+                        "status": "complete",
+                        "analysisId": company_id,
+                    }
                 )
             except Exception as e:
                 logger.exception("Analysis failed for %s", company.get("name"))
                 company_repo.update(company_id, {"error": str(e)})
-                results.append({"name": company["name"], "status": "failed", "error": str(e)})
+                results.append(
+                    {"name": company.get("name", ""), "status": "failed", "error": str(e)}
+                )
 
             progress = round(25 + ((idx + 1) / total) * 70)
             scan_repo.update(scan_id, {"progress": progress})
@@ -293,7 +303,7 @@ class APIGatewayHandler:
 
         risk_scores = []
         opportunities = []
-        analysis_summary = None
+        analysis_summary = ""
         top_actions: list[str] = []
 
         if assessments:
@@ -301,16 +311,15 @@ class APIGatewayHandler:
             assessment_id = assessment.get("id", "")
             risk_scores = assessment_repo.get_risk_scores(assessment_id)
             opportunities = assessment_repo.get_opportunities(assessment_id)
-            analysis_summary = assessment.get("analysis_summary", "")
 
-        # Parse metadata for top actions
+        # Parse metadata for analysis_summary and top actions
         metadata_json = company.get("metadata_json", "")
         if metadata_json:
             try:
                 meta = (
                     json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
                 )
-                analysis_summary = analysis_summary or meta.get("analysis_summary", "")
+                analysis_summary = meta.get("analysis_summary", "")
                 top_actions = meta.get("top_actions", [])
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -380,6 +389,86 @@ class APIGatewayHandler:
                     }
                     for c in companies
                 ]
+            }
+        )
+
+    # ── POST /api/auth/login ─────────────────────────────────────────
+
+    def _handle_login(self, event: dict) -> LambdaResponse:
+        body = json.loads(event.get("body") or "{}")
+        email = body.get("email", "")
+        password = body.get("password", "")
+
+        if not email or not password:
+            return _error("Email and password required")
+
+        user_repo = self._storage.create_user_repository()
+        user_info = user_repo.verify_password(email, password)
+        if not user_info:
+            return _error("Invalid credentials", 401)
+
+        return _json_response({"success": True, "user": user_info})
+
+    # ── GET /api/dashboard ─────────────────────────────────────────
+
+    def _handle_dashboard(self, authentication: AuthContext) -> LambdaResponse:
+        company_repo = self._storage.create_company_repository()
+        scan_repo = self._storage.create_scan_repository()
+
+        companies = company_repo.find_by_org(authentication.org_id)
+        analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
+
+        total_analyses = len(analyzed)
+        avg_risk_score = (
+            round(sum(float(c["overall_risk_score"]) for c in analyzed) / total_analyses, 1)
+            if total_analyses
+            else 0
+        )
+        critical_count = sum(1 for c in analyzed if c.get("risk_tier") == "critical")
+
+        all_scans = scan_repo.find_recent_by_org(authentication.org_id, limit=None)
+        scan_count = len(all_scans)
+        recent_scans = all_scans[:10]
+
+        # Build scan_id → type mapping so company records can resolve scan_type
+        scan_type_map = {s.get("id", ""): s.get("type", "") for s in all_scans}
+
+        # Build recent analyses (sorted by analyzed_at desc)
+        analyzed.sort(key=lambda c: c.get("analyzed_at", ""), reverse=True)
+        recent_analyses = [
+            {
+                "id": c.get("id"),
+                "companyName": c.get("company_name", ""),
+                "companyUrl": c.get("company_url", ""),
+                "overallRiskScore": c.get("overall_risk_score"),
+                "riskTier": c.get("risk_tier"),
+                "analyzedAt": c.get("analyzed_at"),
+                "scanType": scan_type_map.get(c.get("scan_id", ""), ""),
+            }
+            for c in analyzed[:8]
+        ]
+
+        recent_scan_list = [
+            {
+                "id": s.get("id"),
+                "sourceUrl": s.get("source_url", ""),
+                "type": s.get("type", ""),
+                "status": s.get("status", ""),
+                "progress": s.get("progress", 0),
+                "completedCount": len(scan_repo.get_scan_companies(s.get("id", ""))),
+                "createdAt": s.get("created_at", ""),
+            }
+            for s in recent_scans
+        ]
+
+        return _json_response(
+            {
+                "totalAnalyses": total_analyses,
+                "avgRiskScore": avg_risk_score,
+                "criticalCount": critical_count,
+                "scanCount": scan_count,
+                "recentAnalyses": recent_analyses,
+                "recentScans": recent_scan_list,
             }
         )
 

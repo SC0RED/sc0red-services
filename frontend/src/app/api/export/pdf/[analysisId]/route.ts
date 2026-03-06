@@ -1,51 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth/authOptions'
-import { getDb, initializeDb } from '@/lib/db/client'
+import { backendFetch } from '@/lib/api/serverToken'
+
+function escapeHtml(text: string | null | undefined): string {
+  if (!text) return ''
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { analysisId: string } }
 ) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
+  try {
+    const analysis = await backendFetch<any>(`/api/analysis/${params.analysisId}`)
 
-  await initializeDb()
-  const db = getDb()
-  const orgId = (session.user as any).orgId
+    const tierColors: Record<string, string> = {
+      low: '#22C55E', moderate: '#F59E0B', high: '#F97316', critical: '#EF4444'
+    }
+    const tierColor = tierColors[analysis.riskTier] || '#8B9AC4'
 
-  const analysisResult = await db.execute({
-    sql: `SELECT ca.*, s.org_id FROM company_analyses ca JOIN scans s ON s.id = ca.scan_id WHERE ca.id = ? AND s.org_id = ?`,
-    args: [params.analysisId, orgId],
-  })
-  const analysis = analysisResult.rows[0] as any
-  if (!analysis) return new NextResponse('Not found', { status: 404 })
+    const riskScores = analysis.riskScores || []
+    const opportunities = analysis.opportunities || []
+    const topActions = analysis.topActions || []
+    const analysisSummary = analysis.analysisSummary || ''
 
-  const rsResult = await db.execute({ sql: 'SELECT * FROM risk_scores WHERE analysis_id = ? ORDER BY score DESC', args: [params.analysisId] })
-  const oppResult = await db.execute({ sql: 'SELECT * FROM opportunities WHERE analysis_id = ? ORDER BY sort_order', args: [params.analysisId] })
-  const riskScores = rsResult.rows as any[]
-  const opportunities = oppResult.rows as any[]
-
-  const parsedOpp = opportunities.map((o: any) => ({
-    ...o,
-    implementation_steps: JSON.parse(o.implementation_steps || '[]'),
-    related_services: JSON.parse(o.related_services || '[]'),
-  }))
-
-  let descParsed: any = {}
-  try { descParsed = JSON.parse(analysis.description || '{}') } catch { }
-
-  // Generate a simple HTML report for PDF
-  const tierColors: Record<string, string> = {
-    low: '#22C55E', moderate: '#F59E0B', high: '#F97316', critical: '#EF4444'
-  }
-  const tierColor = tierColors[analysis.risk_tier] || '#8B9AC4'
-
-  const html = `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>AI Risk Report — ${analysis.company_name}</title>
+  <title>AI Risk Report — ${escapeHtml(analysis.companyName)}</title>
   <style>
     body { font-family: -apple-system, Inter, sans-serif; margin: 0; padding: 0; background: #060A12; color: #EEF2FF; }
     .page { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
@@ -75,84 +62,84 @@ export async function GET(
   <!-- Cover -->
   <div class="cover">
     <div style="font-size:0.875rem;color:#3B7BF6;font-weight:600;margin-bottom:1rem;">PE SCAN · AI RISK REPORT</div>
-    <h1>${analysis.company_name}</h1>
-    ${analysis.company_url ? `<p class="meta">${analysis.company_url}</p>` : ''}
-    ${analysis.industry ? `<p class="meta">${analysis.industry}</p>` : ''}
+    <h1>${escapeHtml(analysis.companyName)}</h1>
+    ${analysis.companyUrl ? `<p class="meta">${escapeHtml(analysis.companyUrl)}</p>` : ''}
+    ${analysis.industry ? `<p class="meta">${escapeHtml(analysis.industry)}</p>` : ''}
     <div style="margin-top:2rem;">
-      <div class="score-box">${analysis.overall_risk_score?.toFixed(1)}</div>
+      <div class="score-box">${analysis.overallRiskScore?.toFixed(1)}</div>
       <div>
         <span class="badge" style="background:${tierColor}20;color:${tierColor};border:1px solid ${tierColor}40;">
-          ${analysis.risk_tier?.toUpperCase()} RISK
+          ${escapeHtml(analysis.riskTier?.toUpperCase())} RISK
         </span>
       </div>
     </div>
-    ${descParsed.summary ? `<p style="margin-top:1.5rem;max-width:600px;">${descParsed.summary}</p>` : ''}
+    ${analysisSummary ? `<p style="margin-top:1.5rem;max-width:600px;">${escapeHtml(analysisSummary)}</p>` : ''}
     <p class="meta" style="margin-top:2rem;">Generated ${new Date().toLocaleDateString()} · Powered by Claude AI</p>
   </div>
 
   <!-- Top Actions -->
-  ${descParsed.topActions?.length ? `
+  ${topActions.length ? `
   <h2>Top 3 Immediate Actions</h2>
-  ${descParsed.topActions.map((a: string, i: number) => `
+  ${topActions.map((a: string, i: number) => `
     <div class="step">
       <div class="step-num">${i + 1}</div>
-      <p>${a}</p>
+      <p>${escapeHtml(a)}</p>
     </div>`).join('')}
   ` : ''}
 
   <!-- Risk Scores -->
   <h2>Risk Assessment</h2>
   ${riskScores.map((rs: any) => {
-    const tc = ['low', 'moderate', 'high', 'critical']
     const sc = rs.score <= 3 ? '#22C55E' : rs.score <= 6 ? '#F59E0B' : rs.score <= 8 ? '#F97316' : '#EF4444'
     return `
     <div>
       <div class="risk-row">
-        <div style="width:180px;font-size:0.875rem;font-weight:500;">${rs.category.replace(/_/g, ' ')}</div>
+        <div style="width:180px;font-size:0.875rem;font-weight:500;">${escapeHtml(rs.category?.replace(/_/g, ' '))}</div>
         <div class="bar"><div class="bar-fill" style="width:${(rs.score / 10) * 100}%;background:${sc};"></div></div>
         <div style="width:30px;font-weight:700;color:${sc};text-align:right;">${rs.score}</div>
       </div>
-      ${rs.explanation ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${rs.explanation}</p>` : ''}
+      ${rs.explanation ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${escapeHtml(rs.explanation)}</p>` : ''}
     </div>`
   }).join('')}
 
   <!-- Opportunities -->
   <h2 style="margin-top:3rem;">AI Opportunity Roadmap</h2>
-  ${parsedOpp.map((opp: any) => `
+  ${opportunities.map((opp: any) => `
   <div class="opp-card">
-    <h3>${opp.title}</h3>
+    <h3>${escapeHtml(opp.title)}</h3>
     <div style="margin-bottom:0.875rem;">
-      <span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);margin-right:0.5rem;">${opp.impact_rating} Impact</span>
-      <span class="badge" style="background:rgba(139,154,196,0.08);color:#8B9AC4;border:1px solid rgba(139,154,196,0.15);">${opp.timeline}</span>
+      <span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);margin-right:0.5rem;">${escapeHtml(opp.impact_rating)} Impact</span>
+      <span class="badge" style="background:rgba(139,154,196,0.08);color:#8B9AC4;border:1px solid rgba(139,154,196,0.15);">${escapeHtml(opp.timeline)}</span>
     </div>
-    <p>${opp.description}</p>
+    <p>${escapeHtml(opp.description)}</p>
     ${opp.implementation_steps?.length ? `
       <div style="margin-top:0.875rem;">
-        ${opp.implementation_steps.map((s: string, i: number) => `<div class="step"><div class="step-num">${i + 1}</div><p style="margin:0;">${s}</p></div>`).join('')}
+        ${opp.implementation_steps.map((s: string, i: number) => `<div class="step"><div class="step-num">${i + 1}</div><p style="margin:0;">${escapeHtml(s)}</p></div>`).join('')}
       </div>` : ''}
     <div class="callouts">
       <div class="callout" style="background:rgba(245,158,11,0.08);border-left:3px solid #F59E0B;">
         <div class="label">Investment</div>
-        <div style="font-weight:700;color:#F59E0B;">${opp.investment_range}</div>
+        <div style="font-weight:700;color:#F59E0B;">${escapeHtml(opp.investment_range)}</div>
       </div>
       <div class="callout" style="background:rgba(34,197,94,0.08);border-left:3px solid #22C55E;">
         <div class="label">Potential ROI</div>
-        <div style="font-weight:600;color:#22C55E;font-size:0.875rem;">${opp.roi_estimate}</div>
+        <div style="font-weight:600;color:#22C55E;font-size:0.875rem;">${escapeHtml(opp.roi_estimate)}</div>
       </div>
     </div>
     ${opp.related_services?.length ? opp.related_services.map((svc: any) => `
       <div style="margin-top:0.75rem;">
-        <div class="label">${svc.service_type}</div>
-        ${(svc.vendors || []).map((v: any) => `<a href="${v.url}" class="vendor-chip">${v.name}</a>`).join('')}
+        <div class="label">${escapeHtml(svc.service_type)}</div>
+        ${(svc.vendors || []).map((v: any) => `<a href="${escapeHtml(v.url)}" class="vendor-chip">${escapeHtml(v.name)}</a>`).join('')}
       </div>`).join('') : ''}
   </div>`).join('')}
 </div>
 </body>
 </html>`
 
-  return new NextResponse(html, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-    }
-  })
+    return new NextResponse(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    })
+  } catch (err: any) {
+    return new NextResponse(err.message || 'Not found', { status: 404 })
+  }
 }

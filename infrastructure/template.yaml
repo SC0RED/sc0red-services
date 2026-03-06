@@ -11,6 +11,14 @@ Parameters:
     Type: String
     Default: "*"
     Description: Vercel domain for CORS
+  NextAuthSecret:
+    Type: String
+    NoEcho: true
+    Description: Shared secret for JWT validation (must match frontend NEXTAUTH_SECRET)
+  OpenAIApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenAI API key for GPT-4o analysis
 
 Globals:
   Function:
@@ -104,6 +112,8 @@ Resources:
       Environment:
         Variables:
           ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
+          NEXTAUTH_SECRET: !Ref NextAuthSecret
+          OPENAI_API_KEY: !Ref OpenAIApiKey
       Events:
         ApiProxy:
           Type: Api

@@ -71,17 +71,6 @@ class DynamoDBScanRepository:
         """Delete the scan metadata item for the given ID."""
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
 
-    def find_by_org(self, org_id: str) -> list[dict[str, Any]]:
-        """Return all scans belonging to the given organisation ID."""
-        items = self._table.query_gsi(
-            index_name="GSI2",
-            pk_attr="GSI2PK",
-            pk_value=f"ORG#{org_id}",
-        )
-        for item in items:
-            self._deserialize(item)
-        return items
-
     def link_company(self, scan_id: str, company_id: str, company_name: str) -> None:
         """Create a scan→company association item."""
         self._table.put_item(
@@ -97,6 +86,21 @@ class DynamoDBScanRepository:
     def get_scan_companies(self, scan_id: str) -> list[dict[str, Any]]:
         """Return all company association items linked to the given scan ID."""
         return self._table.query(pk=f"SCAN#{scan_id}", sk_prefix="COMPANY#")
+
+    def find_recent_by_org(self, org_id: str, limit: int | None = 10) -> list[dict[str, Any]]:
+        """Return scans for the given organisation, sorted by created_at descending.
+
+        Pass limit=None to return all scans (useful for deriving count).
+        """
+        items = self._table.query_gsi(
+            index_name="GSI2",
+            pk_attr="GSI2PK",
+            pk_value=f"ORG#{org_id}",
+        )
+        for item in items:
+            self._deserialize(item)
+        items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return items[:limit] if limit is not None else items
 
     @staticmethod
     def _deserialize(item: dict[str, Any]) -> None:

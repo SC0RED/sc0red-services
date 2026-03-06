@@ -310,6 +310,7 @@ class TestAPIGatewayHandler:
         body = json.loads(result["body"])
         assert body["status"] == "complete"
         assert len(body["analyses"]) == 1
+        assert body["analyses"][0]["companyName"] == "Test"
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_confirm_no_companies(self, mock_authentication):
@@ -572,3 +573,184 @@ class TestAPIGatewayHandler:
         body = json.loads(result["body"])
         assert len(body["analyses"]) == 1
         assert body["analyses"][0]["companyName"] == "Test"
+
+
+class TestLoginEndpoint:
+    def _make_handler(self):
+        storage = MagicMock()
+        return APIGatewayHandler(storage=storage), storage
+
+    def test_login_missing_fields(self):
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": json.dumps({"email": "test@example.com"}),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "required" in json.loads(result["body"])["error"].lower()
+
+    def test_login_invalid_credentials(self):
+        handler, storage = self._make_handler()
+        user_repo = MagicMock()
+        user_repo.verify_password.return_value = None
+        storage.create_user_repository.return_value = user_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": json.dumps({"email": "test@example.com", "password": "wrong"}),
+            }
+        )
+        assert result["statusCode"] == 401
+        assert "Invalid credentials" in json.loads(result["body"])["error"]
+
+    def test_login_success(self):
+        handler, storage = self._make_handler()
+        user_repo = MagicMock()
+        user_repo.verify_password.return_value = {
+            "id": "user-1",
+            "email": "test@example.com",
+            "name": "Test User",
+            "orgId": "org-1",
+            "role": "admin",
+        }
+        storage.create_user_repository.return_value = user_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": json.dumps({"email": "test@example.com", "password": "correct"}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["success"] is True
+        assert body["user"]["email"] == "test@example.com"
+        assert body["user"]["orgId"] == "org-1"
+
+    def test_login_empty_body(self):
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/login",
+                "headers": {},
+                "body": "{}",
+            }
+        )
+        assert result["statusCode"] == 400
+
+
+class TestDashboardEndpoint:
+    def _make_handler(self):
+        storage = MagicMock()
+        return APIGatewayHandler(storage=storage), storage
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_dashboard_empty_org(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.find_by_org.return_value = []
+        scan_repo = MagicMock()
+        scan_repo.find_recent_by_org.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/dashboard",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["totalAnalyses"] == 0
+        assert body["avgRiskScore"] == 0
+        assert body["criticalCount"] == 0
+        assert body["scanCount"] == 0
+        assert body["recentAnalyses"] == []
+        assert body["recentScans"] == []
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_dashboard_with_data(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.find_by_org.return_value = [
+            {
+                "id": "c-1",
+                "company_name": "Company A",
+                "company_url": "https://a.com",
+                "overall_risk_score": 7.5,
+                "risk_tier": "high",
+                "analyzed_at": "2026-03-01T00:00:00",
+                "scan_id": "s-1",
+            },
+            {
+                "id": "c-2",
+                "company_name": "Company B",
+                "company_url": "https://b.com",
+                "overall_risk_score": 9.2,
+                "risk_tier": "critical",
+                "analyzed_at": "2026-03-02T00:00:00",
+                "scan_id": "s-1",
+            },
+            {
+                "id": "c-3",
+                "company_name": "Pending",
+                "overall_risk_score": None,
+                "scan_id": "s-2",
+            },
+        ]
+        scan_repo = MagicMock()
+        all_scans = [
+            {
+                "id": "s-1",
+                "source_url": "https://pe.com",
+                "type": "portfolio",
+                "status": "complete",
+                "progress": 100,
+                "created_at": "2026-03-01",
+            },
+            {
+                "id": "s-2",
+                "source_url": "https://pe.com/other",
+                "type": "standalone",
+                "status": "complete",
+                "progress": 100,
+                "created_at": "2026-02-28",
+            },
+        ]
+        scan_repo.find_recent_by_org.return_value = all_scans
+        scan_repo.get_scan_companies.return_value = [{"company_id": "c-1"}, {"company_id": "c-2"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/dashboard",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["totalAnalyses"] == 2
+        assert body["avgRiskScore"] == 8.3
+        assert body["criticalCount"] == 1
+        assert body["scanCount"] == 2
+        assert len(body["recentAnalyses"]) == 2
+        assert body["recentAnalyses"][0]["companyName"] == "Company B"
+        assert body["recentAnalyses"][0]["scanType"] == "portfolio"
+        assert len(body["recentScans"]) == 2
+        assert body["recentScans"][0]["completedCount"] == 2

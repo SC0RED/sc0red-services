@@ -53,6 +53,12 @@ async def _lambda_proxy(request: Request, method: str) -> Response:
     )
 
 
+@app.get("/api/health")
+async def get_health() -> dict[str, str]:
+    """Return a simple health check response."""
+    return {"status": "ok"}
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def handle_catch_all(request: Request) -> Response:
     """Route all HTTP methods to the Lambda handler proxy."""
