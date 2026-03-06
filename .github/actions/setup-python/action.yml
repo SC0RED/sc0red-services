@@ -13,6 +13,13 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Configure git for private dependencies
+      shell: bash
+      run: |
+        git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
     - name: Install dependencies
       shell: bash
       run: |
