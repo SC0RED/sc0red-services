@@ -198,6 +198,8 @@ ignore = [
 [tool.ruff.lint.extend-per-file-ignores]
 # Security checks relaxed in test configs (moto credentials)
 "**/conftest.py" = ["S105"]
+# FastAPI needs Request at runtime (not just type-checking)
+"**/local_server.py" = ["TCH002"]
 # Boolean positional args OK in tests
 "**/tests/**/*.py" = ["FBT003"]
 
