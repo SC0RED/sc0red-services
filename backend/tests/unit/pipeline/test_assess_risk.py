@@ -1,7 +1,6 @@
 """Tests for AssessRisk pipeline step."""
 
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,17 +10,17 @@ from src.pipeline.pipeline_steps.assess_risk import AssessRisk
 
 
 class TestAssessRisk:
-    def _make_mock_response(self, data):
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps(data)
-        return mock_response
-
-    @patch("src.pipeline.pipeline_steps.assess_risk.openai.OpenAI")
-    def test_successful_assessment(self, mock_openai_cls):
+    def _make_mock_factory(self, response_data):
+        """Create a mock AIClientFactory that returns structured response data."""
+        mock_factory = MagicMock()
         mock_client = MagicMock()
-        mock_openai_cls.return_value = mock_client
+        mock_factory.get_client.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.content = response_data
+        mock_client.query_structured.return_value = mock_response
+        return mock_factory
 
+    def test_successful_assessment(self):
         assessment_data = {
             "risk_scores": [
                 {
@@ -42,9 +41,7 @@ class TestAssessRisk:
             "top_risks": ["competitive_displacement"],
             "analysis_summary": "Moderate overall risk",
         }
-        mock_client.chat.completions.create.return_value = self._make_mock_response(
-            assessment_data
-        )
+        mock_factory = self._make_mock_factory(assessment_data)
 
         company = Company(url="https://example.com")
         company.scraped_text = "Content about the company"
@@ -55,7 +52,7 @@ class TestAssessRisk:
         )
         accessor = CompanyAccessor(company)
 
-        step = AssessRisk(openai_api_key="test-key")
+        step = AssessRisk(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -65,36 +62,35 @@ class TestAssessRisk:
         assert accessor.company.risk_assessment.overall_score == 5.5
         assert len(accessor.company.risk_assessment.risk_scores) == 2
         step._request_executor.mark_question_complete.assert_called_with("assess_risk")
+        mock_factory.get_client.assert_called_once()
 
     def test_missing_profile_raises(self):
         company = Company(url="https://example.com")
         company.scraped_text = "content"
         accessor = CompanyAccessor(company)
 
-        step = AssessRisk(openai_api_key="test-key")
+        step = AssessRisk(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         with pytest.raises(ValueError, match="no company profile"):
             step.execute()
 
-    @patch("src.pipeline.pipeline_steps.assess_risk.openai.OpenAI")
-    def test_empty_risk_scores_raises(self, mock_openai_cls):
-        mock_client = MagicMock()
-        mock_openai_cls.return_value = mock_client
-
-        mock_client.chat.completions.create.return_value = self._make_mock_response({
-            "risk_scores": [],
-            "overall_score": 0,
-            "tier": "low",
-        })
+    def test_empty_risk_scores_raises(self):
+        mock_factory = self._make_mock_factory(
+            {
+                "risk_scores": [],
+                "overall_score": 0,
+                "tier": "low",
+            }
+        )
 
         company = Company(url="https://example.com")
         company.scraped_text = "content"
         company.profile = CompanyProfile(company_name="Test", industry="Tech")
         accessor = CompanyAccessor(company)
 
-        step = AssessRisk(openai_api_key="test-key")
+        step = AssessRisk(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 

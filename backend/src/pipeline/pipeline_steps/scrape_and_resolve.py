@@ -14,6 +14,8 @@ from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
 from src.data_strategies.web_scraper_strategy import WebScraperStrategy, scrape_url
 
 if TYPE_CHECKING:
+    from signalfield_core.services.ai_client_factory import AIClientFactory
+
     from src.facades.company_accessor import CompanyAccessor
 
 logger = logging.getLogger(__name__)
@@ -28,10 +30,9 @@ class ScrapeAndResolveURL(RequestStep):
     and scrapes that too. Combines both content sources.
     """
 
-    def __init__(self, openai_api_key: str = "", model: str = "gpt-4o") -> None:
+    def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
         super().__init__()
-        self._openai_api_key = openai_api_key
-        self._model = model
+        self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
         """Scrape the initial URL and resolve the actual company website."""
@@ -57,8 +58,7 @@ class ScrapeAndResolveURL(RequestStep):
                 "scraped_text": text,
                 "scraped_title": metadata.get("title", ""),
                 "scraped_links": metadata.get("links", []),
-                "openai_api_key": self._openai_api_key,
-                "model": self._model,
+                "ai_client_factory": self._ai_client_factory,
             }
         )
         actual_url, resolve_meta = resolver.execute()

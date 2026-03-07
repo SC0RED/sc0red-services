@@ -256,7 +256,7 @@ Six tables, all auto-initialized on first connection:
 
 | Variable | Purpose |
 |---|---|
-| `OPENAI_API_KEY` | GPT-4o API calls for the analysis pipeline |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API calls for the analysis pipeline |
 | `NEXTAUTH_SECRET` | JWT signing secret for authentication |
 | `NEXTAUTH_URL` | NextAuth callback URL |
 | `TURSO_DATABASE_URL` | Turso cloud database URL (production) |
@@ -293,6 +293,6 @@ For local development, the database defaults to `file:./data/pescan.db` (local S
 
 ---
 
-## Known Discrepancy
+## AI Provider
 
-The PRD (`PE scan PRD.md`) specifies **Claude Sonnet** as the LLM and references `ANTHROPIC_API_KEY`, but the actual implementation uses **OpenAI GPT-4o** via the `openai` npm package with `OPENAI_API_KEY`.
+The backend uses **Anthropic Claude** via the signalfield-core AI abstraction layer (`AIClientFactory` / `AIClient`). The `ANTHROPIC_API_KEY` environment variable is required for the analysis pipeline.

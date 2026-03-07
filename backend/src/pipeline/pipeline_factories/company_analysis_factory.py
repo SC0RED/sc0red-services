@@ -19,6 +19,7 @@ from src.pipeline.request_executor import JanusRequestExecutor
 
 if TYPE_CHECKING:
     from signalfield_core.pipeline.step import RequestStep
+    from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
@@ -31,16 +32,14 @@ class CompanyAnalysisFactory(PipelineFactory):
     def __init__(
         self,
         entity_accessor: CompanyAccessor,
-        openai_api_key: str,
-        model: str = "gpt-4o",
+        ai_client_factory: AIClientFactory,
         tenant_id: str | None = None,
         request_id: str = "",
         company_repo: DynamoDBCompanyRepository | None = None,
         assessment_repo: DynamoDBAssessmentRepository | None = None,
     ) -> None:
         self._entity_accessor = entity_accessor
-        self._openai_api_key = openai_api_key
-        self._model = model
+        self._ai_client_factory = ai_client_factory
         self._tenant_id = tenant_id
         self._request_id = request_id
         self._company_repo = company_repo
@@ -50,20 +49,16 @@ class CompanyAnalysisFactory(PipelineFactory):
         """Return the ordered list of pipeline steps for company analysis."""
         return [
             ScrapeAndResolveURL(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+                ai_client_factory=self._ai_client_factory,
             ),
             ExtractProfile(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+                ai_client_factory=self._ai_client_factory,
             ),
             AssessRisk(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+                ai_client_factory=self._ai_client_factory,
             ),
             GenerateOpportunities(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+                ai_client_factory=self._ai_client_factory,
             ),
             PersistResults(
                 company_repo=self._company_repo,

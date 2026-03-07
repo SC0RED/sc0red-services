@@ -8,7 +8,7 @@ services:
       - dynamodb-data:/home/dynamodblocal/data
     command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8000/shell/ || exit 1"]
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/ | grep -q 400"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -43,14 +43,14 @@ services:
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-placeholder}
     depends_on:
       dynamodb-local:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8001/api/health || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/api/health')\" || exit 1"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 10
 
   frontend:

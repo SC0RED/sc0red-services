@@ -30,7 +30,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://example.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -66,7 +66,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://portfolio.com/company")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -86,7 +86,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://example.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -121,7 +121,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://original.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -158,7 +158,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://original.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 

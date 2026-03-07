@@ -8,14 +8,15 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-import openai
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 
 from src.models.model_company import CompanyProfile
 
 if TYPE_CHECKING:
+    from signalfield_core.services.ai_client_factory import AIClientFactory
+
     from src.facades.company_accessor import CompanyAccessor
-from src.utilities.json_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -33,31 +34,68 @@ URL: {url}
 Website Content:
 {content}
 
-Respond with this exact JSON structure:
-{{
-  "company_name": "string - official company name",
-  "industry": "string - primary industry (be specific, e.g. 'B2B SaaS - HR Technology' not just 'Software')",
-  "industry_sector": "string - broader sector (Technology, Healthcare, Financial Services, Manufacturing, Retail, Real Estate, Media, Professional Services, Energy, Transportation, etc.)",
-  "business_model": "string - how they make money (SaaS, marketplace, services, product, etc.)",
-  "description": "string - 2-3 sentence description of what they do",
-  "products_services": ["array of specific products or services"],
-  "target_market": "string - who their customers are",
-  "company_size": "string - estimated size (Startup <50, Small 50-200, Mid-market 200-1000, Enterprise 1000+)",
-  "revenue_model": "string - subscription, transaction, professional services, etc.",
-  "tech_signals": ["array of technology signals from job postings, tech stack mentions, integrations"],
-  "competitive_positioning": "string - how they differentiate",
-  "ai_maturity": "string - current AI adoption level (None evident, Early exploration, Partial adoption, AI-forward)",
-  "key_risks_visible": ["array of obvious risk signals visible on the site"]
-}}"""
+Extract the company profile with all available fields."""
+
+_PROFILE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "company_name": {"type": "string", "description": "Official company name"},
+        "industry": {
+            "type": "string",
+            "description": "Primary industry (be specific, e.g. 'B2B SaaS - HR Technology' not just 'Software')",
+        },
+        "industry_sector": {
+            "type": "string",
+            "description": "Broader sector (Technology, Healthcare, Financial Services, Manufacturing, Retail, Real Estate, Media, Professional Services, Energy, Transportation, etc.)",
+        },
+        "business_model": {
+            "type": "string",
+            "description": "How they make money (SaaS, marketplace, services, product, etc.)",
+        },
+        "description": {
+            "type": "string",
+            "description": "2-3 sentence description of what they do",
+        },
+        "products_services": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific products or services",
+        },
+        "target_market": {"type": "string", "description": "Who their customers are"},
+        "company_size": {
+            "type": "string",
+            "description": "Estimated size (Startup <50, Small 50-200, Mid-market 200-1000, Enterprise 1000+)",
+        },
+        "revenue_model": {
+            "type": "string",
+            "description": "Subscription, transaction, professional services, etc.",
+        },
+        "tech_signals": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Technology signals from job postings, tech stack mentions, integrations",
+        },
+        "competitive_positioning": {"type": "string", "description": "How they differentiate"},
+        "ai_maturity": {
+            "type": "string",
+            "description": "Current AI adoption level (None evident, Early exploration, Partial adoption, AI-forward)",
+        },
+        "key_risks_visible": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Obvious risk signals visible on the site",
+        },
+    },
+    "required": ["company_name", "industry"],
+}
 
 
 class ExtractProfile(RequestStep):
     """Extracts a structured CompanyProfile from scraped website content."""
 
-    def __init__(self, openai_api_key: str = "", model: str = "gpt-4o") -> None:
+    def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
         super().__init__()
-        self._openai_api_key = openai_api_key
-        self._model = model
+        self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
         """Extract a structured company profile from scraped website content."""
@@ -70,19 +108,19 @@ class ExtractProfile(RequestStep):
             content=scraped_text[:12000],
         )
 
-        client = openai.OpenAI(api_key=self._openai_api_key)
-        response = client.chat.completions.create(
-            model=self._model,
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        if not self._ai_client_factory:
+            message = "AI client factory not configured"
+            raise RuntimeError(message)
 
-        content = response.choices[0].message.content or ""
-        data = parse_json_response(content)
+        client = self._ai_client_factory.get_client(
+            verbosity=Verbosity.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
+            precision=Precision.STANDARD,
+        )
+        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
+        response = client.query_structured(input_text=prompt, json_schema=_PROFILE_SCHEMA)
+        data = response.content
+
         profile = CompanyProfile(**data)
 
         if not profile.company_name or not profile.industry:

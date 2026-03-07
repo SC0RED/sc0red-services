@@ -1,7 +1,6 @@
 """Tests for GenerateOpportunities pipeline step."""
 
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,11 +10,15 @@ from src.pipeline.pipeline_steps.generate_opportunities import GenerateOpportuni
 
 
 class TestGenerateOpportunities:
-    def _make_mock_response(self, data):
+    def _make_mock_factory(self, response_data):
+        """Create a mock AIClientFactory that returns structured response data."""
+        mock_factory = MagicMock()
+        mock_client = MagicMock()
+        mock_factory.get_client.return_value = mock_client
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps(data)
-        return mock_response
+        mock_response.content = response_data
+        mock_client.query_structured.return_value = mock_response
+        return mock_factory
 
     def _make_company_with_profile_and_risk(self):
         company = Company(url="https://example.com")
@@ -34,11 +37,7 @@ class TestGenerateOpportunities:
         )
         return company
 
-    @patch("src.pipeline.pipeline_steps.generate_opportunities.openai.OpenAI")
-    def test_successful_generation(self, mock_openai_cls):
-        mock_client = MagicMock()
-        mock_openai_cls.return_value = mock_client
-
+    def test_successful_generation(self):
         opp_data = {
             "opportunities": [
                 {
@@ -67,12 +66,12 @@ class TestGenerateOpportunities:
             ],
             "top_three_immediate_actions": ["Action 1", "Action 2", "Action 3"],
         }
-        mock_client.chat.completions.create.return_value = self._make_mock_response(opp_data)
+        mock_factory = self._make_mock_factory(opp_data)
 
         company = self._make_company_with_profile_and_risk()
         accessor = CompanyAccessor(company)
 
-        step = GenerateOpportunities(openai_api_key="test-key")
+        step = GenerateOpportunities(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -84,27 +83,26 @@ class TestGenerateOpportunities:
         assert result.opportunities[0].title == "Deploy AI Chatbot"
         assert len(result.opportunities[0].related_services) == 1
         assert len(result.top_three_immediate_actions) == 3
+        mock_factory.get_client.assert_called_once()
 
-    @patch("src.pipeline.pipeline_steps.generate_opportunities.openai.OpenAI")
-    def test_missing_profile_raises(self, mock_openai_cls):
+    def test_missing_profile_raises(self):
         company = Company(url="https://example.com")
         company.risk_assessment = RiskAssessment(overall_score=5.0)
         accessor = CompanyAccessor(company)
 
-        step = GenerateOpportunities(openai_api_key="test-key")
+        step = GenerateOpportunities(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         with pytest.raises(ValueError, match="profile or risk assessment missing"):
             step.execute()
 
-    @patch("src.pipeline.pipeline_steps.generate_opportunities.openai.OpenAI")
-    def test_missing_risk_assessment_raises(self, mock_openai_cls):
+    def test_missing_risk_assessment_raises(self):
         company = Company(url="https://example.com")
         company.profile = CompanyProfile(company_name="Test", industry="Tech")
         accessor = CompanyAccessor(company)
 
-        step = GenerateOpportunities(openai_api_key="test-key")
+        step = GenerateOpportunities(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
