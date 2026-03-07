@@ -7,6 +7,8 @@
 
 import jwt from 'jsonwebtoken'
 import { getServerSession } from 'next-auth'
+
+import { BackendError } from '@/lib/api/errors'
 import { authOptions } from '@/lib/auth/authOptions'
 import { BACKEND_URL } from '@/lib/config'
 
@@ -15,11 +17,11 @@ import { BACKEND_URL } from '@/lib/config'
  */
 export async function getBackendToken(): Promise<string | null> {
     const session = await getServerSession(authOptions)
-    if (!session?.user) return null
+    if (!session || !session.user) return null
 
-    const user = session.user as any
+    const { user } = session
     const secret = process.env.NEXTAUTH_SECRET
-    if (!secret) throw new Error('NEXTAUTH_SECRET not configured')
+    if (!secret) throw new BackendError('NEXTAUTH_SECRET not configured', 500)
 
     return jwt.sign(
         {
@@ -36,20 +38,20 @@ export async function getBackendToken(): Promise<string | null> {
 
 /**
  * Fetch from the Python backend with automatic auth.
- * Returns typed JSON or throws on error.
+ * Returns typed JSON or throws BackendError on failure.
  */
-export async function backendFetch<T = any>(
+export async function backendFetch<T = unknown>(
     path: string,
-    options: { method?: string; body?: any } = {}
+    options: { method?: string; body?: unknown } = {}
 ): Promise<T> {
     const token = await getBackendToken()
-    if (!token) throw new Error('Not authenticated')
+    if (!token) throw new BackendError('Not authenticated', 401)
 
     const { method = 'GET', body } = options
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
     }
 
     const fetchOptions: RequestInit = { method, headers }
@@ -62,12 +64,12 @@ export async function backendFetch<T = any>(
     if (!response.ok) {
         let errorMessage = `Backend error: ${response.status}`
         try {
-            const errorBody = await response.json()
-            errorMessage = errorBody.error || errorMessage
+            const errorBody = (await response.json()) as { error?: string }
+            errorMessage = errorBody.error ?? errorMessage
         } catch {
             // Response body is not JSON
         }
-        throw new Error(errorMessage)
+        throw new BackendError(errorMessage, response.status)
     }
 
     return response.json() as Promise<T>

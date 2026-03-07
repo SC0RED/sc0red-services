@@ -1,34 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+import { BackendError } from '@/lib/api/errors'
 import { backendFetch } from '@/lib/api/serverToken'
+import type { AnalysisData, Opportunity, RelatedService, RiskScore } from '@/lib/types/api'
 
 function escapeHtml(text: string | null | undefined): string {
-  if (!text) return ''
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
+    if (!text) return ''
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { analysisId: string } }
-) {
-  try {
-    const analysis = await backendFetch<any>(`/api/analysis/${params.analysisId}`)
+export async function GET(req: NextRequest, { params }: { params: { analysisId: string } }) {
+    try {
+        const analysis = await backendFetch<AnalysisData>(`/api/analysis/${params.analysisId}`)
 
-    const tierColors: Record<string, string> = {
-      low: '#22C55E', moderate: '#F59E0B', high: '#F97316', critical: '#EF4444'
-    }
-    const tierColor = tierColors[analysis.riskTier] || '#8B9AC4'
+        const tierColors: Record<string, string> = {
+            low: '#22C55E',
+            moderate: '#F59E0B',
+            high: '#F97316',
+            critical: '#EF4444',
+        }
+        const tierColor = tierColors[analysis.riskTier] || '#8B9AC4'
 
-    const riskScores = analysis.riskScores || []
-    const opportunities = analysis.opportunities || []
-    const topActions = analysis.topActions || []
-    const analysisSummary = analysis.analysisSummary || ''
+        const riskScores: RiskScore[] = analysis.riskScores || []
+        const opportunities: Opportunity[] = analysis.opportunities || []
+        const topActions: string[] = analysis.topActions || []
+        const analysisSummary = analysis.analysisSummary || ''
 
-    const html = `<!DOCTYPE html>
+        const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -78,20 +81,30 @@ export async function GET(
   </div>
 
   <!-- Top Actions -->
-  ${topActions.length ? `
+  ${
+      topActions.length
+          ? `
   <h2>Top 3 Immediate Actions</h2>
-  ${topActions.map((a: string, i: number) => `
+  ${topActions
+      .map(
+          (a, i) => `
     <div class="step">
       <div class="step-num">${i + 1}</div>
       <p>${escapeHtml(a)}</p>
-    </div>`).join('')}
-  ` : ''}
+    </div>`
+      )
+      .join('')}
+  `
+          : ''
+  }
 
   <!-- Risk Scores -->
   <h2>Risk Assessment</h2>
-  ${riskScores.map((rs: any) => {
-    const sc = rs.score <= 3 ? '#22C55E' : rs.score <= 6 ? '#F59E0B' : rs.score <= 8 ? '#F97316' : '#EF4444'
-    return `
+  ${riskScores
+      .map((rs: RiskScore) => {
+          const sc =
+              rs.score <= 3 ? '#22C55E' : rs.score <= 6 ? '#F59E0B' : rs.score <= 8 ? '#F97316' : '#EF4444'
+          return `
     <div>
       <div class="risk-row">
         <div style="width:180px;font-size:0.875rem;font-weight:500;">${escapeHtml(rs.category?.replace(/_/g, ' '))}</div>
@@ -100,11 +113,14 @@ export async function GET(
       </div>
       ${rs.explanation ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${escapeHtml(rs.explanation)}</p>` : ''}
     </div>`
-  }).join('')}
+      })
+      .join('')}
 
   <!-- Opportunities -->
   <h2 style="margin-top:3rem;">AI Opportunity Roadmap</h2>
-  ${opportunities.map((opp: any) => `
+  ${opportunities
+      .map(
+          (opp: Opportunity) => `
   <div class="opp-card">
     <h3>${escapeHtml(opp.title)}</h3>
     <div style="margin-bottom:0.875rem;">
@@ -112,10 +128,14 @@ export async function GET(
       <span class="badge" style="background:rgba(139,154,196,0.08);color:#8B9AC4;border:1px solid rgba(139,154,196,0.15);">${escapeHtml(opp.timeline)}</span>
     </div>
     <p>${escapeHtml(opp.description)}</p>
-    ${opp.implementation_steps?.length ? `
+    ${
+        opp.implementation_steps?.length
+            ? `
       <div style="margin-top:0.875rem;">
-        ${opp.implementation_steps.map((s: string, i: number) => `<div class="step"><div class="step-num">${i + 1}</div><p style="margin:0;">${escapeHtml(s)}</p></div>`).join('')}
-      </div>` : ''}
+        ${opp.implementation_steps.map((s, i) => `<div class="step"><div class="step-num">${i + 1}</div><p style="margin:0;">${escapeHtml(s)}</p></div>`).join('')}
+      </div>`
+            : ''
+    }
     <div class="callouts">
       <div class="callout" style="background:rgba(245,158,11,0.08);border-left:3px solid #F59E0B;">
         <div class="label">Investment</div>
@@ -126,20 +146,32 @@ export async function GET(
         <div style="font-weight:600;color:#22C55E;font-size:0.875rem;">${escapeHtml(opp.roi_estimate)}</div>
       </div>
     </div>
-    ${opp.related_services?.length ? opp.related_services.map((svc: any) => `
+    ${
+        opp.related_services?.length
+            ? opp.related_services
+                  .map(
+                      (svc: RelatedService) => `
       <div style="margin-top:0.75rem;">
         <div class="label">${escapeHtml(svc.service_type)}</div>
-        ${(svc.vendors || []).map((v: any) => `<a href="${escapeHtml(v.url)}" class="vendor-chip">${escapeHtml(v.name)}</a>`).join('')}
-      </div>`).join('') : ''}
-  </div>`).join('')}
+        ${(svc.vendors || []).map((v) => `<a href="${escapeHtml(v.url)}" class="vendor-chip">${escapeHtml(v.name)}</a>`).join('')}
+      </div>`
+                  )
+                  .join('')
+            : ''
+    }
+  </div>`
+      )
+      .join('')}
 </div>
 </body>
 </html>`
 
-    return new NextResponse(html, {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' }
-    })
-  } catch (err: any) {
-    return new NextResponse(err.message || 'Not found', { status: 404 })
-  }
+        return new NextResponse(html, {
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        })
+    } catch (error: unknown) {
+        const status = error instanceof BackendError ? error.status : 500
+        const message = error instanceof Error ? error.message : 'Not found'
+        return new NextResponse(message, { status })
+    }
 }

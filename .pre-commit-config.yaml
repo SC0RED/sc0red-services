@@ -131,6 +131,38 @@ repos:
         always_run: true
 
   # =============================================================================
+  # FRONTEND CODE QUALITY (Next.js / TypeScript)
+  # =============================================================================
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: ESLint (frontend)
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/src/
+        types: [file]
+        pass_filenames: false
+        always_run: false
+
+      - id: frontend-typecheck
+        name: TypeScript type check (frontend)
+        entry: bash -c 'cd frontend && npm run typecheck'
+        language: system
+        files: ^frontend/
+        types: [file]
+        pass_filenames: false
+        always_run: false
+
+      - id: frontend-prettier
+        name: Prettier format check (frontend)
+        entry: bash -c 'cd frontend && npm run format:check'
+        language: system
+        files: ^frontend/src/
+        types: [file]
+        pass_filenames: false
+        always_run: false
+
+  # =============================================================================
   # PRE-PUSH HOOKS
   # =============================================================================
   - repo: local
@@ -147,6 +179,15 @@ repos:
       - id: pip-audit
         name: Check dependency vulnerabilities
         entry: bash -c 'cd backend && .venv/bin/pip-audit'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
+      # Frontend unit tests
+      - id: frontend-test
+        name: Frontend unit tests
+        entry: bash -c 'cd frontend && npm run test'
         language: system
         stages: [pre-push]
         pass_filenames: false
