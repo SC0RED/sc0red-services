@@ -1,5 +1,6 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
+
 import { BACKEND_URL } from '@/lib/config'
 
 export const authOptions: NextAuthOptions = {
@@ -24,7 +25,10 @@ export const authOptions: NextAuthOptions = {
 
                     if (!response.ok) return null
 
-                    const data = await response.json()
+                    const data = (await response.json()) as {
+                        success: boolean
+                        user: { id: string; email: string; name: string; orgId: string; role: string }
+                    }
                     if (!data.success || !data.user) return null
 
                     return {
@@ -34,8 +38,7 @@ export const authOptions: NextAuthOptions = {
                         orgId: data.user.orgId,
                         role: data.user.role,
                     }
-                } catch (err) {
-                    console.error('Auth error:', err)
+                } catch {
                     return null
                 }
             },
@@ -45,18 +48,17 @@ export const authOptions: NextAuthOptions = {
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
-                token.orgId = (user as any).orgId
-                token.role = (user as any).role
+                token.orgId = user.orgId
+                token.role = user.role
                 token.id = user.id
             }
             return token
         },
         async session({ session, token }) {
             if (session.user) {
-                (session.user as any).orgId = token.orgId;
-                (session.user as any).role = token.role;
-                (session.user as any).id = token.id;
-                (session as any).accessToken = token
+                session.user.orgId = token.orgId ?? ''
+                session.user.role = token.role ?? ''
+                session.user.id = token.id ?? ''
             }
             return session
         },

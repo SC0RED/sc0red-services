@@ -1,28 +1,18 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth/authOptions'
-import { backendFetch } from '@/lib/api/serverToken'
-import { getRiskTierLabel } from '@/lib/utils/riskUtils'
 import Link from 'next/link'
-import DashboardSidebar from '@/components/DashboardSidebar'
-import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+import { getServerSession } from 'next-auth'
+import { redirect } from 'next/navigation'
 
-interface AnalysisItem {
-    id: string
-    companyName: string
-    companyUrl: string
-    industry: string
-    overallRiskScore: number | null
-    riskTier: string | null
-    analyzedAt: string | null
-    scanType?: string
-}
+import { backendFetch } from '@/lib/api/serverToken'
+import { authOptions } from '@/lib/auth/authOptions'
+import type { AnalysisItem } from '@/lib/types/api'
+import { getRiskTierLabel } from '@/lib/utils/riskUtils'
+import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+import DashboardSidebar from '@/components/DashboardSidebar'
 
 export default async function AnalysesPage() {
     const session = await getServerSession(authOptions)
-    const orgId = (session?.user as any)?.orgId
 
-    if (!session || !orgId) {
-        const { redirect } = await import('next/navigation')
+    if (!session?.user?.orgId) {
         redirect('/login')
     }
 
@@ -32,57 +22,158 @@ export default async function AnalysesPage() {
     return (
         <div style={{ display: 'flex', minHeight: '100vh' }}>
             <DashboardSidebar />
-            <main style={{ flex: 1, marginLeft: 'var(--sidebar-width)', padding: '2rem', maxWidth: '1100px' }}>
+            <main
+                style={{
+                    flex: 1,
+                    marginLeft: 'var(--sidebar-width)',
+                    padding: '2rem',
+                    maxWidth: '1100px',
+                }}
+            >
                 <div style={{ marginBottom: '2rem' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>All Analyses</h1>
-                    <p style={{ color: 'var(--text-secondary)' }}>Browse all completed company risk assessments</p>
+                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                        All Analyses
+                    </h1>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        Browse all completed company risk assessments
+                    </p>
                 </div>
 
                 {analyses.length === 0 ? (
                     <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
-                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>No analyses yet. Run your first scan to get started.</p>
-                        <Link href="/scan/new" className="btn btn-primary">Start a Scan</Link>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+                            No analyses yet. Run your first scan to get started.
+                        </p>
+                        <Link href="/scan/new" className="btn btn-primary">
+                            Start a Scan
+                        </Link>
                     </div>
                 ) : (
                     <div className="card" style={{ overflow: 'hidden' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                    {['Company', 'Industry', 'Source', 'Risk Score', 'Tier', 'Date', ''].map(h => (
-                                        <th key={h} style={{ padding: '0.875rem 1.25rem', textAlign: 'left', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
-                                    ))}
+                                    {['Company', 'Industry', 'Source', 'Risk Score', 'Tier', 'Date', ''].map(
+                                        (h) => (
+                                            <th
+                                                key={h}
+                                                style={{
+                                                    padding: '0.875rem 1.25rem',
+                                                    textAlign: 'left',
+                                                    fontSize: '0.8125rem',
+                                                    fontWeight: 600,
+                                                    color: 'var(--text-secondary)',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '0.06em',
+                                                }}
+                                            >
+                                                {h}
+                                            </th>
+                                        )
+                                    )}
                                 </tr>
                             </thead>
                             <tbody>
-                                {analyses.map((a, i: number) => {
-                                    const tier = a.riskTier as string
-                                    const tierColors: Record<string, string> = { low: 'var(--risk-low)', moderate: 'var(--risk-moderate)', high: 'var(--risk-high)', critical: 'var(--risk-critical)' }
+                                {analyses.map((a, i) => {
+                                    const tier = a.riskTier ?? ''
+                                    const tierColors: Record<string, string> = {
+                                        low: 'var(--risk-low)',
+                                        moderate: 'var(--risk-moderate)',
+                                        high: 'var(--risk-high)',
+                                        critical: 'var(--risk-critical)',
+                                    }
                                     return (
-                                        <tr key={a.id} style={{ borderBottom: i < analyses.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
+                                        <tr
+                                            key={a.id}
+                                            style={{
+                                                borderBottom:
+                                                    i < analyses.length - 1
+                                                        ? '1px solid var(--border-subtle)'
+                                                        : 'none',
+                                            }}
+                                        >
                                             <td style={{ padding: '1rem 1.25rem' }}>
                                                 <div style={{ fontWeight: 500 }}>{a.companyName}</div>
-                                                {a.companyUrl && <div style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.companyUrl}</div>}
+                                                {a.companyUrl && (
+                                                    <div
+                                                        style={{
+                                                            fontSize: '0.8125rem',
+                                                            color: 'var(--text-tertiary)',
+                                                            maxWidth: '200px',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap',
+                                                        }}
+                                                    >
+                                                        {a.companyUrl}
+                                                    </div>
+                                                )}
                                             </td>
-                                            <td style={{ padding: '1rem 1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{a.industry || '—'}</td>
+                                            <td
+                                                style={{
+                                                    padding: '1rem 1.25rem',
+                                                    color: 'var(--text-secondary)',
+                                                    fontSize: '0.875rem',
+                                                }}
+                                            >
+                                                {a.industry || '—'}
+                                            </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                <span className={`badge badge-${a.scanType === 'portfolio' ? 'blue' : 'cyan'}`} style={{ fontSize: '0.7rem' }}>
+                                                <span
+                                                    className={`badge badge-${a.scanType === 'portfolio' ? 'blue' : 'cyan'}`}
+                                                    style={{ fontSize: '0.7rem' }}
+                                                >
                                                     {a.scanType === 'portfolio' ? 'Portfolio' : 'Standalone'}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                <span style={{ fontWeight: 700, fontSize: '1.1rem', color: tierColors[tier] }}>
+                                                <span
+                                                    style={{
+                                                        fontWeight: 700,
+                                                        fontSize: '1.1rem',
+                                                        color: tierColors[tier],
+                                                    }}
+                                                >
                                                     {a.overallRiskScore?.toFixed(1)}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '1rem 1.25rem' }}>
-                                                {tier && <span className={`badge badge-${tier}`}>{getRiskTierLabel(tier)}</span>}
+                                                {tier && (
+                                                    <span className={`badge badge-${tier}`}>
+                                                        {getRiskTierLabel(tier)}
+                                                    </span>
+                                                )}
                                             </td>
-                                            <td style={{ padding: '1rem 1.25rem', color: 'var(--text-tertiary)', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-                                                {a.analyzedAt ? new Date(a.analyzedAt).toLocaleDateString() : '—'}
+                                            <td
+                                                style={{
+                                                    padding: '1rem 1.25rem',
+                                                    color: 'var(--text-tertiary)',
+                                                    fontSize: '0.8125rem',
+                                                    whiteSpace: 'nowrap',
+                                                }}
+                                            >
+                                                {a.analyzedAt
+                                                    ? new Date(a.analyzedAt).toLocaleDateString()
+                                                    : '—'}
                                             </td>
-                                            <td style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                <Link href={`/analysis/${a.id}`} className="btn btn-ghost btn-sm">View</Link>
-                                                <DeleteAnalysisButton analysisId={a.id} companyName={a.companyName} />
+                                            <td
+                                                style={{
+                                                    padding: '1rem 1.25rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.25rem',
+                                                }}
+                                            >
+                                                <Link
+                                                    href={`/analysis/${a.id}`}
+                                                    className="btn btn-ghost btn-sm"
+                                                >
+                                                    View
+                                                </Link>
+                                                <DeleteAnalysisButton
+                                                    analysisId={a.id}
+                                                    companyName={a.companyName}
+                                                />
                                             </td>
                                         </tr>
                                     )

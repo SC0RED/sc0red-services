@@ -68,5 +68,18 @@ services:
       backend:
         condition: service_healthy
 
+  localstack:
+    image: localstack/localstack:3
+    container_name: janus-localstack
+    profiles: ["localstack"]
+    ports:
+      - "4566:4566"
+    environment:
+      DEBUG: "0"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - localstack-data:/var/lib/localstack
+
 volumes:
   dynamodb-data:
+  localstack-data:

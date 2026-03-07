@@ -5,6 +5,9 @@
 #
 # Usage: ./scripts/e2e-test.sh
 #
+# Prerequisites: python3 with boto3 and PyJWT installed
+#   python3 -m pip install boto3 PyJWT
+#
 set -euo pipefail
 
 BACKEND_URL="${BACKEND_URL:-http://localhost:8001}"
