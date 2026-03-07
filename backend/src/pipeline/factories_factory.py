@@ -8,6 +8,11 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from signalfield_core.models.enums import AIProviderType
+from signalfield_core.services.ai_client_factory import AIClientFactory
+from signalfield_core.services.resources.anthropic_resource import AnthropicResource
+from signalfield_core.services.service_ops import CompositeServiceOps
+
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnalysisFactory
@@ -20,6 +25,17 @@ if TYPE_CHECKING:
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 
 
+def _initialize_ai_client_factory() -> AIClientFactory:
+    """Initialize the AI provider resource and return a shared AIClientFactory."""
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if anthropic_api_key and not AnthropicResource.is_initialized():
+        AnthropicResource.initialize({"anthropic_api_key": anthropic_api_key})
+
+    composite_service_ops = CompositeServiceOps()
+    ai_provider = os.environ.get("AI_PROVIDER", AIProviderType.ANTHROPIC.value)
+    return AIClientFactory(composite_service_ops, provider_type=ai_provider)
+
+
 class JanusFactoriesFactory:
     """Creates the correct pipeline factory for a given event."""
 
@@ -30,8 +46,7 @@ class JanusFactoriesFactory:
     ) -> None:
         self._company_repo = company_repo
         self._assessment_repo = assessment_repo
-        self._openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        self._model = os.environ.get("AI_MODEL", "gpt-4o")
+        self._ai_client_factory = _initialize_ai_client_factory()
 
     def create_and_execute(self, event: JanusEvent) -> JanusRequestExecutor:
         """Create the appropriate pipeline, execute it, and return the executor."""
@@ -53,8 +68,7 @@ class JanusFactoriesFactory:
         else:
             factory = CompanyAnalysisFactory(
                 entity_accessor=accessor,
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+                ai_client_factory=self._ai_client_factory,
                 tenant_id=event.tenant_id,
                 request_id=event.request_id,
                 company_repo=self._company_repo,

@@ -5,12 +5,9 @@ Run with: uvicorn src.local_server:app --port 8001 --reload
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from fastapi import FastAPI, Response
-
-if TYPE_CHECKING:
-    from fastapi import Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.handlers.handler import handle_event

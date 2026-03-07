@@ -9,15 +9,16 @@ import json
 import logging
 from typing import TYPE_CHECKING, cast
 
-import openai
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 
 from src.models.model_company import RiskAssessment, RiskScore
 
 if TYPE_CHECKING:
+    from signalfield_core.services.ai_client_factory import AIClientFactory
+
     from src.facades.company_accessor import CompanyAccessor
 from src.models.model_literals import RISK_SCOPE_DISPLAY
-from src.utilities.json_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,44 @@ _SYSTEM_PROMPT = (
     "9-10: Critical/existential risk, business model fundamentally threatened\n\n"
     "Always respond with valid JSON only. No markdown, no explanation text outside the JSON."
 )
+
+_RISK_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "risk_scores": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "description": "Risk category ID"},
+                    "score": {"type": "number", "description": "Risk score 1-10"},
+                    "explanation": {
+                        "type": "string",
+                        "description": "2-3 sentences explaining this specific score",
+                    },
+                    "evidence": {
+                        "type": "string",
+                        "description": "Specific signals supporting this assessment",
+                    },
+                },
+                "required": ["category", "score", "explanation", "evidence"],
+            },
+        },
+        "overall_score": {"type": "number", "description": "Overall risk score 1-10"},
+        "tier": {
+            "type": "string",
+            "enum": ["low", "moderate", "high", "critical"],
+            "description": "Risk tier",
+        },
+        "top_risks": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Top 3 most critical risk category IDs",
+        },
+        "analysis_summary": {"type": "string", "description": "3-4 sentence executive summary"},
+    },
+    "required": ["risk_scores", "overall_score", "tier", "top_risks", "analysis_summary"],
+}
 
 
 def _build_risk_prompt(profile_dict: dict) -> str:
@@ -71,30 +110,15 @@ For each risk category, consider:
 3. What is the timeline of disruption risk?
 4. Are there any moats protecting against this risk?
 
-Respond with this exact JSON:
-{{
-  "risk_scores": [
-    {{
-      "category": "category_id_from_list",
-      "score": 1-10,
-      "explanation": "2-3 sentences explaining this specific score for this specific company",
-      "evidence": "Specific signals, competitor names, or industry trends supporting this assessment"
-    }}
-  ],
-  "overall_score": number,
-  "tier": "low|moderate|high|critical",
-  "top_risks": ["top 3 most critical risk category IDs"],
-  "analysis_summary": "3-4 sentence executive summary of the overall AI risk picture for this company"
-}}"""
+Assess all risk categories and provide the overall analysis."""
 
 
 class AssessRisk(RequestStep):
     """Runs 8-category AI risk assessment on the company profile."""
 
-    def __init__(self, openai_api_key: str = "", model: str = "gpt-4o") -> None:
+    def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
         super().__init__()
-        self._openai_api_key = openai_api_key
-        self._model = model
+        self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
         """Run the 8-category AI risk assessment and store results on the accessor."""
@@ -106,19 +130,18 @@ class AssessRisk(RequestStep):
 
         user_prompt = _build_risk_prompt(profile.model_dump())
 
-        client = openai.OpenAI(api_key=self._openai_api_key)
-        response = client.chat.completions.create(
-            model=self._model,
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        if not self._ai_client_factory:
+            message = "AI client factory not configured"
+            raise RuntimeError(message)
 
-        content = response.choices[0].message.content or ""
-        data = parse_json_response(content)
+        client = self._ai_client_factory.get_client(
+            verbosity=Verbosity.MEDIUM,
+            reasoning_effort=ReasoningEffort.MEDIUM,
+            precision=Precision.STANDARD,
+        )
+        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
+        response = client.query_structured(input_text=prompt, json_schema=_RISK_SCHEMA)
+        data = response.content
 
         risk_scores = [RiskScore(**rs) for rs in data.get("risk_scores", [])]
         if not risk_scores:

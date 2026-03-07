@@ -22,10 +22,10 @@ assert_status() {
     local label="$1" expected="$2" actual="$3"
     if [ "$actual" -eq "$expected" ]; then
         echo -e "  ${GREEN}✓${NC} $label (HTTP $actual)"
-        ((pass++))
+        pass=$((pass + 1))
     else
         echo -e "  ${RED}✗${NC} $label — expected $expected, got $actual"
-        ((fail++))
+        fail=$((fail + 1))
     fi
 }
 
@@ -34,10 +34,10 @@ assert_json() {
     actual=$(echo "$body" | python3 -c "import sys,json; print(json.load(sys.stdin).get('$field',''))" 2>/dev/null || echo "PARSE_ERROR")
     if [ "$actual" = "$expected" ]; then
         echo -e "  ${GREEN}✓${NC} $label ($field=$actual)"
-        ((pass++))
+        pass=$((pass + 1))
     else
         echo -e "  ${RED}✗${NC} $label — expected $field=$expected, got $actual"
-        ((fail++))
+        fail=$((fail + 1))
     fi
 }
 
@@ -87,14 +87,14 @@ except ddb.exceptions.ResourceInUseException:
 " 2>&1
 
 EMAIL="e2e-$(date +%s)@test.com"
-PASSWORD="Test1234!"
+PASSWORD='TestPass1234'
 
 # ── 1. Register ──────────────────────────────────────────────────
 echo -e "\n${YELLOW}1. Register${NC}"
 RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/register" \
     -H "Content-Type: application/json" \
     -d "{\"name\":\"E2E User\",\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"orgName\":\"E2E Org\"}")
-BODY=$(echo "$RESP" | head -n -1)
+BODY=$(echo "$RESP" | sed '$d')
 STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "Register" 200 "$STATUS"
 assert_json "Register success" "success" "True" "$BODY"
@@ -104,7 +104,7 @@ echo -e "\n${YELLOW}2. Login${NC}"
 RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/login" \
     -H "Content-Type: application/json" \
     -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
-BODY=$(echo "$RESP" | head -n -1)
+BODY=$(echo "$RESP" | sed '$d')
 STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "Login" 200 "$STATUS"
 assert_json "Login success" "success" "True" "$BODY"
@@ -125,7 +125,7 @@ AUTH="Authorization: Bearer $TOKEN"
 # ── 3. Dashboard (empty) ────────────────────────────────────────
 echo -e "\n${YELLOW}3. Dashboard (empty)${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard" -H "$AUTH")
-BODY=$(echo "$RESP" | head -n -1)
+BODY=$(echo "$RESP" | sed '$d')
 STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "Dashboard" 200 "$STATUS"
 assert_json "No analyses" "totalAnalyses" "0" "$BODY"

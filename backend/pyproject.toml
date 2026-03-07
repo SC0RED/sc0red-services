@@ -14,7 +14,7 @@ dependencies = [
     "boto3>=1.34",
     "httpx>=0.27",
     "beautifulsoup4>=4.12",
-    "openai>=1.30",
+    "anthropic>=0.45",
     "PyJWT>=2.8",
     "bcrypt>=4.1",
     "fastapi>=0.111",
@@ -198,6 +198,8 @@ ignore = [
 [tool.ruff.lint.extend-per-file-ignores]
 # Security checks relaxed in test configs (moto credentials)
 "**/conftest.py" = ["S105"]
+# FastAPI needs Request at runtime (not just type-checking)
+"**/local_server.py" = ["TCH002"]
 # Boolean positional args OK in tests
 "**/tests/**/*.py" = ["FBT003"]
 

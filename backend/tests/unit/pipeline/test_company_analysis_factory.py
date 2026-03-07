@@ -15,10 +15,10 @@ from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
 class TestCompanyAnalysisFactory:
     def _make_factory(self):
         accessor = CompanyAccessor(Company(url="https://example.com"))
+        mock_ai_factory = MagicMock()
         return CompanyAnalysisFactory(
             entity_accessor=accessor,
-            openai_api_key="test-key",
-            model="gpt-4o",
+            ai_client_factory=mock_ai_factory,
             tenant_id="t-1",
             request_id="r-1",
         )
@@ -55,9 +55,10 @@ class TestCompanyAnalysisFactory:
         accessor = CompanyAccessor(Company(url="https://example.com"))
         company_repo = MagicMock()
         assessment_repo = MagicMock()
+        mock_ai_factory = MagicMock()
         factory = CompanyAnalysisFactory(
             entity_accessor=accessor,
-            openai_api_key="test-key",
+            ai_client_factory=mock_ai_factory,
             company_repo=company_repo,
             assessment_repo=assessment_repo,
         )

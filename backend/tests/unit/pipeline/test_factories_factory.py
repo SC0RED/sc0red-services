@@ -7,8 +7,11 @@ from src.pipeline.factories_factory import JanusFactoriesFactory
 
 
 class TestJanusFactoriesFactory:
+    @patch("src.pipeline.factories_factory._initialize_ai_client_factory")
     @patch("src.pipeline.factories_factory.CompanyAnalysisFactory")
-    def test_create_company_analysis(self, mock_factory_cls):
+    def test_create_company_analysis(self, mock_factory_cls, mock_init_ai):
+        mock_ai_factory = MagicMock()
+        mock_init_ai.return_value = mock_ai_factory
         mock_executor = MagicMock()
         mock_factory_cls.return_value.execute_pipeline.return_value = mock_executor
 
@@ -22,9 +25,13 @@ class TestJanusFactoriesFactory:
         result = ff.create_and_execute(event)
         assert result is mock_executor
         mock_factory_cls.assert_called_once()
+        call_kwargs = mock_factory_cls.call_args[1]
+        assert call_kwargs["ai_client_factory"] is mock_ai_factory
 
+    @patch("src.pipeline.factories_factory._initialize_ai_client_factory")
     @patch("src.pipeline.factories_factory.PortfolioScanFactory")
-    def test_create_portfolio_scan(self, mock_factory_cls):
+    def test_create_portfolio_scan(self, mock_factory_cls, mock_init_ai):
+        mock_init_ai.return_value = MagicMock()
         mock_executor = MagicMock()
         mock_factory_cls.return_value.execute_pipeline.return_value = mock_executor
 
@@ -39,8 +46,10 @@ class TestJanusFactoriesFactory:
         assert result is mock_executor
         mock_factory_cls.assert_called_once()
 
+    @patch("src.pipeline.factories_factory._initialize_ai_client_factory")
     @patch("src.pipeline.factories_factory.CompanyAnalysisFactory")
-    def test_passes_repos_to_company_factory(self, mock_factory_cls):
+    def test_passes_repos_to_company_factory(self, mock_factory_cls, mock_init_ai):
+        mock_init_ai.return_value = MagicMock()
         mock_executor = MagicMock()
         mock_factory_cls.return_value.execute_pipeline.return_value = mock_executor
 

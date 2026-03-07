@@ -9,14 +9,15 @@ import json
 import logging
 from typing import TYPE_CHECKING, cast
 
-import openai
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 
 from src.models.model_company import Opportunity, OpportunityResult, RelatedService, Vendor
 
 if TYPE_CHECKING:
+    from signalfield_core.services.ai_client_factory import AIClientFactory
+
     from src.facades.company_accessor import CompanyAccessor
-from src.utilities.json_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,84 @@ _SYSTEM_PROMPT = (
     "For vendor recommendations, suggest real companies that specialize in each service area.\n\n"
     "Always respond with valid JSON only. No markdown, no explanation text outside the JSON."
 )
+
+_OPPORTUNITY_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "opportunities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Specific, action-oriented title"},
+                    "risk_mitigated": {
+                        "type": "string",
+                        "description": "Category ID this primarily addresses",
+                    },
+                    "impact_rating": {"type": "string", "enum": ["High", "Medium", "Low"]},
+                    "strategic_category": {
+                        "type": "string",
+                        "description": "One of: Competitive Moat, Revenue Capture, Market Expansion, Operational Efficiency, Talent Strategy",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "2-3 paragraph detailed description",
+                    },
+                    "implementation_steps": {"type": "array", "items": {"type": "string"}},
+                    "timeline": {
+                        "type": "string",
+                        "description": "Quick Win (1-3 months)|Medium-term (3-9 months)|Long-term (9-18 months)",
+                    },
+                    "investment_range": {
+                        "type": "string",
+                        "description": "$50K-$100K|$100K-$500K|$500K-$1M|$1M+",
+                    },
+                    "roi_estimate": {"type": "string", "description": "Specific ROI description"},
+                    "related_services": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_type": {"type": "string"},
+                                "vendors": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string"},
+                                            "url": {"type": "string"},
+                                            "specialty": {"type": "string"},
+                                        },
+                                        "required": ["name", "url", "specialty"],
+                                    },
+                                },
+                            },
+                            "required": ["service_type", "vendors"],
+                        },
+                    },
+                },
+                "required": [
+                    "title",
+                    "risk_mitigated",
+                    "impact_rating",
+                    "strategic_category",
+                    "description",
+                    "implementation_steps",
+                    "timeline",
+                    "investment_range",
+                    "roi_estimate",
+                    "related_services",
+                ],
+            },
+        },
+        "top_three_immediate_actions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Top 3 immediate actions doable in 30 days",
+        },
+    },
+    "required": ["opportunities", "top_three_immediate_actions"],
+}
 
 
 def _build_opportunity_prompt(profile_dict: dict, assessment_dict: dict) -> str:
@@ -65,54 +144,15 @@ Strategic categories to use:
 - "Operational Efficiency" - Internal AI to cut costs and improve margins
 - "Talent Strategy" - Workforce transformation, AI hiring, upskilling
 
-Respond with this exact JSON:
-{{
-  "opportunities": [
-    {{
-      "title": "Specific, action-oriented title (e.g. 'Deploy AI-Powered Customer Churn Prediction')",
-      "risk_mitigated": "category_id this primarily addresses",
-      "impact_rating": "High|Medium|Low",
-      "strategic_category": "one of the 5 categories above",
-      "description": "2-3 paragraph detailed description",
-      "implementation_steps": [
-        "Step 1: Specific action with concrete details",
-        "Step 2: ...",
-        "Step 3: ...",
-        "Step 4: ...",
-        "Step 5: ..."
-      ],
-      "timeline": "Quick Win (1-3 months)|Medium-term (3-9 months)|Long-term (9-18 months)",
-      "investment_range": "$50K-$100K|$100K-$500K|$500K-$1M|$1M+",
-      "roi_estimate": "Specific ROI description",
-      "related_services": [
-        {{
-          "service_type": "e.g. AI Strategy Consulting",
-          "vendors": [
-            {{
-              "name": "Company name",
-              "url": "https://...",
-              "specialty": "What specifically they do"
-            }}
-          ]
-        }}
-      ]
-    }}
-  ],
-  "top_three_immediate_actions": [
-    "Action 1 - very specific, doable in 30 days",
-    "Action 2",
-    "Action 3"
-  ]
-}}"""
+Generate the opportunities and top three immediate actions."""
 
 
 class GenerateOpportunities(RequestStep):
     """Generates AI opportunity recommendations based on risk profile."""
 
-    def __init__(self, openai_api_key: str = "", model: str = "gpt-4o") -> None:
+    def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
         super().__init__()
-        self._openai_api_key = openai_api_key
-        self._model = model
+        self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
         """Generate AI opportunity recommendations from the company risk profile."""
@@ -126,19 +166,18 @@ class GenerateOpportunities(RequestStep):
 
         user_prompt = _build_opportunity_prompt(profile.model_dump(), risk_assessment.model_dump())
 
-        client = openai.OpenAI(api_key=self._openai_api_key)
-        response = client.chat.completions.create(
-            model=self._model,
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        if not self._ai_client_factory:
+            message = "AI client factory not configured"
+            raise RuntimeError(message)
 
-        content = response.choices[0].message.content or ""
-        data = parse_json_response(content)
+        client = self._ai_client_factory.get_client(
+            verbosity=Verbosity.HIGH,
+            reasoning_effort=ReasoningEffort.MEDIUM,
+            precision=Precision.STANDARD,
+        )
+        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
+        response = client.query_structured(input_text=prompt, json_schema=_OPPORTUNITY_SCHEMA)
+        data = response.content
 
         opportunities = []
         for opp_data in data.get("opportunities", []):

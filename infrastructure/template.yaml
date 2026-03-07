@@ -15,10 +15,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Shared secret for JWT validation (must match frontend NEXTAUTH_SECRET)
-  OpenAIApiKey:
+  AnthropicApiKey:
     Type: String
     NoEcho: true
-    Description: OpenAI API key for GPT-4o analysis
+    Description: Anthropic API key for Claude analysis
 
 Globals:
   Function:
@@ -113,7 +113,7 @@ Resources:
         Variables:
           ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
           NEXTAUTH_SECRET: !Ref NextAuthSecret
-          OPENAI_API_KEY: !Ref OpenAIApiKey
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
       Events:
         ApiProxy:
           Type: Api
