@@ -198,7 +198,7 @@ janus/
 │   │   ├── models/           # Pydantic domain models
 │   │   ├── data_strategies/  # Web scraping, URL resolution
 │   │   └── local_server.py   # FastAPI app for local development
-│   └── tests/                # 283 tests, 99% coverage
+│   └── tests/                # 296 tests, ~99% coverage
 │
 ├── frontend/                 # Next.js 14 TypeScript frontend
 │   ├── src/

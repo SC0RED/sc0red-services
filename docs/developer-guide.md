@@ -221,7 +221,7 @@ backend/tests/
 ### Coverage requirements
 
 - **Floor**: 95% (enforced by `--cov-fail-under=95` in CI)
-- **Current**: 99.03%
+- **Current**: 98.50%
 - Coverage report: `htmlcov/index.html` after running with `--cov-report=html`
 
 ### Mocking strategy
