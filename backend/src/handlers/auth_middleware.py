@@ -57,9 +57,15 @@ def validate_token(authorization: str) -> AuthContext:
         message = f"Invalid token: {e}"
         raise ValueError(message) from None
 
+    user_id = payload.get("id") or payload.get("sub")
+    org_id = payload.get("orgId")
+    if not user_id or not org_id:
+        message = "Token missing required claims: user identifier (id/sub) and orgId"
+        raise ValueError(message)
+
     return AuthContext(
-        user_id=payload.get("id", payload.get("sub", "")),
-        org_id=payload.get("orgId", ""),
+        user_id=user_id,
+        org_id=org_id,
         email=payload.get("email", ""),
         role=payload.get("role", "analyst"),
         name=payload.get("name", ""),

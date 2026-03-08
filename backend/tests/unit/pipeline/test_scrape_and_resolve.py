@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from src.facades.company_accessor import CompanyAccessor
@@ -116,7 +117,7 @@ class TestScrapeAndResolveURL:
         )
         mock_resolver_cls.return_value = mock_resolver
 
-        mock_scrape_url.side_effect = RuntimeError("Connection error")
+        mock_scrape_url.side_effect = httpx.RequestError("Connection error")
 
         company = Company(url="https://original.com")
         accessor = CompanyAccessor(company)

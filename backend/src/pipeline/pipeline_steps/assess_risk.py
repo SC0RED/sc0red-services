@@ -150,10 +150,10 @@ class AssessRisk(RequestStep):
 
         assessment = RiskAssessment(
             risk_scores=risk_scores,
-            overall_score=data.get("overall_score", 0),
-            tier=data.get("tier", "low"),
-            top_risks=data.get("top_risks", []),
-            analysis_summary=data.get("analysis_summary", ""),
+            overall_score=data["overall_score"],
+            tier=data["tier"],
+            top_risks=data["top_risks"],
+            analysis_summary=data["analysis_summary"],
         )
 
         accessor.set_risk_assessment(assessment)

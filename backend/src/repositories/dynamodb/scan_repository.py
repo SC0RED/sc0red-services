@@ -105,7 +105,4 @@ class DynamoDBScanRepository:
     @staticmethod
     def _deserialize(item: dict[str, Any]) -> None:
         if "portfolio_companies" in item and isinstance(item["portfolio_companies"], str):
-            try:
-                item["portfolio_companies"] = json.loads(item["portfolio_companies"])
-            except json.JSONDecodeError:
-                item["portfolio_companies"] = []
+            item["portfolio_companies"] = json.loads(item["portfolio_companies"])

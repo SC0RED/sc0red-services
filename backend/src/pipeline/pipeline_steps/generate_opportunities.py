@@ -180,19 +180,19 @@ class GenerateOpportunities(RequestStep):
         data = response.content
 
         opportunities = []
-        for opp_data in data.get("opportunities", []):
+        for opp_data in data["opportunities"]:
             related_services = []
-            for svc in opp_data.get("related_services", []):
-                vendors = [Vendor(**v) for v in svc.get("vendors", [])]
+            for svc in opp_data["related_services"]:
+                vendors = [Vendor(**v) for v in svc["vendors"]]
                 related_services.append(
-                    RelatedService(service_type=svc.get("service_type", ""), vendors=vendors)
+                    RelatedService(service_type=svc["service_type"], vendors=vendors)
                 )
             opp_data["related_services"] = related_services
             opportunities.append(Opportunity(**opp_data))
 
         result = OpportunityResult(
             opportunities=opportunities,
-            top_three_immediate_actions=data.get("top_three_immediate_actions", []),
+            top_three_immediate_actions=data["top_three_immediate_actions"],
         )
 
         accessor.set_opportunities(result)

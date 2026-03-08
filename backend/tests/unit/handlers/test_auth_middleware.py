@@ -39,6 +39,22 @@ class TestValidateToken:
         context = validate_token(f"Bearer {token}")
         assert context.user_id == "user-2"
 
+    @patch.dict(os.environ, {"NEXTAUTH_SECRET": "test-secret-key"})
+    def test_token_missing_org_id_raises(self):
+        payload = {"id": "user-1"}  # no orgId
+        token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
+
+        with pytest.raises(ValueError, match="missing required claims"):
+            validate_token(f"Bearer {token}")
+
+    @patch.dict(os.environ, {"NEXTAUTH_SECRET": "test-secret-key"})
+    def test_token_missing_user_id_raises(self):
+        payload = {"orgId": "org-1"}  # no id or sub
+        token = jwt.encode(payload, "test-secret-key", algorithm="HS256")
+
+        with pytest.raises(ValueError, match="missing required claims"):
+            validate_token(f"Bearer {token}")
+
     def test_missing_bearer_prefix(self):
         with pytest.raises(ValueError, match="Missing"):
             validate_token("just-a-token")

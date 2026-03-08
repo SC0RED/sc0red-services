@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import (
     Company,
@@ -66,16 +68,23 @@ class TestPersistResults:
         assert mock_assessment_repo.save_opportunity.call_count == 1
         step._request_executor.mark_question_complete.assert_called_with("persist_results")
 
-    def test_persist_without_repos_skips(self):
-        company = self._make_full_company()
+    def test_persist_company_id_none_raises(self):
+        company = Company(
+            id="",
+            url="https://example.com",
+            profile=CompanyProfile(company_name="Test", industry="Tech"),
+        )
         accessor = CompanyAccessor(company)
 
-        step = PersistResults(company_repo=None, assessment_repo=None)
+        step = PersistResults(
+            company_repo=MagicMock(),
+            assessment_repo=MagicMock(),
+        )
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
-        step.execute()
-        step._request_executor.mark_question_complete.assert_called_with("persist_results")
+        with pytest.raises(RuntimeError, match="Company ID must be set"):
+            step.execute()
 
     def test_persist_without_risk_assessment_skips_opportunities(self):
         company = Company(

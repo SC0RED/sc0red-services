@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from moto import mock_aws
 
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
@@ -113,8 +114,8 @@ class TestScanRepository:
         assert json.loads(raw["metadata"]) == {"key": "value"}
 
     @mock_aws
-    def test_deserialize_invalid_json_fallback(self, dynamodb_table):
-        """Invalid JSON in portfolio_companies falls back to []."""
+    def test_deserialize_invalid_json_raises(self, dynamodb_table):
+        """Invalid JSON in portfolio_companies raises JSONDecodeError — corrupt data must not be silently swallowed."""
         repo = DynamoDBScanRepository(dynamodb_table)
         scan_id = "test-invalid"
 
@@ -129,8 +130,8 @@ class TestScanRepository:
             }
         )
 
-        result = repo.get_by_id(scan_id)
-        assert result["portfolio_companies"] == []
+        with pytest.raises(json.JSONDecodeError):
+            repo.get_by_id(scan_id)
 
     @mock_aws
     def test_find_recent_by_org(self, dynamodb_table):

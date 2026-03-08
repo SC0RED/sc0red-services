@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
 
 
@@ -16,11 +18,15 @@ class TestURLResolutionStrategy:
         mock_client.query_structured.return_value = mock_response
         return mock_factory
 
-    def test_execute_no_url(self):
+    def test_execute_no_url_raises(self):
         strategy = URLResolutionStrategy(config={})
-        url, meta = strategy.execute()
-        assert url == ""
-        assert meta["resolved"] is False
+        with pytest.raises(ValueError, match="URL is required"):
+            strategy.execute()
+
+    def test_execute_no_factory_raises(self):
+        strategy = URLResolutionStrategy(config={"url": "https://example.com"})
+        with pytest.raises(RuntimeError, match="AI client factory not configured"):
+            strategy.execute()
 
     def test_execute_resolved_to_different_url(self):
         mock_factory = self._make_mock_factory({"actual_url": "https://actual-company.com"})

@@ -63,7 +63,7 @@ class URLResolutionStrategy(DataStrategyExecutor):
         ai_client_factory: AIClientFactory | None = self._config.get("ai_client_factory")
 
         if not url:
-            return url, {"resolved": False, "reason": "No URL provided"}
+            raise ValueError("URL is required for resolution")
 
         user_prompt = (
             f"Provided URL: {url}\n"
@@ -74,24 +74,25 @@ class URLResolutionStrategy(DataStrategyExecutor):
         )
 
         if not ai_client_factory:
-            return url, {"resolved": False, "original_url": url}
+            raise RuntimeError("AI client factory not configured for URL resolution")
 
+        client = ai_client_factory.get_client(
+            verbosity=Verbosity.LOW,
+            reasoning_effort=ReasoningEffort.MINIMAL,
+            precision=Precision.STANDARD,
+        )
+        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
         try:
-            client = ai_client_factory.get_client(
-                verbosity=Verbosity.LOW,
-                reasoning_effort=ReasoningEffort.MINIMAL,
-                precision=Precision.STANDARD,
-            )
-            prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
             response = client.query_structured(
                 input_text=prompt, json_schema=_URL_RESOLUTION_SCHEMA
             )
-            actual_url = response.content.get("actual_url", url)
+            actual_url = response.content["actual_url"]
 
             if actual_url and actual_url.startswith("http"):
                 resolved = actual_url.rstrip("/") != url.rstrip("/")
                 return actual_url, {"resolved": resolved, "original_url": url}
 
+            logger.warning("AI returned non-HTTP URL %r for %s, using original", actual_url, url)
         except Exception:
             logger.warning("URL resolution failed for %s, using original", url, exc_info=True)
 

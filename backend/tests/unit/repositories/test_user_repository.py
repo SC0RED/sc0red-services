@@ -1,6 +1,7 @@
 """Tests for DynamoDBUserRepository and DynamoDBOrganizationRepository."""
 
 import bcrypt
+import pytest
 from moto import mock_aws
 
 from src.repositories.dynamodb.user_repository import (
@@ -100,17 +101,12 @@ class TestUserRepository:
         assert result is None
 
     @mock_aws
-    def test_verify_password_no_hash(self, dynamodb_table):
+    def test_verify_password_no_hash_raises(self, dynamodb_table):
         repo = DynamoDBUserRepository(dynamodb_table)
-        repo.create(
-            {
-                "email": "nohash@example.com",
-                "org_id": "org-1",
-            }
-        )
+        repo.create({"email": "nohash@example.com", "org_id": "org-1"})
 
-        result = repo.verify_password("nohash@example.com", "password")
-        assert result is None
+        with pytest.raises(RuntimeError, match="missing password_hash"):
+            repo.verify_password("nohash@example.com", "password")
 
 
 class TestOrganizationRepository:

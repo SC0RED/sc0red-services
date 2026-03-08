@@ -34,27 +34,22 @@ def handle_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     """Main Lambda handler — routes to API Gateway or SQS handler."""
     logger.info("Incoming event type: %s", _detect_event_type(event))
 
-    try:
-        storage = _get_storage()
+    storage = _get_storage()
 
-        if _is_api_gateway_event(event):
+    if _is_api_gateway_event(event):
+        try:
             return APIGatewayHandler(storage).handle(event)
+        except Exception as e:
+            logger.exception("Unhandled error in API Gateway handler")
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"error": str(e)}),
+            }
 
-        if _is_sqs_event(event):
-            return SQSHandler(storage).handle(event)
+    if _is_sqs_event(event):
+        return SQSHandler(storage).handle(event)
 
-        logger.warning("Unknown event type")
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"error": "Unknown event type"}),
-        }
-
-    except Exception as e:
-        logger.exception("Critical error in handler")
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)}),
-        }
+    raise RuntimeError(f"Unknown event type: {list(event.keys())}")
 
 
 def _is_api_gateway_event(event: dict) -> bool:  # noqa: NAMING001
