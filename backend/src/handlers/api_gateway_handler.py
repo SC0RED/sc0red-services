@@ -149,38 +149,26 @@ class APIGatewayHandler:
                 scan_repo.update(scan_id, {"status": "failed"})
                 return _error(f"Portfolio discovery failed: {e}", 500)
 
-        # Single company analysis
-        company_id = str(uuid.uuid4())
-        company_repo = self._storage.create_company_repository()
-        company_repo.save_company(
-            company_id,
-            {
-                "scan_id": scan_id,
-                "org_id": authentication.org_id,
-                "company_url": url,
-                "company_name": "",
-            },
-        )
-
+        # Single company analysis — company record is created by persist_results
         try:
             scan_repo.update(scan_id, {"progress": 10})
-            self._factory_manager.run_company_analysis(
+            result = self._factory_manager.run_company_analysis(
                 url=url,
                 org_id=authentication.org_id,
                 user_id=authentication.user_id,
                 scan_id=scan_id,
             )
+            analysis_id = result["request_id"]
             scan_repo.update(scan_id, {"status": "complete", "progress": 100})
             return _json_response(
                 {
                     "scanId": scan_id,
                     "status": "complete",
-                    "analysisId": company_id,
+                    "analysisId": analysis_id,
                 }
             )
         except Exception as e:
             logger.exception("Analysis failed for %s", url)
-            company_repo.update(company_id, {"error": str(e)})
             scan_repo.update(scan_id, {"status": "failed", "progress": 0})
             return _error(str(e), 500)
 
@@ -246,41 +234,30 @@ class APIGatewayHandler:
 
         results = []
         total = len(companies)
-        company_repo = self._storage.create_company_repository()
 
         for idx, company in enumerate(companies):
-            company_id = str(uuid.uuid4())
-            company_repo.save_company(
-                company_id,
-                {
-                    "scan_id": scan_id,
-                    "org_id": authentication.org_id,
-                    "company_name": company.get("name", ""),
-                    "company_url": company.get("url", ""),
-                },
-            )
-            scan_repo.link_company(scan_id, company_id, company.get("name", ""))
-
+            company_name = company.get("name", "")
             try:
-                self._factory_manager.run_company_analysis(
-                    url=company.get("url", ""),
+                result = self._factory_manager.run_company_analysis(
+                    url=company["url"],
                     org_id=authentication.org_id,
                     user_id=authentication.user_id,
                     scan_id=scan_id,
-                    company_name=company.get("name", ""),
+                    company_name=company_name,
                 )
+                analysis_id = result["request_id"]
+                scan_repo.link_company(scan_id, analysis_id, company_name)
                 results.append(
                     {
-                        "name": company.get("name", ""),
+                        "name": company_name,
                         "status": "complete",
-                        "analysisId": company_id,
+                        "analysisId": analysis_id,
                     }
                 )
             except Exception as e:
-                logger.exception("Analysis failed for %s", company.get("name"))
-                company_repo.update(company_id, {"error": str(e)})
+                logger.exception("Analysis failed for %s", company_name)
                 results.append(
-                    {"name": company.get("name", ""), "status": "failed", "error": str(e)}
+                    {"name": company_name, "status": "failed", "error": str(e)}
                 )
 
             progress = round(25 + ((idx + 1) / total) * 70)
@@ -315,14 +292,9 @@ class APIGatewayHandler:
         # Parse metadata for analysis_summary and top actions
         metadata_json = company.get("metadata_json", "")
         if metadata_json:
-            try:
-                meta = (
-                    json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
-                )
-                analysis_summary = meta.get("analysis_summary", "")
-                top_actions = meta.get("top_actions", [])
-            except (json.JSONDecodeError, TypeError):
-                pass
+            meta = json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
+            analysis_summary = meta.get("analysis_summary", "")
+            top_actions = meta.get("top_actions", [])
 
         return _json_response(
             {

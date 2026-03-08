@@ -60,9 +60,9 @@ class DynamoDBUserRepository:
         if not user:
             return None
 
-        stored_hash = user.get("password_hash", "")
+        stored_hash = user.get("password_hash")
         if not stored_hash:
-            return None
+            raise RuntimeError(f"User record for {email!r} is missing password_hash — corrupt data")
 
         if not bcrypt.checkpw(password.encode(), stored_hash.encode()):
             return None

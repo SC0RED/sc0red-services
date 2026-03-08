@@ -23,12 +23,12 @@ class TestSQSHandler:
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"progress": 30}
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager.run_company_analysis.return_value = {"request_id": "r-1"}
 
         result = handler.handle(
             {
                 "Records": [
                     {
+                        "messageId": "msg-1",
                         "body": json.dumps(
                             {
                                 "url": "https://example.com",
@@ -51,37 +51,51 @@ class TestSQSHandler:
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"progress": 50}
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager.run_company_analysis.return_value = {}
 
         result = handler.handle(
             {
                 "Records": [
-                    {"body": json.dumps({"url": "https://a.com", "scan_id": "s-1"})},
-                    {"body": json.dumps({"url": "https://b.com", "scan_id": "s-1"})},
+                    {
+                        "messageId": "msg-1",
+                        "body": json.dumps(
+                            {"url": "https://a.com", "org_id": "o1", "user_id": "u1", "scan_id": "s-1"}
+                        ),
+                    },
+                    {
+                        "messageId": "msg-2",
+                        "body": json.dumps(
+                            {"url": "https://b.com", "org_id": "o1", "user_id": "u1", "scan_id": "s-1"}
+                        ),
+                    },
                 ],
             }
         )
         assert result == {"batchItemFailures": []}
         assert handler._factory_manager.run_company_analysis.call_count == 2
 
-    def test_handle_message_processing_error(self):
+    def test_handle_message_processing_error_reports_failure(self):
         handler, _storage = self._make_handler()
         handler._factory_manager.run_company_analysis.side_effect = RuntimeError("fail")
 
         result = handler.handle(
             {
-                "Records": [{"body": json.dumps({"url": "https://a.com", "scan_id": "s-1"})}],
+                "Records": [
+                    {
+                        "messageId": "msg-fail",
+                        "body": json.dumps(
+                            {"url": "https://a.com", "org_id": "o1", "user_id": "u1", "scan_id": "s-1"}
+                        ),
+                    }
+                ],
             }
         )
-        # Should not raise, returns empty failures
-        assert result == {"batchItemFailures": []}
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-fail"}]}
 
     def test_process_message_updates_scan_progress(self):
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"progress": 80}
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager.run_company_analysis.return_value = {}
 
         handler._process_message(
             {
@@ -99,11 +113,12 @@ class TestSQSHandler:
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"progress": 93}
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager.run_company_analysis.return_value = {}
 
         handler._process_message(
             {
                 "url": "https://example.com",
+                "org_id": "org-1",
+                "user_id": "user-1",
                 "scan_id": "scan-1",
             }
         )
@@ -114,8 +129,9 @@ class TestSQSHandler:
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = None
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager.run_company_analysis.return_value = {}
 
         # Should not raise even if scan not found
-        handler._process_message({"url": "https://example.com", "scan_id": "s-1"})
+        handler._process_message(
+            {"url": "https://example.com", "org_id": "o1", "user_id": "u1", "scan_id": "s-1"}
+        )
         scan_repo.update.assert_not_called()

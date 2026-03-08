@@ -26,30 +26,31 @@ class SQSHandler:
     def handle(self, event: dict[str, Any]) -> dict[str, Any]:
         """Process all SQS records in the event and return batch failure info."""
         records = event.get("Records", [])
-        results: list[dict[str, Any]] = []
+        batch_item_failures: list[dict[str, str]] = []
 
         for record in records:
+            message_id = record.get("messageId", "")
             try:
-                body = json.loads(record.get("body", "{}"))
-                result = self._process_message(body)
-                results.append(result)
-            except Exception as e:
-                logger.exception("SQS message processing failed")
-                results.append({"error": str(e)})
+                body = json.loads(record["body"])
+                self._process_message(body)
+            except Exception:
+                logger.exception("SQS message processing failed for %s", message_id)
+                if message_id:
+                    batch_item_failures.append({"itemIdentifier": message_id})
 
-        return {"batchItemFailures": []}
+        return {"batchItemFailures": batch_item_failures}
 
-    def _process_message(self, message: dict[str, Any]) -> dict[str, Any]:
+    def _process_message(self, message: dict[str, Any]) -> None:
         """Process a single SQS message and run the company analysis pipeline."""
-        url = message.get("url", "")
-        org_id = message.get("org_id", "")
-        user_id = message.get("user_id", "")
-        scan_id = message.get("scan_id", "")
+        url = message["url"]
+        org_id = message["org_id"]
+        user_id = message["user_id"]
+        scan_id = message["scan_id"]
         company_name = message.get("company_name", "")
 
         logger.info("Processing async analysis for %s (%s)", company_name or url, scan_id)
 
-        result = self._factory_manager.run_company_analysis(
+        self._factory_manager.run_company_analysis(
             url=url,
             org_id=org_id,
             user_id=user_id,
@@ -64,5 +65,3 @@ class SQSHandler:
             current_progress = scan.get("progress", 0)
             new_progress = min(current_progress + 10, 95)
             scan_repo.update(scan_id, {"progress": new_progress})
-
-        return result

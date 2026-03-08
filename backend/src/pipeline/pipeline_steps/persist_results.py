@@ -25,8 +25,8 @@ class PersistResults(RequestStep):
 
     def __init__(
         self,
-        company_repo: DynamoDBCompanyRepository | None = None,
-        assessment_repo: DynamoDBAssessmentRepository | None = None,
+        company_repo: DynamoDBCompanyRepository,
+        assessment_repo: DynamoDBAssessmentRepository,
     ) -> None:
         super().__init__()
         self._company_repo = company_repo
@@ -37,13 +37,9 @@ class PersistResults(RequestStep):
         accessor = cast("CompanyAccessor", self.entity_accessor)
         company = accessor.company
 
-        if not self._company_repo or not self._assessment_repo:
-            logger.warning("No repositories configured — skipping persistence")
-            self.request_executor.mark_question_complete("persist_results")
-            return
-
-        # Persist company record
-        company_id = company.id or str(uuid.uuid4())
+        if not company.id:
+            raise RuntimeError("Company ID must be set before persisting results")
+        company_id = company.id
         accessor.set_id(company_id)
 
         profile = company.profile
@@ -64,6 +60,7 @@ class PersistResults(RequestStep):
         self._company_repo.save_company(company_id, company_doc)
 
         # Persist assessment with risk scores
+        assessment_id = ""
         if risk_assessment:
             assessment_id = str(uuid.uuid4())
             assessment_doc = {

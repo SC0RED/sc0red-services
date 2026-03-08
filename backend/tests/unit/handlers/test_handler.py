@@ -3,6 +3,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import src.handlers.handler as handler_module
 from src.handlers.handler import (
     _detect_event_type,
@@ -86,15 +88,12 @@ class TestHandlerRouting:
         assert "batchItemFailures" in result
 
     @patch("src.handlers.handler._get_storage")
-    def test_unknown_event_returns_400(self, mock_storage):
+    def test_unknown_event_raises(self, mock_storage):
         mock_storage.return_value = MagicMock()
 
         event = {"unknown": "event"}
-        result = handle_event(event, None)
-
-        assert result["statusCode"] == 400
-        body = json.loads(result["body"])
-        assert "error" in body
+        with pytest.raises(RuntimeError, match="Unknown event type"):
+            handle_event(event, None)
 
     @patch("src.handlers.handler._get_storage")
     @patch("src.handlers.handler.APIGatewayHandler")

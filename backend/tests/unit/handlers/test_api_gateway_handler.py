@@ -157,10 +157,9 @@ class TestAPIGatewayHandler:
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
-        company_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
-        storage.create_company_repository.return_value = company_repo
         handler._factory_manager = MagicMock()
+        handler._factory_manager.run_company_analysis.return_value = {"request_id": "analysis-1"}
 
         result = handler.handle(
             {
@@ -173,6 +172,7 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["status"] == "complete"
+        assert body["analysisId"] == "analysis-1"
         assert "scanId" in body
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
@@ -181,9 +181,7 @@ class TestAPIGatewayHandler:
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
-        company_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
-        storage.create_company_repository.return_value = company_repo
         handler._factory_manager = MagicMock()
         handler._factory_manager.run_company_analysis.side_effect = RuntimeError("AI error")
 
@@ -350,10 +348,9 @@ class TestAPIGatewayHandler:
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
-        company_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
-        storage.create_company_repository.return_value = company_repo
         handler._factory_manager = MagicMock()
+        handler._factory_manager.run_company_analysis.return_value = {"request_id": "analysis-x"}
 
         result = handler.handle(
             {
@@ -381,11 +378,12 @@ class TestAPIGatewayHandler:
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
-        company_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
-        storage.create_company_repository.return_value = company_repo
         handler._factory_manager = MagicMock()
-        handler._factory_manager.run_company_analysis.side_effect = [None, RuntimeError("fail")]
+        handler._factory_manager.run_company_analysis.side_effect = [
+            {"request_id": "analysis-1"},
+            RuntimeError("fail"),
+        ]
 
         result = handler.handle(
             {
