@@ -256,9 +256,7 @@ class APIGatewayHandler:
                 )
             except Exception as e:
                 logger.exception("Analysis failed for %s", company_name)
-                results.append(
-                    {"name": company_name, "status": "failed", "error": str(e)}
-                )
+                results.append({"name": company_name, "status": "failed", "error": str(e)})
 
             progress = round(25 + ((idx + 1) / total) * 70)
             scan_repo.update(scan_id, {"progress": progress})
