@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
@@ -113,6 +113,17 @@ _OPPORTUNITY_SCHEMA: dict = {
 }
 
 
+def _build_opportunity(data: dict[str, Any]) -> Opportunity:
+    related_services = [
+        RelatedService(
+            service_type=svc["service_type"],
+            vendors=[Vendor(**v) for v in svc["vendors"]],
+        )
+        for svc in data["related_services"]
+    ]
+    return Opportunity(**{**data, "related_services": related_services})
+
+
 def _build_opportunity_prompt(profile_dict: dict, assessment_dict: dict) -> str:
     risk_scores_json = json.dumps(assessment_dict.get("risk_scores", []), indent=2)
     top_risks = ", ".join(assessment_dict.get("top_risks", []))
@@ -179,16 +190,7 @@ class GenerateOpportunities(RequestStep):
         response = client.query_structured(input_text=prompt, json_schema=_OPPORTUNITY_SCHEMA)
         data = response.content
 
-        opportunities = []
-        for opp_data in data["opportunities"]:
-            related_services = []
-            for svc in opp_data["related_services"]:
-                vendors = [Vendor(**v) for v in svc["vendors"]]
-                related_services.append(
-                    RelatedService(service_type=svc["service_type"], vendors=vendors)
-                )
-            opp_data["related_services"] = related_services
-            opportunities.append(Opportunity(**opp_data))
+        opportunities = [_build_opportunity(opp) for opp in data["opportunities"]]
 
         result = OpportunityResult(
             opportunities=opportunities,

@@ -3,6 +3,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.handlers.api_gateway_handler import APIGatewayHandler, _error, _json_response
 
 
@@ -185,15 +187,15 @@ class TestAPIGatewayHandler:
         handler._factory_manager = MagicMock()
         handler._factory_manager.run_company_analysis.side_effect = RuntimeError("AI error")
 
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/scan/start",
-                "headers": {"Authorization": "Bearer token"},
-                "body": json.dumps({"url": "https://example.com", "type": "single"}),
-            }
-        )
-        assert result["statusCode"] == 500
+        with pytest.raises(RuntimeError, match="AI error"):
+            handler.handle(
+                {
+                    "httpMethod": "POST",
+                    "path": "/api/scan/start",
+                    "headers": {"Authorization": "Bearer token"},
+                    "body": json.dumps({"url": "https://example.com", "type": "single"}),
+                }
+            )
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_start_portfolio_success(self, mock_authentication):
@@ -230,15 +232,15 @@ class TestAPIGatewayHandler:
         handler._factory_manager = MagicMock()
         handler._factory_manager.run_portfolio_discovery.side_effect = RuntimeError("fail")
 
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/scan/start",
-                "headers": {"Authorization": "Bearer token"},
-                "body": json.dumps({"url": "https://pefirm.com", "type": "portfolio"}),
-            }
-        )
-        assert result["statusCode"] == 500
+        with pytest.raises(RuntimeError, match="fail"):
+            handler.handle(
+                {
+                    "httpMethod": "POST",
+                    "path": "/api/scan/start",
+                    "headers": {"Authorization": "Bearer token"},
+                    "body": json.dumps({"url": "https://pefirm.com", "type": "portfolio"}),
+                }
+            )
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_status_not_found(self, mock_authentication):
@@ -404,6 +406,29 @@ class TestAPIGatewayHandler:
         body = json.loads(result["body"])
         assert body["results"][0]["status"] == "complete"
         assert body["results"][1]["status"] == "failed"
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_confirm_missing_url_in_company(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"org_id": "org-1"}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager = MagicMock()
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/confirm",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"companies": [{"name": "Co1"}]}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["results"][0]["status"] == "failed"
+        assert body["results"][0]["error"] == "url is required"
+        handler._factory_manager.run_company_analysis.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_get_analysis_not_found(self, mock_authentication):

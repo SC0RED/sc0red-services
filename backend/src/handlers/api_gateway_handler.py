@@ -14,9 +14,11 @@ from typing import TYPE_CHECKING, Any
 import bcrypt
 
 from src.handlers.auth_middleware import require_authentication
+from src.handlers.router import Router
 
 if TYPE_CHECKING:
     from src.handlers.auth_middleware import AuthContext
+    from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 
 from src.handlers.factory_manager import FactoryManager
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 LambdaResponse = dict[str, Any]
 
 
-def _json_response(body: dict, status: int = 200) -> LambdaResponse:
+def _json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
     return {
         "statusCode": status,
         "headers": {
@@ -43,12 +45,39 @@ def _error(message: str, status: int = 400) -> LambdaResponse:
     return _json_response({"error": message}, status)
 
 
+def _build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": company.get("id"),
+        "companyName": company.get("company_name", ""),
+        "companyUrl": company.get("company_url", ""),
+        "industry": company.get("industry", ""),
+        "overallRiskScore": company.get("overall_risk_score"),
+        "riskTier": company.get("risk_tier"),
+        "error": company.get("error"),
+        "analyzedAt": company.get("analyzed_at"),
+    }
+
+
 class APIGatewayHandler:
     """Handles all API Gateway HTTP requests."""
 
     def __init__(self, storage: DynamoDBStorageProvider | None = None) -> None:
         self._storage = storage or DynamoDBStorageProvider()
         self._factory_manager = FactoryManager(self._storage)
+        self._router = self._build_router()
+
+    def _build_router(self) -> Router:
+        router = Router()
+        router.public("POST", "/api/auth/register", self._handle_register)
+        router.public("POST", "/api/auth/login", self._handle_login)
+        router.protected("POST", "/api/scan/start", self._handle_scan_start)
+        router.protected("GET", "/api/scan/{scan_id}", self._handle_scan_status)
+        router.protected("POST", "/api/scan/{scan_id}/confirm", self._handle_scan_confirm)
+        router.protected("GET", "/api/analysis/{analysis_id}", self._handle_get_analysis)
+        router.protected("DELETE", "/api/analysis/{analysis_id}", self._handle_delete_analysis)
+        router.protected("GET", "/api/analyses", self._handle_list_analyses)
+        router.protected("GET", "/api/dashboard", self._handle_dashboard)
+        return router
 
     def handle(self, event: dict[str, Any]) -> LambdaResponse:
         """Route an API Gateway event to the appropriate handler."""
@@ -56,47 +85,29 @@ class APIGatewayHandler:
         path = event.get("path", "")
         headers = event.get("headers") or {}
 
-        # CORS preflight
         if method == "OPTIONS":
             return _json_response({}, 200)
 
-        # Public routes (no authentication required)
-        if path == "/api/auth/register" and method == "POST":
-            return self._handle_register(event)
-        if path == "/api/auth/login" and method == "POST":
-            return self._handle_login(event)
+        result = self._router.dispatch(method, path)
+        if result is None:
+            return _error("Not found", 404)
 
-        # All other routes require authentication
+        handler, path_params, authenticated = result
+        if not authenticated:
+            return handler(event, **path_params)
+
         try:
-            authentication = require_authentication(headers)
+            auth = require_authentication(headers)
         except ValueError as e:
             return _error(str(e), 401)
 
-        # Route to handlers
-        if path == "/api/scan/start" and method == "POST":
-            return self._handle_scan_start(event, authentication)
-        if path.startswith("/api/scan/") and path.endswith("/confirm") and method == "POST":
-            scan_id = path.split("/")[3]
-            return self._handle_scan_confirm(event, authentication, scan_id)
-        if path.startswith("/api/scan/") and method == "GET":
-            scan_id = path.split("/")[3]
-            return self._handle_scan_status(authentication, scan_id)
-        if path.startswith("/api/analysis/") and method == "GET":
-            analysis_id = path.split("/")[3]
-            return self._handle_get_analysis(authentication, analysis_id)
-        if path.startswith("/api/analysis/") and method == "DELETE":
-            analysis_id = path.split("/")[3]
-            return self._handle_delete_analysis(authentication, analysis_id)
-        if path == "/api/analyses" and method == "GET":
-            return self._handle_list_analyses(authentication)
-        if path == "/api/dashboard" and method == "GET":
-            return self._handle_dashboard(authentication)
-
-        return _error("Not found", 404)
+        return handler(event, auth, **path_params)
 
     # ── POST /api/scan/start ─────────────────────────────────────────
 
-    def _handle_scan_start(self, event: dict, authentication: AuthContext) -> LambdaResponse:
+    def _handle_scan_start(
+        self, event: dict[str, Any], authentication: AuthContext
+    ) -> LambdaResponse:
         body = json.loads(event.get("body") or "{}")
         url = body.get("url", "")
         scan_type = body.get("type", "")
@@ -105,8 +116,20 @@ class APIGatewayHandler:
             return _error("url and type required")
 
         scan_repo = self._storage.create_scan_repository()
-        scan_id = str(uuid.uuid4())
+        scan_id = self._create_scan_record(scan_repo, url, scan_type, authentication)
 
+        if scan_type == "portfolio":
+            return self._start_portfolio_scan(scan_repo, scan_id, url, authentication)
+        return self._start_single_scan(scan_repo, scan_id, url, authentication)
+
+    def _create_scan_record(
+        self,
+        scan_repo: DynamoDBScanRepository,
+        url: str,
+        scan_type: str,
+        authentication: AuthContext,
+    ) -> str:
+        scan_id = str(uuid.uuid4())
         scan_repo.create(
             {
                 "id": scan_id,
@@ -118,69 +141,76 @@ class APIGatewayHandler:
                 "progress": 0,
             }
         )
+        return scan_id
 
-        if scan_type == "portfolio":
-            try:
-                scan_repo.update(scan_id, {"progress": 5})
-                result = self._factory_manager.run_portfolio_discovery(
-                    url=url,
-                    org_id=authentication.org_id,
-                    user_id=authentication.user_id,
-                    scan_id=scan_id,
-                )
-                companies = result.get("details", {}).get("portfolio_companies", [])
-                scan_repo.update(
-                    scan_id,
-                    {
-                        "status": "awaiting_confirmation",
-                        "progress": 20,
-                        "portfolio_companies": companies,
-                    },
-                )
-                return _json_response(
-                    {
-                        "scanId": scan_id,
-                        "status": "awaiting_confirmation",
-                        "portfolioCompanies": companies,
-                    }
-                )
-            except Exception as e:
-                logger.exception("Portfolio discovery failed")
-                scan_repo.update(scan_id, {"status": "failed"})
-                return _error(f"Portfolio discovery failed: {e}", 500)
+    def _start_portfolio_scan(
+        self,
+        scan_repo: DynamoDBScanRepository,
+        scan_id: str,
+        url: str,
+        authentication: AuthContext,
+    ) -> LambdaResponse:
+        scan_repo.update(scan_id, {"progress": 5})
+        result = self._factory_manager.run_portfolio_discovery(
+            url=url,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
+        )
+        companies = result["details"]["portfolio_companies"]
+        scan_repo.update(
+            scan_id,
+            {
+                "status": "awaiting_confirmation",
+                "progress": 20,
+                "portfolio_companies": companies,
+            },
+        )
+        return _json_response(
+            {
+                "scanId": scan_id,
+                "status": "awaiting_confirmation",
+                "portfolioCompanies": companies,
+            }
+        )
 
-        # Single company analysis — company record is created by persist_results
-        try:
-            scan_repo.update(scan_id, {"progress": 10})
-            result = self._factory_manager.run_company_analysis(
-                url=url,
-                org_id=authentication.org_id,
-                user_id=authentication.user_id,
-                scan_id=scan_id,
-            )
-            analysis_id = result["request_id"]
-            scan_repo.update(scan_id, {"status": "complete", "progress": 100})
-            return _json_response(
-                {
-                    "scanId": scan_id,
-                    "status": "complete",
-                    "analysisId": analysis_id,
-                }
-            )
-        except Exception as e:
-            logger.exception("Analysis failed for %s", url)
-            scan_repo.update(scan_id, {"status": "failed", "progress": 0})
-            return _error(str(e), 500)
+    def _start_single_scan(
+        self,
+        scan_repo: DynamoDBScanRepository,
+        scan_id: str,
+        url: str,
+        authentication: AuthContext,
+    ) -> LambdaResponse:
+        scan_repo.update(scan_id, {"progress": 10})
+        result = self._factory_manager.run_company_analysis(
+            url=url,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
+        )
+        analysis_id = result["request_id"]
+        scan_repo.update(scan_id, {"status": "complete", "progress": 100})
+        return _json_response(
+            {
+                "scanId": scan_id,
+                "status": "complete",
+                "analysisId": analysis_id,
+            }
+        )
 
     # ── GET /api/scan/{scanId} ───────────────────────────────────────
 
-    def _handle_scan_status(self, authentication: AuthContext, scan_id: str) -> LambdaResponse:
+    def _handle_scan_status(
+        self,
+        _event: dict[str, Any],
+        authentication: AuthContext,
+        scan_id: str,
+    ) -> LambdaResponse:
         scan_repo = self._storage.create_scan_repository()
         scan = scan_repo.get_by_id(scan_id)
         if not scan or scan.get("org_id") != authentication.org_id:
             return _error("Not found", 404)
 
-        # Get full company records linked to this scan
         company_repo = self._storage.create_company_repository()
         scan_companies = scan_repo.get_scan_companies(scan_id)
         analyses = []
@@ -189,18 +219,7 @@ class APIGatewayHandler:
             if company_id:
                 full = company_repo.get_by_id(company_id)
                 if full:
-                    analyses.append(
-                        {
-                            "id": full.get("id"),
-                            "companyName": full.get("company_name", ""),
-                            "companyUrl": full.get("company_url", ""),
-                            "industry": full.get("industry", ""),
-                            "overallRiskScore": full.get("overall_risk_score"),
-                            "riskTier": full.get("risk_tier"),
-                            "error": full.get("error"),
-                            "analyzedAt": full.get("analyzed_at"),
-                        }
-                    )
+                    analyses.append(_build_company_summary(full))
 
         return _json_response(
             {
@@ -216,7 +235,7 @@ class APIGatewayHandler:
 
     def _handle_scan_confirm(
         self,
-        event: dict,
+        event: dict[str, Any],
         authentication: AuthContext,
         scan_id: str,
     ) -> LambdaResponse:
@@ -237,26 +256,32 @@ class APIGatewayHandler:
 
         for idx, company in enumerate(companies):
             company_name = company.get("name", "")
-            try:
-                result = self._factory_manager.run_company_analysis(
-                    url=company["url"],
-                    org_id=authentication.org_id,
-                    user_id=authentication.user_id,
-                    scan_id=scan_id,
-                    company_name=company_name,
-                )
-                analysis_id = result["request_id"]
-                scan_repo.link_company(scan_id, analysis_id, company_name)
+            company_url = company.get("url", "")
+            if not company_url:
                 results.append(
-                    {
-                        "name": company_name,
-                        "status": "complete",
-                        "analysisId": analysis_id,
-                    }
+                    {"name": company_name, "status": "failed", "error": "url is required"}
                 )
-            except Exception as e:
-                logger.exception("Analysis failed for %s", company_name)
-                results.append({"name": company_name, "status": "failed", "error": str(e)})
+            else:
+                try:
+                    result = self._factory_manager.run_company_analysis(
+                        url=company_url,
+                        org_id=authentication.org_id,
+                        user_id=authentication.user_id,
+                        scan_id=scan_id,
+                        company_name=company_name,
+                    )
+                    analysis_id = result["request_id"]
+                    scan_repo.link_company(scan_id, analysis_id, company_name)
+                    results.append(
+                        {
+                            "name": company_name,
+                            "status": "complete",
+                            "analysisId": analysis_id,
+                        }
+                    )
+                except Exception as e:
+                    logger.exception("Analysis failed for %s", company_name)
+                    results.append({"name": company_name, "status": "failed", "error": str(e)})
 
             progress = round(25 + ((idx + 1) / total) * 70)
             scan_repo.update(scan_id, {"progress": progress})
@@ -266,13 +291,17 @@ class APIGatewayHandler:
 
     # ── GET /api/analysis/{id} ───────────────────────────────────────
 
-    def _handle_get_analysis(self, authentication: AuthContext, analysis_id: str) -> LambdaResponse:
+    def _handle_get_analysis(
+        self,
+        _event: dict[str, Any],
+        authentication: AuthContext,
+        analysis_id: str,
+    ) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
         company = company_repo.get_by_id(analysis_id)
         if not company or company.get("org_id") != authentication.org_id:
             return _error("Not found", 404)
 
-        # Get assessment + risk scores + opportunities
         assessment_repo = self._storage.create_assessment_repository()
         assessments = assessment_repo.find_by_company(analysis_id)
 
@@ -283,11 +312,10 @@ class APIGatewayHandler:
 
         if assessments:
             assessment = assessments[0]
-            assessment_id = assessment.get("id", "")
+            assessment_id = assessment["id"]
             risk_scores = assessment_repo.get_risk_scores(assessment_id)
             opportunities = assessment_repo.get_opportunities(assessment_id)
 
-        # Parse metadata for analysis_summary and top actions
         metadata_json = company.get("metadata_json", "")
         if metadata_json:
             meta = json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
@@ -312,6 +340,7 @@ class APIGatewayHandler:
 
     def _handle_delete_analysis(
         self,
+        _event: dict[str, Any],
         authentication: AuthContext,
         analysis_id: str,
     ) -> LambdaResponse:
@@ -320,16 +349,13 @@ class APIGatewayHandler:
         if not company or company.get("org_id") != authentication.org_id:
             return _error("Not found", 404)
 
-        # Delete assessment + children
         assessment_repo = self._storage.create_assessment_repository()
         assessments = assessment_repo.find_by_company(analysis_id)
         for assessment in assessments:
-            assessment_repo.delete(assessment.get("id", ""))
+            assessment_repo.delete(assessment["id"])
 
-        # Delete company
         company_repo.delete(analysis_id)
 
-        # Check if scan has remaining companies
         scan_id = company.get("scan_id", "")
         if scan_id:
             scan_repo = self._storage.create_scan_repository()
@@ -341,30 +367,20 @@ class APIGatewayHandler:
 
     # ── GET /api/analyses ────────────────────────────────────────────
 
-    def _handle_list_analyses(self, authentication: AuthContext) -> LambdaResponse:
+    def _handle_list_analyses(
+        self,
+        _event: dict[str, Any],
+        authentication: AuthContext,
+    ) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
         companies = company_repo.find_by_org(authentication.org_id)
         return _json_response(
-            {
-                "analyses": [
-                    {
-                        "id": c.get("id"),
-                        "companyName": c.get("company_name", ""),
-                        "companyUrl": c.get("company_url", ""),
-                        "industry": c.get("industry", ""),
-                        "overallRiskScore": c.get("overall_risk_score"),
-                        "riskTier": c.get("risk_tier"),
-                        "error": c.get("error"),
-                        "analyzedAt": c.get("analyzed_at"),
-                    }
-                    for c in companies
-                ]
-            }
+            {"analyses": [_build_company_summary(c) for c in companies]}
         )
 
     # ── POST /api/auth/login ─────────────────────────────────────────
 
-    def _handle_login(self, event: dict) -> LambdaResponse:
+    def _handle_login(self, event: dict[str, Any]) -> LambdaResponse:
         body = json.loads(event.get("body") or "{}")
         email = body.get("email", "")
         password = body.get("password", "")
@@ -381,7 +397,11 @@ class APIGatewayHandler:
 
     # ── GET /api/dashboard ─────────────────────────────────────────
 
-    def _handle_dashboard(self, authentication: AuthContext) -> LambdaResponse:
+    def _handle_dashboard(
+        self,
+        _event: dict[str, Any],
+        authentication: AuthContext,
+    ) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
         scan_repo = self._storage.create_scan_repository()
 
@@ -400,10 +420,8 @@ class APIGatewayHandler:
         scan_count = len(all_scans)
         recent_scans = all_scans[:10]
 
-        # Build scan_id → type mapping so company records can resolve scan_type
-        scan_type_map = {s.get("id", ""): s.get("type", "") for s in all_scans}
+        scan_type_map = {s["id"]: s.get("type", "") for s in all_scans}
 
-        # Build recent analyses (sorted by analyzed_at desc)
         analyzed.sort(key=lambda c: c.get("analyzed_at", ""), reverse=True)
         recent_analyses = [
             {
@@ -425,7 +443,7 @@ class APIGatewayHandler:
                 "type": s.get("type", ""),
                 "status": s.get("status", ""),
                 "progress": s.get("progress", 0),
-                "completedCount": len(scan_repo.get_scan_companies(s.get("id", ""))),
+                "completedCount": len(scan_repo.get_scan_companies(s["id"])),
                 "createdAt": s.get("created_at", ""),
             }
             for s in recent_scans
@@ -444,7 +462,7 @@ class APIGatewayHandler:
 
     # ── POST /api/auth/register ──────────────────────────────────────
 
-    def _handle_register(self, event: dict) -> LambdaResponse:
+    def _handle_register(self, event: dict[str, Any]) -> LambdaResponse:
         body = json.loads(event.get("body") or "{}")
         name = body.get("name", "")
         email = body.get("email", "")
