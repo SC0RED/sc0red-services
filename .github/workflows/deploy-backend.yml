@@ -16,6 +16,7 @@ jobs:
     secrets:
       APP_ID: ${{ secrets.APP_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   deploy:
     name: Deploy to Staging
@@ -30,11 +31,28 @@ jobs:
 
       - name: Generate GitHub App token
         id: app-token
+        if: ${{ secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
+        continue-on-error: true
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: SC0RED
+
+      - name: Configure SSH for private dependencies (fallback)
+        if: steps.app-token.outcome != 'success'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" > ~/.ssh/janus_deploy_key
+          chmod 600 ~/.ssh/janus_deploy_key
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config << 'EOF'
+          Host github.com
+            IdentityFile ~/.ssh/janus_deploy_key
+            StrictHostKeyChecking yes
+          EOF
+          chmod 600 ~/.ssh/config
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
 
       - uses: actions/setup-python@v5
         with:
