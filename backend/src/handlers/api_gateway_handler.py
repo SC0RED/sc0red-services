@@ -97,11 +97,11 @@ class APIGatewayHandler:
             return handler(event, **path_params)
 
         try:
-            auth = require_authentication(headers)
+            authentication = require_authentication(headers)
         except ValueError as e:
             return _error(str(e), 401)
 
-        return handler(event, auth, **path_params)
+        return handler(event, authentication, **path_params)
 
     # ── POST /api/scan/start ─────────────────────────────────────────
 
