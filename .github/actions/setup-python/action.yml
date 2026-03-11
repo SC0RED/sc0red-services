@@ -28,7 +28,7 @@ runs:
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.app-private-key }}
-        owner: SignalField
+        owner: SC0RED
 
     - name: Configure git for private dependencies
       shell: bash
