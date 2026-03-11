@@ -13,6 +13,10 @@ inputs:
     description: 'GitHub App private key for generating installation token'
     required: false
     default: ''
+  deploy-key:
+    description: 'SSH private key for accessing private GitHub dependencies (fallback when App token unavailable)'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -24,20 +28,34 @@ runs:
     - name: Generate GitHub App token
       id: app-token
       if: inputs.app-id != '' && inputs.app-private-key != ''
+      continue-on-error: true
       uses: actions/create-github-app-token@v1
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.app-private-key }}
         owner: SC0RED
 
-    - name: Configure git for private dependencies
+    - name: Configure git via GitHub App token
+      if: steps.app-token.outcome == 'success'
       shell: bash
       run: |
-        TOKEN="${APP_TOKEN:-${GITHUB_TOKEN}}"
-        git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-      env:
-        APP_TOKEN: ${{ steps.app-token.outputs.token }}
-        GITHUB_TOKEN: ${{ github.token }}
+        git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "https://github.com/"
+
+    - name: Configure git via SSH deploy key
+      if: steps.app-token.outcome != 'success' && inputs.deploy-key != ''
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ inputs.deploy-key }}" > ~/.ssh/janus_deploy_key
+        chmod 600 ~/.ssh/janus_deploy_key
+        ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+        cat >> ~/.ssh/config << 'EOF'
+        Host github.com
+          IdentityFile ~/.ssh/janus_deploy_key
+          StrictHostKeyChecking yes
+        EOF
+        chmod 600 ~/.ssh/config
+        git config --global url."git@github.com:".insteadOf "https://github.com/"
 
     - name: Install dependencies
       shell: bash
