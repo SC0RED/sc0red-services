@@ -109,10 +109,13 @@ class JanusStack(Stack):
             "ApiHandler",
             function_name=f"janus-{self._environment}",
             runtime=lambda_.Runtime.PYTHON_3_12,
-            # ARM_64 matches the bundling host (Apple Silicon) so native extensions
-            # (e.g. bcrypt) are installed as arm64 manylinux wheels and run correctly
-            # in the arm64 Lambda execution container that LocalStack/AWS spawns.
-            architecture=lambda_.Architecture.ARM_64,
+            # ARM_64 for local development (Apple Silicon); X86_64 for CI/CD where
+            # GitHub Actions runs on x86_64 — native wheels must match execution env.
+            architecture=(
+                lambda_.Architecture.ARM_64
+                if self._environment == "development"
+                else lambda_.Architecture.X86_64
+            ),
             handler="src.handlers.handler.handle_event",
             code=lambda_.Code.from_asset(
                 "../backend",
