@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 #
 # End-to-end integration test for Janus.
-# Runs the full flow: register → login → scan → poll → view → delete.
+# Runs the full flow: register → login → scan start → confirm → poll → view → delete.
 #
-# Usage: ./scripts/e2e-test.sh
+# Usage:
+#   # Standard (standalone DynamoDB, no SQS worker — auth tests only):
+#   ./scripts/e2e-test.sh
+#
+#   # Full E2E with async scan flow (requires docker-compose.e2e.yml):
+#   GH_TOKEN=$(gh auth token) docker compose -f docker-compose.e2e.yml up --build -d
+#   BACKEND_URL=http://localhost:8001 E2E_MODE=full ./scripts/e2e-test.sh
 #
 # Prerequisites: python3 with boto3 and PyJWT installed
 #   python3 -m pip install boto3 PyJWT
@@ -12,6 +18,11 @@ set -euo pipefail
 
 BACKEND_URL="${BACKEND_URL:-http://localhost:8001}"
 NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}"
+DYNAMODB_ENDPOINT="${DYNAMODB_ENDPOINT:-http://localhost:8000}"
+DYNAMODB_TABLE="${DYNAMODB_TABLE:-janus-dev}"
+AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-}"
+# Set E2E_MODE=full to enable scan + async polling tests (requires docker-compose.e2e.yml)
+E2E_MODE="${E2E_MODE:-basic}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -44,6 +55,18 @@ assert_json() {
     fi
 }
 
+assert_json_nonempty() {
+    local label="$1" field="$2" body="$3"
+    actual=$(echo "$body" | python3 -c "import sys,json; v=json.load(sys.stdin).get('$field',''); print(bool(v))" 2>/dev/null || echo "False")
+    if [ "$actual" = "True" ]; then
+        echo -e "  ${GREEN}✓${NC} $label ($field is set)"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} $label — expected $field to be non-empty"
+        fail=$((fail + 1))
+    fi
+}
+
 # ── Wait for backend ──────────────────────────────────────────────
 echo -e "${YELLOW}Waiting for backend at $BACKEND_URL ...${NC}"
 for i in $(seq 1 30); do
@@ -63,11 +86,12 @@ echo -e "\n${YELLOW}Ensuring DynamoDB table exists ...${NC}"
 python3 -c "
 import boto3, os
 endpoint = os.environ.get('DYNAMODB_ENDPOINT', 'http://localhost:8000')
+table = os.environ.get('DYNAMODB_TABLE', 'janus-dev')
 ddb = boto3.client('dynamodb', endpoint_url=endpoint, region_name='us-east-1',
     aws_access_key_id='local', aws_secret_access_key='local')
 try:
     ddb.create_table(
-        TableName='janus-dev',
+        TableName=table,
         KeySchema=[{'AttributeName':'pk','KeyType':'HASH'},{'AttributeName':'sk','KeyType':'RANGE'}],
         AttributeDefinitions=[
             {'AttributeName':'pk','AttributeType':'S'},{'AttributeName':'sk','AttributeType':'S'},
@@ -84,10 +108,23 @@ try:
         ],
         BillingMode='PAY_PER_REQUEST',
     )
-    print('Table created')
+    print(f'Table {table} created')
 except ddb.exceptions.ResourceInUseException:
-    print('Table already exists')
+    print(f'Table {table} already exists')
 " 2>&1
+
+# ── Create SQS queue (E2E mode only) ─────────────────────────────
+if [ "$E2E_MODE" = "full" ]; then
+    echo -e "\n${YELLOW}Ensuring SQS queue exists ...${NC}"
+    python3 -c "
+import boto3, os
+endpoint = os.environ.get('AWS_ENDPOINT_URL', 'http://localhost:4566')
+sqs = boto3.client('sqs', endpoint_url=endpoint, region_name='us-east-1',
+    aws_access_key_id='local', aws_secret_access_key='local')
+response = sqs.create_queue(QueueName='janus-analysis-e2e')
+print('Queue URL:', response['QueueUrl'])
+" 2>&1
+fi
 
 EMAIL="e2e-$(date +%s)@test.com"
 PASSWORD='TestPass1234'
@@ -152,6 +189,130 @@ echo -e "\n${YELLOW}6. Unauthenticated access${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard")
 STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "No auth = 401" 401 "$STATUS"
+
+# ── Scan flow (E2E_MODE=full only) ──────────────────────────────
+if [ "$E2E_MODE" = "full" ]; then
+
+    # ── 7. Start scan ────────────────────────────────────────────
+    echo -e "\n${YELLOW}7. Start scan${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/start" \
+        -H "Content-Type: application/json" \
+        -H "$AUTH" \
+        -d '{"url":"https://example.com","type":"single"}')
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Scan start" 200 "$STATUS"
+    assert_json_nonempty "Got scanId" "scanId" "$BODY"
+    SCAN_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['scanId'])")
+
+    # ── 8. Confirm scan (async — returns 202) ─────────────────────
+    echo -e "\n${YELLOW}8. Confirm scan${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/$SCAN_ID/confirm" \
+        -H "Content-Type: application/json" \
+        -H "$AUTH" \
+        -d '{"companies":[{"name":"Example Corp","url":"https://example.com"}]}')
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Scan confirm (async 202)" 202 "$STATUS"
+    assert_json "Confirm ok" "ok" "True" "$BODY"
+
+    # Extract first analysis ID from queued list
+    ANALYSIS_ID=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+queued = data.get('queued', [])
+print(queued[0]['analysisId'] if queued else '')
+")
+    if [ -z "$ANALYSIS_ID" ]; then
+        echo -e "  ${RED}✗${NC} No analysisId in confirm response"
+        fail=$((fail + 1))
+    else
+        echo -e "  ${GREEN}✓${NC} Got analysisId: $ANALYSIS_ID"
+        pass=$((pass + 1))
+    fi
+
+    # ── 9. Poll scan until complete ───────────────────────────────
+    echo -e "\n${YELLOW}9. Poll scan until complete (max 120s)${NC}"
+    SCAN_COMPLETE=false
+    for i in $(seq 1 40); do
+        RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$SCAN_ID" -H "$AUTH")
+        BODY=$(echo "$RESP" | sed '$d')
+        STATUS=$(echo "$RESP" | tail -n 1)
+        SCAN_STATUS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+        echo -e "    Poll $i: status=$SCAN_STATUS"
+        if [ "$SCAN_STATUS" = "complete" ]; then
+            SCAN_COMPLETE=true
+            break
+        fi
+        sleep 3
+    done
+
+    if [ "$SCAN_COMPLETE" = "true" ]; then
+        echo -e "  ${GREEN}✓${NC} Scan reached complete status"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Scan did not complete within timeout"
+        fail=$((fail + 1))
+    fi
+
+    # ── 10. Verify scan has analyses with risk scores ──────────────
+    echo -e "\n${YELLOW}10. Verify analysis results${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$SCAN_ID" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Scan status endpoint" 200 "$STATUS"
+
+    HAS_SCORE=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+analyses = data.get('analyses', [])
+print(any(a.get('overallRiskScore') is not None for a in analyses))
+" 2>/dev/null || echo "False")
+    if [ "$HAS_SCORE" = "True" ]; then
+        echo -e "  ${GREEN}✓${NC} Analysis has overallRiskScore"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} No risk score found in analyses"
+        fail=$((fail + 1))
+    fi
+
+    # ── 11. Get individual analysis ───────────────────────────────
+    echo -e "\n${YELLOW}11. Get analysis detail${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Get analysis" 200 "$STATUS"
+    assert_json_nonempty "Analysis has companyName" "companyName" "$BODY"
+    assert_json_nonempty "Analysis has overallRiskScore" "overallRiskScore" "$BODY"
+
+    # ── 12. Dashboard shows updated stats ─────────────────────────
+    echo -e "\n${YELLOW}12. Dashboard after analysis${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Dashboard" 200 "$STATUS"
+    TOTAL=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalAnalyses',0))" 2>/dev/null || echo "0")
+    if [ "$TOTAL" -ge 1 ]; then
+        echo -e "  ${GREEN}✓${NC} Dashboard totalAnalyses=$TOTAL"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Dashboard shows 0 analyses after scan"
+        fail=$((fail + 1))
+    fi
+
+    # ── 13. Delete analysis ───────────────────────────────────────
+    echo -e "\n${YELLOW}13. Delete analysis${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X DELETE "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Delete analysis" 200 "$STATUS"
+
+    # ── 14. Verify deletion ───────────────────────────────────────
+    echo -e "\n${YELLOW}14. Verify analysis is gone${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Analysis 404 after delete" 404 "$STATUS"
+
+fi  # E2E_MODE=full
 
 # ── Summary ──────────────────────────────────────────────────────
 echo ""
