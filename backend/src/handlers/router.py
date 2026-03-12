@@ -1,4 +1,5 @@
 """Lightweight regex-based HTTP router for API Gateway Lambda handlers."""
+
 from __future__ import annotations
 
 import re
@@ -46,9 +47,7 @@ class Router:
         """Register a route that requires a valid auth token."""
         self._routes.append(Route(method, _compile_route(path), handler, authenticated=True))
 
-    def dispatch(
-        self, method: str, path: str
-    ) -> tuple[RouteHandler, dict[str, str], bool] | None:
+    def dispatch(self, method: str, path: str) -> tuple[RouteHandler, dict[str, str], bool] | None:
         """Match method+path against registered routes. Returns None if no match."""
         for route in self._routes:
             if route.method == method and (match := route.pattern.match(path)):

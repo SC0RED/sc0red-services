@@ -14,8 +14,6 @@ jobs:
     name: CI Checks
     uses: ./.github/workflows/_ci-checks.yml
     secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
       DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   deploy:
@@ -29,26 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate GitHub App token
-        id: app-token
-        continue-on-error: true
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: SC0RED
-
-      - name: Configure SSH for private dependencies (fallback)
-        if: steps.app-token.outcome != 'success'
+      - name: Configure SSH for private dependencies
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" > ~/.ssh/janus_deploy_key
           chmod 600 ~/.ssh/janus_deploy_key
           ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
-          printf 'Host github.com
-  IdentityFile ~/.ssh/janus_deploy_key
-  StrictHostKeyChecking yes
-' >> ~/.ssh/config
+          printf 'Host github.com\n  IdentityFile ~/.ssh/janus_deploy_key\n  StrictHostKeyChecking yes\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
           git config --global url."git@github.com:".insteadOf "https://github.com/"
 
@@ -80,7 +65,10 @@ jobs:
 
       - name: CDK Deploy
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # GH_TOKEN is used during Docker bundling to pip-install signalfield-core.
+          # Add SIGNALFIELD_CORE_READ_TOKEN (a PAT with read access to SignalField/signalfield-core)
+          # as a repo secret or staging environment secret to enable Lambda builds.
+          GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
