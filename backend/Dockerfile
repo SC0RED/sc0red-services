@@ -1,6 +1,7 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -10,7 +11,14 @@ RUN if [ -n "$GH_TOKEN" ]; then \
     fi
 
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e "."
+
+# Install deps — uses GH_TOKEN (HTTPS) when set, otherwise SSH mount for deploy key
+RUN --mount=type=ssh \
+    if [ -z "$GH_TOKEN" ]; then \
+        mkdir -p ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null && \
+        git config --global url."git@github.com:".insteadOf "https://github.com/"; \
+    fi && \
+    pip install --no-cache-dir -e "."
 
 COPY . .
 

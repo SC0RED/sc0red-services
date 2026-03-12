@@ -93,13 +93,56 @@ except PipelineError as e:
 - Tests call public interfaces (`handle()`), not private methods directly
 - Integration paths (dispatch → handler → response) need at least one end-to-end test
 
+### What "new functionality" requires
+
+| Change type | Required before commit |
+|-------------|----------------------|
+| New backend handler / route | Unit tests covering success + error paths |
+| New pipeline step | Unit tests for `execute()` with mocked dependencies |
+| New repository method | Unit tests covering read + write paths |
+| New frontend component | Vitest + RTL tests covering render + interaction |
+| New frontend page | Tests for loading, error, and success states |
+| Any async flow change | Tests covering the async path (polling, SQS, etc.) |
+
 ---
 
 ## Commit Workflow (in order)
 
+### Backend changes
 1. Make code changes
 2. `uv run ruff check src/` — fix all lint errors
 3. `uv run pyright src/` — no new errors introduced (pre-existing errors are tracked separately)
 4. `uv run pytest tests/ -q` — all tests pass, coverage ≥ 95%
 5. **Run `architecture-reviewer` agent** — resolve findings before proceeding
 6. `git commit` with conventional commit message
+
+### Frontend changes
+1. Make code changes
+2. `cd frontend && npm run lint` — fix all lint errors
+3. `cd frontend && npx tsc --noEmit` — no type errors
+4. **`cd frontend && npm test` — ALL tests must pass before committing**
+5. `git commit` with conventional commit message
+
+---
+
+## PR Workflow (in order)
+
+Before calling `gh pr create`, ALL of the following must be true:
+
+1. All unit tests pass (backend `pytest` and/or frontend `npm test` as applicable)
+2. **E2E tests pass locally:**
+   ```bash
+   GH_TOKEN=$(gh auth token) docker compose -f docker-compose.e2e.yml up --build -d
+   BACKEND_URL=http://localhost:8001 \
+   DYNAMODB_ENDPOINT=http://localhost:4566 \
+   DYNAMODB_TABLE=janus-e2e \
+   AWS_ENDPOINT_URL=http://localhost:4566 \
+   MOCK_COMPANY_URL=http://ai-mock:8080/company \
+   E2E_MODE=full \
+   ./scripts/e2e-test.sh
+   docker compose -f docker-compose.e2e.yml down -v
+   ```
+3. Architecture reviewer has run (if conditions in the gate above are met)
+
+**Do not open a PR if the E2E suite has not been run and passed.**
+The CI pipeline also runs E2E on every PR — a failure there means the PR cannot merge.
