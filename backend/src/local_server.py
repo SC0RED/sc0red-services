@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.handlers.handler import handle_event
+from src.handlers.api_handler_entry import handle_api_event
 
 app = FastAPI(title="Janus Backend (Local Dev)")
 
@@ -40,7 +40,7 @@ async def _lambda_proxy(request: Request, method: str) -> Response:
         "requestContext": {"stage": "local"},
     }
 
-    result = handle_event(event, None)
+    result = handle_api_event(event, None)
 
     return Response(
         content=result.get("body", ""),
