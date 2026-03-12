@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
             high: '#F97316',
             critical: '#EF4444',
         }
-        const tierColor = tierColors[analysis.riskTier] || '#8B9AC4'
+        const tierColor = (analysis.riskTier && tierColors[analysis.riskTier]) || '#8B9AC4'
 
         const riskScores: RiskScore[] = analysis.riskScores || []
         const opportunities: Opportunity[] = analysis.opportunities || []

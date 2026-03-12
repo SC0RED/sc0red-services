@@ -34,8 +34,8 @@ export interface AnalysisData {
     companyName: string
     companyUrl?: string
     industry?: string
-    overallRiskScore: number
-    riskTier: 'low' | 'moderate' | 'high' | 'critical'
+    overallRiskScore: number | null
+    riskTier: 'low' | 'moderate' | 'high' | 'critical' | null
     analysisSummary?: string
     riskScores: RiskScore[]
     opportunities: Opportunity[]

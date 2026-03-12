@@ -46,22 +46,25 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     const [expandedRisk, setExpandedRisk] = useState<string | null>(null)
     const [expandedOpp, setExpandedOpp] = useState<string | null>(null)
 
-    const tier = data.riskTier || getRiskTier(data.overallRiskScore || 0)
+    const riskScores = data.riskScores ?? []
+    const opportunities = data.opportunities ?? []
+
+    const tier = data.riskTier || getRiskTier(data.overallRiskScore ?? 0)
     const tierColor = TIER_COLORS[tier] || 'var(--text-secondary)'
 
     const radarData = RISK_CATEGORIES.map((cat) => {
-        const rs = data.riskScores.find((r) => r.category === cat.id)
+        const rs = riskScores.find((r) => r.category === cat.id)
         return { category: CAT_LABELS[cat.id] ?? cat.name, score: rs?.score ?? 0, fullMark: 10 }
     })
 
-    const uniqueCategories = data.opportunities
+    const uniqueCategories = opportunities
         .map((o) => o.strategic_category)
         .filter((cat, index, arr) => arr.indexOf(cat) === index)
     const oppCategories = ['All', ...uniqueCategories]
     const filteredOpps =
         activeOppCat === 'All'
-            ? data.opportunities
-            : data.opportunities.filter((o) => o.strategic_category === activeOppCat)
+            ? opportunities
+            : opportunities.filter((o) => o.strategic_category === activeOppCat)
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -384,7 +387,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                         Risk Breakdown
                     </h2>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                        {[...data.riskScores]
+                        {[...riskScores]
                             .sort((a: RiskScore, b: RiskScore) => b.score - a.score)
                             .map((rs) => {
                                 const rsTier = getRiskTier(rs.score)
@@ -562,7 +565,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                         }}
                     >
                         <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                            AI Opportunities ({data.opportunities?.length || 0})
+                            AI Opportunities ({opportunities.length})
                         </h2>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             {oppCategories.map((cat) => (
