@@ -30,12 +30,71 @@ jobs:
       DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   # ===========================================================================
+  # E2E Integration Tests
+  # ===========================================================================
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install boto3 PyJWT
+
+      - name: Start E2E stack
+        env:
+          GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
+        run: |
+          GH_TOKEN=$GH_TOKEN docker compose -f docker-compose.e2e.yml up --build -d
+
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8001/api/health > /dev/null 2>&1; then
+              echo "Backend ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Backend did not start in time"
+              docker compose -f docker-compose.e2e.yml logs backend
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Run E2E tests
+        env:
+          BACKEND_URL: http://localhost:8001
+          DYNAMODB_ENDPOINT: http://localhost:4566
+          DYNAMODB_TABLE: janus-e2e
+          AWS_ENDPOINT_URL: http://localhost:4566
+          MOCK_COMPANY_URL: http://ai-mock:8080/company
+          E2E_MODE: full
+        run: ./scripts/e2e-test.sh
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.e2e.yml logs backend
+          docker compose -f docker-compose.e2e.yml logs worker
+          docker compose -f docker-compose.e2e.yml logs ai-mock
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
+  # ===========================================================================
   # Summary Job
   # ===========================================================================
   summary:
     runs-on: ubuntu-latest
     name: PR Summary
-    needs: [ci, naming]
+    needs: [ci, naming, e2e]
     if: always()
     steps:
       - name: Generate PR Summary
@@ -59,8 +118,17 @@ jobs:
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### E2E Integration Tests" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.e2e.result }}" == "success" ]; then
+            echo "- E2E tests (full async scan flow): **Passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- E2E tests (full async scan flow): **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.ci.result }}" != "success" ] || \
-             [ "${{ needs.naming.result }}" != "success" ]; then
+             [ "${{ needs.naming.result }}" != "success" ] || \
+             [ "${{ needs.e2e.result }}" != "success" ]; then
             echo "**Some checks failed. Please review the individual job results above.**" >> $GITHUB_STEP_SUMMARY
           else
             echo "**All checks passed! Ready for review.**" >> $GITHUB_STEP_SUMMARY
