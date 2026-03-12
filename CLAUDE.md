@@ -17,6 +17,25 @@ If you skip this step, you are violating these instructions.
 
 ---
 
+## MANDATORY: Local Dev = Production Parity
+
+**On every code change, verify that local development, tests, and docker-compose services use the exact same code paths as the production deployment.**
+
+This means:
+- `local_server.py` must import the same handler entry points that CDK Lambda uses
+- `docker-compose*.yml` services must mirror the production architecture (separate API and worker)
+- Tests must exercise the same modules that run in production — never test dead code
+- When replacing or splitting entry points, **update all consumers and delete the old code** — no "backward compatibility" wrappers, no "kept for local dev" modules
+
+**Checklist (run mentally before every commit):**
+1. Is any module imported only by local dev or tests but not by production infrastructure? → Delete it
+2. Did I create a new entry point? → Update `local_server.py` and docker-compose to use it
+3. Did I replace an old module? → Remove the old module and its tests entirely
+
+If local dev exercises different code than production, bugs will only appear in deployment. This rule exists because that exact scenario happened.
+
+---
+
 ## Fail-Fast Standards (Non-Negotiable)
 
 The backend enforces strict fail-fast. Violations will be caught by the architecture reviewer and must be fixed.
