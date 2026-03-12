@@ -1,0 +1,208 @@
+# =============================================================================
+# POST-MERGE WORKFLOW
+# =============================================================================
+# Triggered when code is pushed/merged to protected branches.
+# Runs CI gate then deploys to the corresponding environment.
+#
+# Branch → Environment mapping:
+#   development → staging   (DEV_AWS_* secrets)
+#   testing     → testing   (TEST_AWS_* secrets)
+#   production  → production (PROD_AWS_* secrets)
+# =============================================================================
+
+name: Post-Merge
+
+on:
+  push:
+    branches: [development, testing, production]
+    paths:
+      - 'backend/**'
+      - 'infrastructure/**'
+      - '.github/workflows/post-merge.yml'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # ===========================================================================
+  # CI Gate
+  # ===========================================================================
+  ci:
+    name: CI Checks
+    uses: ./.github/workflows/_ci-checks.yml
+    secrets:
+      DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
+
+  # ===========================================================================
+  # Map branch → environment + AWS secret prefix
+  # ===========================================================================
+  resolve-environment:
+    runs-on: ubuntu-latest
+    name: Resolve Environment
+    outputs:
+      environment: ${{ steps.map.outputs.environment }}
+      prefix: ${{ steps.map.outputs.prefix }}
+    steps:
+      - name: Map branch to environment
+        id: map
+        run: |
+          case "${{ github.ref_name }}" in
+            "development")
+              echo "environment=staging" >> $GITHUB_OUTPUT
+              echo "prefix=DEV" >> $GITHUB_OUTPUT
+              ;;
+            "testing")
+              echo "environment=testing" >> $GITHUB_OUTPUT
+              echo "prefix=TEST" >> $GITHUB_OUTPUT
+              ;;
+            "production")
+              echo "environment=production" >> $GITHUB_OUTPUT
+              echo "prefix=PROD" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # ===========================================================================
+  # Deploy
+  # ===========================================================================
+  deploy:
+    name: Deploy to ${{ needs.resolve-environment.outputs.environment }}
+    needs: [ci, resolve-environment]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve-environment.outputs.environment }}
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH for private dependencies
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" > ~/.ssh/janus_deploy_key
+          chmod 600 ~/.ssh/janus_deploy_key
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+          printf 'Host github.com\n  IdentityFile ~/.ssh/janus_deploy_key\n  StrictHostKeyChecking yes\n' >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk --silent
+
+      - name: Install CDK Python dependencies
+        run: |
+          cd infrastructure
+          pip install . --quiet
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets[format('{0}_AWS_ACCESS_KEY_ID', needs.resolve-environment.outputs.prefix)] }}
+          aws-secret-access-key: ${{ secrets[format('{0}_AWS_SECRET_ACCESS_KEY', needs.resolve-environment.outputs.prefix)] }}
+          aws-region: ${{ secrets[format('{0}_AWS_REGION', needs.resolve-environment.outputs.prefix)] }}
+
+      - name: CDK Bootstrap
+        run: |
+          cd infrastructure
+          CDK_ENVIRONMENT=${{ needs.resolve-environment.outputs.environment }} \
+            cdk bootstrap \
+            "aws://${{ secrets[format('{0}_AWS_ACCOUNT_ID', needs.resolve-environment.outputs.prefix)] }}/${{ secrets[format('{0}_AWS_REGION', needs.resolve-environment.outputs.prefix)] }}" \
+            --quiet 2>&1 | grep -v "^$" || true
+
+      - name: CDK Deploy
+        env:
+          # GH_TOKEN is passed into the Docker bundling container to pip-install
+          # signalfield-core. Requires SIGNALFIELD_CORE_READ_TOKEN secret (PAT
+          # with read:packages or repo scope on SC0RED/signalfield-core).
+          GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd infrastructure
+          CDK_ENVIRONMENT=${{ needs.resolve-environment.outputs.environment }} \
+          AWS_DEFAULT_REGION="${{ secrets[format('{0}_AWS_REGION', needs.resolve-environment.outputs.prefix)] }}" \
+            cdk deploy Janus-${{ needs.resolve-environment.outputs.environment }} \
+              --require-approval never \
+              --outputs-file /tmp/janus-outputs.json \
+              --context "environment=${{ needs.resolve-environment.outputs.environment }}" \
+              --context "account=${{ secrets[format('{0}_AWS_ACCOUNT_ID', needs.resolve-environment.outputs.prefix)] }}" \
+              --context "region=${{ secrets[format('{0}_AWS_REGION', needs.resolve-environment.outputs.prefix)] }}"
+
+      - name: Print deployment outputs
+        run: |
+          python3 -c "
+          import json, sys
+          env = '${{ needs.resolve-environment.outputs.environment }}'
+          try:
+              with open('/tmp/janus-outputs.json') as f:
+                  outputs = json.load(f)
+              stack = outputs.get(f'Janus-{env}', {})
+              for key, val in stack.items():
+                  if 'ApiUrl' in key:
+                      print(f'Backend API URL: {val}')
+                      break
+          except Exception as e:
+              print(f'Could not read outputs: {e}', file=sys.stderr)
+          "
+
+  # ===========================================================================
+  # Cleanup merged branches
+  # ===========================================================================
+  cleanup-branches:
+    runs-on: ubuntu-latest
+    name: Cleanup Branches
+    needs: deploy
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete merged branches
+        run: |
+          git fetch --prune
+
+          MERGED_BRANCHES=$(git branch -r --merged origin/${{ github.ref_name }} \
+            | grep -v "development\|testing\|production\|HEAD" \
+            | sed 's/origin\///' || true)
+
+          if [ -n "$MERGED_BRANCHES" ]; then
+            echo "Deleting merged branches: $MERGED_BRANCHES"
+            for branch in $MERGED_BRANCHES; do
+              git push origin --delete "$branch" || true
+            done
+          else
+            echo "No merged branches to delete"
+          fi
+
+  # ===========================================================================
+  # Summary
+  # ===========================================================================
+  summary:
+    runs-on: ubuntu-latest
+    name: Post-Merge Summary
+    needs: [deploy, cleanup-branches]
+    if: always()
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## Post-Merge Summary for ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "- Deploy: **Succeeded**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Deploy: **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.cleanup-branches.result }}" == "success" ]; then
+            echo "- Cleanup branches: **Completed**" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.cleanup-branches.result }}" == "skipped" ]; then
+            echo "- Cleanup branches: **Skipped**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Cleanup branches: **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi

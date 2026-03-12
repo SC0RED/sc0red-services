@@ -1,3 +1,13 @@
+# =============================================================================
+# PULL REQUEST WORKFLOW
+# =============================================================================
+# Orchestrates all pre-merge checks on pull requests.
+#
+# Reusable workflows:
+#   - _ci-checks.yml       : lint, test, security
+#   - _naming-validation.yml: branch name, python naming, ruff naming
+# =============================================================================
+
 name: Pull Request
 
 on:
@@ -13,9 +23,6 @@ jobs:
     name: CI
     uses: ./.github/workflows/_ci-checks.yml
     secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
       DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   # ===========================================================================
@@ -25,8 +32,6 @@ jobs:
     name: Naming
     uses: ./.github/workflows/_naming-validation.yml
     secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
       DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   # ===========================================================================

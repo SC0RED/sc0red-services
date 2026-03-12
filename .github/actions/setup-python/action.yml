@@ -5,16 +5,8 @@ inputs:
     description: 'Python version to use'
     required: false
     default: '3.12'
-  app-id:
-    description: 'GitHub App ID for generating installation token (reserved for future use)'
-    required: false
-    default: ''
-  app-private-key:
-    description: 'GitHub App private key (reserved for future use)'
-    required: false
-    default: ''
-  deploy-key:
-    description: 'SSH private key for accessing private GitHub dependencies'
+  github-token:
+    description: 'SSH private key or HTTPS token for accessing private GitHub dependencies (signalfield-core)'
     required: false
     default: ''
 
@@ -26,11 +18,11 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: Configure git via SSH deploy key
-      if: inputs.deploy-key != ''
+      if: inputs.github-token != ''
       shell: bash
       run: |
         mkdir -p ~/.ssh
-        echo "${{ inputs.deploy-key }}" > ~/.ssh/janus_deploy_key
+        echo "${{ inputs.github-token }}" > ~/.ssh/janus_deploy_key
         chmod 600 ~/.ssh/janus_deploy_key
         ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
         cat >> ~/.ssh/config << 'EOF'
