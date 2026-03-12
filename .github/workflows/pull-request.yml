@@ -50,7 +50,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
         run: |
-          GH_TOKEN=$GH_TOKEN docker compose -f docker-compose.e2e.yml up --build -d
+          docker compose -f docker-compose.e2e.yml up --build -d
 
       - name: Wait for backend health
         run: |
