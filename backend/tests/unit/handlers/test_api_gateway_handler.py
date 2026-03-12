@@ -345,14 +345,16 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 404
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_scan_confirm_success(self, mock_authentication):
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    def test_scan_confirm_success(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager = MagicMock()
-        handler._factory_manager.run_company_analysis.return_value = {"request_id": "analysis-x"}
 
         result = handler.handle(
             {
@@ -369,23 +371,24 @@ class TestAPIGatewayHandler:
                 ),
             }
         )
-        assert result["statusCode"] == 200
+        assert result["statusCode"] == 202
         body = json.loads(result["body"])
         assert body["ok"] is True
-        assert len(body["results"]) == 2
+        assert len(body["queued"]) == 2
+        assert mock_sqs.send_message.call_count == 2
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_scan_confirm_partial_failure(self, mock_authentication):
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    def test_scan_confirm_partial_failure(self, mock_boto3, mock_authentication):
+        """Companies without a URL are skipped; valid ones are still queued."""
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager = MagicMock()
-        handler._factory_manager.run_company_analysis.side_effect = [
-            {"request_id": "analysis-1"},
-            RuntimeError("fail"),
-        ]
 
         result = handler.handle(
             {
@@ -396,25 +399,29 @@ class TestAPIGatewayHandler:
                     {
                         "companies": [
                             {"name": "Co1", "url": "https://co1.com"},
-                            {"name": "Co2", "url": "https://co2.com"},
+                            {"name": "Co2"},
                         ],
                     }
                 ),
             }
         )
-        assert result["statusCode"] == 200
+        assert result["statusCode"] == 202
         body = json.loads(result["body"])
-        assert body["results"][0]["status"] == "complete"
-        assert body["results"][1]["status"] == "failed"
+        assert len(body["queued"]) == 1
+        assert body["queued"][0]["name"] == "Co1"
+        assert mock_sqs.send_message.call_count == 1
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_scan_confirm_missing_url_in_company(self, mock_authentication):
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    def test_scan_confirm_missing_url_in_company(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager = MagicMock()
 
         result = handler.handle(
             {
@@ -424,11 +431,10 @@ class TestAPIGatewayHandler:
                 "body": json.dumps({"companies": [{"name": "Co1"}]}),
             }
         )
-        assert result["statusCode"] == 200
+        assert result["statusCode"] == 400
         body = json.loads(result["body"])
-        assert body["results"][0]["status"] == "failed"
-        assert body["results"][0]["error"] == "url is required"
-        handler._factory_manager.run_company_analysis.assert_not_called()
+        assert "url" in body["error"]
+        mock_sqs.send_message.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_get_analysis_not_found(self, mock_authentication):

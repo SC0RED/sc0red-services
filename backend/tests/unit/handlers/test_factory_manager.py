@@ -31,8 +31,9 @@ class TestFactoryManager:
             user_id="user-1",
             scan_id="scan-1",
             company_name="Test",
+            request_id="pre-generated-id",
         )
-        assert "request_id" in result
+        assert result["request_id"] == "pre-generated-id"
         assert result["details"] == {"key": "value"}
         assert result["step_timings"] == {"step1": 1.5}
         assert result["exceptions"] == []
@@ -73,5 +74,6 @@ class TestFactoryManager:
             org_id="org-1",
             user_id="user-1",
             scan_id="scan-1",
+            request_id="pre-generated-id",
         )
         assert result["exceptions"] == ["test error"]
