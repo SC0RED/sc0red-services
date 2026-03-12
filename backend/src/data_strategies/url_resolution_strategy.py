@@ -78,7 +78,7 @@ class URLResolutionStrategy(DataStrategyExecutor):
 
         client = ai_client_factory.get_client(
             verbosity=Verbosity.LOW,
-            reasoning_effort=ReasoningEffort.MINIMAL,
+            reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
         )
         prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
