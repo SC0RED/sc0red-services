@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
 import bcrypt
+import boto3
 
 from src.handlers.auth_middleware import require_authentication
 from src.handlers.router import Router
@@ -65,6 +67,8 @@ class APIGatewayHandler:
         self._storage = storage or DynamoDBStorageProvider()
         self._factory_manager = FactoryManager(self._storage)
         self._router = self._build_router()
+        self._queue_url = os.environ["ANALYSIS_QUEUE_URL"]
+        self._sqs = boto3.client("sqs")
 
     def _build_router(self) -> Router:
         router = Router()
@@ -249,45 +253,38 @@ class APIGatewayHandler:
         if not scan or scan.get("org_id") != authentication.org_id:
             return _error("Scan not found", 404)
 
-        scan_repo.update(scan_id, {"status": "running", "progress": 25})
+        valid_companies = [c for c in companies if c.get("url")]
+        if not valid_companies:
+            return _error("At least one company with a url is required")
 
-        results = []
-        total = len(companies)
+        scan_repo.update(
+            scan_id,
+            {"status": "running", "progress": 10, "total_companies": len(valid_companies)},
+        )
 
-        for idx, company in enumerate(companies):
+        queued = []
+        for company in valid_companies:
             company_name = company.get("name", "")
-            company_url = company.get("url", "")
-            if not company_url:
-                results.append(
-                    {"name": company_name, "status": "failed", "error": "url is required"}
-                )
-            else:
-                try:
-                    result = self._factory_manager.run_company_analysis(
-                        url=company_url,
-                        org_id=authentication.org_id,
-                        user_id=authentication.user_id,
-                        scan_id=scan_id,
-                        company_name=company_name,
-                    )
-                    analysis_id = result["request_id"]
-                    scan_repo.link_company(scan_id, analysis_id, company_name)
-                    results.append(
-                        {
-                            "name": company_name,
-                            "status": "complete",
-                            "analysisId": analysis_id,
-                        }
-                    )
-                except Exception as e:
-                    logger.exception("Analysis failed for %s", company_name)
-                    results.append({"name": company_name, "status": "failed", "error": str(e)})
+            company_url = company["url"]
+            analysis_id = str(uuid.uuid4())
+            scan_repo.link_company(scan_id, analysis_id, company_name)
 
-            progress = round(25 + ((idx + 1) / total) * 70)
-            scan_repo.update(scan_id, {"progress": progress})
+            self._sqs.send_message(
+                QueueUrl=self._queue_url,
+                MessageBody=json.dumps(
+                    {
+                        "url": company_url,
+                        "org_id": authentication.org_id,
+                        "user_id": authentication.user_id,
+                        "scan_id": scan_id,
+                        "company_name": company_name,
+                        "request_id": analysis_id,
+                    }
+                ),
+            )
+            queued.append({"name": company_name, "analysisId": analysis_id})
 
-        scan_repo.update(scan_id, {"status": "complete", "progress": 100})
-        return _json_response({"ok": True, "results": results})
+        return _json_response({"ok": True, "queued": queued}, 202)
 
     # ── GET /api/analysis/{id} ───────────────────────────────────────
 

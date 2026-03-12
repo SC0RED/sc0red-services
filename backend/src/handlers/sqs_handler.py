@@ -47,6 +47,7 @@ class SQSHandler:
         user_id = message["user_id"]
         scan_id = message["scan_id"]
         company_name = message.get("company_name", "")
+        request_id = message["request_id"]
 
         logger.info("Processing async analysis for %s (%s)", company_name or url, scan_id)
 
@@ -56,12 +57,30 @@ class SQSHandler:
             user_id=user_id,
             scan_id=scan_id,
             company_name=company_name,
+            request_id=request_id,
         )
 
-        # Update scan progress
         scan_repo = self._storage.create_scan_repository()
         scan = scan_repo.get_by_id(scan_id)
-        if scan:
-            current_progress = scan.get("progress", 0)
-            new_progress = min(current_progress + 10, 95)
-            scan_repo.update(scan_id, {"progress": new_progress})
+        if scan is None:
+            raise RuntimeError(
+                f"Scan {scan_id} not found after analysis — possible consistency error"
+            )
+
+        total_companies = scan.get("total_companies", 0)
+        company_repo = self._storage.create_company_repository()
+        linked = scan_repo.get_scan_companies(scan_id)
+        resolved = sum(
+            1
+            for link in linked
+            if (record := company_repo.get_by_id(link["company_id"]))
+            and (record.get("overall_risk_score") is not None or record.get("error"))
+        )
+
+        if total_companies and resolved >= total_companies:
+            scan_repo.update(scan_id, {"status": "complete", "progress": 100})
+        else:
+            progress = (
+                min(10 + round((resolved / total_companies) * 85), 95) if total_companies else 50
+            )
+            scan_repo.update(scan_id, {"progress": progress})

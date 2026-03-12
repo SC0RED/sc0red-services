@@ -32,9 +32,12 @@ class FactoryManager:
         user_id: str,
         scan_id: str,
         company_name: str = "",
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         """Run a single company analysis pipeline."""
-        request_id = str(uuid.uuid4())
+        if request_id is None:
+            raise ValueError("request_id is required — callers must pre-generate a UUID")
+
         event = JanusEvent(
             request_id=request_id,
             request_type="company_analysis",
