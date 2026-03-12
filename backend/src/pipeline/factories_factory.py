@@ -32,11 +32,15 @@ def _initialize_ai_client_factory() -> AIClientFactory:
 
     if ai_provider == AIProviderType.OPENAI.value:
         openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        if openai_api_key and not OpenAIResource.is_initialized():
+        if not openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY must be set when AI_PROVIDER=openai")
+        if not OpenAIResource.is_initialized():
             OpenAIResource.initialize({"openai_api_key": openai_api_key})
     else:
         anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if anthropic_api_key and not AnthropicResource.is_initialized():
+        if not anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY must be set when AI_PROVIDER=anthropic")
+        if not AnthropicResource.is_initialized():
             AnthropicResource.initialize({"anthropic_api_key": anthropic_api_key})
 
     composite_service_ops = CompositeServiceOps()
