@@ -61,6 +61,7 @@ _RISK_SCHEMA: dict = {
                     },
                 },
                 "required": ["category", "score", "explanation", "evidence"],
+                "additionalProperties": False,
             },
         },
         "overall_score": {"type": "number", "description": "Overall risk score 1-10"},
@@ -77,6 +78,7 @@ _RISK_SCHEMA: dict = {
         "analysis_summary": {"type": "string", "description": "3-4 sentence executive summary"},
     },
     "required": ["risk_scores", "overall_score", "tier", "top_risks", "analysis_summary"],
+    "additionalProperties": False,
 }
 
 

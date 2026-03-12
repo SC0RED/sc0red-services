@@ -86,7 +86,22 @@ _PROFILE_SCHEMA: dict = {
             "description": "Obvious risk signals visible on the site",
         },
     },
-    "required": ["company_name", "industry"],
+    "required": [
+        "company_name",
+        "industry",
+        "industry_sector",
+        "business_model",
+        "description",
+        "products_services",
+        "target_market",
+        "company_size",
+        "revenue_model",
+        "tech_signals",
+        "competitive_positioning",
+        "ai_maturity",
+        "key_risks_visible",
+    ],
+    "additionalProperties": False,
 }
 
 
