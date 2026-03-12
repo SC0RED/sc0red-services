@@ -36,6 +36,7 @@ _URL_RESOLUTION_SCHEMA: dict = {
         "actual_url": {"type": "string", "description": "The actual company website URL"},
     },
     "required": ["actual_url"],
+    "additionalProperties": False,
 }
 
 

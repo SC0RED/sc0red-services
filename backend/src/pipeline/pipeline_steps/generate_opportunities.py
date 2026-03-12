@@ -82,10 +82,12 @@ _OPPORTUNITY_SCHEMA: dict = {
                                             "specialty": {"type": "string"},
                                         },
                                         "required": ["name", "url", "specialty"],
+                                        "additionalProperties": False,
                                     },
                                 },
                             },
                             "required": ["service_type", "vendors"],
+                            "additionalProperties": False,
                         },
                     },
                 },
@@ -101,6 +103,7 @@ _OPPORTUNITY_SCHEMA: dict = {
                     "roi_estimate",
                     "related_services",
                 ],
+                "additionalProperties": False,
             },
         },
         "top_three_immediate_actions": {
@@ -110,6 +113,7 @@ _OPPORTUNITY_SCHEMA: dict = {
         },
     },
     "required": ["opportunities", "top_three_immediate_actions"],
+    "additionalProperties": False,
 }
 
 
