@@ -17,6 +17,25 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 _PORT = 8080
 
+_MOCK_COMPANY_HTML = """\
+<!DOCTYPE html>
+<html>
+<head><title>E2E Test Corp - AI Risk Intelligence Platform</title></head>
+<body>
+<h1>E2E Test Corp</h1>
+<p>We are a B2B SaaS company providing AI-powered risk intelligence to private equity firms.</p>
+<p>Our platform analyses portfolio companies for AI disruption risk across eight categories.</p>
+<p>Founded in 2023, E2E Test Corp serves enterprise clients in the financial services sector.</p>
+<p>Products: Risk Intelligence Platform, Portfolio Analytics Dashboard, Opportunity Engine.</p>
+<p>Technology: Python, React, AWS Lambda, DynamoDB.</p>
+<p>Revenue model: annual subscription, starting at $50K per year.</p>
+<a href="https://linkedin.com/company/e2e-test-corp">LinkedIn</a>
+<a href="/about">About Us</a>
+<a href="/pricing">Pricing</a>
+</body>
+</html>
+"""
+
 # ---------------------------------------------------------------------------
 # Mock payloads — one per pipeline step, keyed by a unique top-level property
 # ---------------------------------------------------------------------------
@@ -149,21 +168,58 @@ _MOCK_RESPONSES: dict[str, object] = {
 
 
 def _detect_step(body: dict) -> str:
-    """Return the key in _MOCK_RESPONSES that matches this request's schema."""
-    try:
-        schema = body["response_format"]["json_schema"]["schema"]
-        properties = set(schema.get("properties", {}).keys())
-    except (KeyError, TypeError):
-        return "unknown"
+    """Return the key in _MOCK_RESPONSES that matches this request's schema.
 
-    for key in ("actual_url", "company_name", "risk_scores", "opportunities"):
-        if key in properties:
-            return key
+    Handles both:
+     - OpenAI Responses API: body["text"]["format"]["schema"]["properties"]
+     - OpenAI Chat Completions API: body["response_format"]["json_schema"]["schema"]["properties"]
+     - Anthropic Messages API: body["response_format"]["json_schema"]["schema"]["properties"]
+    """
+    candidates: list[dict] = []
+    try:
+        candidates.append(body["text"]["format"]["schema"])
+    except (KeyError, TypeError):
+        pass
+    try:
+        candidates.append(body["response_format"]["json_schema"]["schema"])
+    except (KeyError, TypeError):
+        pass
+
+    for schema in candidates:
+        props = set(schema.get("properties", {}).keys())
+        for key in ("actual_url", "company_name", "risk_scores", "opportunities"):
+            if key in props:
+                return key
 
     return "unknown"
 
 
-def _openai_envelope(content: object) -> dict:
+def _openai_responses_envelope(content: object) -> dict:
+    """Response format for the OpenAI Responses API (/v1/responses)."""
+    return {
+        "id": "resp_mock",
+        "object": "response",
+        "model": "gpt-5.1",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": json.dumps(content),
+                        "annotations": [],
+                    }
+                ],
+            }
+        ],
+        "usage": {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+    }
+
+
+def _openai_chat_envelope(content: object) -> dict:
+    """Response format for the OpenAI Chat Completions API (/v1/chat/completions)."""
     return {
         "id": "chatcmpl-mock",
         "object": "chat.completion",
@@ -203,8 +259,11 @@ class _Handler(BaseHTTPRequestHandler):
         print(f"[mock-ai] {self.path} — {fmt % args}")
 
     def do_GET(self) -> None:  # noqa: N802
-        """Health probe."""
-        self._send_json({"status": "ok"}, 200)
+        """Health probe + mock company website for E2E scraper."""
+        if self.path.startswith("/company"):
+            self._send_html(_MOCK_COMPANY_HTML, 200)
+        else:
+            self._send_json({"status": "ok"}, 200)
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", 0))
@@ -215,8 +274,10 @@ class _Handler(BaseHTTPRequestHandler):
 
         if self.path.endswith("/messages"):
             response = _anthropic_envelope(content)
+        elif self.path.endswith("/responses"):
+            response = _openai_responses_envelope(content)
         else:
-            response = _openai_envelope(content)
+            response = _openai_chat_envelope(content)
 
         self._send_json(response, 200)
 
@@ -224,6 +285,14 @@ class _Handler(BaseHTTPRequestHandler):
         payload = json.dumps(data).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _send_html(self, html: str, status: int) -> None:
+        payload = html.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)

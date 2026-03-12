@@ -161,7 +161,7 @@ class TestAPIGatewayHandler:
         scan_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
         handler._factory_manager = MagicMock()
-        handler._factory_manager.run_company_analysis.return_value = {"request_id": "analysis-1"}
+        handler._factory_manager.run_company_analysis.return_value = {}
 
         result = handler.handle(
             {
@@ -174,7 +174,7 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["status"] == "complete"
-        assert body["analysisId"] == "analysis-1"
+        assert body["analysisId"]  # pre-generated UUID — just verify it's present
         assert "scanId" in body
 
     @patch("src.handlers.api_gateway_handler.require_authentication")

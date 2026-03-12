@@ -23,6 +23,8 @@ DYNAMODB_TABLE="${DYNAMODB_TABLE:-janus-dev}"
 AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-}"
 # Set E2E_MODE=full to enable scan + async polling tests (requires docker-compose.e2e.yml)
 E2E_MODE="${E2E_MODE:-basic}"
+# URL of the mock company website — must be reachable from inside the backend container
+MOCK_COMPANY_URL="${MOCK_COMPANY_URL:-http://ai-mock:8080/company}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -193,52 +195,73 @@ assert_status "No auth = 401" 401 "$STATUS"
 # ── Scan flow (E2E_MODE=full only) ──────────────────────────────
 if [ "$E2E_MODE" = "full" ]; then
 
-    # ── 7. Start scan ────────────────────────────────────────────
-    echo -e "\n${YELLOW}7. Start scan${NC}"
+    # ── 7. Single scan (synchronous — mock AI, full pipeline) ────────
+    echo -e "\n${YELLOW}7. Single scan start (synchronous)${NC}"
     RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/start" \
         -H "Content-Type: application/json" \
         -H "$AUTH" \
-        -d '{"url":"https://example.com","type":"single"}')
+        -d "{\"url\":\"$MOCK_COMPANY_URL\",\"type\":\"single\"}")
     BODY=$(echo "$RESP" | sed '$d')
     STATUS=$(echo "$RESP" | tail -n 1)
-    assert_status "Scan start" 200 "$STATUS"
+    assert_status "Single scan start" 200 "$STATUS"
+    assert_json "Single scan complete" "status" "complete" "$BODY"
     assert_json_nonempty "Got scanId" "scanId" "$BODY"
-    SCAN_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['scanId'])")
+    assert_json_nonempty "Got analysisId" "analysisId" "$BODY"
+    SINGLE_SCAN_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['scanId'])")
+    ANALYSIS_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['analysisId'])")
 
-    # ── 8. Confirm scan (async — returns 202) ─────────────────────
-    echo -e "\n${YELLOW}8. Confirm scan${NC}"
-    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/$SCAN_ID/confirm" \
+    # ── 8. Verify single scan analysis has risk score ─────────────
+    echo -e "\n${YELLOW}8. Verify single scan analysis${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Get analysis" 200 "$STATUS"
+    assert_json_nonempty "Analysis has companyName" "companyName" "$BODY"
+    assert_json_nonempty "Analysis has overallRiskScore" "overallRiskScore" "$BODY"
+
+    # ── 9. Async confirm → SQS → worker path ─────────────────────
+    # Start a second scan, then call confirm directly to exercise the async path
+    echo -e "\n${YELLOW}9. Start scan for async confirm test${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/start" \
         -H "Content-Type: application/json" \
         -H "$AUTH" \
-        -d '{"companies":[{"name":"Example Corp","url":"https://example.com"}]}')
+        -d "{\"url\":\"$MOCK_COMPANY_URL\",\"type\":\"single\"}")
+    BODY=$(echo "$RESP" | sed '$d')
+    # Grab the scanId from the completed scan to use its scan record for confirm
+    # Actually start a fresh scan — use the single scan result's scanId
+    ASYNC_SCAN_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scanId',''))" 2>/dev/null || echo "")
+
+    # ── 10. Confirm scan via async SQS path ───────────────────────
+    echo -e "\n${YELLOW}10. Confirm scan (async 202 → SQS → worker)${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/$ASYNC_SCAN_ID/confirm" \
+        -H "Content-Type: application/json" \
+        -H "$AUTH" \
+        -d "{\"companies\":[{\"name\":\"Async Corp\",\"url\":\"$MOCK_COMPANY_URL\"}]}")
     BODY=$(echo "$RESP" | sed '$d')
     STATUS=$(echo "$RESP" | tail -n 1)
-    assert_status "Scan confirm (async 202)" 202 "$STATUS"
+    assert_status "Confirm returns 202" 202 "$STATUS"
     assert_json "Confirm ok" "ok" "True" "$BODY"
 
-    # Extract first analysis ID from queued list
-    ANALYSIS_ID=$(echo "$BODY" | python3 -c "
+    ASYNC_ANALYSIS_ID=$(echo "$BODY" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 queued = data.get('queued', [])
 print(queued[0]['analysisId'] if queued else '')
-")
-    if [ -z "$ANALYSIS_ID" ]; then
+" 2>/dev/null || echo "")
+    if [ -z "$ASYNC_ANALYSIS_ID" ]; then
         echo -e "  ${RED}✗${NC} No analysisId in confirm response"
         fail=$((fail + 1))
     else
-        echo -e "  ${GREEN}✓${NC} Got analysisId: $ANALYSIS_ID"
+        echo -e "  ${GREEN}✓${NC} Got async analysisId"
         pass=$((pass + 1))
     fi
 
-    # ── 9. Poll scan until complete ───────────────────────────────
-    echo -e "\n${YELLOW}9. Poll scan until complete (max 120s)${NC}"
+    # ── 11. Poll until async scan completes ───────────────────────
+    echo -e "\n${YELLOW}11. Poll async scan until complete (max 120s)${NC}"
     SCAN_COMPLETE=false
     for i in $(seq 1 40); do
-        RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$SCAN_ID" -H "$AUTH")
-        BODY=$(echo "$RESP" | sed '$d')
-        STATUS=$(echo "$RESP" | tail -n 1)
-        SCAN_STATUS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+        RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$ASYNC_SCAN_ID" -H "$AUTH")
+        SCAN_STATUS=$(echo "$RESP" | sed '$d' | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
         echo -e "    Poll $i: status=$SCAN_STATUS"
         if [ "$SCAN_STATUS" = "complete" ]; then
             SCAN_COMPLETE=true
@@ -248,20 +271,19 @@ print(queued[0]['analysisId'] if queued else '')
     done
 
     if [ "$SCAN_COMPLETE" = "true" ]; then
-        echo -e "  ${GREEN}✓${NC} Scan reached complete status"
+        echo -e "  ${GREEN}✓${NC} Async scan reached complete status"
         pass=$((pass + 1))
     else
-        echo -e "  ${RED}✗${NC} Scan did not complete within timeout"
+        echo -e "  ${RED}✗${NC} Async scan did not complete within timeout"
         fail=$((fail + 1))
     fi
 
-    # ── 10. Verify scan has analyses with risk scores ──────────────
-    echo -e "\n${YELLOW}10. Verify analysis results${NC}"
-    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$SCAN_ID" -H "$AUTH")
+    # ── 12. Verify async analysis has risk score ──────────────────
+    echo -e "\n${YELLOW}12. Verify async analysis results${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$ASYNC_SCAN_ID" -H "$AUTH")
     BODY=$(echo "$RESP" | sed '$d')
     STATUS=$(echo "$RESP" | tail -n 1)
-    assert_status "Scan status endpoint" 200 "$STATUS"
-
+    assert_status "Async scan status endpoint" 200 "$STATUS"
     HAS_SCORE=$(echo "$BODY" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
@@ -269,45 +291,36 @@ analyses = data.get('analyses', [])
 print(any(a.get('overallRiskScore') is not None for a in analyses))
 " 2>/dev/null || echo "False")
     if [ "$HAS_SCORE" = "True" ]; then
-        echo -e "  ${GREEN}✓${NC} Analysis has overallRiskScore"
+        echo -e "  ${GREEN}✓${NC} Async analysis has overallRiskScore"
         pass=$((pass + 1))
     else
-        echo -e "  ${RED}✗${NC} No risk score found in analyses"
+        echo -e "  ${RED}✗${NC} No risk score found in async analysis"
         fail=$((fail + 1))
     fi
 
-    # ── 11. Get individual analysis ───────────────────────────────
-    echo -e "\n${YELLOW}11. Get analysis detail${NC}"
-    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
-    BODY=$(echo "$RESP" | sed '$d')
-    STATUS=$(echo "$RESP" | tail -n 1)
-    assert_status "Get analysis" 200 "$STATUS"
-    assert_json_nonempty "Analysis has companyName" "companyName" "$BODY"
-    assert_json_nonempty "Analysis has overallRiskScore" "overallRiskScore" "$BODY"
-
-    # ── 12. Dashboard shows updated stats ─────────────────────────
-    echo -e "\n${YELLOW}12. Dashboard after analysis${NC}"
+    # ── 13. Dashboard shows updated stats ─────────────────────────
+    echo -e "\n${YELLOW}13. Dashboard after scans${NC}"
     RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard" -H "$AUTH")
     BODY=$(echo "$RESP" | sed '$d')
     STATUS=$(echo "$RESP" | tail -n 1)
     assert_status "Dashboard" 200 "$STATUS"
     TOTAL=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalAnalyses',0))" 2>/dev/null || echo "0")
-    if [ "$TOTAL" -ge 1 ]; then
+    if [ "$TOTAL" -ge 2 ]; then
         echo -e "  ${GREEN}✓${NC} Dashboard totalAnalyses=$TOTAL"
         pass=$((pass + 1))
     else
-        echo -e "  ${RED}✗${NC} Dashboard shows 0 analyses after scan"
+        echo -e "  ${RED}✗${NC} Dashboard shows $TOTAL analyses (expected ≥ 2)"
         fail=$((fail + 1))
     fi
 
-    # ── 13. Delete analysis ───────────────────────────────────────
-    echo -e "\n${YELLOW}13. Delete analysis${NC}"
+    # ── 14. Delete analysis ───────────────────────────────────────
+    echo -e "\n${YELLOW}14. Delete analysis${NC}"
     RESP=$(curl -sw "\n%{http_code}" -X DELETE "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
     STATUS=$(echo "$RESP" | tail -n 1)
     assert_status "Delete analysis" 200 "$STATUS"
 
-    # ── 14. Verify deletion ───────────────────────────────────────
-    echo -e "\n${YELLOW}14. Verify analysis is gone${NC}"
+    # ── 15. Verify deletion ───────────────────────────────────────
+    echo -e "\n${YELLOW}15. Verify analysis is gone${NC}"
     RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
     STATUS=$(echo "$RESP" | tail -n 1)
     assert_status "Analysis 404 after delete" 404 "$STATUS"
