@@ -132,7 +132,8 @@ class JanusStack(Stack):
                             (
                                 'if [ -n "$DEPLOY_KEY_B64" ]; then'
                                 " mkdir -p ~/.ssh"
-                                ' && echo "$DEPLOY_KEY_B64" | base64 -d > ~/.ssh/id_rsa'
+                                ' && echo "$DEPLOY_KEY_B64" | base64 -d | tr -d "\\r" > ~/.ssh/id_rsa'
+                                " && echo >> ~/.ssh/id_rsa"
                                 " && chmod 600 ~/.ssh/id_rsa"
                                 " && ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null"
                                 ' && git config --global url."git@github.com:".insteadOf "https://github.com/";'
