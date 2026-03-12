@@ -157,6 +157,8 @@ class JanusStack(Stack):
                     "NEXTAUTH_SECRET", "dev-secret-minimum-32-characters-long"
                 ),
                 "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-placeholder"),
+                "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
+                "AI_PROVIDER": os.environ.get("AI_PROVIDER", "anthropic"),
             },
         )
 
