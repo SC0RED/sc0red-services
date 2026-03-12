@@ -238,7 +238,10 @@ class APIGatewayHandler:
         progress = scan.get("progress", 0)
         logger.info(
             "[poll] scan=%s status=%s progress=%s analyses=%d",
-            scan_id, status, progress, len(analyses),
+            scan_id,
+            status,
+            progress,
+            len(analyses),
         )
 
         return _json_response(
