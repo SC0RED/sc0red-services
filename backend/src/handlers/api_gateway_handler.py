@@ -185,14 +185,16 @@ class APIGatewayHandler:
         url: str,
         authentication: AuthContext,
     ) -> LambdaResponse:
-        scan_repo.update(scan_id, {"progress": 10})
-        result = self._factory_manager.run_company_analysis(
+        analysis_id = str(uuid.uuid4())
+        scan_repo.update(scan_id, {"progress": 10, "total_companies": 1})
+        scan_repo.link_company(scan_id, analysis_id, "")
+        self._factory_manager.run_company_analysis(
             url=url,
             org_id=authentication.org_id,
             user_id=authentication.user_id,
             scan_id=scan_id,
+            request_id=analysis_id,
         )
-        analysis_id = result["request_id"]
         scan_repo.update(scan_id, {"status": "complete", "progress": 100})
         return _json_response(
             {
