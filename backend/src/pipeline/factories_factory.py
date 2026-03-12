@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from signalfield_core.models.enums import AIProviderType
 from signalfield_core.services.ai_client_factory import AIClientFactory
 from signalfield_core.services.resources.anthropic_resource import AnthropicResource
+from signalfield_core.services.resources.openai_resource import OpenAIResource
 from signalfield_core.services.service_ops import CompositeServiceOps
 
 from src.facades.company_accessor import CompanyAccessor
@@ -27,12 +28,18 @@ if TYPE_CHECKING:
 
 def _initialize_ai_client_factory() -> AIClientFactory:
     """Initialize the AI provider resource and return a shared AIClientFactory."""
-    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if anthropic_api_key and not AnthropicResource.is_initialized():
-        AnthropicResource.initialize({"anthropic_api_key": anthropic_api_key})
+    ai_provider = os.environ.get("AI_PROVIDER", AIProviderType.ANTHROPIC.value)
+
+    if ai_provider == AIProviderType.OPENAI.value:
+        openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+        if openai_api_key and not OpenAIResource.is_initialized():
+            OpenAIResource.initialize({"openai_api_key": openai_api_key})
+    else:
+        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if anthropic_api_key and not AnthropicResource.is_initialized():
+            AnthropicResource.initialize({"anthropic_api_key": anthropic_api_key})
 
     composite_service_ops = CompositeServiceOps()
-    ai_provider = os.environ.get("AI_PROVIDER", AIProviderType.ANTHROPIC.value)
     return AIClientFactory(composite_service_ops, provider_type=ai_provider)
 
 
