@@ -118,35 +118,46 @@ function NewScanContent() {
         ]
         let stageIdx = 0
 
-        const interval = setInterval(async () => {
+        // Animate progress bar while waiting for backend to finish
+        const animateInterval = setInterval(() => {
+            setProgress((prev) => {
+                if (prev >= 90) return prev
+                return prev + Math.random() * 3
+            })
+            stageIdx = Math.min(stageIdx + 1, stages.length - 1)
+            setProgressLabel(stages[stageIdx])
+        }, 4000)
+
+        const pollInterval = setInterval(async () => {
             const res = await fetch(`/api/scan/${id}`)
             if (!res.ok) return
             const data = await res.json()
 
-            setProgress(data.progress || 0)
-            stageIdx = Math.min(Math.floor((data.progress / 100) * stages.length), stages.length - 1)
-            setProgressLabel(stages[stageIdx])
-
             if (data.status === 'awaiting_confirmation') {
-                clearInterval(interval)
+                clearInterval(pollInterval)
+                clearInterval(animateInterval)
                 const companiesWithSelect = (
                     (data.portfolioCompanies as Omit<Company, 'selected'>[] | undefined) ?? []
                 ).map((c) => ({ ...c, selected: true }))
                 setCompanies(companiesWithSelect)
                 setPhase('portfolio_confirm')
             } else if (data.status === 'complete') {
-                clearInterval(interval)
+                clearInterval(pollInterval)
+                clearInterval(animateInterval)
+                setProgress(100)
+                setProgressLabel('Analysis complete!')
                 if (mode === 'portfolio') {
                     router.push(`/portfolio/${id}`)
                 } else if (data.analyses?.[0]) {
                     router.push(`/analysis/${data.analyses[0].id}`)
                 }
             } else if (data.status === 'failed') {
-                clearInterval(interval)
+                clearInterval(pollInterval)
+                clearInterval(animateInterval)
                 setError('Analysis failed. Please try again.')
                 setPhase('input')
             }
-        }, 2000)
+        }, 3000)
     }
 
     async function confirmPortfolio() {

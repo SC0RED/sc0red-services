@@ -234,10 +234,17 @@ class APIGatewayHandler:
                 if full:
                     analyses.append(_build_company_summary(full))
 
+        status = scan.get("status")
+        progress = scan.get("progress", 0)
+        logger.info(
+            "[poll] scan=%s status=%s progress=%s analyses=%d",
+            scan_id, status, progress, len(analyses),
+        )
+
         return _json_response(
             {
-                "status": scan.get("status"),
-                "progress": scan.get("progress", 0),
+                "status": status,
+                "progress": progress,
                 "type": scan.get("type"),
                 "portfolioCompanies": scan.get("portfolio_companies", []),
                 "analyses": analyses,
