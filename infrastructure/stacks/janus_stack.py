@@ -1,4 +1,4 @@
-"""Janus CDK stack — DynamoDB, SQS, Lambda, API Gateway."""
+"""Janus CDK stack — DynamoDB, SQS, Lambda (API + Worker), API Gateway."""
 
 import os
 from typing import Any
@@ -15,7 +15,7 @@ from constructs import Construct
 
 
 class JanusStack(Stack):
-    """Main stack: DynamoDB table, SQS queue, Lambda handler, API Gateway."""
+    """Main stack: DynamoDB table, SQS queue, API + Worker Lambdas, API Gateway."""
 
     def __init__(
         self,
@@ -33,15 +33,25 @@ class JanusStack(Stack):
 
         table = self._create_table()
         queue, dlq = self._create_queues()
-        handler = self._create_lambda(table, queue)
-        api = self._create_api(handler)
 
-        handler.add_event_source(lambda_event_sources.SqsEventSource(queue, batch_size=1))
+        bundling = self._build_bundling_options()
+        common_environment = self._build_common_environment(table, queue)
+
+        api_handler = self._create_api_lambda(table, queue, bundling, common_environment)
+        worker_handler = self._create_worker_lambda(table, queue, bundling, common_environment)
+
+        api = self._create_api(api_handler)
+
+        worker_handler.add_event_source(
+            lambda_event_sources.SqsEventSource(queue, batch_size=1)
+        )
 
         CfnOutput(self, "ApiUrl", value=api.url, description=f"API Gateway URL — {environment}")
         CfnOutput(self, "TableName", value=table.table_name)
         CfnOutput(self, "QueueUrl", value=queue.queue_url)
         CfnOutput(self, "DlqUrl", value=dlq.queue_url)
+        CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
+        CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)
 
     # ── DynamoDB ──────────────────────────────────────────────────────────────
 
@@ -91,16 +101,71 @@ class JanusStack(Stack):
         )
         return queue, dlq
 
-    # ── Lambda ────────────────────────────────────────────────────────────────
+    # ── Shared helpers ─────────────────────────────────────────────────────────
 
-    def _create_lambda(self, table: dynamodb.Table, queue: sqs.Queue) -> lambda_.Function:
+    def _build_bundling_options(self) -> cdk.BundlingOptions:
+        """Build the Docker bundling config shared by both Lambdas."""
         gh_token = os.environ.get("GH_TOKEN", "")
         deploy_key_b64 = os.environ.get("DEPLOY_KEY_B64", "")
 
+        return cdk.BundlingOptions(
+            image=cdk.DockerImage.from_registry("python:3.12-slim"),
+            user="root",
+            environment={"DEPLOY_KEY_B64": deploy_key_b64, "GH_TOKEN": gh_token},
+            command=[
+                "bash",
+                "-c",
+                " && ".join([
+                    "apt-get update -qq && apt-get install -y -qq git openssh-client",
+                    (
+                        'if [ -n "$DEPLOY_KEY_B64" ]; then'
+                        " mkdir -p ~/.ssh"
+                        ' && echo "$DEPLOY_KEY_B64" | base64 -d | tr -d "\\r" > ~/.ssh/id_rsa'
+                        " && echo >> ~/.ssh/id_rsa"
+                        " && chmod 600 ~/.ssh/id_rsa"
+                        " && ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null"
+                        ' && git config --global url."git@github.com:".insteadOf "https://github.com/";'
+                        ' elif [ -n "$GH_TOKEN" ]; then'
+                        ' git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/";'
+                        " fi"
+                    ),
+                    "pip install --no-cache-dir . -t /asset-output -q",
+                ]),
+            ],
+        )
+
+    def _build_common_environment(
+        self,
+        table: dynamodb.Table,
+        queue: sqs.Queue,
+    ) -> dict[str, str]:
+        """Build the environment variables shared by both Lambdas."""
+        return {
+            "DYNAMODB_TABLE": table.table_name,
+            "ANALYSIS_QUEUE_URL": queue.queue_url,
+            "STAGE": self._environment,
+            "NEXTAUTH_SECRET": os.environ.get(
+                "NEXTAUTH_SECRET", "dev-secret-minimum-32-characters-long"
+            ),
+            "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-placeholder"),
+            "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
+            "AI_PROVIDER": os.environ.get("AI_PROVIDER", "anthropic"),
+        }
+
+    # ── Lambda (API) ───────────────────────────────────────────────────────────
+
+    def _create_api_lambda(
+        self,
+        table: dynamodb.Table,
+        queue: sqs.Queue,
+        bundling: cdk.BundlingOptions,
+        environment: dict[str, str],
+    ) -> lambda_.Function:
+        """Create the API Gateway-facing Lambda (fast reads/writes, 30s timeout)."""
         log_group = logs.LogGroup(
             self,
             "ApiHandlerLogs",
-            log_group_name=f"/aws/lambda/janus-{self._environment}",
+            log_group_name=f"/aws/lambda/janus-api-{self._environment}",
             retention=logs.RetentionDays.THREE_DAYS,
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
@@ -108,62 +173,63 @@ class JanusStack(Stack):
         handler = lambda_.Function(
             self,
             "ApiHandler",
-            function_name=f"janus-{self._environment}",
+            function_name=f"janus-api-{self._environment}",
             runtime=lambda_.Runtime.PYTHON_3_12,
-            # ARM_64 for local development (Apple Silicon); X86_64 for CI/CD where
-            # GitHub Actions runs on x86_64 — native wheels must match execution env.
             architecture=(
                 lambda_.Architecture.ARM_64
                 if self._environment == "development"
                 else lambda_.Architecture.X86_64
             ),
-            handler="src.handlers.handler.handle_event",
-            code=lambda_.Code.from_asset(
-                "../backend",
-                bundling=cdk.BundlingOptions(
-                    image=cdk.DockerImage.from_registry("python:3.12-slim"),
-                    user="root",
-                    environment={"DEPLOY_KEY_B64": deploy_key_b64, "GH_TOKEN": gh_token},
-                    command=[
-                        "bash",
-                        "-c",
-                        " && ".join([
-                            "apt-get update -qq && apt-get install -y -qq git openssh-client",
-                            (
-                                'if [ -n "$DEPLOY_KEY_B64" ]; then'
-                                " mkdir -p ~/.ssh"
-                                ' && echo "$DEPLOY_KEY_B64" | base64 -d | tr -d "\\r" > ~/.ssh/id_rsa'
-                                " && echo >> ~/.ssh/id_rsa"
-                                " && chmod 600 ~/.ssh/id_rsa"
-                                " && ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null"
-                                ' && git config --global url."git@github.com:".insteadOf "https://github.com/";'
-                                ' elif [ -n "$GH_TOKEN" ]; then'
-                                ' git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/";'
-                                " fi"
-                            ),
-                            "pip install --no-cache-dir . -t /asset-output -q",
-                        ]),
-                    ],
-                ),
-            ),
-            timeout=Duration.seconds(300),
-            memory_size=512,
+            handler="src.handlers.api_handler_entry.handle_api_event",
+            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            timeout=Duration.seconds(30),
+            memory_size=256,
             log_group=log_group,
-            environment={
-                "DYNAMODB_TABLE": table.table_name,
-                "ANALYSIS_QUEUE_URL": queue.queue_url,
-                "STAGE": self._environment,
-                "NEXTAUTH_SECRET": os.environ.get(
-                    "NEXTAUTH_SECRET", "dev-secret-minimum-32-characters-long"
-                ),
-                "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-placeholder"),
-                "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
-                "AI_PROVIDER": os.environ.get("AI_PROVIDER", "anthropic"),
-            },
+            environment=environment,
         )
 
         table.grant_read_write_data(handler)
         queue.grant_send_messages(handler)
+
+        return handler
+
+    # ── Lambda (Worker) ────────────────────────────────────────────────────────
+
+    def _create_worker_lambda(
+        self,
+        table: dynamodb.Table,
+        queue: sqs.Queue,
+        bundling: cdk.BundlingOptions,
+        environment: dict[str, str],
+    ) -> lambda_.Function:
+        """Create the SQS worker Lambda (long-running AI pipeline, 540s timeout)."""
+        log_group = logs.LogGroup(
+            self,
+            "WorkerHandlerLogs",
+            log_group_name=f"/aws/lambda/janus-worker-{self._environment}",
+            retention=logs.RetentionDays.THREE_DAYS,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+
+        handler = lambda_.Function(
+            self,
+            "WorkerHandler",
+            function_name=f"janus-worker-{self._environment}",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            architecture=(
+                lambda_.Architecture.ARM_64
+                if self._environment == "development"
+                else lambda_.Architecture.X86_64
+            ),
+            handler="src.handlers.worker_handler_entry.handle_worker_event",
+            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            timeout=Duration.seconds(540),
+            memory_size=512,
+            log_group=log_group,
+            environment=environment,
+        )
+
+        table.grant_read_write_data(handler)
         queue.grant_consume_messages(handler)
 
         return handler

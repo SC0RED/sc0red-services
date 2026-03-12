@@ -154,14 +154,16 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 400
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_scan_start_single_company_success(self, mock_authentication):
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    def test_scan_start_single_company_enqueues_to_sqs(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager = MagicMock()
-        handler._factory_manager.run_company_analysis.return_value = {}
 
         result = handler.handle(
             {
@@ -173,29 +175,15 @@ class TestAPIGatewayHandler:
         )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
-        assert body["status"] == "complete"
-        assert body["analysisId"]  # pre-generated UUID — just verify it's present
+        assert body["status"] == "running"
+        assert body["analysisId"]
         assert "scanId" in body
 
-    @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_scan_start_single_company_failure(self, mock_authentication):
-        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
-        handler, storage = self._make_handler()
-
-        scan_repo = MagicMock()
-        storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager = MagicMock()
-        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("AI error")
-
-        with pytest.raises(RuntimeError, match="AI error"):
-            handler.handle(
-                {
-                    "httpMethod": "POST",
-                    "path": "/api/scan/start",
-                    "headers": {"Authorization": "Bearer token"},
-                    "body": json.dumps({"url": "https://example.com", "type": "single"}),
-                }
-            )
+        mock_sqs.send_message.assert_called_once()
+        message_body = json.loads(mock_sqs.send_message.call_args[1]["MessageBody"])
+        assert message_body["url"] == "https://example.com"
+        assert message_body["org_id"] == "org-1"
+        assert message_body["request_id"] == body["analysisId"]
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_start_portfolio_success(self, mock_authentication):

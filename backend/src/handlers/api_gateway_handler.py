@@ -186,20 +186,27 @@ class APIGatewayHandler:
         authentication: AuthContext,
     ) -> LambdaResponse:
         analysis_id = str(uuid.uuid4())
-        scan_repo.update(scan_id, {"progress": 10, "total_companies": 1})
+        scan_repo.update(scan_id, {"status": "running", "progress": 10, "total_companies": 1})
         scan_repo.link_company(scan_id, analysis_id, "")
-        self._factory_manager.run_company_analysis(
-            url=url,
-            org_id=authentication.org_id,
-            user_id=authentication.user_id,
-            scan_id=scan_id,
-            request_id=analysis_id,
+
+        self._sqs.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=json.dumps(
+                {
+                    "url": url,
+                    "org_id": authentication.org_id,
+                    "user_id": authentication.user_id,
+                    "scan_id": scan_id,
+                    "company_name": "",
+                    "request_id": analysis_id,
+                }
+            ),
         )
-        scan_repo.update(scan_id, {"status": "complete", "progress": 100})
+
         return _json_response(
             {
                 "scanId": scan_id,
-                "status": "complete",
+                "status": "running",
                 "analysisId": analysis_id,
             }
         )

@@ -195,8 +195,8 @@ assert_status "No auth = 401" 401 "$STATUS"
 # ── Scan flow (E2E_MODE=full only) ──────────────────────────────
 if [ "$E2E_MODE" = "full" ]; then
 
-    # ── 7. Single scan (synchronous — mock AI, full pipeline) ────────
-    echo -e "\n${YELLOW}7. Single scan start (synchronous)${NC}"
+    # ── 7. Single scan (async via SQS) ────────────────────────────
+    echo -e "\n${YELLOW}7. Single scan start (async via SQS)${NC}"
     RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/start" \
         -H "Content-Type: application/json" \
         -H "$AUTH" \
@@ -204,11 +204,33 @@ if [ "$E2E_MODE" = "full" ]; then
     BODY=$(echo "$RESP" | sed '$d')
     STATUS=$(echo "$RESP" | tail -n 1)
     assert_status "Single scan start" 200 "$STATUS"
-    assert_json "Single scan complete" "status" "complete" "$BODY"
+    assert_json "Single scan enqueued" "status" "running" "$BODY"
     assert_json_nonempty "Got scanId" "scanId" "$BODY"
     assert_json_nonempty "Got analysisId" "analysisId" "$BODY"
     SINGLE_SCAN_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['scanId'])")
     ANALYSIS_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['analysisId'])")
+
+    # ── 7b. Poll until single scan completes ────────────────────
+    echo -e "\n${YELLOW}7b. Poll single scan until complete (max 120s)${NC}"
+    SINGLE_COMPLETE=false
+    for i in $(seq 1 40); do
+        RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$SINGLE_SCAN_ID" -H "$AUTH")
+        SCAN_STATUS=$(echo "$RESP" | sed '$d' | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+        echo -e "    Poll $i: status=$SCAN_STATUS"
+        if [ "$SCAN_STATUS" = "complete" ]; then
+            SINGLE_COMPLETE=true
+            break
+        fi
+        sleep 3
+    done
+
+    if [ "$SINGLE_COMPLETE" = "true" ]; then
+        echo -e "  ${GREEN}✓${NC} Single scan reached complete status"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Single scan did not complete within 120s"
+        fail=$((fail + 1))
+    fi
 
     # ── 8. Verify single scan analysis has risk score ─────────────
     echo -e "\n${YELLOW}8. Verify single scan analysis${NC}"
@@ -220,15 +242,13 @@ if [ "$E2E_MODE" = "full" ]; then
     assert_json_nonempty "Analysis has overallRiskScore" "overallRiskScore" "$BODY"
 
     # ── 9. Async confirm → SQS → worker path ─────────────────────
-    # Start a second scan, then call confirm directly to exercise the async path
+    # Start a second scan for the portfolio confirm flow
     echo -e "\n${YELLOW}9. Start scan for async confirm test${NC}"
     RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/start" \
         -H "Content-Type: application/json" \
         -H "$AUTH" \
         -d "{\"url\":\"$MOCK_COMPANY_URL\",\"type\":\"single\"}")
     BODY=$(echo "$RESP" | sed '$d')
-    # Grab the scanId from the completed scan to use its scan record for confirm
-    # Actually start a fresh scan — use the single scan result's scanId
     ASYNC_SCAN_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scanId',''))" 2>/dev/null || echo "")
 
     # ── 10. Confirm scan via async SQS path ───────────────────────
