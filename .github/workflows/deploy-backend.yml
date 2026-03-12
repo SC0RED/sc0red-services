@@ -66,11 +66,14 @@ jobs:
             cdk bootstrap "aws://${{ secrets.DEV_AWS_ACCOUNT_ID }}/${{ secrets.DEV_AWS_REGION }}" \
             --quiet 2>&1 | grep -v "^$" || true
 
+      - name: Encode deploy key for Docker bundling
+        env:
+          DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
+        run: echo "DEPLOY_KEY_B64=$(printf '%s' "$DEPLOY_KEY" | base64 -w 0)" >> $GITHUB_ENV
+
       - name: CDK Deploy
         env:
-          # GH_TOKEN is used during Docker bundling to pip-install signalfield-core.
-          # Add SIGNALFIELD_CORE_READ_TOKEN (a PAT with read access to SignalField/signalfield-core)
-          # as a repo secret or staging environment secret to enable Lambda builds.
+          DEPLOY_KEY_B64: ${{ env.DEPLOY_KEY_B64 }}
           GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
