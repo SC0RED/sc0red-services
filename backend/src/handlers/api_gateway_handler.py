@@ -374,9 +374,7 @@ class APIGatewayHandler:
     ) -> LambdaResponse:
         company_repo = self._storage.create_company_repository()
         companies = company_repo.find_by_org(authentication.org_id)
-        return _json_response(
-            {"analyses": [_build_company_summary(c) for c in companies]}
-        )
+        return _json_response({"analyses": [_build_company_summary(c) for c in companies]})
 
     # ── POST /api/auth/login ─────────────────────────────────────────
 
