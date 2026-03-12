@@ -182,13 +182,10 @@ function NewScanContent() {
                 return
             }
 
-            // The confirm route now awaits completion — navigate directly
-            setProgress(100)
-            setProgressLabel('Portfolio analysis complete!')
-            router.push(`/portfolio/${scanId}`)
+            // Backend returns 202 — analysis runs async via SQS, poll for completion
+            pollRunning(scanId, selected.length)
         } catch {
             clearInterval(progressInterval)
-            // If the request timed out on the client side, poll for status
             pollRunning(scanId, selected.length)
         }
     }
