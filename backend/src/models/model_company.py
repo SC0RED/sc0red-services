@@ -6,6 +6,7 @@ Ported from pe-scan/src/lib/ai/prompts.ts interfaces (lines 179-237).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -75,6 +76,7 @@ class Opportunity(BaseModel):
     investment_range: str = ""
     roi_estimate: str = ""
     related_services: list[str] = Field(default_factory=list)
+    value_lever: Literal["Revenue Side", "Cost Side", "Both"] | None = None
 
 
 class OpportunityResult(BaseModel):

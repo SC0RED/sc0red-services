@@ -51,6 +51,7 @@ class TestGenerateOpportunities:
                     "investment_range": "$100K-$500K",
                     "roi_estimate": "30% improvement in support efficiency",
                     "related_services": ["Accenture - AI strategy"],
+                    "value_lever": "Both",
                 }
             ],
             "top_three_immediate_actions": ["Action 1", "Action 2", "Action 3"],
@@ -71,6 +72,7 @@ class TestGenerateOpportunities:
         assert len(result.opportunities) == 1
         assert result.opportunities[0].title == "Deploy AI Chatbot"
         assert len(result.opportunities[0].related_services) == 1
+        assert result.opportunities[0].value_lever == "Both"
         assert len(result.top_three_immediate_actions) == 3
         mock_factory.get_client.assert_called_once()
 

@@ -71,6 +71,11 @@ _OPPORTUNITY_SCHEMA: dict = {
                         "items": {"type": "string"},
                         "description": "Relevant vendor or service names (e.g. 'Datadog - Observability', 'Snowflake - Data Platform')",
                     },
+                    "value_lever": {
+                        "type": "string",
+                        "enum": ["Revenue Side", "Cost Side", "Both"],
+                        "description": "Whether this opportunity primarily drives revenue growth, reduces costs, or both",
+                    },
                 },
                 "required": [
                     "title",
@@ -83,6 +88,7 @@ _OPPORTUNITY_SCHEMA: dict = {
                     "investment_range",
                     "roi_estimate",
                     "related_services",
+                    "value_lever",
                 ],
                 "additionalProperties": False,
             },
@@ -124,6 +130,7 @@ Generate 4-6 high-priority opportunities. For each opportunity:
 - Make implementation steps specific to THIS company
 - ROI estimates should be realistic for company size and industry
 - For related_services, list relevant vendors as simple strings (e.g. "Datadog - Observability")
+- Classify each opportunity's value_lever: "Revenue Side" (drives top-line growth, new revenue streams, pricing optimization, market expansion), "Cost Side" (reduces operating expenses, automation, efficiency gains), or "Both" (impacts revenue and cost simultaneously)
 
 Strategic categories to use:
 - "Competitive Moat" - Strengthen defensibility (data flywheels, switching costs, network effects)

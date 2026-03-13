@@ -101,6 +101,7 @@ class PersistResults(RequestStep):
                         "investment_range": opp.investment_range,
                         "roi_estimate": opp.roi_estimate,
                         "related_services": opp.related_services,
+                        "value_lever": opp.value_lever,
                     },
                 )
 
