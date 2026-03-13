@@ -27,6 +27,7 @@ export interface Opportunity {
     investment_range?: string
     roi_estimate?: string
     related_services?: string[]
+    value_lever?: 'Revenue Side' | 'Cost Side' | 'Both'
 }
 
 export interface AnalysisData {

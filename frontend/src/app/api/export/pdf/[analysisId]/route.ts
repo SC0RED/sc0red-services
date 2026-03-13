@@ -126,6 +126,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
     <div style="margin-bottom:0.875rem;">
       <span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);margin-right:0.5rem;">${escapeHtml(opp.impact_rating)} Impact</span>
       <span class="badge" style="background:rgba(139,154,196,0.08);color:#8B9AC4;border:1px solid rgba(139,154,196,0.15);">${escapeHtml(opp.timeline)}</span>
+      ${opp.value_lever ? `<span class="badge" style="background:rgba(${opp.value_lever === 'Revenue Side' ? '34,197,94' : opp.value_lever === 'Cost Side' ? '167,139,250' : '6,182,212'},0.1);color:${opp.value_lever === 'Revenue Side' ? '#22C55E' : opp.value_lever === 'Cost Side' ? '#A78BFA' : '#06B6D4'};border:1px solid rgba(${opp.value_lever === 'Revenue Side' ? '34,197,94' : opp.value_lever === 'Cost Side' ? '167,139,250' : '6,182,212'},0.2);margin-left:0.5rem;">${escapeHtml(opp.value_lever)}</span>` : ''}
     </div>
     <p>${escapeHtml(opp.description)}</p>
     ${

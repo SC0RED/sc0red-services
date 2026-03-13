@@ -41,8 +41,15 @@ const TIER_COLORS: Record<string, string> = {
     critical: 'var(--risk-critical)',
 }
 
+const LEVER_COLORS: Record<string, string> = {
+    'Revenue Side': 'var(--risk-low)',
+    'Cost Side': '#a78bfa',
+    Both: 'var(--accent-cyan)',
+}
+
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
     const [activeOppCat, setActiveOppCat] = useState<string>('All')
+    const [activeLever, setActiveLever] = useState<string>('All')
     const [expandedRisk, setExpandedRisk] = useState<string | null>(null)
     const [expandedOpp, setExpandedOpp] = useState<string | null>(null)
 
@@ -61,10 +68,20 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
         .map((o) => o.strategic_category)
         .filter((cat, index, arr) => arr.indexOf(cat) === index)
     const oppCategories = ['All', ...uniqueCategories]
-    const filteredOpps =
-        activeOppCat === 'All'
-            ? opportunities
-            : opportunities.filter((o) => o.strategic_category === activeOppCat)
+    const filteredOpps = opportunities.filter((o) => {
+        if (activeOppCat !== 'All' && o.strategic_category !== activeOppCat) return false
+        if (activeLever !== 'All' && o.value_lever !== activeLever) return false
+        return true
+    })
+
+    const hasValueLevers = opportunities.some((o) => o.value_lever)
+
+    const leverSummary = hasValueLevers
+        ? (['Revenue Side', 'Cost Side', 'Both'] as const).map((lever) => ({
+              lever,
+              count: opportunities.filter((o) => o.value_lever === lever).length,
+          }))
+        : []
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -552,6 +569,62 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     </div>
                 </div>
 
+                {/* Value Lever Summary */}
+                {hasValueLevers && (
+                    <div style={{ marginBottom: '2rem' }}>
+                        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>
+                            Value Impact
+                        </h2>
+                        <div
+                            style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(3, 1fr)',
+                                gap: '0.875rem',
+                            }}
+                        >
+                            {leverSummary.map(({ lever, count }) => {
+                                const color = LEVER_COLORS[lever] || 'var(--text-secondary)'
+                                return (
+                                    <div
+                                        key={lever}
+                                        className="card"
+                                        style={{
+                                            padding: '1.25rem',
+                                            borderTop: `3px solid ${color}`,
+                                            cursor: 'pointer',
+                                            background:
+                                                activeLever === lever ? `${color}10` : 'var(--bg-surface)',
+                                        }}
+                                        onClick={() => setActiveLever(activeLever === lever ? 'All' : lever)}
+                                    >
+                                        <div
+                                            style={{
+                                                fontSize: '0.8rem',
+                                                color: 'var(--text-secondary)',
+                                                marginBottom: '0.5rem',
+                                            }}
+                                        >
+                                            {lever}
+                                        </div>
+                                        <div style={{ fontSize: '1.75rem', fontWeight: 800, color }}>
+                                            {count}
+                                        </div>
+                                        <div
+                                            style={{
+                                                fontSize: '0.75rem',
+                                                color: 'var(--text-tertiary)',
+                                                marginTop: '0.25rem',
+                                            }}
+                                        >
+                                            {count === 1 ? 'opportunity' : 'opportunities'}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* Opportunities */}
                 <div style={{ marginBottom: '2rem' }}>
                     <div
@@ -642,6 +715,25 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                                                     <span className="badge badge-neutral">
                                                         {opp.strategic_category}
                                                     </span>
+                                                    {opp.value_lever && (
+                                                        <span
+                                                            style={{
+                                                                padding: '0.15rem 0.5rem',
+                                                                borderRadius: 'var(--radius-full)',
+                                                                fontSize: '0.7rem',
+                                                                fontWeight: 500,
+                                                                border: '1px solid',
+                                                                borderColor:
+                                                                    LEVER_COLORS[opp.value_lever] ||
+                                                                    'var(--text-secondary)',
+                                                                color:
+                                                                    LEVER_COLORS[opp.value_lever] ||
+                                                                    'var(--text-secondary)',
+                                                            }}
+                                                        >
+                                                            {opp.value_lever}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                             <svg

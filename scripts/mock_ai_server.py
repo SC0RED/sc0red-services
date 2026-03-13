@@ -145,6 +145,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "investment_range": "$50K-$100K",
                 "roi_estimate": "2x ROI within 12 months through headcount reallocation",
                 "related_services": ["Mock AI Co - Workflow automation"],
+                "value_lever": "Cost Side",
             }
         ],
         "top_three_immediate_actions": [

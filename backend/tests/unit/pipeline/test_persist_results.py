@@ -39,7 +39,7 @@ class TestPersistResults:
             ),
             opportunity_result=OpportunityResult(
                 opportunities=[
-                    Opportunity(title="Deploy AI", risk_mitigated="competitive_displacement"),
+                    Opportunity(title="Deploy AI", risk_mitigated="competitive_displacement", value_lever="Revenue Side"),
                 ],
                 top_three_immediate_actions=["Action 1"],
             ),
@@ -66,6 +66,8 @@ class TestPersistResults:
         mock_assessment_repo.save_assessment.assert_called_once()
         assert mock_assessment_repo.save_risk_score.call_count == 2
         assert mock_assessment_repo.save_opportunity.call_count == 1
+        opportunity_call_data = mock_assessment_repo.save_opportunity.call_args[0][2]
+        assert opportunity_call_data["value_lever"] == "Revenue Side"
         step._request_executor.mark_question_complete.assert_called_with("persist_results")
 
     def test_persist_company_id_none_raises(self):
