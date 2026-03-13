@@ -1,4 +1,4 @@
-"""Stage 4: Persist analysis results to DynamoDB.
+"""Stage 6: Persist analysis results to DynamoDB.
 
 Ports the DB write logic from pe-scan/src/app/api/scan/start/route.ts.
 """
@@ -110,6 +110,19 @@ class PersistResults(RequestStep):
                 company_id,
                 {
                     "top_actions": opportunity_result.top_three_immediate_actions,
+                },
+            )
+
+        # Persist EBITDA tree (only if we have a valid assessment to attach it to)
+        ebitda_tree = company.ebitda_tree
+        if ebitda_tree and assessment_id:
+            self._assessment_repo.save_ebitda_tree(
+                assessment_id,
+                {
+                    "tree_data": [node.model_dump() for node in ebitda_tree.nodes],
+                    "revenue_estimate": ebitda_tree.revenue_estimate,
+                    "ebitda_estimate": ebitda_tree.ebitda_estimate,
+                    "business_model_summary": ebitda_tree.summary,
                 },
             )
 

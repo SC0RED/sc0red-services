@@ -1,9 +1,10 @@
 """DynamoDB implementation of assessment storage.
 
 Single-table keys:
-  Assessment: pk=ASSESSMENT#{id}  sk=ASSESSMENT#METADATA
-  RiskScore:  pk=ASSESSMENT#{id}  sk=RISK#{category}
+  Assessment:  pk=ASSESSMENT#{id}  sk=ASSESSMENT#METADATA
+  RiskScore:   pk=ASSESSMENT#{id}  sk=RISK#{category}
   Opportunity: pk=ASSESSMENT#{id}  sk=OPP#{sort_order}
+  EbitdaTree:  pk=ASSESSMENT#{id}  sk=EBITDA_TREE
   GSI3: pk=COMPANY#{company_id}  (for company→assessment lookup)
 """
 
@@ -133,3 +134,40 @@ class DynamoDBAssessmentRepository:
                     with contextlib.suppress(json.JSONDecodeError):
                         item[field] = json.loads(item[field])
         return items
+
+    # ── EBITDA tree operations ────────────────────────────────────────
+
+    def save_ebitda_tree(self, assessment_id: str, data: dict[str, Any]) -> None:
+        """Persist the EBITDA decomposition tree for the given assessment."""
+        item = {
+            "pk": f"ASSESSMENT#{assessment_id}",
+            "sk": "EBITDA_TREE",
+            "entity_type": "ebitda_tree",
+            "assessment_id": assessment_id,
+            "tree_data": json.dumps(data["tree_data"]),
+            "revenue_estimate": data["revenue_estimate"],
+            "ebitda_estimate": data["ebitda_estimate"],
+            "business_model_summary": data["business_model_summary"],
+        }
+        self._table.put_item(item)
+
+    def get_ebitda_tree(self, assessment_id: str) -> dict[str, Any] | None:
+        """Return the EBITDA tree for the given assessment, or None if not found."""
+        item = self._table.get_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="EBITDA_TREE",
+        )
+        if not item:
+            return None
+
+        tree_data = item.get("tree_data", "[]")
+        if isinstance(tree_data, str):
+            with contextlib.suppress(json.JSONDecodeError):
+                tree_data = json.loads(tree_data)
+
+        return {
+            "treeData": tree_data,
+            "revenueEstimate": item["revenue_estimate"],
+            "ebitdaEstimate": item["ebitda_estimate"],
+            "businessModelSummary": item["business_model_summary"],
+        }

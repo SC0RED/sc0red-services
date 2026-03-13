@@ -24,6 +24,14 @@ vi.mock('next/navigation', () => ({
     usePathname: () => '/analysis/test-id',
 }))
 
+vi.mock('@/components/EbitdaTree', () => ({
+    default: ({ treeData, opportunities }: { treeData: unknown[]; opportunities: unknown[] }) => (
+        <div data-testid="ebitda-tree">
+            EBITDA Tree ({treeData.length} nodes, {opportunities.length} opportunities)
+        </div>
+    ),
+}))
+
 function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData {
     return {
         id: 'test-id',
@@ -193,5 +201,68 @@ describe('AnalysisDetail — Value Lever', () => {
         // "Revenue Side" should appear at least twice: once in summary card, once as badge
         const revenueSideElements = screen.getAllByText('Revenue Side')
         expect(revenueSideElements.length).toBeGreaterThanOrEqual(2)
+    })
+})
+
+describe('AnalysisDetail — EBITDA Tree', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    it('renders EBITDA section when ebitdaTree data is present', () => {
+        const data = buildAnalysisData({
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'revenue',
+                        label: 'Revenue',
+                        type: 'revenue',
+                        parent_id: null,
+                        description: 'All revenue',
+                        linked_opportunity_indices: [],
+                        children: [],
+                    },
+                ],
+                revenueEstimate: '$10M-$50M',
+                ebitdaEstimate: '$2M-$8M',
+                businessModelSummary: 'SaaS model with subscription revenue.',
+            },
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.getByText('EBITDA Impact Model')).toBeInTheDocument()
+        expect(screen.getByText('Revenue: $10M-$50M')).toBeInTheDocument()
+        expect(screen.getByText('EBITDA: $2M-$8M')).toBeInTheDocument()
+        expect(screen.getByText('SaaS model with subscription revenue.')).toBeInTheDocument()
+    })
+
+    it('hides EBITDA section when ebitdaTree is not present', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.queryByText('EBITDA Impact Model')).not.toBeInTheDocument()
+    })
+
+    it('renders EBITDA tree without optional fields', () => {
+        const data = buildAnalysisData({
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'revenue',
+                        label: 'Revenue',
+                        type: 'revenue',
+                        parent_id: null,
+                        description: 'Revenue',
+                        linked_opportunity_indices: [],
+                        children: [],
+                    },
+                ],
+            },
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.getByText('EBITDA Impact Model')).toBeInTheDocument()
+        expect(screen.queryByText(/Revenue:/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/EBITDA:/)).not.toBeInTheDocument()
     })
 })

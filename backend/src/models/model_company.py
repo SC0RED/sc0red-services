@@ -86,6 +86,29 @@ class OpportunityResult(BaseModel):
     top_three_immediate_actions: list[str] = Field(default_factory=list)
 
 
+class EbitdaNode(BaseModel):
+    """Single node in the EBITDA decomposition tree."""
+
+    id: str
+    label: str
+    type: Literal["revenue", "cost", "margin", "subtotal"]
+    value_range: str | None = None
+    percentage_of_parent: float | None = None
+    parent_id: str | None = None
+    description: str = ""
+    linked_opportunity_indices: list[int] = Field(default_factory=list)
+    children: list[EbitdaNode] = Field(default_factory=list)
+
+
+class EbitdaTreeResult(BaseModel):
+    """EBITDA decomposition tree mapping AI opportunities to P&L line items."""
+
+    summary: str = ""
+    revenue_estimate: str = ""
+    ebitda_estimate: str = ""
+    nodes: list[EbitdaNode] = Field(default_factory=list)
+
+
 class Company(BaseModel):
     """Full company entity combining profile, risk, and opportunities."""
 
@@ -100,6 +123,7 @@ class Company(BaseModel):
     profile: CompanyProfile | None = None
     risk_assessment: RiskAssessment | None = None
     opportunity_result: OpportunityResult | None = None
+    ebitda_tree: EbitdaTreeResult | None = None
     error: str | None = None
     analyzed_at: datetime | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

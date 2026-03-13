@@ -1,7 +1,8 @@
 """Company analysis pipeline factory.
 
-Wires the 5-step single company analysis pipeline:
-ScrapeAndResolve → ExtractProfile → AssessRisk → GenerateOpportunities → PersistResults
+Wires the 6-step single company analysis pipeline:
+ScrapeAndResolve → ExtractProfile → AssessRisk →
+GenerateOpportunities → GenerateEbitdaTree → PersistResults
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from signalfield_core.pipeline.factory import PipelineFactory
 
 from src.pipeline.pipeline_steps.assess_risk import AssessRisk
 from src.pipeline.pipeline_steps.extract_profile import ExtractProfile
+from src.pipeline.pipeline_steps.generate_ebitda_tree import GenerateEbitdaTree
 from src.pipeline.pipeline_steps.generate_opportunities import GenerateOpportunities
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
@@ -58,6 +60,9 @@ class CompanyAnalysisFactory(PipelineFactory):
                 ai_client_factory=self._ai_client_factory,
             ),
             GenerateOpportunities(
+                ai_client_factory=self._ai_client_factory,
+            ),
+            GenerateEbitdaTree(
                 ai_client_factory=self._ai_client_factory,
             ),
             PersistResults(
