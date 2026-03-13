@@ -35,7 +35,7 @@ def _decimal_serializer(value: object) -> float | int | str:
     """Convert Decimal to numeric types so JSON output stays numeric, not stringified."""
     if isinstance(value, Decimal):
         return int(value) if value == value.to_integral_value() else float(value)
-    return str(obj)
+    return str(value)
 
 
 def _json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
