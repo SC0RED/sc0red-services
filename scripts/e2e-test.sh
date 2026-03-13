@@ -241,6 +241,67 @@ if [ "$E2E_MODE" = "full" ]; then
     assert_json_nonempty "Analysis has companyName" "companyName" "$BODY"
     assert_json_nonempty "Analysis has overallRiskScore" "overallRiskScore" "$BODY"
 
+    # ── 8b. Verify EBITDA tree in analysis ──────────────────────
+    echo -e "\n${YELLOW}8b. Verify EBITDA tree in analysis${NC}"
+    HAS_EBITDA=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+tree = data.get('ebitdaTree')
+if not tree:
+    print('MISSING')
+elif not tree.get('treeData'):
+    print('EMPTY_TREE')
+elif not tree.get('revenueEstimate'):
+    print('NO_REVENUE')
+elif not tree.get('ebitdaEstimate'):
+    print('NO_EBITDA')
+else:
+    print('OK')
+" 2>/dev/null || echo "ERROR")
+    if [ "$HAS_EBITDA" = "OK" ]; then
+        echo -e "  ${GREEN}✓${NC} Analysis has ebitdaTree with treeData, revenueEstimate, ebitdaEstimate"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} EBITDA tree validation failed: $HAS_EBITDA"
+        fail=$((fail + 1))
+    fi
+
+    EBITDA_NODE_COUNT=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+tree = data.get('ebitdaTree', {})
+nodes = tree.get('treeData', [])
+print(len(nodes))
+" 2>/dev/null || echo "0")
+    if [ "$EBITDA_NODE_COUNT" -ge 2 ]; then
+        echo -e "  ${GREEN}✓${NC} EBITDA tree has $EBITDA_NODE_COUNT top-level nodes"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Expected ≥2 EBITDA nodes, got $EBITDA_NODE_COUNT"
+        fail=$((fail + 1))
+    fi
+
+    # ── 8c. Verify value_lever on opportunities ─────────────────
+    echo -e "\n${YELLOW}8c. Verify value_lever on opportunities${NC}"
+    HAS_LEVER=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+opps = data.get('opportunities', [])
+if not opps:
+    print('NO_OPPS')
+elif any(o.get('value_lever') for o in opps):
+    print('OK')
+else:
+    print('NO_LEVER')
+" 2>/dev/null || echo "ERROR")
+    if [ "$HAS_LEVER" = "OK" ]; then
+        echo -e "  ${GREEN}✓${NC} Opportunities have value_lever set"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} value_lever validation failed: $HAS_LEVER"
+        fail=$((fail + 1))
+    fi
+
     # ── 9. Async confirm → SQS → worker path ─────────────────────
     # Start a second scan for the portfolio confirm flow
     echo -e "\n${YELLOW}9. Start scan for async confirm test${NC}"
