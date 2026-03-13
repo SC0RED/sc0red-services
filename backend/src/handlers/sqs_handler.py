@@ -72,9 +72,7 @@ class SQSHandler:
 
         self._update_scan_progress(scan_id)
 
-    def _record_failure(
-        self, scan_id: str, request_id: str, error_message: str
-    ) -> None:
+    def _record_failure(self, scan_id: str, request_id: str, error_message: str) -> None:
         """Record a pipeline failure on the company and update scan progress.
 
         Uses update() (attribute-level patch) instead of save() to avoid
