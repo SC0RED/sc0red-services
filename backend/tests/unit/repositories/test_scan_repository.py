@@ -150,3 +150,43 @@ class TestScanRepository:
         # Without limit (all scans)
         all_results = repo.find_recent_by_org("org-A", limit=None)
         assert len(all_results) == 3
+
+    @mock_aws
+    def test_unlink_company(self, dynamodb_table):
+        """unlink_company removes a single scan→company link item."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "running"})
+        repo.link_company(scan_id, "c-1", "Company One")
+        repo.link_company(scan_id, "c-2", "Company Two")
+
+        repo.unlink_company(scan_id, "c-1")
+
+        companies = repo.get_scan_companies(scan_id)
+        assert len(companies) == 1
+        assert companies[0]["company_id"] == "c-2"
+
+    @mock_aws
+    def test_delete_all_company_links(self, dynamodb_table):
+        """delete_all_company_links removes all scan→company link items."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "running"})
+        repo.link_company(scan_id, "c-1", "Company One")
+        repo.link_company(scan_id, "c-2", "Company Two")
+        repo.link_company(scan_id, "c-3", "Company Three")
+
+        repo.delete_all_company_links(scan_id)
+
+        companies = repo.get_scan_companies(scan_id)
+        assert len(companies) == 0
+        # Scan metadata should still exist
+        assert repo.get_by_id(scan_id) is not None
+
+    @mock_aws
+    def test_delete_all_company_links_no_links(self, dynamodb_table):
+        """delete_all_company_links is a no-op when no links exist."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "running"})
+
+        repo.delete_all_company_links(scan_id)
+
+        assert repo.get_scan_companies(scan_id) == []

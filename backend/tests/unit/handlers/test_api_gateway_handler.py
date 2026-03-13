@@ -425,6 +425,96 @@ class TestAPIGatewayHandler:
         mock_sqs.send_message.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_scan_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = None
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_scan_wrong_org(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"org_id": "other-org"}
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_scan_cascades_to_companies_and_assessments(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"org_id": "org-1"}
+        scan_repo.get_scan_companies.return_value = [
+            {"company_id": "c-1"},
+            {"company_id": "c-2"},
+        ]
+        company_repo = MagicMock()
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.side_effect = [
+            [{"id": "assess-1"}],
+            [],
+        ]
+        storage.create_scan_repository.return_value = scan_repo
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["ok"] is True
+        assessment_repo.delete.assert_called_once_with("assess-1")
+        assert company_repo.delete.call_count == 2
+        scan_repo.delete_all_company_links.assert_called_once_with("scan-123")
+        scan_repo.delete.assert_called_once_with("scan-123")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_scan_no_companies(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"org_id": "org-1"}
+        scan_repo.get_scan_companies.return_value = []
+        storage.create_scan_repository.return_value = scan_repo
+        storage.create_company_repository.return_value = MagicMock()
+        storage.create_assessment_repository.return_value = MagicMock()
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        scan_repo.delete.assert_called_once_with("scan-123")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_get_analysis_not_found(self, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
@@ -543,6 +633,7 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 200
         assessment_repo.delete.assert_called_once_with("assess-1")
         company_repo.delete.assert_called_once_with("a-1")
+        scan_repo.unlink_company.assert_called_once_with("scan-1", "a-1")
         scan_repo.delete.assert_called_once_with("scan-1")
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
@@ -567,6 +658,7 @@ class TestAPIGatewayHandler:
             }
         )
         assert result["statusCode"] == 200
+        scan_repo.unlink_company.assert_called_once_with("scan-1", "a-1")
         scan_repo.delete.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")

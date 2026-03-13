@@ -7,6 +7,7 @@ import { backendFetch } from '@/lib/api/serverToken'
 import { authOptions } from '@/lib/auth/authOptions'
 import type { DashboardData } from '@/lib/types/api'
 import DashboardSidebar from '@/components/DashboardSidebar'
+import DeleteScanButton from '@/components/DeleteScanButton'
 
 export const metadata: Metadata = { title: 'Dashboard — Janus' }
 
@@ -389,9 +390,18 @@ export default async function DashboardPage() {
                                                         whiteSpace: 'nowrap',
                                                     }}
                                                 >
-                                                    {new Date(scan.createdAt).toLocaleDateString()}
+                                                    {scan.createdAt
+                                                        ? new Date(scan.createdAt).toLocaleDateString()
+                                                        : '—'}
                                                 </td>
-                                                <td style={{ padding: '1rem 1.25rem' }}>
+                                                <td
+                                                    style={{
+                                                        padding: '1rem 1.25rem',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.25rem',
+                                                    }}
+                                                >
                                                     {scan.type === 'portfolio' ? (
                                                         <Link
                                                             href={`/portfolio/${scan.id}`}
@@ -407,6 +417,12 @@ export default async function DashboardPage() {
                                                             View
                                                         </Link>
                                                     ) : null}
+                                                    {(scan.status === 'failed' ||
+                                                        (scan.status !== 'complete' &&
+                                                            scan.status !== 'running' &&
+                                                            scan.status !== 'awaiting_confirmation')) && (
+                                                        <DeleteScanButton scanId={scan.id} />
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
