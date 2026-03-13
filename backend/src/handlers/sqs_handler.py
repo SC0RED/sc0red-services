@@ -51,15 +51,43 @@ class SQSHandler:
 
         logger.info("Processing async analysis for %s (%s)", company_name or url, scan_id)
 
-        self._factory_manager.run_company_analysis(
-            url=url,
-            org_id=org_id,
-            user_id=user_id,
-            scan_id=scan_id,
-            company_name=company_name,
-            request_id=request_id,
-        )
+        try:
+            self._factory_manager.run_company_analysis(
+                url=url,
+                org_id=org_id,
+                user_id=user_id,
+                scan_id=scan_id,
+                company_name=company_name,
+                request_id=request_id,
+            )
+        except Exception as error:
+            logger.exception(
+                "Pipeline failed for %s (scan=%s, request=%s)",
+                company_name or url,
+                scan_id,
+                request_id,
+            )
+            self._record_failure(scan_id, request_id, str(error))
+            return
 
+        self._update_scan_progress(scan_id)
+
+    def _record_failure(
+        self, scan_id: str, request_id: str, error_message: str
+    ) -> None:
+        """Record a pipeline failure on the company and update scan progress.
+
+        Uses update() (attribute-level patch) instead of save() to avoid
+        overwriting any fields already persisted by earlier pipeline steps.
+        If the record does not yet exist, update_item creates a minimal item.
+        """
+        company_repo = self._storage.create_company_repository()
+        company_repo.update(request_id, {"error": error_message})
+
+        self._update_scan_progress(scan_id)
+
+    def _update_scan_progress(self, scan_id: str) -> None:
+        """Recalculate and persist scan progress based on resolved companies."""
         scan_repo = self._storage.create_scan_repository()
         scan = scan_repo.get_by_id(scan_id)
         if scan is None:
