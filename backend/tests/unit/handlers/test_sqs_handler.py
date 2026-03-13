@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 from src.handlers.sqs_handler import SQSHandler
 
@@ -84,9 +84,16 @@ class TestSQSHandler:
         assert result == {"batchItemFailures": []}
         assert handler._factory_manager.run_company_analysis.call_count == 2
 
-    def test_handle_message_processing_error_reports_failure(self):
-        handler, _storage = self._make_handler()
-        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("fail")
+    def test_pipeline_error_records_failure_and_does_not_retry(self):
+        """Pipeline errors are recorded on the company and scan — not retried via SQS."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("AI provider boom")
+        self._make_scan_repo(
+            storage, {"progress": 10, "total_companies": 1}, resolved_companies=0
+        )
+        # After recording the error, the company_repo.get_by_id returns a record with error
+        company_repo = storage.create_company_repository.return_value
+        company_repo.get_by_id.return_value = {"error": "AI provider boom"}
 
         result = handler.handle(
             {
@@ -98,7 +105,46 @@ class TestSQSHandler:
                 ],
             }
         )
-        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-fail"}]}
+        # No batch item failures — message is consumed, not retried
+        assert result == {"batchItemFailures": []}
+
+        # Error was patched onto the company record (not a full overwrite)
+        company_repo.update.assert_called_once_with(
+            "analysis-id-1", {"error": "AI provider boom"}
+        )
+
+    def test_pipeline_error_marks_single_scan_complete_with_error(self):
+        """A single-company scan that fails should still be marked complete."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("timeout")
+        scan_repo, company_repo = self._make_scan_repo(
+            storage, {"progress": 10, "total_companies": 1}, resolved_companies=1
+        )
+        # After failure, company has error field
+        company_repo.get_by_id.return_value = {"error": "timeout"}
+
+        handler._process_message(_BASE_MESSAGE)
+
+        company_repo.update.assert_called_once_with(
+            "analysis-id-1", {"error": "timeout"}
+        )
+        scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100})
+
+    def test_json_parse_error_reports_batch_failure(self):
+        """Malformed JSON in the SQS body is a transient issue — report for retry."""
+        handler, _ = self._make_handler()
+
+        result = handler.handle(
+            {
+                "Records": [
+                    {
+                        "messageId": "msg-bad-json",
+                        "body": "not valid json",
+                    }
+                ],
+            }
+        )
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-bad-json"}]}
 
     def test_process_message_marks_scan_complete_when_all_resolved(self):
         handler, storage = self._make_handler()
@@ -151,6 +197,31 @@ class TestSQSHandler:
 
         with pytest.raises(RuntimeError, match="not found after analysis"):
             handler._process_message(_BASE_MESSAGE)
+
+    def test_record_failure_scan_not_found_propagates_to_batch_failure(self):
+        """If _record_failure can't find the scan, the error propagates and SQS retries."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("AI error")
+
+        company_repo = MagicMock()
+        storage.create_company_repository.return_value = company_repo
+
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = None
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "Records": [
+                    {
+                        "messageId": "msg-orphan",
+                        "body": json.dumps(_BASE_MESSAGE),
+                    }
+                ],
+            }
+        )
+        # Infrastructure failure → SQS retries
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-orphan"}]}
 
     def test_process_message_raises_on_missing_request_id(self):
         handler, _storage = self._make_handler()
