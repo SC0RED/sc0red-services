@@ -133,7 +133,21 @@ class ExtractProfile(RequestStep):
             precision=Precision.STANDARD,
         )
         prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
-        response = client.query_structured(input_text=prompt, json_schema=_PROFILE_SCHEMA)
+        logger.info(
+            "[ExtractProfile] sending AI request: prompt_len=%d, model=%s",
+            len(prompt),
+            getattr(client, "model", "unknown"),
+        )
+        try:
+            response = client.query_structured(input_text=prompt, json_schema=_PROFILE_SCHEMA)
+        except Exception:
+            logger.exception("[ExtractProfile] AI request failed")
+            raise
+        logger.info(
+            "[ExtractProfile] AI response: input_tokens=%d, output_tokens=%d",
+            response.input_tokens,
+            response.output_tokens,
+        )
         data = response.content
 
         profile = CompanyProfile(**data)

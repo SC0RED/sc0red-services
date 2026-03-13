@@ -191,7 +191,21 @@ class GenerateOpportunities(RequestStep):
             precision=Precision.STANDARD,
         )
         prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
-        response = client.query_structured(input_text=prompt, json_schema=_OPPORTUNITY_SCHEMA)
+        logger.info(
+            "[GenerateOpportunities] sending AI request: prompt_len=%d, model=%s",
+            len(prompt),
+            getattr(client, "model", "unknown"),
+        )
+        try:
+            response = client.query_structured(input_text=prompt, json_schema=_OPPORTUNITY_SCHEMA)
+        except Exception:
+            logger.exception("[GenerateOpportunities] AI request failed")
+            raise
+        logger.info(
+            "[GenerateOpportunities] AI response: input_tokens=%d, output_tokens=%d",
+            response.input_tokens,
+            response.output_tokens,
+        )
         data = response.content
 
         opportunities = [_build_opportunity(opp) for opp in data["opportunities"]]

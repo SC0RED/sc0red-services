@@ -142,7 +142,21 @@ class AssessRisk(RequestStep):
             precision=Precision.STANDARD,
         )
         prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
-        response = client.query_structured(input_text=prompt, json_schema=_RISK_SCHEMA)
+        logger.info(
+            "[AssessRisk] sending AI request: prompt_len=%d, model=%s",
+            len(prompt),
+            getattr(client, "model", "unknown"),
+        )
+        try:
+            response = client.query_structured(input_text=prompt, json_schema=_RISK_SCHEMA)
+        except Exception:
+            logger.exception("[AssessRisk] AI request failed")
+            raise
+        logger.info(
+            "[AssessRisk] AI response: input_tokens=%d, output_tokens=%d",
+            response.input_tokens,
+            response.output_tokens,
+        )
         data = response.content
 
         risk_scores = [RiskScore(**rs) for rs in data.get("risk_scores", [])]

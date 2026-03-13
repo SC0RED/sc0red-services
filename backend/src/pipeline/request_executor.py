@@ -107,17 +107,31 @@ class JanusRequestExecutor:
 
     def execute_all(self) -> None:
         """Execute all pipeline steps in order."""
+        logger.info(
+            "[pipeline] starting request_id=%s, steps=%s",
+            self.request_id,
+            [s.step_name() for s in self._pipeline],
+        )
         for step in self._pipeline:
             step_name = step.step_name()
-            logger.info("Executing step: %s", step_name)
+            logger.info("[pipeline] executing step=%s request_id=%s", step_name, self.request_id)
             start = time.time()
             try:
                 step.execute()
             except Exception as exc:
                 self.exceptions.append(exc)
-                logger.exception("Step %s failed", step_name)
+                logger.exception(
+                    "[pipeline] step=%s FAILED request_id=%s",
+                    step_name,
+                    self.request_id,
+                )
                 raise
             finally:
                 elapsed = time.time() - start
                 self._step_timings[step_name] = elapsed
-                logger.info("Step %s completed in %.2fs", step_name, elapsed)
+                logger.info(
+                    "[pipeline] step=%s completed in %.2fs request_id=%s",
+                    step_name,
+                    elapsed,
+                    self.request_id,
+                )
