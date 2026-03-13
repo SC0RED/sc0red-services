@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { signIn } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
 
 export default function SignupPage() {
     const router = useRouter()
+    const { status } = useSession()
     const [form, setForm] = useState({
         name: '',
         email: '',
@@ -16,6 +17,16 @@ export default function SignupPage() {
     })
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        if (status === 'authenticated') {
+            router.replace('/dashboard')
+        }
+    }, [status, router])
+
+    if (status === 'authenticated') {
+        return null
+    }
 
     function update(field: string, val: string) {
         setForm((f) => ({ ...f, [field]: val }))
