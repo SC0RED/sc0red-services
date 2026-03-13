@@ -80,7 +80,7 @@ class SQSHandler:
         If the record does not yet exist, update_item creates a minimal item.
         """
         company_repo = self._storage.create_company_repository()
-        company_repo.update(request_id, {"error": error_message})
+        company_repo.update(request_id, {"id": request_id, "error": error_message})
 
         self._update_scan_progress(scan_id)
 

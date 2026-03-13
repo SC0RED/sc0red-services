@@ -110,7 +110,7 @@ class TestSQSHandler:
 
         # Error was patched onto the company record (not a full overwrite)
         company_repo.update.assert_called_once_with(
-            "analysis-id-1", {"error": "AI provider boom"}
+            "analysis-id-1", {"id": "analysis-id-1", "error": "AI provider boom"}
         )
 
     def test_pipeline_error_marks_single_scan_complete_with_error(self):
@@ -126,7 +126,7 @@ class TestSQSHandler:
         handler._process_message(_BASE_MESSAGE)
 
         company_repo.update.assert_called_once_with(
-            "analysis-id-1", {"error": "timeout"}
+            "analysis-id-1", {"id": "analysis-id-1", "error": "timeout"}
         )
         scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100})
 

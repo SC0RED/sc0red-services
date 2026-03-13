@@ -148,8 +148,19 @@ function NewScanContent() {
                 setProgressLabel('Analysis complete!')
                 if (mode === 'portfolio') {
                     router.push(`/portfolio/${id}`)
-                } else if (data.analyses?.[0]) {
-                    router.push(`/analysis/${data.analyses[0].id}`)
+                } else if (data.analyses?.[0]?.id) {
+                    if (data.analyses[0].error) {
+                        setError(`Analysis failed: ${data.analyses[0].error}`)
+                        setPhase('input')
+                    } else {
+                        router.push(`/analysis/${data.analyses[0].id}`)
+                    }
+                } else if (data.analyses?.[0]?.error) {
+                    setError(`Analysis failed: ${data.analyses[0].error}`)
+                    setPhase('input')
+                } else {
+                    setError('Analysis completed but no results were returned.')
+                    setPhase('input')
                 }
             } else if (data.status === 'failed') {
                 clearInterval(pollInterval)

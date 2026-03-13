@@ -202,9 +202,8 @@ class GenerateOpportunities(RequestStep):
             logger.exception("[GenerateOpportunities] AI request failed")
             raise
         logger.info(
-            "[GenerateOpportunities] AI response: input_tokens=%d, output_tokens=%d",
-            response.input_tokens,
-            response.output_tokens,
+            "[GenerateOpportunities] AI response received: metadata=%s",
+            response.metadata,
         )
         data = response.content
 

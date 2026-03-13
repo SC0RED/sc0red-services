@@ -144,9 +144,8 @@ class ExtractProfile(RequestStep):
             logger.exception("[ExtractProfile] AI request failed")
             raise
         logger.info(
-            "[ExtractProfile] AI response: input_tokens=%d, output_tokens=%d",
-            response.input_tokens,
-            response.output_tokens,
+            "[ExtractProfile] AI response received: metadata=%s",
+            response.metadata,
         )
         data = response.content
 

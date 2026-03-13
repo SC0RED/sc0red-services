@@ -153,9 +153,8 @@ class AssessRisk(RequestStep):
             logger.exception("[AssessRisk] AI request failed")
             raise
         logger.info(
-            "[AssessRisk] AI response: input_tokens=%d, output_tokens=%d",
-            response.input_tokens,
-            response.output_tokens,
+            "[AssessRisk] AI response received: metadata=%s",
+            response.metadata,
         )
         data = response.content
 
