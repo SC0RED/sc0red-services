@@ -226,7 +226,7 @@ export default function LandingPage() {
                         </Link>
                     </div>
                     <p style={{ marginTop: '1rem', fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                        No credit card required · Analysis in minutes · Powered by Claude AI
+                        No credit card required · Analysis in minutes · Powered by AI
                     </p>
                 </div>
             </section>

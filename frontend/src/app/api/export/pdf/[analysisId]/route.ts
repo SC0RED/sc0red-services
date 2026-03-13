@@ -77,7 +77,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
       </div>
     </div>
     ${analysisSummary ? `<p style="margin-top:1.5rem;max-width:600px;">${escapeHtml(analysisSummary)}</p>` : ''}
-    <p class="meta" style="margin-top:2rem;">Generated ${new Date().toLocaleDateString()} · Powered by Claude AI</p>
+    <p class="meta" style="margin-top:2rem;">Generated ${new Date().toLocaleDateString()} · Powered by AI</p>
   </div>
 
   <!-- Top Actions -->
