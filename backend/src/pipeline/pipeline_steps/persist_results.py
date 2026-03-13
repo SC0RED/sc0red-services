@@ -100,7 +100,7 @@ class PersistResults(RequestStep):
                         "timeline": opp.timeline,
                         "investment_range": opp.investment_range,
                         "roi_estimate": opp.roi_estimate,
-                        "related_services": [svc.model_dump() for svc in opp.related_services],
+                        "related_services": opp.related_services,
                     },
                 )
 
