@@ -61,6 +61,8 @@ _EBITDA_NODE_SCHEMA: dict = {
         "id",
         "label",
         "type",
+        "value_range",
+        "percentage_of_parent",
         "parent_id",
         "description",
         "linked_opportunity_indices",
