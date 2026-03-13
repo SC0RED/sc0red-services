@@ -1,5 +1,6 @@
 """Tests for APIGatewayHandler."""
 
+import base64
 import json
 from unittest.mock import MagicMock, patch
 
@@ -863,3 +864,299 @@ class TestDashboardEndpoint:
         assert body["recentAnalyses"][0]["scanType"] == "portfolio"
         assert len(body["recentScans"]) == 2
         assert body["recentScans"][0]["completedCount"] == 2
+
+
+class TestDocumentEndpoints:
+    def _make_handler(self):
+        storage = MagicMock()
+        return APIGatewayHandler(storage=storage), storage
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_with_base64_content(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        file_content = base64.b64encode(b"Hello document text").decode()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "fileContent": file_content,
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 201
+        body = json.loads(result["body"])
+        assert body["filename"] == "test.txt"
+        assert body["fileType"] == "txt"
+        assert body["charCount"] == len("Hello document text")
+        assessment_repo.save_document.assert_called_once()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = None
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {"filename": "test.txt", "fileType": "txt", "fileContent": "aGVsbG8="}
+                ),
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_missing_fields(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.txt"}),
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_unsupported_type(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.pptx",
+                        "fileType": "pptx",
+                        "fileContent": base64.b64encode(b"data").decode(),
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "Unsupported" in json.loads(result["body"])["error"]
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_no_assessment(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "fileContent": base64.b64encode(b"content").decode(),
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 404
+        assert "assessment" in json.loads(result["body"])["error"].lower()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_document_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/analysis/a-1/documents/doc-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        assessment_repo.delete_document.assert_called_once_with("assess-1", "doc-1")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_document_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = None
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/analysis/a-1/documents/doc-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_success(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_url": "https://test.com",
+            "scan_id": "scan-1",
+        }
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 202
+        body = json.loads(result["body"])
+        assert body["status"] == "queued"
+        mock_sqs.send_message.assert_called_once()
+        message_body = json.loads(
+            mock_sqs.send_message.call_args[1]["MessageBody"]
+        )
+        assert message_body["reanalyze"] is True
+        assert message_body["analysis_id"] == "a-1"
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_no_company_url(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1", "company_url": ""}
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_reanalyze_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = None
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_upload_url_not_configured(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/upload-url",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.pdf", "fileType": "pdf"}),
+            }
+        )
+        assert result["statusCode"] == 501
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_includes_documents(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_name": "Test",
+            "metadata_json": "",
+        }
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_risk_scores.return_value = []
+        assessment_repo.get_opportunities.return_value = []
+        assessment_repo.get_ebitda_tree.return_value = None
+        assessment_repo.get_documents.return_value = [
+            {
+                "id": "doc-1",
+                "filename": "report.pdf",
+                "fileType": "pdf",
+                "charCount": 5000,
+                "uploadedAt": "2026-03-13T00:00:00",
+            }
+        ]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert len(body["documents"]) == 1
+        assert body["documents"][0]["filename"] == "report.pdf"

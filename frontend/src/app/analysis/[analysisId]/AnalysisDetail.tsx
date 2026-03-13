@@ -1,16 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
 
 import RiskBadge from '@/components/RiskBadge'
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import DashboardSidebar from '@/components/DashboardSidebar'
+import DocumentUpload from '@/components/DocumentUpload'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import { getRiskTier, RISK_CATEGORIES } from '@/lib/utils/riskUtils'
-import type { AnalysisData, Opportunity, RiskScore } from '@/lib/types/api'
+import type { AnalysisData, DocumentInfo, Opportunity, RiskScore } from '@/lib/types/api'
 
 const EbitdaTree = dynamic(() => import('@/components/EbitdaTree'), { ssr: false })
 
@@ -46,10 +48,39 @@ const TIER_COLORS: Record<string, string> = {
 }
 
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
+    const router = useRouter()
     const [activeOppCat, setActiveOppCat] = useState<string>('All')
     const [activeLever, setActiveLever] = useState<string>('All')
     const [expandedRisk, setExpandedRisk] = useState<string | null>(null)
     const [expandedOpp, setExpandedOpp] = useState<string | null>(null)
+    const [documents, setDocuments] = useState<DocumentInfo[]>(data.documents ?? [])
+    const [reanalyzing, setReanalyzing] = useState(false)
+
+    const handleDocumentsChange = useCallback(async () => {
+        try {
+            const response = await fetch(`/api/analysis/${analysisId}`)
+            const updated = (await response.json()) as AnalysisData
+            setDocuments(updated.documents ?? [])
+        } catch {
+            // Refresh page as fallback
+            router.refresh()
+        }
+    }, [analysisId, router])
+
+    const handleReanalyze = useCallback(async () => {
+        setReanalyzing(true)
+        try {
+            const response = await fetch(`/api/analysis/${analysisId}/reanalyze`, { method: 'POST' })
+            if (!response.ok) throw new Error('Re-analysis failed')
+            // Refresh the page to show updated data after worker completes
+            // The worker is async so we just notify the user
+            router.refresh()
+        } catch {
+            // Error handled by component
+        } finally {
+            setReanalyzing(false)
+        }
+    }, [analysisId, router])
 
     const riskScores = data.riskScores ?? []
     const opportunities = data.opportunities ?? []
@@ -940,6 +971,15 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                         })}
                     </div>
                 </div>
+
+                {/* Document Upload */}
+                <DocumentUpload
+                    analysisId={analysisId}
+                    documents={documents}
+                    onDocumentsChange={handleDocumentsChange}
+                    onReanalyze={handleReanalyze}
+                    reanalyzing={reanalyzing}
+                />
 
                 {/* EBITDA Impact Model */}
                 {data.ebitdaTree && (

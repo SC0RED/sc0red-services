@@ -59,7 +59,11 @@ class JanusFactoriesFactory:
         self._assessment_repo = assessment_repo
         self._ai_client_factory = _initialize_ai_client_factory()
 
-    def create_and_execute(self, event: JanusEvent) -> JanusRequestExecutor:
+    def create_and_execute(
+        self,
+        event: JanusEvent,
+        document_text: str | None = None,
+    ) -> JanusRequestExecutor:
         """Create the appropriate pipeline, execute it, and return the executor."""
         company = Company(
             id=event.request_id,
@@ -67,6 +71,7 @@ class JanusFactoriesFactory:
             scan_id=event.scan_id,
             org_id=event.org_id,
             company_name=event.company_name,
+            document_text=document_text,
         )
         accessor = CompanyAccessor(company)
 

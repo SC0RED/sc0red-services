@@ -33,7 +33,7 @@ URL: {url}
 
 Website Content:
 {content}
-
+{document_section}
 Extract the company profile with all available fields."""
 
 _PROFILE_SCHEMA: dict = {
@@ -118,9 +118,18 @@ class ExtractProfile(RequestStep):
         scraped_text = accessor.get_scraped_text()
         actual_url = accessor.company.actual_url or accessor.company.url
 
+        document_text = accessor.get_document_text()
+        document_section = ""
+        if document_text:
+            document_section = (
+                "\nSUPPLEMENTARY DOCUMENTS (investment memos, diligence docs, etc.):\n"
+                f"{document_text[:25000]}\n"
+            )
+
         user_prompt = _USER_PROMPT_TEMPLATE.format(
             url=actual_url,
             content=scraped_text[:12000],
+            document_section=document_section,
         )
 
         if not self._ai_client_factory:

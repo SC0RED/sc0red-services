@@ -6,6 +6,7 @@ Request/response shapes are identical to minimize frontend changes.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import bcrypt
 import boto3
 
+from src.documents.extract_text import extract_text
 from src.handlers.auth_middleware import require_authentication
 from src.handlers.router import Router
 
@@ -78,6 +80,8 @@ class APIGatewayHandler:
         self._router = self._build_router()
         self._queue_url = os.environ["ANALYSIS_QUEUE_URL"]
         self._sqs = boto3.client("sqs")
+        self._documents_bucket = os.environ.get("DOCUMENTS_BUCKET", "")
+        self._s3 = boto3.client("s3") if self._documents_bucket else None
 
     def _build_router(self) -> Router:
         router = Router()
@@ -91,6 +95,16 @@ class APIGatewayHandler:
         router.protected("DELETE", "/api/analysis/{analysis_id}", self._handle_delete_analysis)
         router.protected("GET", "/api/analyses", self._handle_list_analyses)
         router.protected("GET", "/api/dashboard", self._handle_dashboard)
+        router.protected("POST", "/api/analysis/{analysis_id}/upload-url", self._handle_upload_url)
+        router.protected(
+            "POST", "/api/analysis/{analysis_id}/documents", self._handle_create_document
+        )
+        router.protected(
+            "DELETE",
+            "/api/analysis/{analysis_id}/documents/{document_id}",
+            self._handle_delete_document,
+        )
+        router.protected("POST", "/api/analysis/{analysis_id}/reanalyze", self._handle_reanalyze)
         return router
 
     def handle(self, event: dict[str, Any]) -> LambdaResponse:
@@ -367,12 +381,15 @@ class APIGatewayHandler:
         top_actions: list[str] = []
         ebitda_tree = None
 
+        documents: list[dict[str, Any]] = []
+
         if assessments:
             assessment = assessments[0]
             assessment_id = assessment["id"]
             risk_scores = assessment_repo.get_risk_scores(assessment_id)
             opportunities = assessment_repo.get_opportunities(assessment_id)
             ebitda_tree = assessment_repo.get_ebitda_tree(assessment_id)
+            documents = assessment_repo.get_documents(assessment_id)
 
         metadata_json = company.get("metadata_json", "")
         if metadata_json:
@@ -392,6 +409,7 @@ class APIGatewayHandler:
                 "riskScores": risk_scores,
                 "opportunities": opportunities,
                 "ebitdaTree": ebitda_tree,
+                "documents": documents,
             }
         )
 
@@ -527,6 +545,163 @@ class APIGatewayHandler:
                 "recentScans": recent_scan_list,
             }
         )
+
+    # ── POST /api/analysis/{id}/upload-url ───────────────────────────
+
+    def _handle_upload_url(
+        self,
+        event: dict[str, Any],
+        authentication: AuthContext,
+        analysis_id: str,
+    ) -> LambdaResponse:
+        if not self._s3 or not self._documents_bucket:
+            return _error("Document uploads not configured", 501)
+
+        body = json.loads(event.get("body") or "{}")
+        filename = body.get("filename", "")
+        file_type = body.get("fileType", "")
+        if not filename or not file_type:
+            return _error("filename and fileType required")
+
+        company_repo = self._storage.create_company_repository()
+        company = company_repo.get_by_id(analysis_id)
+        if not company or company.get("org_id") != authentication.org_id:
+            return _error("Not found", 404)
+
+        document_key = f"uploads/{analysis_id}/{uuid.uuid4()}.{file_type}"
+
+        upload_url = self._s3.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": self._documents_bucket,
+                "Key": document_key,
+                "ContentType": "application/octet-stream",
+            },
+            ExpiresIn=300,
+        )
+
+        return _json_response({"uploadUrl": upload_url, "documentKey": document_key})
+
+    # ── POST /api/analysis/{id}/documents ──────────────────────────
+
+    def _handle_create_document(
+        self,
+        event: dict[str, Any],
+        authentication: AuthContext,
+        analysis_id: str,
+    ) -> LambdaResponse:
+        body = json.loads(event.get("body") or "{}")
+        filename = body.get("filename", "")
+        file_type = body.get("fileType", "")
+        document_key = body.get("documentKey", "")
+        file_content_b64 = body.get("fileContent", "")
+
+        if not filename or not file_type:
+            return _error("filename and fileType required")
+
+        company_repo = self._storage.create_company_repository()
+        company = company_repo.get_by_id(analysis_id)
+        if not company or company.get("org_id") != authentication.org_id:
+            return _error("Not found", 404)
+
+        # Get file bytes — from S3 if documentKey provided, else from base64 body
+        if document_key and self._s3 and self._documents_bucket:
+            response = self._s3.get_object(Bucket=self._documents_bucket, Key=document_key)
+            file_bytes = response["Body"].read()
+        elif file_content_b64:
+            file_bytes = base64.b64decode(file_content_b64)
+        else:
+            return _error("documentKey or fileContent required")
+
+        try:
+            extracted_text = extract_text(file_bytes, file_type)
+        except ValueError as error:
+            return _error(str(error))
+
+        assessment_repo = self._storage.create_assessment_repository()
+        assessments = assessment_repo.find_by_company(analysis_id)
+        if not assessments:
+            return _error("No assessment found for this analysis", 404)
+
+        assessment_id = assessments[0]["id"]
+        document_id = str(uuid.uuid4())
+        document = {
+            "id": document_id,
+            "filename": filename,
+            "file_type": file_type,
+            "extracted_text": extracted_text,
+            "char_count": len(extracted_text),
+            "uploaded_at": datetime.now(UTC).isoformat(),
+        }
+        assessment_repo.save_document(assessment_id, document)
+
+        return _json_response(
+            {
+                "id": document_id,
+                "filename": filename,
+                "fileType": file_type,
+                "charCount": len(extracted_text),
+            },
+            201,
+        )
+
+    # ── DELETE /api/analysis/{id}/documents/{docId} ────────────────
+
+    def _handle_delete_document(
+        self,
+        _event: dict[str, Any],
+        authentication: AuthContext,
+        analysis_id: str,
+        document_id: str,
+    ) -> LambdaResponse:
+        company_repo = self._storage.create_company_repository()
+        company = company_repo.get_by_id(analysis_id)
+        if not company or company.get("org_id") != authentication.org_id:
+            return _error("Not found", 404)
+
+        assessment_repo = self._storage.create_assessment_repository()
+        assessments = assessment_repo.find_by_company(analysis_id)
+        if not assessments:
+            return _error("No assessment found", 404)
+
+        assessment_repo.delete_document(assessments[0]["id"], document_id)
+        return _json_response({"ok": True})
+
+    # ── POST /api/analysis/{id}/reanalyze ──────────────────────────
+
+    def _handle_reanalyze(
+        self,
+        _event: dict[str, Any],
+        authentication: AuthContext,
+        analysis_id: str,
+    ) -> LambdaResponse:
+        company_repo = self._storage.create_company_repository()
+        company = company_repo.get_by_id(analysis_id)
+        if not company or company.get("org_id") != authentication.org_id:
+            return _error("Not found", 404)
+
+        company_url = company.get("company_url", "")
+        if not company_url:
+            return _error("Analysis has no company URL — cannot re-analyze")
+
+        scan_id = company.get("scan_id", "")
+
+        self._sqs.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=json.dumps(
+                {
+                    "reanalyze": True,
+                    "analysis_id": analysis_id,
+                    "url": company_url,
+                    "org_id": authentication.org_id,
+                    "user_id": authentication.user_id,
+                    "scan_id": scan_id,
+                    "request_id": analysis_id,
+                }
+            ),
+        )
+
+        return _json_response({"status": "queued"}, 202)
 
     # ── POST /api/auth/register ──────────────────────────────────────
 

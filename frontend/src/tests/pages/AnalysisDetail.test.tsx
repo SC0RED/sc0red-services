@@ -24,6 +24,10 @@ vi.mock('next/navigation', () => ({
     usePathname: () => '/analysis/test-id',
 }))
 
+vi.mock('@/components/DocumentUpload', () => ({
+    default: () => <div data-testid="document-upload">Document Upload</div>,
+}))
+
 vi.mock('@/components/EbitdaTree', () => ({
     default: ({ treeData, opportunities }: { treeData: unknown[]; opportunities: unknown[] }) => (
         <div data-testid="ebitda-tree">
