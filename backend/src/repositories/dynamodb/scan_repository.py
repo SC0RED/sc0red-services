@@ -83,6 +83,17 @@ class DynamoDBScanRepository:
             }
         )
 
+    def unlink_company(self, scan_id: str, company_id: str) -> None:
+        """Delete a single scan→company association item."""
+        self._table.delete_item(pk=f"SCAN#{scan_id}", sk=f"COMPANY#{company_id}")
+
+    def delete_all_company_links(self, scan_id: str) -> None:
+        """Delete all scan→company association items for the given scan."""
+        links = self.get_scan_companies(scan_id)
+        keys = [{"pk": f"SCAN#{scan_id}", "sk": f"COMPANY#{link['company_id']}"} for link in links]
+        if keys:
+            self._table.batch_delete(keys)
+
     def get_scan_companies(self, scan_id: str) -> list[dict[str, Any]]:
         """Return all company association items linked to the given scan ID."""
         return self._table.query(pk=f"SCAN#{scan_id}", sk_prefix="COMPANY#")

@@ -345,6 +345,44 @@ print(any(a.get('overallRiskScore') is not None for a in analyses))
     STATUS=$(echo "$RESP" | tail -n 1)
     assert_status "Analysis 404 after delete" 404 "$STATUS"
 
+    # ── 16. Dashboard scan has createdAt ────────────────────────
+    echo -e "\n${YELLOW}16. Dashboard scan has createdAt${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    HAS_DATE=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+scans = data.get('recentScans', [])
+print(any(s.get('createdAt') for s in scans))
+" 2>/dev/null || echo "False")
+    if [ "$HAS_DATE" = "True" ]; then
+        echo -e "  ${GREEN}✓${NC} Dashboard scan has createdAt timestamp"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Dashboard scan missing createdAt"
+        fail=$((fail + 1))
+    fi
+
+    # ── 17. Delete scan (cascade) ───────────────────────────────
+    echo -e "\n${YELLOW}17. Delete scan (cascade)${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X DELETE "$BACKEND_URL/api/scan/$ASYNC_SCAN_ID" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Delete scan" 200 "$STATUS"
+    assert_json "Delete scan ok" "ok" "True" "$BODY"
+
+    # ── 18. Verify scan is gone ─────────────────────────────────
+    echo -e "\n${YELLOW}18. Verify scan is gone${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$ASYNC_SCAN_ID" -H "$AUTH")
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Scan 404 after delete" 404 "$STATUS"
+
+    # ── 19. Verify cascade — async analysis also gone ───────────
+    echo -e "\n${YELLOW}19. Verify cascade — async analysis deleted${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ASYNC_ANALYSIS_ID" -H "$AUTH")
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Cascaded analysis 404" 404 "$STATUS"
+
 fi  # E2E_MODE=full
 
 # ── Summary ──────────────────────────────────────────────────────

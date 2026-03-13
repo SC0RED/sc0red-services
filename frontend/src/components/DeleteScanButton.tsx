@@ -3,17 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export default function DeleteAnalysisButton({
-    analysisId,
-    companyName: _companyName,
-    variant = 'icon',
-    redirectTo,
-}: {
-    analysisId: string
-    companyName: string
-    variant?: 'icon' | 'button'
-    redirectTo?: string
-}) {
+export default function DeleteScanButton({ scanId }: { scanId: string }) {
     const router = useRouter()
     const [confirming, setConfirming] = useState(false)
     const [deleting, setDeleting] = useState(false)
@@ -21,13 +11,9 @@ export default function DeleteAnalysisButton({
     async function handleDelete() {
         setDeleting(true)
         try {
-            const res = await fetch(`/api/analysis/${analysisId}`, { method: 'DELETE' })
-            if (res.ok) {
-                if (redirectTo) {
-                    router.push(redirectTo)
-                } else {
-                    router.refresh()
-                }
+            const response = await fetch(`/api/scan/${scanId}`, { method: 'DELETE' })
+            if (response.ok) {
+                router.refresh()
             }
         } finally {
             setDeleting(false)
@@ -37,25 +23,7 @@ export default function DeleteAnalysisButton({
 
     if (confirming) {
         return (
-            <div
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.375rem',
-                    whiteSpace: 'nowrap',
-                }}
-            >
-                <span
-                    style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--risk-critical)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: '120px',
-                    }}
-                >
-                    Delete?
-                </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                 <button
                     onClick={handleDelete}
                     disabled={deleting}
@@ -69,7 +37,7 @@ export default function DeleteAnalysisButton({
                         opacity: deleting ? 0.6 : 1,
                     }}
                 >
-                    {deleting ? '...' : 'Yes'}
+                    {deleting ? 'Deleting...' : 'Delete'}
                 </button>
                 <button
                     onClick={() => setConfirming(false)}
@@ -77,21 +45,9 @@ export default function DeleteAnalysisButton({
                     className="btn btn-ghost btn-sm"
                     style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}
                 >
-                    No
+                    Cancel
                 </button>
             </div>
-        )
-    }
-
-    if (variant === 'button') {
-        return (
-            <button
-                onClick={() => setConfirming(true)}
-                className="btn btn-ghost btn-sm"
-                style={{ color: 'var(--risk-critical)' }}
-            >
-                Delete Analysis
-            </button>
         )
     }
 
@@ -99,7 +55,7 @@ export default function DeleteAnalysisButton({
         <button
             onClick={() => setConfirming(true)}
             className="btn btn-ghost btn-sm"
-            title="Delete analysis"
+            title="Delete scan"
             style={{ color: 'var(--text-tertiary)', padding: '0.25rem 0.5rem' }}
         >
             <svg

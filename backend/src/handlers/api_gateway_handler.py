@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -85,6 +86,7 @@ class APIGatewayHandler:
         router.protected("POST", "/api/scan/start", self._handle_scan_start)
         router.protected("GET", "/api/scan/{scan_id}", self._handle_scan_status)
         router.protected("POST", "/api/scan/{scan_id}/confirm", self._handle_scan_confirm)
+        router.protected("DELETE", "/api/scan/{scan_id}", self._handle_delete_scan)
         router.protected("GET", "/api/analysis/{analysis_id}", self._handle_get_analysis)
         router.protected("DELETE", "/api/analysis/{analysis_id}", self._handle_delete_analysis)
         router.protected("GET", "/api/analyses", self._handle_list_analyses)
@@ -151,6 +153,7 @@ class APIGatewayHandler:
                 "source_url": url,
                 "status": "running",
                 "progress": 0,
+                "created_at": datetime.now(UTC).isoformat(),
             }
         )
         return scan_id
@@ -313,6 +316,35 @@ class APIGatewayHandler:
 
         return _json_response({"ok": True, "queued": queued}, 202)
 
+    # ── DELETE /api/scan/{scanId} ─────────────────────────────────────
+
+    def _handle_delete_scan(
+        self,
+        _event: dict[str, Any],
+        authentication: AuthContext,
+        scan_id: str,
+    ) -> LambdaResponse:
+        scan_repo = self._storage.create_scan_repository()
+        scan = scan_repo.get_by_id(scan_id)
+        if not scan or scan.get("org_id") != authentication.org_id:
+            return _error("Not found", 404)
+
+        company_repo = self._storage.create_company_repository()
+        assessment_repo = self._storage.create_assessment_repository()
+
+        scan_companies = scan_repo.get_scan_companies(scan_id)
+        for link in scan_companies:
+            company_id = link.get("company_id", "")
+            if company_id:
+                assessments = assessment_repo.find_by_company(company_id)
+                for assessment in assessments:
+                    assessment_repo.delete(assessment["id"])
+                company_repo.delete(company_id)
+
+        scan_repo.delete_all_company_links(scan_id)
+        scan_repo.delete(scan_id)
+        return _json_response({"ok": True})
+
     # ── GET /api/analysis/{id} ───────────────────────────────────────
 
     def _handle_get_analysis(
@@ -383,6 +415,7 @@ class APIGatewayHandler:
         scan_id = company.get("scan_id", "")
         if scan_id:
             scan_repo = self._storage.create_scan_repository()
+            scan_repo.unlink_company(scan_id, analysis_id)
             remaining = scan_repo.get_scan_companies(scan_id)
             if not remaining:
                 scan_repo.delete(scan_id)
