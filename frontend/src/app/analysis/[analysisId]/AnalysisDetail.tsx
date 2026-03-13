@@ -55,28 +55,31 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     const [expandedOpp, setExpandedOpp] = useState<string | null>(null)
     const [documents, setDocuments] = useState<DocumentInfo[]>(data.documents ?? [])
     const [reanalyzing, setReanalyzing] = useState(false)
+    const [documentError, setDocumentError] = useState<string | null>(null)
 
     const handleDocumentsChange = useCallback(async () => {
+        setDocumentError(null)
         try {
             const response = await fetch(`/api/analysis/${analysisId}`)
+            if (!response.ok) throw new Error('Failed to refresh documents')
             const updated = (await response.json()) as AnalysisData
             setDocuments(updated.documents ?? [])
-        } catch {
-            // Refresh page as fallback
-            router.refresh()
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to refresh documents'
+            setDocumentError(message)
         }
-    }, [analysisId, router])
+    }, [analysisId])
 
     const handleReanalyze = useCallback(async () => {
         setReanalyzing(true)
+        setDocumentError(null)
         try {
             const response = await fetch(`/api/analysis/${analysisId}/reanalyze`, { method: 'POST' })
             if (!response.ok) throw new Error('Re-analysis failed')
-            // Refresh the page to show updated data after worker completes
-            // The worker is async so we just notify the user
             router.refresh()
-        } catch {
-            // Error handled by component
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Re-analysis failed'
+            setDocumentError(message)
         } finally {
             setReanalyzing(false)
         }
@@ -973,6 +976,20 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 </div>
 
                 {/* Document Upload */}
+                {documentError && (
+                    <div
+                        style={{
+                            padding: '0.75rem 1rem',
+                            background: 'rgba(239,68,68,0.1)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--risk-critical)',
+                            fontSize: '0.875rem',
+                            marginBottom: '1rem',
+                        }}
+                    >
+                        {documentError}
+                    </div>
+                )}
                 <DocumentUpload
                     analysisId={analysisId}
                     documents={documents}

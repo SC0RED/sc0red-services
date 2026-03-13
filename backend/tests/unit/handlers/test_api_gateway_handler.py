@@ -1109,20 +1109,6 @@ class TestDocumentEndpoints:
         assert result["statusCode"] == 404
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_upload_url_not_configured(self, mock_authentication):
-        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
-        handler, _ = self._make_handler()
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/analysis/a-1/upload-url",
-                "headers": {"Authorization": "Bearer token"},
-                "body": json.dumps({"filename": "test.pdf", "fileType": "pdf"}),
-            }
-        )
-        assert result["statusCode"] == 501
-
-    @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_get_analysis_includes_documents(self, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()

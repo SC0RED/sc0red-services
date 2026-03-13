@@ -277,3 +277,34 @@ class TestAssessmentRepository:
 
         repo.delete("assess-cascade-doc")
         assert repo.get_documents("assess-cascade-doc") == []
+
+    @mock_aws
+    def test_delete_analysis_results_keeps_documents_and_metadata(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-partial", "company_id": "comp-1"})
+        repo.save_risk_score("assess-partial", "data_ip", {"score": 5})
+        repo.save_opportunity("assess-partial", 0, {"title": "Opp"})
+        repo.save_ebitda_tree("assess-partial", {
+            "tree_data": [],
+            "revenue_estimate": "$1M",
+            "ebitda_estimate": "$100K",
+            "business_model_summary": "Test",
+        })
+        repo.save_document("assess-partial", {
+            "id": "doc-keep",
+            "filename": "keep.txt",
+            "file_type": "txt",
+            "extracted_text": "keep this",
+            "char_count": 9,
+            "uploaded_at": "2026-03-13T00:00:00",
+        })
+
+        repo.delete_analysis_results("assess-partial")
+
+        # Results are deleted
+        assert repo.get_risk_scores("assess-partial") == []
+        assert repo.get_opportunities("assess-partial") == []
+        assert repo.get_ebitda_tree("assess-partial") is None
+        # Metadata and documents are preserved
+        assert repo.get_by_id("assess-partial") is not None
+        assert len(repo.get_documents("assess-partial")) == 1

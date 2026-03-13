@@ -243,11 +243,6 @@ class TestSQSHandlerReanalysis:
         assessment_repo = MagicMock()
         assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
         assessment_repo.get_combined_document_text.return_value = "Document content here"
-        assessment_repo._table = MagicMock()
-        assessment_repo._table.query.return_value = [
-            {"pk": "ASSESSMENT#assess-1", "sk": "RISK#tech"},
-            {"pk": "ASSESSMENT#assess-1", "sk": "OPP#0001"},
-        ]
         storage.create_assessment_repository.return_value = assessment_repo
 
         # Mock scan repo for _update_scan_progress
@@ -284,8 +279,6 @@ class TestSQSHandlerReanalysis:
         assessment_repo = MagicMock()
         assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
         assessment_repo.get_combined_document_text.return_value = ""
-        assessment_repo._table = MagicMock()
-        assessment_repo._table.query.return_value = []
         storage.create_assessment_repository.return_value = assessment_repo
 
         message = {
@@ -314,8 +307,6 @@ class TestSQSHandlerReanalysis:
         assessment_repo = MagicMock()
         assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
         assessment_repo.get_combined_document_text.return_value = ""
-        assessment_repo._table = MagicMock()
-        assessment_repo._table.query.return_value = []
         storage.create_assessment_repository.return_value = assessment_repo
         company_repo = MagicMock()
         storage.create_company_repository.return_value = company_repo
@@ -333,19 +324,11 @@ class TestSQSHandlerReanalysis:
 
         company_repo.update.assert_called_once_with("a-1", {"error": "boom"})
 
-    def test_reanalysis_deletes_old_results_but_keeps_documents(self):
+    def test_reanalysis_deletes_old_results_via_repository(self):
         handler, storage = self._make_handler()
         assessment_repo = MagicMock()
         assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
         assessment_repo.get_combined_document_text.return_value = "doc text"
-        assessment_repo._table = MagicMock()
-        assessment_repo._table.query.return_value = [
-            {"pk": "ASSESSMENT#assess-1", "sk": "RISK#tech"},
-            {"pk": "ASSESSMENT#assess-1", "sk": "OPP#0001"},
-            {"pk": "ASSESSMENT#assess-1", "sk": "EBITDA_TREE"},
-            {"pk": "ASSESSMENT#assess-1", "sk": "DOC#doc-1"},
-            {"pk": "ASSESSMENT#assess-1", "sk": "ASSESSMENT#METADATA"},
-        ]
         storage.create_assessment_repository.return_value = assessment_repo
 
         message = {
@@ -359,11 +342,4 @@ class TestSQSHandlerReanalysis:
         }
         handler._process_message(message)
 
-        # Only RISK#, OPP#, EBITDA_TREE should be deleted — not DOC# or ASSESSMENT#METADATA
-        deleted_keys = assessment_repo._table.batch_delete.call_args[0][0]
-        deleted_sks = {k["sk"] for k in deleted_keys}
-        assert "RISK#tech" in deleted_sks
-        assert "OPP#0001" in deleted_sks
-        assert "EBITDA_TREE" in deleted_sks
-        assert "DOC#doc-1" not in deleted_sks
-        assert "ASSESSMENT#METADATA" not in deleted_sks
+        assessment_repo.delete_analysis_results.assert_called_once_with("assess-1")

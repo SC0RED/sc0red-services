@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 
+from src.documents.extract_text import MAX_CHARS_COMBINED
 from src.models.model_company import CompanyProfile
 
 if TYPE_CHECKING:
@@ -123,7 +124,7 @@ class ExtractProfile(RequestStep):
         if document_text:
             document_section = (
                 "\nSUPPLEMENTARY DOCUMENTS (investment memos, diligence docs, etc.):\n"
-                f"{document_text[:25000]}\n"
+                f"{document_text[:MAX_CHARS_COMBINED]}\n"
             )
 
         user_prompt = _USER_PROMPT_TEMPLATE.format(

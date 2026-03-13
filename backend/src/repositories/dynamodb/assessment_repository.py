@@ -16,6 +16,8 @@ import json
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from src.documents.extract_text import combine_document_texts
+
 if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
 
@@ -215,18 +217,24 @@ class DynamoDBAssessmentRepository:
             sk=f"DOC#{document_id}",
         )
 
-    _MAX_COMBINED_TEXT = 25_000
-
     def get_combined_document_text(self, assessment_id: str) -> str:
-        """Fetch all documents and return combined extracted text, capped at 25K chars."""
+        """Fetch all documents and return combined extracted text, capped at MAX_CHARS_COMBINED."""
         items = self._table.query(
             pk=f"ASSESSMENT#{assessment_id}",
             sk_prefix="DOC#",
         )
-        texts = [item["extracted_text"] for item in items if item.get("extracted_text")]
+        texts = [item["extracted_text"] for item in items]
         if not texts:
             return ""
-        combined = "\n---\n".join(texts)
-        if len(combined) > self._MAX_COMBINED_TEXT:
-            return combined[: self._MAX_COMBINED_TEXT] + "\n[...truncated]"
-        return combined
+        return combine_document_texts(texts)
+
+    def delete_analysis_results(self, assessment_id: str) -> None:
+        """Delete risk scores, opportunities, and EBITDA tree but keep documents and metadata."""
+        items = self._table.query(pk=f"ASSESSMENT#{assessment_id}")
+        keys_to_delete = [
+            {"pk": item["pk"], "sk": item["sk"]}
+            for item in items
+            if item["sk"].startswith(("RISK#", "OPP#", "EBITDA_TREE"))
+        ]
+        if keys_to_delete:
+            self._table.batch_delete(keys_to_delete)

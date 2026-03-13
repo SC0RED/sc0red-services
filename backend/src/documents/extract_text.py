@@ -10,7 +10,7 @@ import io
 from typing import Any
 
 _MAX_CHARS_PER_DOCUMENT = 15_000
-_MAX_CHARS_COMBINED = 25_000
+MAX_CHARS_COMBINED = 25_000
 
 _SUPPORTED_TYPES = frozenset({"pdf", "docx", "xlsx", "xls", "txt", "csv", "md"})
 
@@ -51,8 +51,8 @@ def extract_text(file_bytes: bytes, file_type: str) -> str:
 def combine_document_texts(texts: list[str]) -> str:
     """Combine multiple document texts with separators, capped at 25,000 characters."""
     combined = "\n---\n".join(texts)
-    if len(combined) > _MAX_CHARS_COMBINED:
-        return combined[:_MAX_CHARS_COMBINED] + "\n[...truncated]"
+    if len(combined) > MAX_CHARS_COMBINED:
+        return combined[:MAX_CHARS_COMBINED] + "\n[...truncated]"
     return combined
 
 

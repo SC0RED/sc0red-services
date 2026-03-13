@@ -123,14 +123,7 @@ class SQSHandler:
         assessment_id: str,
     ) -> None:
         """Delete risk scores, opportunities, and EBITDA tree but keep documents."""
-        items = assessment_repo._table.query(pk=f"ASSESSMENT#{assessment_id}")
-        keys_to_delete = [
-            {"pk": item["pk"], "sk": item["sk"]}
-            for item in items
-            if item["sk"].startswith(("RISK#", "OPP#", "EBITDA_TREE"))
-        ]
-        if keys_to_delete:
-            assessment_repo._table.batch_delete(keys_to_delete)
+        assessment_repo.delete_analysis_results(assessment_id)
 
     def _record_failure(self, scan_id: str, request_id: str, error_message: str) -> None:
         """Record a pipeline failure on the company and update scan progress.
