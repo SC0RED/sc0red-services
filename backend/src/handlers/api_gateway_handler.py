@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import uuid
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import bcrypt
@@ -30,6 +31,13 @@ logger = logging.getLogger(__name__)
 LambdaResponse = dict[str, Any]
 
 
+def _decimal_serializer(obj: object) -> float | int | str:
+    """Convert Decimal to numeric types so JSON output stays numeric, not stringified."""
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == obj.to_integral_value() else float(obj)
+    return str(obj)
+
+
 def _json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
     return {
         "statusCode": status,
@@ -39,7 +47,7 @@ def _json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
             "Access-Control-Allow-Headers": "Content-Type,Authorization",
             "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
         },
-        "body": json.dumps(body, default=str),
+        "body": json.dumps(body, default=_decimal_serializer),
     }
 
 
