@@ -831,68 +831,16 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                                                     <div
                                                         style={{
                                                             display: 'flex',
-                                                            flexDirection: 'column',
-                                                            gap: '0.75rem',
+                                                            gap: '0.5rem',
+                                                            flexWrap: 'wrap',
                                                         }}
                                                     >
                                                         {opp.related_services.map((svc, si) => (
-                                                            <div key={si}>
-                                                                <div
-                                                                    style={{
-                                                                        fontSize: '0.8125rem',
-                                                                        fontWeight: 600,
-                                                                        color: 'var(--text-secondary)',
-                                                                        marginBottom: '0.5rem',
-                                                                    }}
-                                                                >
-                                                                    {svc.service_type}
-                                                                </div>
-                                                                <div
-                                                                    style={{
-                                                                        display: 'flex',
-                                                                        gap: '0.5rem',
-                                                                        flexWrap: 'wrap',
-                                                                    }}
-                                                                >
-                                                                    {svc.vendors.map((vendor, vi) => (
-                                                                        <a
-                                                                            key={vi}
-                                                                            href={vendor.url}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="badge badge-neutral"
-                                                                            style={{
-                                                                                textDecoration: 'none',
-                                                                                cursor: 'pointer',
-                                                                                transition:
-                                                                                    'all var(--transition-fast)',
-                                                                            }}
-                                                                            title={vendor.specialty}
-                                                                        >
-                                                                            <svg
-                                                                                width="11"
-                                                                                height="11"
-                                                                                viewBox="0 0 24 24"
-                                                                                fill="none"
-                                                                                stroke="currentColor"
-                                                                                strokeWidth="2"
-                                                                                strokeLinecap="round"
-                                                                                strokeLinejoin="round"
-                                                                            >
-                                                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                                                                <polyline points="15 3 21 3 21 9" />
-                                                                                <line
-                                                                                    x1="10"
-                                                                                    y1="14"
-                                                                                    x2="21"
-                                                                                    y2="3"
-                                                                                />
-                                                                            </svg>
-                                                                            {vendor.name}
-                                                                        </a>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
+                                                            <span key={si} className="badge badge-neutral">
+                                                                {typeof svc === 'string'
+                                                                    ? svc
+                                                                    : svc.service_type}
+                                                            </span>
                                                         ))}
                                                     </div>
                                                 </div>

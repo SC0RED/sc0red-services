@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { BackendError } from '@/lib/api/errors'
 import { backendFetch } from '@/lib/api/serverToken'
-import type { AnalysisData, Opportunity, RelatedService, RiskScore } from '@/lib/types/api'
+import type { AnalysisData, Opportunity, RiskScore } from '@/lib/types/api'
 
 function escapeHtml(text: string | null | undefined): string {
     if (!text) return ''
@@ -148,15 +148,10 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
     </div>
     ${
         opp.related_services?.length
-            ? opp.related_services
-                  .map(
-                      (svc: RelatedService) => `
-      <div style="margin-top:0.75rem;">
-        <div class="label">${escapeHtml(svc.service_type)}</div>
-        ${(svc.vendors || []).map((v) => `<a href="${escapeHtml(v.url)}" class="vendor-chip">${escapeHtml(v.name)}</a>`).join('')}
+            ? `<div style="margin-top:0.75rem;">
+        <div class="label">Implementation Partners</div>
+        ${opp.related_services.map((svc: string) => `<span class="vendor-chip">${escapeHtml(svc)}</span>`).join('')}
       </div>`
-                  )
-                  .join('')
             : ''
     }
   </div>`

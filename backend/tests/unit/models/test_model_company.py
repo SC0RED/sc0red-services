@@ -5,10 +5,8 @@ from src.models.model_company import (
     CompanyProfile,
     Opportunity,
     OpportunityResult,
-    RelatedService,
     RiskAssessment,
     RiskScore,
-    Vendor,
 )
 
 
@@ -86,9 +84,7 @@ class TestRiskAssessment:
 
 
 class TestOpportunity:
-    def test_create_with_vendors(self):
-        vendor = Vendor(name="DataRobot", url="https://datarobot.com", specialty="AutoML")
-        service = RelatedService(service_type="ML Platform", vendors=[vendor])
+    def test_create_with_related_services(self):
         opportunity = Opportunity(
             title="Deploy AI Churn Prediction",
             risk_mitigated="customer_behavior",
@@ -99,11 +95,10 @@ class TestOpportunity:
             timeline="Medium-term (3-9 months)",
             investment_range="$100K-$500K",
             roi_estimate="20% reduction in churn",
-            related_services=[service],
+            related_services=["DataRobot - AutoML", "Snowflake - Data Platform"],
         )
         assert opportunity.title == "Deploy AI Churn Prediction"
-        assert len(opportunity.related_services) == 1
-        assert opportunity.related_services[0].vendors[0].name == "DataRobot"
+        assert opportunity.related_services == ["DataRobot - AutoML", "Snowflake - Data Platform"]
 
 
 class TestOpportunityResult:

@@ -50,18 +50,7 @@ class TestGenerateOpportunities:
                     "timeline": "Medium-term (3-9 months)",
                     "investment_range": "$100K-$500K",
                     "roi_estimate": "30% improvement in support efficiency",
-                    "related_services": [
-                        {
-                            "service_type": "AI Consulting",
-                            "vendors": [
-                                {
-                                    "name": "Accenture",
-                                    "url": "https://accenture.com",
-                                    "specialty": "AI strategy",
-                                }
-                            ],
-                        }
-                    ],
+                    "related_services": ["Accenture - AI strategy"],
                 }
             ],
             "top_three_immediate_actions": ["Action 1", "Action 2", "Action 3"],
