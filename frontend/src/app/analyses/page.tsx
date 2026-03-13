@@ -49,8 +49,8 @@ export default async function AnalysesPage() {
                         </Link>
                     </div>
                 ) : (
-                    <div className="card" style={{ overflow: 'hidden' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className="card" style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', minWidth: '860px', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                     {['Company', 'Industry', 'Source', 'Risk Score', 'Tier', 'Date', ''].map(

@@ -477,6 +477,16 @@ class APIGatewayHandler:
 
         scan_type_map = {s["id"]: s.get("type", "") for s in all_scans}
 
+        # Build fallback date map: scan_id → earliest analyzed_at from linked companies
+        scan_date_fallback: dict[str, str] = {}
+        for company in companies:
+            scan_id = company.get("scan_id", "")
+            analyzed_at = company.get("analyzed_at", "")
+            if scan_id and analyzed_at:
+                existing = scan_date_fallback.get(scan_id, "")
+                if not existing or analyzed_at < existing:
+                    scan_date_fallback[scan_id] = analyzed_at
+
         analyzed.sort(key=lambda c: c.get("analyzed_at", ""), reverse=True)
         recent_analyses = [
             {
@@ -499,7 +509,7 @@ class APIGatewayHandler:
                 "status": s.get("status", ""),
                 "progress": s.get("progress", 0),
                 "completedCount": len(scan_repo.get_scan_companies(s["id"])),
-                "createdAt": s.get("created_at", ""),
+                "createdAt": s.get("created_at") or scan_date_fallback.get(s.get("id", ""), ""),
             }
             for s in recent_scans
         ]
