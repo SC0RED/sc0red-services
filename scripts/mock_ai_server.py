@@ -144,18 +144,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "timeline": "Quick Win (1-3 months)",
                 "investment_range": "$50K-$100K",
                 "roi_estimate": "2x ROI within 12 months through headcount reallocation",
-                "related_services": [
-                    {
-                        "service_type": "AI Platform",
-                        "vendors": [
-                            {
-                                "name": "Mock AI Co",
-                                "url": "https://mock-ai.example.com",
-                                "specialty": "Workflow automation",
-                            }
-                        ],
-                    }
-                ],
+                "related_services": ["Mock AI Co - Workflow automation"],
             }
         ],
         "top_three_immediate_actions": [

@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 LambdaResponse = dict[str, Any]
 
 
-def _decimal_serializer(obj: object) -> float | int | str:
+def _decimal_serializer(value: object) -> float | int | str:
     """Convert Decimal to numeric types so JSON output stays numeric, not stringified."""
-    if isinstance(obj, Decimal):
-        return int(obj) if obj == obj.to_integral_value() else float(obj)
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
     return str(obj)
 
 
