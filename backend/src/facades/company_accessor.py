@@ -13,6 +13,7 @@ from src.models.model_company import Company
 if TYPE_CHECKING:
     from src.models.model_company import (
         CompanyProfile,
+        EbitdaTreeResult,
         OpportunityResult,
         RiskAssessment,
     )
@@ -88,6 +89,10 @@ class CompanyAccessor:
     def set_opportunities(self, result: OpportunityResult) -> None:
         """Set the company opportunity result."""
         self._company.opportunity_result = result
+
+    def set_ebitda_tree(self, result: EbitdaTreeResult) -> None:
+        """Set the EBITDA decomposition tree."""
+        self._company.ebitda_tree = result
 
     def set_url(self, url: str) -> None:
         """Set the company URL."""

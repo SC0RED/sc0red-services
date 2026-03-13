@@ -1,14 +1,18 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
 
 import RiskBadge from '@/components/RiskBadge'
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import DashboardSidebar from '@/components/DashboardSidebar'
+import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import { getRiskTier, RISK_CATEGORIES } from '@/lib/utils/riskUtils'
 import type { AnalysisData, Opportunity, RiskScore } from '@/lib/types/api'
+
+const EbitdaTree = dynamic(() => import('@/components/EbitdaTree'), { ssr: false })
 
 function ImpactBadge({ impact }: { impact: string }) {
     const colorMap: Record<string, string> = { High: 'low', Medium: 'moderate', Low: 'neutral' }
@@ -39,12 +43,6 @@ const TIER_COLORS: Record<string, string> = {
     moderate: 'var(--risk-moderate)',
     high: 'var(--risk-high)',
     critical: 'var(--risk-critical)',
-}
-
-const LEVER_COLORS: Record<string, string> = {
-    'Revenue Side': 'var(--risk-low)',
-    'Cost Side': '#a78bfa',
-    Both: 'var(--accent-cyan)',
 }
 
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
@@ -942,6 +940,52 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                         })}
                     </div>
                 </div>
+
+                {/* EBITDA Impact Model */}
+                {data.ebitdaTree && (
+                    <div style={{ marginBottom: '2rem' }}>
+                        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>
+                            EBITDA Impact Model
+                        </h2>
+
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: '0.5rem',
+                                flexWrap: 'wrap',
+                                marginBottom: '1rem',
+                            }}
+                        >
+                            {data.ebitdaTree.revenueEstimate && (
+                                <span className="badge badge-low">
+                                    Revenue: {data.ebitdaTree.revenueEstimate}
+                                </span>
+                            )}
+                            {data.ebitdaTree.ebitdaEstimate && (
+                                <span className="badge badge-blue">
+                                    EBITDA: {data.ebitdaTree.ebitdaEstimate}
+                                </span>
+                            )}
+                        </div>
+
+                        {data.ebitdaTree.businessModelSummary && (
+                            <p
+                                style={{
+                                    fontSize: '0.9rem',
+                                    lineHeight: 1.7,
+                                    color: 'var(--text-secondary)',
+                                    marginBottom: '1.25rem',
+                                }}
+                            >
+                                {data.ebitdaTree.businessModelSummary}
+                            </p>
+                        )}
+
+                        <div className="card" style={{ padding: '1rem' }}>
+                            <EbitdaTree treeData={data.ebitdaTree.treeData} opportunities={opportunities} />
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     )

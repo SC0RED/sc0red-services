@@ -365,12 +365,14 @@ class APIGatewayHandler:
         opportunities = []
         analysis_summary = ""
         top_actions: list[str] = []
+        ebitda_tree = None
 
         if assessments:
             assessment = assessments[0]
             assessment_id = assessment["id"]
             risk_scores = assessment_repo.get_risk_scores(assessment_id)
             opportunities = assessment_repo.get_opportunities(assessment_id)
+            ebitda_tree = assessment_repo.get_ebitda_tree(assessment_id)
 
         metadata_json = company.get("metadata_json", "")
         if metadata_json:
@@ -389,6 +391,7 @@ class APIGatewayHandler:
                 "topActions": top_actions,
                 "riskScores": risk_scores,
                 "opportunities": opportunities,
+                "ebitdaTree": ebitda_tree,
             }
         )
 

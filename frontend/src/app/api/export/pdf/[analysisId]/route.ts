@@ -158,6 +158,21 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
   </div>`
       )
       .join('')}
+
+  <!-- EBITDA Impact Model -->
+  ${
+      analysis.ebitdaTree
+          ? `
+  <h2 style="margin-top:3rem;">EBITDA Impact Model</h2>
+  <div style="margin-bottom:1rem;">
+    ${analysis.ebitdaTree.revenueEstimate ? `<span class="badge" style="background:rgba(34,197,94,0.1);color:#22C55E;border:1px solid rgba(34,197,94,0.2);margin-right:0.5rem;">Revenue: ${escapeHtml(analysis.ebitdaTree.revenueEstimate)}</span>` : ''}
+    ${analysis.ebitdaTree.ebitdaEstimate ? `<span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);">EBITDA: ${escapeHtml(analysis.ebitdaTree.ebitdaEstimate)}</span>` : ''}
+  </div>
+  ${analysis.ebitdaTree.businessModelSummary ? `<p>${escapeHtml(analysis.ebitdaTree.businessModelSummary)}</p>` : ''}
+  <p class="meta" style="font-style:italic;">Interactive EBITDA tree visualisation available in the web application.</p>
+  `
+          : ''
+  }
 </div>
 </body>
 </html>`

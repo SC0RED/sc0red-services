@@ -30,6 +30,25 @@ export interface Opportunity {
     value_lever?: 'Revenue Side' | 'Cost Side' | 'Both'
 }
 
+export interface EbitdaNode {
+    id: string
+    label: string
+    type: 'revenue' | 'cost' | 'margin' | 'subtotal'
+    value_range?: string
+    percentage_of_parent?: number
+    parent_id: string | null
+    description: string
+    linked_opportunity_indices: number[]
+    children?: EbitdaNode[]
+}
+
+export interface EbitdaTree {
+    treeData: EbitdaNode[]
+    revenueEstimate?: string
+    ebitdaEstimate?: string
+    businessModelSummary?: string
+}
+
 export interface AnalysisData {
     id: string
     companyName: string
@@ -41,6 +60,7 @@ export interface AnalysisData {
     riskScores: RiskScore[]
     opportunities: Opportunity[]
     topActions?: string[]
+    ebitdaTree?: EbitdaTree
     analyzedAt?: string
     scanType?: string
 }

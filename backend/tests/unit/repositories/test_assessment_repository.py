@@ -129,3 +129,54 @@ class TestAssessmentRepository:
         assert result is not None
         assert result["tier"] == "high"
         assert result["id"] == "custom-id-123"
+
+    @mock_aws
+    def test_save_and_get_ebitda_tree(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-ebitda", "company_id": "comp-1"})
+
+        tree_data = [
+            {
+                "id": "revenue",
+                "label": "Total Revenue",
+                "type": "revenue",
+                "parent_id": None,
+                "description": "All revenue",
+                "linked_opportunity_indices": [],
+                "children": [],
+            },
+        ]
+        repo.save_ebitda_tree("assess-ebitda", {
+            "tree_data": tree_data,
+            "revenue_estimate": "$10M-$50M",
+            "ebitda_estimate": "$2M-$8M",
+            "business_model_summary": "SaaS model overview",
+        })
+
+        result = repo.get_ebitda_tree("assess-ebitda")
+        assert result is not None
+        assert result["revenueEstimate"] == "$10M-$50M"
+        assert result["ebitdaEstimate"] == "$2M-$8M"
+        assert result["businessModelSummary"] == "SaaS model overview"
+        assert len(result["treeData"]) == 1
+        assert result["treeData"][0]["id"] == "revenue"
+
+    @mock_aws
+    def test_get_ebitda_tree_not_found(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        result = repo.get_ebitda_tree("nonexistent")
+        assert result is None
+
+    @mock_aws
+    def test_delete_cascades_ebitda_tree(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-del-ebitda", "company_id": "comp-1"})
+        repo.save_ebitda_tree("assess-del-ebitda", {
+            "tree_data": [],
+            "revenue_estimate": "$1M",
+            "ebitda_estimate": "$100K",
+            "business_model_summary": "Test",
+        })
+
+        repo.delete("assess-del-ebitda")
+        assert repo.get_ebitda_tree("assess-del-ebitda") is None
