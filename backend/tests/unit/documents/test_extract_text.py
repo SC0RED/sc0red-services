@@ -6,7 +6,7 @@ import pytest
 
 from src.documents.extract_text import (
     _MAX_CHARS_PER_DOCUMENT,
-    combine_document_texts,
+    join_document_texts,
     extract_text,
 )
 
@@ -100,19 +100,19 @@ class TestExtractText:
 class TestCombineDocumentTexts:
     def test_combines_with_separator(self):
         texts = ["Document 1 text", "Document 2 text"]
-        result = combine_document_texts(texts)
+        result = join_document_texts(texts)
         assert result == "Document 1 text\n---\nDocument 2 text"
 
     def test_truncates_at_limit(self):
         texts = ["x" * 20_000, "y" * 20_000]
-        result = combine_document_texts(texts)
+        result = join_document_texts(texts)
         assert len(result) <= 25_005 + len("\n[...truncated]")
         assert result.endswith("[...truncated]")
 
     def test_empty_list(self):
-        result = combine_document_texts([])
+        result = join_document_texts([])
         assert result == ""
 
     def test_single_document(self):
-        result = combine_document_texts(["Only one doc"])
+        result = join_document_texts(["Only one doc"])
         assert result == "Only one doc"

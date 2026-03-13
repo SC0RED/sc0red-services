@@ -16,7 +16,7 @@ import json
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from src.documents.extract_text import combine_document_texts
+from src.documents.extract_text import join_document_texts
 
 if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
@@ -226,7 +226,7 @@ class DynamoDBAssessmentRepository:
         texts = [item["extracted_text"] for item in items]
         if not texts:
             return ""
-        return combine_document_texts(texts)
+        return join_document_texts(texts)
 
     def delete_analysis_results(self, assessment_id: str) -> None:
         """Delete risk scores, opportunities, and EBITDA tree but keep documents and metadata."""

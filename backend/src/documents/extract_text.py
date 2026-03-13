@@ -48,7 +48,7 @@ def extract_text(file_bytes: bytes, file_type: str) -> str:
     return text[:_MAX_CHARS_PER_DOCUMENT]
 
 
-def combine_document_texts(texts: list[str]) -> str:
+def join_document_texts(texts: list[str]) -> str:
     """Combine multiple document texts with separators, capped at 25,000 characters."""
     combined = "\n---\n".join(texts)
     if len(combined) > MAX_CHARS_COMBINED:
