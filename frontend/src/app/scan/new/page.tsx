@@ -521,7 +521,10 @@ function NewScanContent() {
                                 {progressLabel}
                             </p>
                             <div className="progress-bar" style={{ maxWidth: '360px', margin: '0 auto' }}>
-                                <div className="progress-fill" style={{ width: `${progress}%` }} />
+                                <div
+                                    className="progress-fill"
+                                    style={{ width: `${Math.round(progress)}%` }}
+                                />
                             </div>
                             <div
                                 style={{
@@ -530,7 +533,7 @@ function NewScanContent() {
                                     color: 'var(--text-tertiary)',
                                 }}
                             >
-                                {progress}% complete
+                                {Math.round(progress)}% complete
                             </div>
                             <p
                                 style={{
