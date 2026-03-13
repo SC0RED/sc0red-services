@@ -171,8 +171,7 @@ class GenerateEbitdaTree(RequestStep):
 
         if not profile or not risk_assessment or not opportunity_result:
             message = (
-                "Cannot generate EBITDA tree: "
-                "profile, risk assessment, or opportunities missing"
+                "Cannot generate EBITDA tree: profile, risk assessment, or opportunities missing"
             )
             raise ValueError(message)
 
