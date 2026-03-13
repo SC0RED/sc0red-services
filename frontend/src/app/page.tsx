@@ -1,6 +1,15 @@
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { getServerSession } from 'next-auth'
 
-export default function LandingPage() {
+import { authOptions } from '@/lib/auth/authOptions'
+
+export default async function LandingPage() {
+    const session = await getServerSession(authOptions)
+    if (session) {
+        redirect('/dashboard')
+    }
+
     const features = [
         {
             icon: (
