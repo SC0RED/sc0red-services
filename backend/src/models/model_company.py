@@ -74,7 +74,7 @@ class Opportunity(BaseModel):
     timeline: str = ""
     investment_range: str = ""
     roi_estimate: str = ""
-    related_services: list[RelatedService] = Field(default_factory=list)
+    related_services: list[str] = Field(default_factory=list)
 
 
 class OpportunityResult(BaseModel):

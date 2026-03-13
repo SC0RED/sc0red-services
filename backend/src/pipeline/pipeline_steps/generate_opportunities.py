@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 
-from src.models.model_company import Opportunity, OpportunityResult, RelatedService, Vendor
+from src.models.model_company import Opportunity, OpportunityResult
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
@@ -68,27 +68,8 @@ _OPPORTUNITY_SCHEMA: dict = {
                     "roi_estimate": {"type": "string", "description": "Specific ROI description"},
                     "related_services": {
                         "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "service_type": {"type": "string"},
-                                "vendors": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": {"type": "string"},
-                                            "url": {"type": "string"},
-                                            "specialty": {"type": "string"},
-                                        },
-                                        "required": ["name", "url", "specialty"],
-                                        "additionalProperties": False,
-                                    },
-                                },
-                            },
-                            "required": ["service_type", "vendors"],
-                            "additionalProperties": False,
-                        },
+                        "items": {"type": "string"},
+                        "description": "Relevant vendor or service names (e.g. 'Datadog - Observability', 'Snowflake - Data Platform')",
                     },
                 },
                 "required": [
@@ -118,14 +99,7 @@ _OPPORTUNITY_SCHEMA: dict = {
 
 
 def _build_opportunity(data: dict[str, Any]) -> Opportunity:
-    related_services = [
-        RelatedService(
-            service_type=svc["service_type"],
-            vendors=[Vendor(**v) for v in svc["vendors"]],
-        )
-        for svc in data["related_services"]
-    ]
-    return Opportunity(**{**data, "related_services": related_services})
+    return Opportunity(**data)
 
 
 def _build_opportunity_prompt(profile_dict: dict, assessment_dict: dict) -> str:
@@ -147,10 +121,9 @@ DETAILED RISK SCORES:
 
 Generate 4-6 high-priority opportunities. For each opportunity:
 - Focus on the highest-scoring risks first
-- Make implementation steps genuinely specific to THIS company
-- Use real vendor/partner names (not generic descriptions)
+- Make implementation steps specific to THIS company
 - ROI estimates should be realistic for company size and industry
-- Timeline should account for typical implementation complexity
+- For related_services, list relevant vendors as simple strings (e.g. "Datadog - Observability")
 
 Strategic categories to use:
 - "Competitive Moat" - Strengthen defensibility (data flywheels, switching costs, network effects)
@@ -186,8 +159,8 @@ class GenerateOpportunities(RequestStep):
             raise RuntimeError(message)
 
         client = self._ai_client_factory.get_client(
-            verbosity=Verbosity.HIGH,
-            reasoning_effort=ReasoningEffort.MEDIUM,
+            verbosity=Verbosity.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
         )
         prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"

@@ -26,7 +26,7 @@ export interface Opportunity {
     implementation_steps?: string[]
     investment_range?: string
     roi_estimate?: string
-    related_services?: RelatedService[]
+    related_services?: string[]
 }
 
 export interface AnalysisData {
