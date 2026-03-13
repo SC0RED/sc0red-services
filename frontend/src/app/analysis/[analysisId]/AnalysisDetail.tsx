@@ -837,9 +837,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                                                     >
                                                         {opp.related_services.map((svc, si) => (
                                                             <span key={si} className="badge badge-neutral">
-                                                                {typeof svc === 'string'
-                                                                    ? svc
-                                                                    : svc.service_type}
+                                                                {svc}
                                                             </span>
                                                         ))}
                                                     </div>
