@@ -236,9 +236,7 @@ class GenerateOpportunities(RequestStep):
         high_priority_prompt = _build_high_priority_prompt(
             profile_dict, assessment_dict, top_risk_categories
         )
-        strategic_prompt = _build_strategic_prompt(
-            profile_dict, assessment_dict, other_categories
-        )
+        strategic_prompt = _build_strategic_prompt(profile_dict, assessment_dict, other_categories)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             future_high = pool.submit(
@@ -283,8 +281,7 @@ class GenerateOpportunities(RequestStep):
         label: str,
     ) -> tuple[str, dict[str, Any]]:
         """Execute a single AI call and return (label, response_data)."""
-        assert self._ai_client_factory is not None
-
+        # _ai_client_factory is validated non-None in execute() before threads are spawned
         client = self._ai_client_factory.get_client(
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
