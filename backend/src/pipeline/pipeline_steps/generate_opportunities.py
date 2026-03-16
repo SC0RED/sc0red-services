@@ -36,8 +36,7 @@ _SYSTEM_PROMPT = (
     "- Industry-appropriate: Tailored to what's actually feasible in this sector\n"
     "- Commercial: Focused on ROI, competitive advantage, and revenue impact\n"
     "- Resourced: Include realistic investment ranges and timeline estimates\n\n"
-    "For vendor recommendations, suggest real companies that specialize in each service area.\n\n"
-    "Always respond with valid JSON only. No markdown, no explanation text outside the JSON."
+    "For vendor recommendations, suggest real companies that specialize in each service area."
 )
 
 _STRATEGIC_CATEGORIES_INSTRUCTIONS = """Strategic categories to use:
@@ -135,11 +134,11 @@ def _build_opportunity(data: dict[str, Any]) -> Opportunity:
 
 def _build_context_block(profile_dict: dict[str, Any], assessment_dict: dict[str, Any]) -> str:
     """Build the shared company/risk context included in both prompts."""
-    risk_scores_json = json.dumps(assessment_dict["risk_scores"], indent=2)
+    risk_scores_json = json.dumps(assessment_dict["risk_scores"])
     top_risks = ", ".join(assessment_dict["top_risks"])
 
     return f"""COMPANY PROFILE:
-{json.dumps(profile_dict, indent=2)}
+{json.dumps(profile_dict)}
 
 RISK ASSESSMENT:
 Overall Score: {assessment_dict["overall_score"]}/10 ({assessment_dict["tier"]} risk)
@@ -294,17 +293,17 @@ class GenerateOpportunities(RequestStep):
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
         )
-        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
         logger.info(
             "[GenerateOpportunities:%s] sending AI request: prompt_len=%d, model=%s",
             label,
-            len(prompt),
+            len(user_prompt),
             getattr(client, "model", "unknown"),
         )
         start = time.monotonic()
         try:
-            response = client.query_structured(input_text=prompt, json_schema=schema)
+            response = client.query_structured(input_text=user_prompt, json_schema=schema)
         except Exception:
             logger.exception("[GenerateOpportunities:%s] AI request failed", label)
             raise

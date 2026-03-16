@@ -38,8 +38,7 @@ _SYSTEM_PROMPT = (
     "3-4: Low-moderate risk, some vulnerability but manageable\n"
     "5-6: Moderate risk, meaningful exposure requiring attention in 12 months\n"
     "7-8: High risk, significant disruption likely, immediate action needed\n"
-    "9-10: Critical/existential risk, business model fundamentally threatened\n\n"
-    "Always respond with valid JSON only. No markdown, no explanation text outside the JSON."
+    "9-10: Critical/existential risk, business model fundamentally threatened"
 )
 
 _RISK_SCHEMA: dict = {
@@ -94,7 +93,7 @@ def _build_risk_prompt(profile_dict: dict) -> str:
     return f"""Perform a comprehensive AI disruption risk assessment for this company.
 
 COMPANY PROFILE:
-{json.dumps(profile_dict, indent=2)}
+{json.dumps(profile_dict)}
 
 RISK CATEGORIES TO ASSESS:
 {categories}
@@ -143,16 +142,16 @@ class AssessRisk(RequestStep):
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
         )
-        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
         logger.info(
             "[AssessRisk] sending AI request: prompt_len=%d, model=%s",
-            len(prompt),
+            len(user_prompt),
             getattr(client, "model", "unknown"),
         )
         with timer.measure("ai_call"):
             try:
-                response = client.query_structured(input_text=prompt, json_schema=_RISK_SCHEMA)
+                response = client.query_structured(input_text=user_prompt, json_schema=_RISK_SCHEMA)
             except Exception:
                 logger.exception("[AssessRisk] AI request failed")
                 raise

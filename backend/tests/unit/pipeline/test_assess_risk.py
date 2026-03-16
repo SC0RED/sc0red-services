@@ -7,7 +7,7 @@ from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company, CompanyProfile
-from src.pipeline.pipeline_steps.assess_risk import AssessRisk
+from src.pipeline.pipeline_steps.assess_risk import _SYSTEM_PROMPT, AssessRisk
 
 
 class TestAssessRisk:
@@ -67,6 +67,7 @@ class TestAssessRisk:
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
         )
 
     def test_missing_profile_raises(self):

@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 _SYSTEM_PROMPT = (
     "You are a senior business intelligence analyst specializing in technology companies "
     "and private equity portfolio analysis. Your job is to extract structured, accurate "
-    "information about a company from raw web content.\n\n"
-    "Always respond with valid JSON only. No markdown, no explanation text outside the JSON."
+    "information about a company from raw web content."
 )
 
 _USER_PROMPT_TEMPLATE = """Analyze this company website content and extract a structured company profile.
@@ -144,16 +143,16 @@ class ExtractProfile(RequestStep):
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
         )
-        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
         logger.info(
             "[ExtractProfile] sending AI request: prompt_len=%d, model=%s",
-            len(prompt),
+            len(user_prompt),
             getattr(client, "model", "unknown"),
         )
         with timer.measure("ai_call"):
             try:
-                response = client.query_structured(input_text=prompt, json_schema=_PROFILE_SCHEMA)
+                response = client.query_structured(input_text=user_prompt, json_schema=_PROFILE_SCHEMA)
             except Exception:
                 logger.exception("[ExtractProfile] AI request failed")
                 raise

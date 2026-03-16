@@ -3,8 +3,9 @@
 from unittest.mock import MagicMock
 
 import pytest
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
-from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
+from src.data_strategies.url_resolution_strategy import _SYSTEM_PROMPT, URLResolutionStrategy
 
 
 class TestURLResolutionStrategy:
@@ -44,6 +45,12 @@ class TestURLResolutionStrategy:
         assert url == "https://actual-company.com"
         assert meta["resolved"] is True
         assert meta["original_url"] == "https://portfolio.com/company"
+        mock_factory.get_client.assert_called_once_with(
+            verbosity=Verbosity.LOW,
+            reasoning_effort=ReasoningEffort.LOW,
+            precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
+        )
 
     def test_execute_same_url(self):
         mock_factory = self._make_mock_factory({"actual_url": "https://example.com"})
