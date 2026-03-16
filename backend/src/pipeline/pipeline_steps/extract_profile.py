@@ -13,6 +13,7 @@ from signalfield_core.pipeline.step import RequestStep
 
 from src.documents.extract_text import MAX_CHARS_COMBINED
 from src.models.model_company import CompanyProfile
+from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
@@ -137,6 +138,8 @@ class ExtractProfile(RequestStep):
             message = "AI client factory not configured"
             raise RuntimeError(message)
 
+        timer = StepTimer("ExtractProfile")
+
         client = self._ai_client_factory.get_client(
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
@@ -148,11 +151,12 @@ class ExtractProfile(RequestStep):
             len(prompt),
             getattr(client, "model", "unknown"),
         )
-        try:
-            response = client.query_structured(input_text=prompt, json_schema=_PROFILE_SCHEMA)
-        except Exception:
-            logger.exception("[ExtractProfile] AI request failed")
-            raise
+        with timer.measure("ai_call"):
+            try:
+                response = client.query_structured(input_text=prompt, json_schema=_PROFILE_SCHEMA)
+            except Exception:
+                logger.exception("[ExtractProfile] AI request failed")
+                raise
         logger.info(
             "[ExtractProfile] AI response received: metadata=%s",
             response.metadata,
@@ -168,4 +172,5 @@ class ExtractProfile(RequestStep):
             raise ValueError(message)
 
         accessor.set_profile(profile)
+        self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("extract_profile")

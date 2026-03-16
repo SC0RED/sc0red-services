@@ -107,6 +107,7 @@ class JanusRequestExecutor:
 
     def execute_all(self) -> None:
         """Execute all pipeline steps in order."""
+        pipeline_start = time.monotonic()
         logger.info(
             "[pipeline] starting request_id=%s, steps=%s",
             self.request_id,
@@ -115,7 +116,7 @@ class JanusRequestExecutor:
         for step in self._pipeline:
             step_name = step.step_name()
             logger.info("[pipeline] executing step=%s request_id=%s", step_name, self.request_id)
-            start = time.time()
+            start = time.monotonic()
             try:
                 step.execute()
             except Exception as exc:
@@ -127,7 +128,7 @@ class JanusRequestExecutor:
                 )
                 raise
             finally:
-                elapsed = time.time() - start
+                elapsed = time.monotonic() - start
                 self._step_timings[step_name] = elapsed
                 logger.info(
                     "[pipeline] step=%s completed in %.2fs request_id=%s",
@@ -135,3 +136,28 @@ class JanusRequestExecutor:
                     elapsed,
                     self.request_id,
                 )
+
+        total_elapsed = time.monotonic() - pipeline_start
+        self._step_timings["_total"] = total_elapsed
+
+        # Log performance summary with sub-step details
+        timing_lines = [
+            f"  {name}: {duration:.2f}s" for name, duration in self._step_timings.items()
+        ]
+        substep_lines = []
+        for key, value in self._details.items():
+            if key.endswith(".timings") and isinstance(value, dict):
+                step_label = key.removesuffix(".timings")
+                for sub_name, sub_duration in value.items():
+                    substep_lines.append(f"    {step_label}.{sub_name}: {sub_duration:.2f}s")
+
+        summary = "\n".join(timing_lines)
+        if substep_lines:
+            summary += "\n  Sub-step breakdown:\n" + "\n".join(substep_lines)
+
+        logger.info(
+            "[pipeline] completed request_id=%s in %.2fs\n%s",
+            self.request_id,
+            total_elapsed,
+            summary,
+        )

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, cast
 
@@ -17,6 +18,7 @@ from signalfield_core.pipeline.step import RequestStep
 
 from src.models.model_company import Opportunity, OpportunityResult
 from src.models.model_literals import RISK_SCOPE_NAMES
+from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
@@ -233,6 +235,8 @@ class GenerateOpportunities(RequestStep):
             category for category in RISK_SCOPE_NAMES if category not in top_risk_categories
         ]
 
+        timer = StepTimer("GenerateOpportunities")
+
         high_priority_prompt = _build_high_priority_prompt(
             profile_dict, assessment_dict, top_risk_categories
         )
@@ -252,13 +256,16 @@ class GenerateOpportunities(RequestStep):
                 "strategic",
             )
 
-            results: dict[str, dict[str, Any]] = {}
+            results: dict[str, tuple[dict[str, Any], float]] = {}
             for future in as_completed([future_high, future_strategic]):
-                label, data = future.result()
-                results[label] = data
+                label, data, elapsed = future.result()
+                results[label] = (data, elapsed)
 
-        high_priority_data = results["high_priority"]
-        strategic_data = results["strategic"]
+        high_priority_data, high_elapsed = results["high_priority"]
+        strategic_data, strategic_elapsed = results["strategic"]
+
+        timer.record("ai_call_high_priority", high_elapsed)
+        timer.record("ai_call_strategic", strategic_elapsed)
 
         all_opportunities = [
             _build_opportunity(opp)
@@ -272,6 +279,7 @@ class GenerateOpportunities(RequestStep):
         )
 
         accessor.set_opportunities(result)
+        self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("generate_opportunities")
 
     def _run_ai_call(
@@ -279,8 +287,8 @@ class GenerateOpportunities(RequestStep):
         user_prompt: str,
         schema: dict[str, Any],
         label: str,
-    ) -> tuple[str, dict[str, Any]]:
-        """Execute a single AI call and return (label, response_data)."""
+    ) -> tuple[str, dict[str, Any], float]:
+        """Execute a single AI call and return (label, response_data, elapsed_seconds)."""
         # _ai_client_factory is validated non-None in execute() before threads are spawned
         client = self._ai_client_factory.get_client(
             verbosity=Verbosity.MEDIUM,
@@ -294,14 +302,17 @@ class GenerateOpportunities(RequestStep):
             len(prompt),
             getattr(client, "model", "unknown"),
         )
+        start = time.monotonic()
         try:
             response = client.query_structured(input_text=prompt, json_schema=schema)
         except Exception:
             logger.exception("[GenerateOpportunities:%s] AI request failed", label)
             raise
+        elapsed = time.monotonic() - start
         logger.info(
-            "[GenerateOpportunities:%s] AI response received: metadata=%s",
+            "[GenerateOpportunities:%s] AI response received in %.2fs: metadata=%s",
             label,
+            elapsed,
             response.metadata,
         )
-        return label, response.content
+        return label, response.content, elapsed

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
+from src.pipeline.step_timer import StepTimer
+
 if TYPE_CHECKING:
     from src.facades.company_accessor import CompanyAccessor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
@@ -34,6 +36,7 @@ class PersistResults(RequestStep):
 
     def execute(self) -> None:
         """Persist company, assessment, risk scores, and opportunities to DynamoDB."""
+        timer = StepTimer("PersistResults")
         accessor = cast("CompanyAccessor", self.entity_accessor)
         company = accessor.company
 
@@ -126,4 +129,5 @@ class PersistResults(RequestStep):
                 },
             )
 
+        self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("persist_results")

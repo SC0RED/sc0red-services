@@ -14,6 +14,7 @@ from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 
 from src.models.model_company import EbitdaNode, EbitdaTreeResult
+from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
@@ -188,6 +189,8 @@ class GenerateEbitdaTree(RequestStep):
             message = "AI client factory not configured"
             raise RuntimeError(message)
 
+        timer = StepTimer("GenerateEbitdaTree")
+
         client = self._ai_client_factory.get_client(
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
@@ -199,11 +202,14 @@ class GenerateEbitdaTree(RequestStep):
             len(prompt),
             getattr(client, "model", "unknown"),
         )
-        try:
-            response = client.query_structured(input_text=prompt, json_schema=_EBITDA_TREE_SCHEMA)
-        except Exception:
-            logger.exception("[GenerateEbitdaTree] AI request failed")
-            raise
+        with timer.measure("ai_call"):
+            try:
+                response = client.query_structured(
+                    input_text=prompt, json_schema=_EBITDA_TREE_SCHEMA
+                )
+            except Exception:
+                logger.exception("[GenerateEbitdaTree] AI request failed")
+                raise
         logger.info(
             "[GenerateEbitdaTree] AI response received: metadata=%s",
             response.metadata,
@@ -219,4 +225,5 @@ class GenerateEbitdaTree(RequestStep):
         )
 
         accessor.set_ebitda_tree(result)
+        self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("generate_ebitda_tree")
