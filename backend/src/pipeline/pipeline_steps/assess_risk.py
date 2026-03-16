@@ -13,6 +13,7 @@ from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 
 from src.models.model_company import RiskAssessment, RiskScore
+from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
@@ -136,9 +137,11 @@ class AssessRisk(RequestStep):
             message = "AI client factory not configured"
             raise RuntimeError(message)
 
+        timer = StepTimer("AssessRisk")
+
         client = self._ai_client_factory.get_client(
             verbosity=Verbosity.MEDIUM,
-            reasoning_effort=ReasoningEffort.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
         )
         prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
@@ -147,18 +150,19 @@ class AssessRisk(RequestStep):
             len(prompt),
             getattr(client, "model", "unknown"),
         )
-        try:
-            response = client.query_structured(input_text=prompt, json_schema=_RISK_SCHEMA)
-        except Exception:
-            logger.exception("[AssessRisk] AI request failed")
-            raise
+        with timer.measure("ai_call"):
+            try:
+                response = client.query_structured(input_text=prompt, json_schema=_RISK_SCHEMA)
+            except Exception:
+                logger.exception("[AssessRisk] AI request failed")
+                raise
         logger.info(
             "[AssessRisk] AI response received: metadata=%s",
             response.metadata,
         )
         data = response.content
 
-        risk_scores = [RiskScore(**rs) for rs in data.get("risk_scores", [])]
+        risk_scores = [RiskScore(**rs) for rs in data["risk_scores"]]
         if not risk_scores:
             message = "Risk assessment returned no risk scores"
             raise ValueError(message)
@@ -172,4 +176,5 @@ class AssessRisk(RequestStep):
         )
 
         accessor.set_risk_assessment(assessment)
+        self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("assess_risk")

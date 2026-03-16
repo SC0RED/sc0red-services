@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company, CompanyProfile
@@ -62,7 +63,11 @@ class TestAssessRisk:
         assert accessor.company.risk_assessment.overall_score == 5.5
         assert len(accessor.company.risk_assessment.risk_scores) == 2
         step._request_executor.mark_question_complete.assert_called_with("assess_risk")
-        mock_factory.get_client.assert_called_once()
+        mock_factory.get_client.assert_called_once_with(
+            verbosity=Verbosity.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
+            precision=Precision.STANDARD,
+        )
 
     def test_missing_profile_raises(self):
         company = Company(url="https://example.com")
