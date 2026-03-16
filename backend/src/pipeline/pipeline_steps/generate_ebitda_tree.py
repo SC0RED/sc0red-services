@@ -31,8 +31,7 @@ _SYSTEM_PROMPT = (
     "- Structured: Build a clear top-down tree from Revenue → Gross Profit → EBITDA\n"
     "- Specific: Use industry-typical line items relevant to this company's business model\n"
     "- Actionable: Link AI opportunities to specific P&L nodes where they'd have impact\n"
-    "- Realistic: Provide reasonable estimates based on company size and industry benchmarks\n\n"
-    "Always respond with valid JSON only. No markdown, no explanation text outside the JSON."
+    "- Realistic: Provide reasonable estimates based on company size and industry benchmarks"
 )
 
 _EBITDA_NODE_SCHEMA: dict = {
@@ -132,7 +131,7 @@ def _build_ebitda_prompt(
 showing where AI opportunities would impact the P&L.
 
 COMPANY PROFILE:
-{json.dumps(profile_dict, indent=2)}
+{json.dumps(profile_dict)}
 
 RISK ASSESSMENT:
 Overall Score: {assessment_dict["overall_score"]}/10 \
@@ -195,17 +194,17 @@ class GenerateEbitdaTree(RequestStep):
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
         )
-        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
         logger.info(
             "[GenerateEbitdaTree] sending AI request: prompt_len=%d, model=%s",
-            len(prompt),
+            len(user_prompt),
             getattr(client, "model", "unknown"),
         )
         with timer.measure("ai_call"):
             try:
                 response = client.query_structured(
-                    input_text=prompt, json_schema=_EBITDA_TREE_SCHEMA
+                    input_text=user_prompt, json_schema=_EBITDA_TREE_SCHEMA
                 )
             except Exception:
                 logger.exception("[GenerateEbitdaTree] AI request failed")

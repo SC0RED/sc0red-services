@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
@@ -52,7 +53,15 @@ class TestExtractProfile:
         assert accessor.company.profile.company_name == "Acme Corp"
         assert accessor.company.profile.industry == "B2B SaaS - HR Technology"
         step._request_executor.mark_question_complete.assert_called_with("extract_profile")
-        mock_factory.get_client.assert_called_once()
+
+        from src.pipeline.pipeline_steps.extract_profile import _SYSTEM_PROMPT
+
+        mock_factory.get_client.assert_called_once_with(
+            verbosity=Verbosity.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
+            precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
+        )
 
     def test_incomplete_profile_raises(self):
         mock_factory = self._make_mock_factory(
@@ -105,6 +114,8 @@ class TestExtractProfile:
         prompt_sent = mock_client.query_structured.call_args[1]["input_text"]
         assert "SUPPLEMENTARY DOCUMENTS" in prompt_sent
         assert "Investment memo: Revenue is $50M annually." in prompt_sent
+        # System prompt should NOT be in user prompt — it goes via instructions param
+        assert "senior business intelligence analyst" not in prompt_sent
 
     def test_omits_document_section_when_no_documents(self):
         profile_data = {
@@ -136,3 +147,4 @@ class TestExtractProfile:
 
         prompt_sent = mock_client.query_structured.call_args[1]["input_text"]
         assert "SUPPLEMENTARY DOCUMENTS" not in prompt_sent
+        assert "senior business intelligence analyst" not in prompt_sent

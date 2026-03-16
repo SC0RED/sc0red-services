@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import (
@@ -15,10 +16,10 @@ from src.models.model_company import (
     RiskScore,
 )
 from src.pipeline.pipeline_steps.generate_ebitda_tree import (
+    _SYSTEM_PROMPT,
     GenerateEbitdaTree,
     _build_ebitda_node,
 )
-
 
 _MOCK_AI_RESPONSE = {
     "summary": "SaaS model with subscription revenue and moderate EBITDA margins.",
@@ -166,6 +167,12 @@ class TestGenerateEbitdaTree:
         assert result.nodes[0].children[0].linked_opportunity_indices == [0]
         step._request_executor.mark_question_complete.assert_called_with(
             "generate_ebitda_tree"
+        )
+        mock_factory.get_client.assert_called_once_with(
+            verbosity=Verbosity.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
+            precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
         )
 
     def test_execute_missing_profile_raises(self):

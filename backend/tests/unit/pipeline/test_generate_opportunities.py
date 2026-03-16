@@ -3,10 +3,12 @@
 from unittest.mock import MagicMock
 
 import pytest
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company, CompanyProfile, RiskAssessment, RiskScore
 from src.pipeline.pipeline_steps.generate_opportunities import (
+    _SYSTEM_PROMPT,
     GenerateOpportunities,
     _build_context_block,
     _build_high_priority_prompt,
@@ -116,8 +118,14 @@ class TestGenerateOpportunities:
         assert result.opportunities[2].value_lever == "Cost Side"
         assert result.top_three_immediate_actions == ["Action 1", "Action 2", "Action 3"]
 
-        # Two AI calls should have been made (parallel)
+        # Two AI calls should have been made (parallel), both with instructions
         assert mock_factory.get_client.call_count == 2
+        mock_factory.get_client.assert_called_with(
+            verbosity=Verbosity.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
+            precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
+        )
         assert mock_client_query_count(mock_factory) == 2
 
     def test_top_actions_come_from_high_priority_call(self):
