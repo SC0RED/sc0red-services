@@ -67,14 +67,13 @@ Generated: 2026-03-16
 
 ---
 
-## Gap #6 — E2E Tests for Document Upload (NOT ADDED)
+## Gap #6 — E2E Tests for Document Upload ~~(NOT ADDED)~~ FIXED
 
 | Plan | Implementation |
 |------|---------------|
-| `scripts/e2e-test.sh` — "Add document upload + re-analyze E2E tests" | Not added. E2E script unchanged (35 existing tests pass, no new document tests) |
+| `scripts/e2e-test.sh` — "Add document upload + re-analyze E2E tests" | **FIXED** — Added steps 8d-8f: presigned URL upload, document registration, verify in analysis, re-analyze, delete document |
 
-**Severity:** HIGH
-**Impact:** The document upload and re-analysis flow is only tested at the unit level. No integration-level test verifies the full path: upload → extract → save → reanalyze → SQS → worker → pipeline with doc text → new results.
+**Severity:** ~~HIGH~~ RESOLVED
 
 ---
 
@@ -89,25 +88,23 @@ Generated: 2026-03-16
 
 ---
 
-## Gap #8 — Reanalysis Result Deletion Ordering
+## Gap #8 — Reanalysis Result Deletion Ordering — FIXED
 
 | Plan | Implementation |
 |------|---------------|
-| Step 3: "Run pipeline", Step 4: "Delete old assessment results" | Reversed — deletes old results before running pipeline |
+| Step 3: "Run pipeline", Step 4: "Delete old assessment results" | **FIXED** — Old results now deleted only after pipeline succeeds. On failure, old results preserved. |
 
-**Severity:** HIGH
-**Impact:** If the pipeline fails during re-analysis, the old results are already gone. The user ends up with no analysis results at all (only the error recorded on the company record). The plan's ordering would preserve old results as fallback until new ones succeed.
+**Severity:** ~~HIGH~~ RESOLVED
 
 ---
 
-## Gap #9 — Re-analysis Frontend UX — Polling (NOT IMPLEMENTED)
+## Gap #9 — Re-analysis Frontend UX — Polling ~~(NOT IMPLEMENTED)~~ FIXED
 
 | Plan | Implementation |
 |------|---------------|
-| "Re-analyze button triggers POST, then polls scan status until complete, then refreshes data" | Button triggers POST, calls `router.refresh()`, sets `reanalyzing=false`. No polling. |
+| "Re-analyze button triggers POST, then polls scan status until complete, then refreshes data" | **FIXED** — After POST, polls `/api/analysis/{id}` every 3s (max 2 min) until `analyzedAt` timestamp changes, then refreshes. AbortController cleans up on unmount. Consecutive error tracking (3 failures = abort). |
 
-**Severity:** MEDIUM
-**Impact:** After clicking "Re-analyze", the user sees the button briefly say "Re-analyzing..." then it resets. The worker is async — results arrive later. The user has no way to know when re-analysis completes without manually refreshing.
+**Severity:** ~~MEDIUM~~ RESOLVED
 
 ---
 
@@ -148,10 +145,10 @@ Generated: 2026-03-16
 | Severity | Gap | Description |
 |----------|-----|-------------|
 | HIGH | #1 | S3 bucket not in infrastructure — 6MB payload limit in production |
-| HIGH | #8 | Delete-before-pipeline ordering — failed re-analysis loses all results |
-| HIGH | #6 | No E2E tests for document upload/re-analyze flow |
-| MEDIUM | #2 | Presigned URL route removed — large file uploads won't work |
-| MEDIUM | #9 | No polling after re-analyze — user can't tell when it's done |
+| ~~HIGH~~ FIXED | #8 | ~~Delete-before-pipeline ordering~~ Now deletes after success |
+| ~~HIGH~~ FIXED | #6 | ~~No E2E tests~~ Added presigned URL upload + re-analyze E2E tests |
+| ~~MEDIUM~~ FIXED | #2 | ~~Presigned URL route removed~~ S3 presigned URL support restored |
+| ~~MEDIUM~~ FIXED | #9 | ~~No polling~~ Polls analysis endpoint until results change |
 | LOW | #3 | `company_analysis_factory.py` not modified (different routing) |
 | LOW | #4 | Prompt injection method differs (cleaner approach used) |
 | LOW | #5 | Proxy route path prefix differs (matches existing codebase) |

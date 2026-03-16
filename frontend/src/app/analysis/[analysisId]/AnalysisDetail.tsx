@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -70,20 +70,67 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
         }
     }, [analysisId])
 
+    const abortControllerRef = useRef<AbortController | null>(null)
+
+    useEffect(() => {
+        return () => {
+            abortControllerRef.current?.abort()
+        }
+    }, [])
+
     const handleReanalyze = useCallback(async () => {
         setReanalyzing(true)
         setDocumentError(null)
+        const controller = new AbortController()
+        abortControllerRef.current = controller
         try {
-            const response = await fetch(`/api/analysis/${analysisId}/reanalyze`, { method: 'POST' })
+            const response = await fetch(`/api/analysis/${analysisId}/reanalyze`, {
+                method: 'POST',
+                signal: controller.signal,
+            })
             if (!response.ok) throw new Error('Re-analysis failed')
+
+            // Poll until analyzedAt changes (indicates pipeline completed) or timeout (2 min)
+            const maxAttempts = 40
+            const intervalMs = 3000
+            const originalAnalyzedAt = data.analyzedAt
+            let consecutiveErrors = 0
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, intervalMs))
+                if (controller.signal.aborted) return
+                try {
+                    const pollResponse = await fetch(`/api/analysis/${analysisId}`, {
+                        signal: controller.signal,
+                    })
+                    if (!pollResponse.ok) {
+                        consecutiveErrors++
+                        if (consecutiveErrors >= 3) throw new Error('Polling failed')
+                        continue
+                    }
+                    consecutiveErrors = 0
+                    const updated = (await pollResponse.json()) as AnalysisData
+                    if (updated.analyzedAt && updated.analyzedAt !== originalAnalyzedAt) {
+                        router.refresh()
+                        return
+                    }
+                } catch (error: unknown) {
+                    if (error instanceof DOMException && error.name === 'AbortError') return
+                    throw error
+                }
+            }
+
+            // Timeout — refresh anyway to show whatever state we have
             router.refresh()
         } catch (error: unknown) {
+            if (error instanceof DOMException && error.name === 'AbortError') return
             const message = error instanceof Error ? error.message : 'Re-analysis failed'
             setDocumentError(message)
         } finally {
             setReanalyzing(false)
+            abortControllerRef.current = null
         }
-    }, [analysisId, router])
+    }, [analysisId, data.analyzedAt, router])
 
     const riskScores = data.riskScores ?? []
     const opportunities = data.opportunities ?? []
