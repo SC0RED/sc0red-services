@@ -625,7 +625,8 @@ class APIGatewayHandler:
                 return _error("Invalid documentKey", 400)
             try:
                 response = self._s3.get_object(
-                    Bucket=self._documents_bucket, Key=document_key,
+                    Bucket=self._documents_bucket,
+                    Key=document_key,
                 )
                 file_bytes = response["Body"].read()
             except ClientError as error:
