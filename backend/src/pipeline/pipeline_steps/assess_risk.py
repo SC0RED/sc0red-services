@@ -138,7 +138,7 @@ class AssessRisk(RequestStep):
 
         client = self._ai_client_factory.get_client(
             verbosity=Verbosity.MEDIUM,
-            reasoning_effort=ReasoningEffort.MEDIUM,
+            reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
         )
         prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
@@ -158,7 +158,7 @@ class AssessRisk(RequestStep):
         )
         data = response.content
 
-        risk_scores = [RiskScore(**rs) for rs in data.get("risk_scores", [])]
+        risk_scores = [RiskScore(**rs) for rs in data["risk_scores"]]
         if not risk_scores:
             message = "Risk assessment returned no risk scores"
             raise ValueError(message)
