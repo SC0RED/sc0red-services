@@ -152,7 +152,9 @@ class ExtractProfile(RequestStep):
         )
         with timer.measure("ai_call"):
             try:
-                response = client.query_structured(input_text=user_prompt, json_schema=_PROFILE_SCHEMA)
+                response = client.query_structured(
+                    input_text=user_prompt, json_schema=_PROFILE_SCHEMA
+                )
             except Exception:
                 logger.exception("[ExtractProfile] AI request failed")
                 raise
