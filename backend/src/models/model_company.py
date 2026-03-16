@@ -131,3 +131,4 @@ class Company(BaseModel):
     scraped_text: str = Field(default="", exclude=True)
     scraped_links: list[dict[str, str]] = Field(default_factory=list, exclude=True)
     scraped_title: str = Field(default="", exclude=True)
+    document_text: str | None = Field(default=None, exclude=True)

@@ -18,7 +18,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      SERVICES: sqs,dynamodb
+      SERVICES: sqs,dynamodb,s3
       DEBUG: "0"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
@@ -66,6 +66,7 @@ services:
       OPENAI_API_KEY: mock-key
       OPENAI_BASE_URL: http://ai-mock:8080/v1/
       ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/janus-analysis-e2e
+      DOCUMENTS_BUCKET: janus-documents-e2e
     depends_on:
       localstack:
         condition: service_healthy
@@ -100,6 +101,7 @@ services:
       OPENAI_API_KEY: mock-key
       OPENAI_BASE_URL: http://ai-mock:8080/v1/
       ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/janus-analysis-e2e
+      DOCUMENTS_BUCKET: janus-documents-e2e
     depends_on:
       backend:
         condition: service_healthy

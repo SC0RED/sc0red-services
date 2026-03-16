@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fireEvent, within, act } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 // Recharts ResponsiveContainer requires ResizeObserver
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -12,6 +12,7 @@ import AnalysisDetail from '@/app/analysis/[analysisId]/AnalysisDetail'
 import type { AnalysisData } from '@/lib/types/api'
 
 const mockSignOut = vi.fn()
+const mockRefresh = vi.fn()
 let mockSession = { user: { name: 'Test', email: 'test@test.com' } }
 
 vi.mock('next-auth/react', () => ({
@@ -20,8 +21,21 @@ vi.mock('next-auth/react', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-    useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+    useRouter: () => ({ push: vi.fn(), refresh: mockRefresh }),
     usePathname: () => '/analysis/test-id',
+}))
+
+vi.mock('@/components/DocumentUpload', () => ({
+    default: ({ onReanalyze }: { onReanalyze?: () => void }) => (
+        <div data-testid="document-upload">
+            Document Upload
+            {onReanalyze && (
+                <button data-testid="reanalyze-trigger" onClick={onReanalyze}>
+                    Re-analyze
+                </button>
+            )}
+        </div>
+    ),
 }))
 
 vi.mock('@/components/EbitdaTree', () => ({
@@ -264,5 +278,153 @@ describe('AnalysisDetail — EBITDA Tree', () => {
         expect(screen.getByText('EBITDA Impact Model')).toBeInTheDocument()
         expect(screen.queryByText(/Revenue:/)).not.toBeInTheDocument()
         expect(screen.queryByText(/EBITDA:/)).not.toBeInTheDocument()
+    })
+})
+
+describe('AnalysisDetail — Reanalysis Polling', () => {
+    let fetchMock: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        vi.useFakeTimers()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+        fetchMock = vi.fn()
+        global.fetch = fetchMock
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
+    it('polls until analyzedAt changes then refreshes', async () => {
+        const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
+
+        // POST reanalyze succeeds
+        fetchMock.mockResolvedValueOnce({ ok: true })
+        // First poll — same analyzedAt
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ ...data, analyzedAt: '2026-03-01T00:00:00Z' }),
+        })
+        // Second poll — analyzedAt changed
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ ...data, analyzedAt: '2026-03-16T12:00:00Z' }),
+        })
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        const button = screen.getByTestId('reanalyze-trigger')
+
+        await act(async () => {
+            fireEvent.click(button)
+        })
+
+        // Advance through first poll interval
+        await act(async () => {
+            vi.advanceTimersByTime(3000)
+        })
+
+        // Advance through second poll interval
+        await act(async () => {
+            vi.advanceTimersByTime(3000)
+        })
+
+        expect(mockRefresh).toHaveBeenCalled()
+        expect(fetchMock).toHaveBeenCalledTimes(3) // POST + 2 polls
+    })
+
+    it('refreshes on timeout when analyzedAt never changes', async () => {
+        const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
+
+        // POST succeeds
+        fetchMock.mockResolvedValueOnce({ ok: true })
+        // All polls return same analyzedAt
+        for (let i = 0; i < 40; i++) {
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ ...data, analyzedAt: '2026-03-01T00:00:00Z' }),
+            })
+        }
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('reanalyze-trigger'))
+        })
+
+        // Advance through all 40 intervals (40 * 3000ms = 120s)
+        for (let i = 0; i < 40; i++) {
+            await act(async () => {
+                vi.advanceTimersByTime(3000)
+            })
+        }
+
+        // Should still refresh on timeout
+        expect(mockRefresh).toHaveBeenCalled()
+    })
+
+    it('aborts polling on consecutive HTTP errors', async () => {
+        const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
+
+        // POST succeeds
+        fetchMock.mockResolvedValueOnce({ ok: true })
+        // Three consecutive poll failures
+        fetchMock.mockResolvedValueOnce({ ok: false })
+        fetchMock.mockResolvedValueOnce({ ok: false })
+        fetchMock.mockResolvedValueOnce({ ok: false })
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('reanalyze-trigger'))
+        })
+
+        for (let i = 0; i < 3; i++) {
+            await act(async () => {
+                vi.advanceTimersByTime(3000)
+            })
+        }
+
+        // Allow microtasks to flush
+        await act(async () => {
+            await Promise.resolve()
+        })
+
+        // Should NOT have called refresh — error should be set
+        expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
+    it('cleans up polling on component unmount', async () => {
+        const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
+
+        // POST succeeds
+        fetchMock.mockResolvedValueOnce({ ok: true })
+        // Poll returns same data
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ ...data, analyzedAt: '2026-03-01T00:00:00Z' }),
+        })
+
+        const { unmount } = render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('reanalyze-trigger'))
+        })
+
+        // Advance one poll
+        await act(async () => {
+            vi.advanceTimersByTime(3000)
+        })
+
+        // Unmount mid-polling
+        unmount()
+
+        // Advance more — fetch should be aborted, no errors
+        await act(async () => {
+            vi.advanceTimersByTime(10000)
+        })
+
+        // No crash, no unhandled rejections — test passes if we get here
+        expect(true).toBe(true)
     })
 })

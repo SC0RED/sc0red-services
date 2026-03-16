@@ -5,6 +5,7 @@ Single-table keys:
   RiskScore:   pk=ASSESSMENT#{id}  sk=RISK#{category}
   Opportunity: pk=ASSESSMENT#{id}  sk=OPP#{sort_order}
   EbitdaTree:  pk=ASSESSMENT#{id}  sk=EBITDA_TREE
+  Document:    pk=ASSESSMENT#{id}  sk=DOC#{doc_id}
   GSI3: pk=COMPANY#{company_id}  (for company→assessment lookup)
 """
 
@@ -14,6 +15,8 @@ import contextlib
 import json
 import uuid
 from typing import TYPE_CHECKING, Any
+
+from src.documents.extract_text import join_document_texts
 
 if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
@@ -171,3 +174,67 @@ class DynamoDBAssessmentRepository:
             "ebitdaEstimate": item["ebitda_estimate"],
             "businessModelSummary": item["business_model_summary"],
         }
+
+    # ── Document operations ────────────────────────────────────────────
+
+    def save_document(self, assessment_id: str, document: dict[str, Any]) -> None:
+        """Persist a document metadata + extracted text item for the given assessment."""
+        item = {
+            "pk": f"ASSESSMENT#{assessment_id}",
+            "sk": f"DOC#{document['id']}",
+            "entity_type": "document",
+            "assessment_id": assessment_id,
+            "id": document["id"],
+            "filename": document["filename"],
+            "file_type": document["file_type"],
+            "extracted_text": document["extracted_text"],
+            "char_count": document["char_count"],
+            "uploaded_at": document["uploaded_at"],
+        }
+        self._table.put_item(item)
+
+    def get_documents(self, assessment_id: str) -> list[dict[str, Any]]:
+        """Return all document items for the given assessment ID."""
+        items = self._table.query(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk_prefix="DOC#",
+        )
+        return [
+            {
+                "id": item["id"],
+                "filename": item["filename"],
+                "fileType": item["file_type"],
+                "charCount": item["char_count"],
+                "uploadedAt": item["uploaded_at"],
+            }
+            for item in items
+        ]
+
+    def delete_document(self, assessment_id: str, document_id: str) -> None:
+        """Delete a single document from the given assessment."""
+        self._table.delete_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk=f"DOC#{document_id}",
+        )
+
+    def get_combined_document_text(self, assessment_id: str) -> str:
+        """Fetch all documents and return combined extracted text, capped at MAX_CHARS_COMBINED."""
+        items = self._table.query(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk_prefix="DOC#",
+        )
+        texts = [item["extracted_text"] for item in items]
+        if not texts:
+            return ""
+        return join_document_texts(texts)
+
+    def delete_analysis_results(self, assessment_id: str) -> None:
+        """Delete risk scores, opportunities, and EBITDA tree but keep documents and metadata."""
+        items = self._table.query(pk=f"ASSESSMENT#{assessment_id}")
+        keys_to_delete = [
+            {"pk": item["pk"], "sk": item["sk"]}
+            for item in items
+            if item["sk"].startswith(("RISK#", "OPP#", "EBITDA_TREE"))
+        ]
+        if keys_to_delete:
+            self._table.batch_delete(keys_to_delete)

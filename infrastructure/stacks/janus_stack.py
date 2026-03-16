@@ -7,6 +7,7 @@ import aws_cdk as cdk
 from aws_cdk import CfnOutput, Duration, Stack
 from aws_cdk import aws_apigateway as apigw
 from aws_cdk import aws_dynamodb as dynamodb
+from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources
 from aws_cdk import aws_logs as logs
@@ -33,12 +34,15 @@ class JanusStack(Stack):
 
         table = self._create_table()
         queue, dlq = self._create_queues()
+        documents_bucket = self._create_documents_bucket()
 
         bundling = self._build_bundling_options()
-        common_environment = self._build_common_environment(table, queue)
+        common_environment = self._build_common_environment(table, queue, documents_bucket)
 
         api_handler = self._create_api_lambda(table, queue, bundling, common_environment)
         worker_handler = self._create_worker_lambda(table, queue, bundling, common_environment)
+
+        documents_bucket.grant_read_write(api_handler)
 
         api = self._create_api(api_handler)
 
@@ -50,6 +54,7 @@ class JanusStack(Stack):
         CfnOutput(self, "TableName", value=table.table_name)
         CfnOutput(self, "QueueUrl", value=queue.queue_url)
         CfnOutput(self, "DlqUrl", value=dlq.queue_url)
+        CfnOutput(self, "BucketName", value=documents_bucket.bucket_name)
         CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
         CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)
 
@@ -101,6 +106,20 @@ class JanusStack(Stack):
         )
         return queue, dlq
 
+    # ── S3 ───────────────────────────────────────────────────────────────────
+
+    def _create_documents_bucket(self) -> s3.Bucket:
+        return s3.Bucket(
+            self,
+            "DocumentsBucket",
+            bucket_name=f"janus-documents-{self._environment}",
+            removal_policy=self._config["removal_policy"],
+            auto_delete_objects=self._environment == "development",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            lifecycle_rules=[s3.LifecycleRule(expiration=Duration.days(90))],
+        )
+
     # ── Shared helpers ─────────────────────────────────────────────────────────
 
     def _build_bundling_options(self) -> cdk.BundlingOptions:
@@ -138,11 +157,13 @@ class JanusStack(Stack):
         self,
         table: dynamodb.Table,
         queue: sqs.Queue,
+        documents_bucket: s3.Bucket,
     ) -> dict[str, str]:
         """Build the environment variables shared by both Lambdas."""
         return {
             "DYNAMODB_TABLE": table.table_name,
             "ANALYSIS_QUEUE_URL": queue.queue_url,
+            "DOCUMENTS_BUCKET": documents_bucket.bucket_name,
             "STAGE": self._environment,
             "NEXTAUTH_SECRET": os.environ.get(
                 "NEXTAUTH_SECRET", "dev-secret-minimum-32-characters-long"

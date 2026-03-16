@@ -141,3 +141,11 @@ class CompanyAccessor:
     def get_scraped_title(self) -> str:
         """Return the scraped page title."""
         return self._company.scraped_title
+
+    def set_document_text(self, text: str) -> None:
+        """Set supplementary document text for enriched analysis."""
+        self._company.document_text = text
+
+    def get_document_text(self) -> str | None:
+        """Return supplementary document text, or None if no documents uploaded."""
+        return self._company.document_text

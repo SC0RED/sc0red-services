@@ -41,7 +41,14 @@ class SQSHandler:
         return {"batchItemFailures": batch_item_failures}
 
     def _process_message(self, message: dict[str, Any]) -> None:
-        """Process a single SQS message and run the company analysis pipeline."""
+        """Process a single SQS message — either new analysis or re-analysis."""
+        if message.get("reanalyze"):
+            self._process_reanalysis(message)
+        else:
+            self._process_new_analysis(message)
+
+    def _process_new_analysis(self, message: dict[str, Any]) -> None:
+        """Run the company analysis pipeline for a new scan."""
         url = message["url"]
         org_id = message["org_id"]
         user_id = message["user_id"]
@@ -71,6 +78,55 @@ class SQSHandler:
             return
 
         self._update_scan_progress(scan_id)
+
+    def _process_reanalysis(self, message: dict[str, Any]) -> None:
+        """Re-run the pipeline with supplementary document text.
+
+        Ordering: fetch doc text → run pipeline → delete old results.
+        Old results are kept until the pipeline succeeds so that a failure
+        does not leave the user with no analysis data.
+        """
+        analysis_id = message["analysis_id"]
+        url = message["url"]
+        org_id = message["org_id"]
+        user_id = message["user_id"]
+        # scan_id is always present but may be "" for standalone (non-portfolio) re-analyses
+        scan_id = message["scan_id"]
+
+        logger.info("Re-analyzing %s with documents", analysis_id)
+
+        # Fetch combined document text from DynamoDB
+        assessment_repo = self._storage.create_assessment_repository()
+        assessments = assessment_repo.find_by_company(analysis_id)
+        document_text = ""
+        old_assessment_id = ""
+        if assessments:
+            old_assessment_id = assessments[0]["id"]
+            document_text = assessment_repo.get_combined_document_text(old_assessment_id)
+
+        try:
+            self._factory_manager.run_company_analysis(
+                url=url,
+                org_id=org_id,
+                user_id=user_id,
+                scan_id=scan_id,
+                request_id=analysis_id,
+                document_text=document_text or None,
+            )
+        except Exception as error:
+            logger.exception("Re-analysis pipeline failed for %s", analysis_id)
+            company_repo = self._storage.create_company_repository()
+            company_repo.update(analysis_id, {"error": str(error)})
+            if scan_id:
+                self._update_scan_progress(scan_id)
+            return
+
+        # Delete old results only after pipeline succeeds — preserves data on failure
+        if old_assessment_id:
+            assessment_repo.delete_analysis_results(old_assessment_id)
+
+        if scan_id:
+            self._update_scan_progress(scan_id)
 
     def _record_failure(self, scan_id: str, request_id: str, error_message: str) -> None:
         """Record a pipeline failure on the company and update scan progress.

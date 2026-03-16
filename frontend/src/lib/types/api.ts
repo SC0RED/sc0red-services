@@ -49,6 +49,14 @@ export interface EbitdaTree {
     businessModelSummary?: string
 }
 
+export interface DocumentInfo {
+    id: string
+    filename: string
+    fileType: string
+    charCount: number
+    uploadedAt: string
+}
+
 export interface AnalysisData {
     id: string
     companyName: string
@@ -61,6 +69,7 @@ export interface AnalysisData {
     opportunities: Opportunity[]
     topActions?: string[]
     ebitdaTree?: EbitdaTree
+    documents?: DocumentInfo[]
     analyzedAt?: string
     scanType?: string
 }

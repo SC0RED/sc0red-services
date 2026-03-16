@@ -229,3 +229,168 @@ class TestSQSHandler:
 
         with pytest.raises(KeyError):
             handler._process_message(message)
+
+
+class TestSQSHandlerReanalysis:
+    def _make_handler(self):
+        storage = MagicMock()
+        handler = SQSHandler(storage=storage)
+        handler._factory_manager = MagicMock()
+        return handler, storage
+
+    def test_reanalysis_fetches_documents_and_runs_pipeline(self):
+        handler, storage = self._make_handler()
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_combined_document_text.return_value = "Document content here"
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        # Mock scan repo for _update_scan_progress
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"total_companies": 1}
+        scan_repo.get_scan_companies.return_value = [{"company_id": "a-1"}]
+        storage.create_scan_repository.return_value = scan_repo
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"overall_risk_score": 5.0}
+        storage.create_company_repository.return_value = company_repo
+
+        message = {
+            "reanalyze": True,
+            "analysis_id": "a-1",
+            "url": "https://test.com",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+            "request_id": "a-1",
+        }
+        handler._process_message(message)
+
+        handler._factory_manager.run_company_analysis.assert_called_once_with(
+            url="https://test.com",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-1",
+            request_id="a-1",
+            document_text="Document content here",
+        )
+
+    def test_reanalysis_without_documents(self):
+        handler, storage = self._make_handler()
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_combined_document_text.return_value = ""
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        # Mock scan repo for _update_scan_progress
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"total_companies": 1}
+        scan_repo.get_scan_companies.return_value = [{"company_id": "a-1"}]
+        storage.create_scan_repository.return_value = scan_repo
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"overall_risk_score": 5.0}
+        storage.create_company_repository.return_value = company_repo
+
+        message = {
+            "reanalyze": True,
+            "analysis_id": "a-1",
+            "url": "https://test.com",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+            "request_id": "a-1",
+        }
+        handler._process_message(message)
+
+        handler._factory_manager.run_company_analysis.assert_called_once_with(
+            url="https://test.com",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-1",
+            request_id="a-1",
+            document_text=None,
+        )
+
+    def test_reanalysis_pipeline_failure_records_error_and_preserves_old_results(self):
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("boom")
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_combined_document_text.return_value = ""
+        storage.create_assessment_repository.return_value = assessment_repo
+        company_repo = MagicMock()
+        storage.create_company_repository.return_value = company_repo
+
+        # Set up scan repo for _update_scan_progress call on failure
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"total_companies": 1}
+        scan_repo.get_scan_companies.return_value = [{"company_id": "a-1"}]
+        storage.create_scan_repository.return_value = scan_repo
+        company_repo.get_by_id.return_value = {"error": "boom"}
+
+        message = {
+            "reanalyze": True,
+            "analysis_id": "a-1",
+            "url": "https://test.com",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+            "request_id": "a-1",
+        }
+        handler._process_message(message)
+
+        company_repo.update.assert_called_once_with("a-1", {"error": "boom"})
+        # Old results should NOT be deleted when pipeline fails
+        assessment_repo.delete_analysis_results.assert_not_called()
+        # Scan progress should still be updated so scan doesn't get stuck
+        scan_repo.update.assert_called_once()
+
+    def test_reanalysis_deletes_old_results_via_repository(self):
+        handler, storage = self._make_handler()
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_combined_document_text.return_value = "doc text"
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        # Mock scan repo for _update_scan_progress
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"total_companies": 1}
+        scan_repo.get_scan_companies.return_value = [{"company_id": "a-1"}]
+        storage.create_scan_repository.return_value = scan_repo
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"overall_risk_score": 5.0}
+        storage.create_company_repository.return_value = company_repo
+
+        message = {
+            "reanalyze": True,
+            "analysis_id": "a-1",
+            "url": "https://test.com",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+            "request_id": "a-1",
+        }
+        handler._process_message(message)
+
+        assessment_repo.delete_analysis_results.assert_called_once_with("assess-1")
+
+    def test_reanalysis_with_empty_scan_id_skips_progress_update(self):
+        """Standalone re-analyses (no portfolio scan) should not call _update_scan_progress."""
+        handler, storage = self._make_handler()
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_combined_document_text.return_value = "doc text"
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        message = {
+            "reanalyze": True,
+            "analysis_id": "a-1",
+            "url": "https://test.com",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "",
+            "request_id": "a-1",
+        }
+        handler._process_message(message)
+
+        # scan_id is "" → _update_scan_progress should NOT be called
+        storage.create_scan_repository.assert_not_called()

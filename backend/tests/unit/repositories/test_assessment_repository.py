@@ -180,3 +180,131 @@ class TestAssessmentRepository:
 
         repo.delete("assess-del-ebitda")
         assert repo.get_ebitda_tree("assess-del-ebitda") is None
+
+    # ── Document operations ─────────────────────────────────────────
+
+    @mock_aws
+    def test_save_and_get_documents(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-doc", "company_id": "comp-1"})
+
+        repo.save_document("assess-doc", {
+            "id": "doc-1",
+            "filename": "report.pdf",
+            "file_type": "pdf",
+            "extracted_text": "Revenue was $10M last year.",
+            "char_count": 26,
+            "uploaded_at": "2026-03-13T00:00:00",
+        })
+        repo.save_document("assess-doc", {
+            "id": "doc-2",
+            "filename": "memo.txt",
+            "file_type": "txt",
+            "extracted_text": "Investment memo content.",
+            "char_count": 23,
+            "uploaded_at": "2026-03-13T01:00:00",
+        })
+
+        documents = repo.get_documents("assess-doc")
+        assert len(documents) == 2
+        filenames = {d["filename"] for d in documents}
+        assert filenames == {"report.pdf", "memo.txt"}
+        assert documents[0]["fileType"] in ("pdf", "txt")
+        assert documents[0]["charCount"] > 0
+
+    @mock_aws
+    def test_delete_document(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-deldoc", "company_id": "comp-1"})
+        repo.save_document("assess-deldoc", {
+            "id": "doc-del",
+            "filename": "old.txt",
+            "file_type": "txt",
+            "extracted_text": "old content",
+            "char_count": 11,
+            "uploaded_at": "2026-03-13T00:00:00",
+        })
+
+        repo.delete_document("assess-deldoc", "doc-del")
+        documents = repo.get_documents("assess-deldoc")
+        assert len(documents) == 0
+
+    @mock_aws
+    def test_get_combined_document_text(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-combined", "company_id": "comp-1"})
+        repo.save_document("assess-combined", {
+            "id": "doc-a",
+            "filename": "a.txt",
+            "file_type": "txt",
+            "extracted_text": "First document",
+            "char_count": 14,
+            "uploaded_at": "2026-03-13T00:00:00",
+        })
+        repo.save_document("assess-combined", {
+            "id": "doc-b",
+            "filename": "b.txt",
+            "file_type": "txt",
+            "extracted_text": "Second document",
+            "char_count": 15,
+            "uploaded_at": "2026-03-13T01:00:00",
+        })
+
+        combined = repo.get_combined_document_text("assess-combined")
+        assert "First document" in combined
+        assert "Second document" in combined
+        assert "---" in combined
+
+    @mock_aws
+    def test_get_combined_document_text_empty(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-empty-docs", "company_id": "comp-1"})
+        combined = repo.get_combined_document_text("assess-empty-docs")
+        assert combined == ""
+
+    @mock_aws
+    def test_delete_cascades_documents(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-cascade-doc", "company_id": "comp-1"})
+        repo.save_document("assess-cascade-doc", {
+            "id": "doc-cascade",
+            "filename": "test.txt",
+            "file_type": "txt",
+            "extracted_text": "content",
+            "char_count": 7,
+            "uploaded_at": "2026-03-13T00:00:00",
+        })
+
+        repo.delete("assess-cascade-doc")
+        assert repo.get_documents("assess-cascade-doc") == []
+
+    @mock_aws
+    def test_delete_analysis_results_keeps_documents_and_metadata(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-partial", "company_id": "comp-1"})
+        repo.save_risk_score("assess-partial", "data_ip", {"score": 5})
+        repo.save_opportunity("assess-partial", 0, {"title": "Opp"})
+        repo.save_ebitda_tree("assess-partial", {
+            "tree_data": [],
+            "revenue_estimate": "$1M",
+            "ebitda_estimate": "$100K",
+            "business_model_summary": "Test",
+        })
+        repo.save_document("assess-partial", {
+            "id": "doc-keep",
+            "filename": "keep.txt",
+            "file_type": "txt",
+            "extracted_text": "keep this",
+            "char_count": 9,
+            "uploaded_at": "2026-03-13T00:00:00",
+        })
+
+        repo.delete_analysis_results("assess-partial")
+
+        # Results are deleted
+        assert repo.get_risk_scores("assess-partial") == []
+        assert repo.get_opportunities("assess-partial") == []
+        assert repo.get_ebitda_tree("assess-partial") is None
+        # Metadata and documents are preserved
+        assert repo.get_by_id("assess-partial") is not None
+        assert len(repo.get_documents("assess-partial")) == 1
