@@ -19,7 +19,7 @@ import bcrypt
 import boto3
 from botocore.exceptions import ClientError
 
-from src.documents.extract_text import _SUPPORTED_TYPES, extract_text
+from src.documents.extract_text import SUPPORTED_TYPES, extract_text
 from src.handlers.auth_middleware import require_authentication
 from src.handlers.router import Router
 
@@ -572,7 +572,7 @@ class APIGatewayHandler:
         if not filename or not file_type:
             return _error("filename and fileType required")
 
-        if file_type not in _SUPPORTED_TYPES:
+        if file_type not in SUPPORTED_TYPES:
             return _error(f"Unsupported file type: {file_type}")
 
         company_repo = self._storage.create_company_repository()

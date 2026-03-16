@@ -334,6 +334,10 @@ else:
     UPLOAD_URL=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['uploadUrl'])")
     DOC_KEY=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['documentKey'])")
 
+    # Rewrite presigned URL: backend returns internal hostname (localstack:4566),
+    # but E2E tests run on the host where LocalStack is at localhost:4566
+    UPLOAD_URL=$(echo "$UPLOAD_URL" | sed 's|http://localstack:4566|http://localhost:4566|g' | sed 's|http://[^/]*\.localhost\.localstack\.cloud:4566|http://localhost:4566|g')
+
     # Upload file content to presigned URL
     echo -e "\n${YELLOW}8d-2. PUT file to presigned URL${NC}"
     PUT_STATUS=$(curl -sw "%{http_code}" -o /dev/null -X PUT "$UPLOAD_URL" \

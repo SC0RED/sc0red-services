@@ -12,7 +12,7 @@ from typing import Any
 _MAX_CHARS_PER_DOCUMENT = 15_000
 MAX_CHARS_COMBINED = 25_000
 
-_SUPPORTED_TYPES = frozenset({"pdf", "docx", "xlsx", "xls", "txt", "csv", "md"})
+SUPPORTED_TYPES = frozenset({"pdf", "docx", "xlsx", "xls", "txt", "csv", "md"})
 
 
 def extract_text(file_bytes: bytes, file_type: str) -> str:
@@ -29,8 +29,8 @@ def extract_text(file_bytes: bytes, file_type: str) -> str:
         ValueError: If file_type is not supported.
     """
     normalised = file_type.lower().strip(".")
-    if normalised not in _SUPPORTED_TYPES:
-        supported = ", ".join(sorted(_SUPPORTED_TYPES))
+    if normalised not in SUPPORTED_TYPES:
+        supported = ", ".join(sorted(SUPPORTED_TYPES))
         message = f"Unsupported file type: {normalised}. Supported: {supported}"
         raise ValueError(message)
 
