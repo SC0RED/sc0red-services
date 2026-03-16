@@ -2,19 +2,18 @@
 
 Generated: 2026-03-16
 
-## Gap #1 — S3 Bucket Infrastructure (NOT IMPLEMENTED)
+## Gap #1 — S3 Bucket Infrastructure ~~(NOT IMPLEMENTED)~~ FIXED
 
 | Plan | Implementation |
 |------|---------------|
-| New S3 bucket `janus-documents-{environment}` in `janus_stack.py` | Not added. No S3 bucket, no `DOCUMENTS_BUCKET` env var in CDK |
-| `DOCUMENTS_BUCKET` env var passed to both Lambdas | Not added |
-| S3 lifecycle rule (90-day expiration) | Not added |
-| Lambda IAM permissions for S3 read + presigned URL | Not added |
-| `s3.BlockPublicAccess.BLOCK_ALL` | Not added |
-| `docker-compose.e2e.yml` — add `s3` to LocalStack `SERVICES` | Not added — still `sqs,dynamodb` |
+| New S3 bucket `janus-documents-{environment}` in `janus_stack.py` | **FIXED** — `_create_documents_bucket()` with `BLOCK_ALL`, S3_MANAGED encryption, 90-day lifecycle |
+| `DOCUMENTS_BUCKET` env var passed to both Lambdas | **FIXED** — `_build_common_environment()` includes `DOCUMENTS_BUCKET` |
+| S3 lifecycle rule (90-day expiration) | **FIXED** — `LifecycleRule(expiration=Duration.days(90))` |
+| Lambda IAM permissions for S3 read + presigned URL | **FIXED** — `documents_bucket.grant_read_write(api_handler)` |
+| `s3.BlockPublicAccess.BLOCK_ALL` | **FIXED** |
+| `docker-compose.e2e.yml` — add `s3` to LocalStack `SERVICES` | **FIXED** — `SERVICES: sqs,dynamodb,s3`, `DOCUMENTS_BUCKET: janus-documents-e2e` on both services |
 
-**Severity:** HIGH
-**Impact:** The base64 path works for files under ~6MB (API Gateway limit). Larger files will fail in production. The plan explicitly chose S3 presigned URLs because "Lambda has 6MB payload limit — can't pass file bytes through API Gateway."
+**Severity:** ~~HIGH~~ RESOLVED
 
 ---
 
@@ -133,10 +132,10 @@ Generated: 2026-03-16
 
 | Plan | Implementation |
 |------|---------------|
-| Both `docker-compose.yml` and `docker-compose.e2e.yml` should include `DOCUMENTS_BUCKET` | Neither updated |
+| Both `docker-compose.yml` and `docker-compose.e2e.yml` should include `DOCUMENTS_BUCKET` | `docker-compose.e2e.yml` updated. `docker-compose.yml` (local dev) still missing — backend falls back to base64 when unset |
 
-**Severity:** LOW (blocked by gap #1)
-**Impact:** When S3 is eventually added, both compose files need updating.
+**Severity:** LOW
+**Impact:** Local dev uses base64 fallback instead of S3. Functional but diverges from production path.
 
 ---
 
@@ -144,13 +143,13 @@ Generated: 2026-03-16
 
 | Severity | Gap | Description |
 |----------|-----|-------------|
-| HIGH | #1 | S3 bucket not in infrastructure — 6MB payload limit in production |
+| ~~HIGH~~ FIXED | #1 | ~~S3 bucket not in infrastructure~~ CDK stack, E2E compose, IAM permissions all added |
 | ~~HIGH~~ FIXED | #8 | ~~Delete-before-pipeline ordering~~ Now deletes after success |
 | ~~HIGH~~ FIXED | #6 | ~~No E2E tests~~ Added presigned URL upload + re-analyze E2E tests |
 | ~~MEDIUM~~ FIXED | #2 | ~~Presigned URL route removed~~ S3 presigned URL support restored |
-| ~~MEDIUM~~ FIXED | #9 | ~~No polling~~ Polls analysis endpoint until results change |
+| ~~MEDIUM~~ FIXED | #9 | ~~No polling~~ Polls analyzedAt timestamp with abort + error tracking |
 | LOW | #3 | `company_analysis_factory.py` not modified (different routing) |
 | LOW | #4 | Prompt injection method differs (cleaner approach used) |
 | LOW | #5 | Proxy route path prefix differs (matches existing codebase) |
 | LOW | #7 | Missing `company_name` in reanalyze SQS message |
-| LOW | #12 | Docker-compose not updated (blocked by #1) |
+| LOW | #12 | `docker-compose.yml` (local dev) missing `DOCUMENTS_BUCKET` — falls back to base64 |
