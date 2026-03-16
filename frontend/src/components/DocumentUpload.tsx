@@ -47,19 +47,47 @@ export default function DocumentUpload({
             setUploading(true)
 
             try {
-                const buffer = await file.arrayBuffer()
-                const base64 = btoa(
-                    new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                )
+                let documentKey = ''
+
+                // Try S3 presigned URL upload first
+                const urlResponse = await fetch(`/api/analysis/${analysisId}/upload-url`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: file.name, fileType: extension }),
+                })
+
+                if (urlResponse.ok) {
+                    const { uploadUrl, documentKey: key } = (await urlResponse.json()) as {
+                        uploadUrl: string
+                        documentKey: string
+                    }
+                    const putResponse = await fetch(uploadUrl, {
+                        method: 'PUT',
+                        body: file,
+                        headers: { 'Content-Type': 'application/octet-stream' },
+                    })
+                    if (!putResponse.ok) throw new Error('Failed to upload file to storage')
+                    documentKey = key
+                }
+
+                // Register document — with S3 key if available, otherwise base64 fallback
+                const payload: Record<string, string> = {
+                    filename: file.name,
+                    fileType: extension,
+                }
+                if (documentKey) {
+                    payload.documentKey = documentKey
+                } else {
+                    const buffer = await file.arrayBuffer()
+                    payload.fileContent = btoa(
+                        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+                    )
+                }
 
                 const response = await fetch(`/api/analysis/${analysisId}/documents`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        filename: file.name,
-                        fileType: extension,
-                        fileContent: base64,
-                    }),
+                    body: JSON.stringify(payload),
                 })
 
                 if (!response.ok) {

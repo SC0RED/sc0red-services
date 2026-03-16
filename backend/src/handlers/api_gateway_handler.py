@@ -17,8 +17,9 @@ from typing import TYPE_CHECKING, Any
 
 import bcrypt
 import boto3
+from botocore.exceptions import ClientError
 
-from src.documents.extract_text import extract_text
+from src.documents.extract_text import _SUPPORTED_TYPES, extract_text
 from src.handlers.auth_middleware import require_authentication
 from src.handlers.router import Router
 
@@ -80,6 +81,12 @@ class APIGatewayHandler:
         self._router = self._build_router()
         self._queue_url = os.environ["ANALYSIS_QUEUE_URL"]
         self._sqs = boto3.client("sqs")
+        self._documents_bucket = os.environ.get("DOCUMENTS_BUCKET", "")
+        if not self._documents_bucket:
+            logger.warning(
+                "DOCUMENTS_BUCKET not set — S3 document upload disabled, falling back to base64"
+            )
+        self._s3 = boto3.client("s3") if self._documents_bucket else None
 
     def _build_router(self) -> Router:
         router = Router()
@@ -93,6 +100,11 @@ class APIGatewayHandler:
         router.protected("DELETE", "/api/analysis/{analysis_id}", self._handle_delete_analysis)
         router.protected("GET", "/api/analyses", self._handle_list_analyses)
         router.protected("GET", "/api/dashboard", self._handle_dashboard)
+        router.protected(
+            "POST",
+            "/api/analysis/{analysis_id}/upload-url",
+            self._handle_upload_url,
+        )
         router.protected(
             "POST", "/api/analysis/{analysis_id}/documents", self._handle_create_document
         )
@@ -543,6 +555,45 @@ class APIGatewayHandler:
             }
         )
 
+    # ── POST /api/analysis/{id}/upload-url ───────────────────────────
+
+    def _handle_upload_url(
+        self,
+        event: dict[str, Any],
+        authentication: AuthContext,
+        analysis_id: str,
+    ) -> LambdaResponse:
+        if not self._s3 or not self._documents_bucket:
+            return _error("Document uploads via S3 not configured", 501)
+
+        body = json.loads(event.get("body") or "{}")
+        filename = body.get("filename", "")
+        file_type = body.get("fileType", "")
+        if not filename or not file_type:
+            return _error("filename and fileType required")
+
+        if file_type not in _SUPPORTED_TYPES:
+            return _error(f"Unsupported file type: {file_type}")
+
+        company_repo = self._storage.create_company_repository()
+        company = company_repo.get_by_id(analysis_id)
+        if not company or company.get("org_id") != authentication.org_id:
+            return _error("Not found", 404)
+
+        document_key = f"uploads/{analysis_id}/{uuid.uuid4()}.{file_type}"
+
+        upload_url = self._s3.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": self._documents_bucket,
+                "Key": document_key,
+                "ContentType": "application/octet-stream",
+            },
+            ExpiresIn=300,
+        )
+
+        return _json_response({"uploadUrl": upload_url, "documentKey": document_key})
+
     # ── POST /api/analysis/{id}/documents ──────────────────────────
 
     def _handle_create_document(
@@ -554,19 +605,38 @@ class APIGatewayHandler:
         body = json.loads(event.get("body") or "{}")
         filename = body.get("filename", "")
         file_type = body.get("fileType", "")
+        document_key = body.get("documentKey", "")
         file_content_b64 = body.get("fileContent", "")
 
         if not filename or not file_type:
             return _error("filename and fileType required")
-        if not file_content_b64:
-            return _error("fileContent required")
 
         company_repo = self._storage.create_company_repository()
         company = company_repo.get_by_id(analysis_id)
         if not company or company.get("org_id") != authentication.org_id:
             return _error("Not found", 404)
 
-        file_bytes = base64.b64decode(file_content_b64)
+        # Get file bytes — from S3 if documentKey provided, else from base64 body
+        if document_key:
+            if not self._s3 or not self._documents_bucket:
+                return _error("S3 not configured — cannot retrieve uploaded file", 500)
+            expected_prefix = f"uploads/{analysis_id}/"
+            if not document_key.startswith(expected_prefix):
+                return _error("Invalid documentKey", 400)
+            try:
+                response = self._s3.get_object(
+                    Bucket=self._documents_bucket, Key=document_key,
+                )
+                file_bytes = response["Body"].read()
+            except ClientError as error:
+                code = error.response["Error"]["Code"]
+                if code == "NoSuchKey":
+                    return _error("Uploaded file not found — presigned URL may have expired", 404)
+                raise
+        elif file_content_b64:
+            file_bytes = base64.b64decode(file_content_b64)
+        else:
+            return _error("documentKey or fileContent required")
 
         try:
             extracted_text = extract_text(file_bytes, file_type)

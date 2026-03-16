@@ -97,7 +97,19 @@ describe('DocumentUpload', () => {
         expect(defaultProps.onReanalyze).toHaveBeenCalledOnce()
     })
 
-    it('uploads file via base64 on file select', async () => {
+    it('uploads file via S3 presigned URL when available', async () => {
+        // 1. upload-url returns presigned URL
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            json: () =>
+                Promise.resolve({
+                    uploadUrl: 'https://s3.example.com/presigned',
+                    documentKey: 'uploads/analysis-1/abc.txt',
+                }),
+        })
+        // 2. PUT to presigned URL succeeds
+        mockFetch.mockResolvedValueOnce({ ok: true })
+        // 3. POST to /documents succeeds
         mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
 
         render(<DocumentUpload {...defaultProps} />)
@@ -107,14 +119,52 @@ describe('DocumentUpload', () => {
         fireEvent.change(input, { target: { files: [file] } })
 
         await waitFor(() => {
-            expect(mockFetch).toHaveBeenCalledWith(
-                '/api/analysis/analysis-1/documents',
-                expect.objectContaining({
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                })
-            )
+            // Should have called upload-url, then PUT, then register document
+            expect(mockFetch).toHaveBeenCalledTimes(3)
         })
+
+        // Verify upload-url call
+        expect(mockFetch).toHaveBeenNthCalledWith(
+            1,
+            '/api/analysis/analysis-1/upload-url',
+            expect.objectContaining({ method: 'POST' })
+        )
+        // Verify PUT to presigned URL
+        expect(mockFetch).toHaveBeenNthCalledWith(
+            2,
+            'https://s3.example.com/presigned',
+            expect.objectContaining({ method: 'PUT' })
+        )
+        // Verify register call includes documentKey
+        const registerCall = mockFetch.mock.calls[2]
+        const registerBody = JSON.parse(registerCall[1].body as string)
+        expect(registerBody.documentKey).toBe('uploads/analysis-1/abc.txt')
+        expect(registerBody.fileContent).toBeUndefined()
+
+        expect(defaultProps.onDocumentsChange).toHaveBeenCalled()
+    })
+
+    it('falls back to base64 when upload-url returns non-ok', async () => {
+        // 1. upload-url returns 501 (S3 not configured)
+        mockFetch.mockResolvedValueOnce({ ok: false, status: 501 })
+        // 2. POST to /documents succeeds with base64
+        mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+
+        render(<DocumentUpload {...defaultProps} />)
+
+        const file = createFile('hello world', 'test.txt', 'text/plain')
+        const input = document.querySelector('input[type="file"]') as HTMLInputElement
+        fireEvent.change(input, { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(mockFetch).toHaveBeenCalledTimes(2)
+        })
+
+        // Verify register call includes fileContent (base64), not documentKey
+        const registerCall = mockFetch.mock.calls[1]
+        const registerBody = JSON.parse(registerCall[1].body as string)
+        expect(registerBody.fileContent).toBeDefined()
+        expect(registerBody.documentKey).toBeUndefined()
 
         expect(defaultProps.onDocumentsChange).toHaveBeenCalled()
     })
@@ -150,6 +200,9 @@ describe('DocumentUpload', () => {
     })
 
     it('shows error when upload fails', async () => {
+        // upload-url fails (no S3)
+        mockFetch.mockResolvedValueOnce({ ok: false, status: 501 })
+        // document registration also fails
         mockFetch.mockResolvedValueOnce({
             ok: false,
             json: () => Promise.resolve({ error: 'Bad request' }),
@@ -197,6 +250,8 @@ describe('DocumentUpload', () => {
     })
 
     it('handles drag and drop upload', async () => {
+        // upload-url fails (S3 not configured), then document register succeeds
+        mockFetch.mockResolvedValueOnce({ ok: false, status: 501 })
         mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
 
         render(<DocumentUpload {...defaultProps} />)
