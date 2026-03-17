@@ -134,6 +134,12 @@ class DynamoDBTable:
             ExpressionAttributeValues=values,
         )
 
+    def batch_write(self, items: list[dict[str, Any]]) -> None:
+        """Write multiple items using a batch writer (max 25 per request, auto-batched)."""
+        with self._table.batch_writer() as batch:
+            for item in items:
+                batch.put_item(Item=_convert_floats(item))
+
     def batch_delete(self, keys: list[dict[str, str]]) -> None:
         """Delete multiple items by their primary keys using a batch writer."""
         with self._table.batch_writer() as batch:

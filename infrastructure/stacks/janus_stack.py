@@ -204,7 +204,7 @@ class JanusStack(Stack):
             handler="src.handlers.api_handler_entry.handle_api_event",
             code=lambda_.Code.from_asset("../backend", bundling=bundling),
             timeout=Duration.seconds(30),
-            memory_size=256,
+            memory_size=512,
             log_group=log_group,
             environment=environment,
         )
@@ -245,7 +245,7 @@ class JanusStack(Stack):
             handler="src.handlers.worker_handler_entry.handle_worker_event",
             code=lambda_.Code.from_asset("../backend", bundling=bundling),
             timeout=Duration.seconds(540),
-            memory_size=512,
+            memory_size=1769,
             log_group=log_group,
             environment=environment,
         )

@@ -10,12 +10,14 @@ class TestCompanyRepository:
     def test_save_and_get(self, dynamodb_table):
         repo = DynamoDBCompanyRepository(dynamodb_table)
 
-        company_id = repo.save({
-            "id": "comp-123",
-            "company_name": "Acme Corp",
-            "url": "https://acme.com",
-            "org_id": "org-1",
-        })
+        company_id = repo.save(
+            {
+                "id": "comp-123",
+                "company_name": "Acme Corp",
+                "url": "https://acme.com",
+                "org_id": "org-1",
+            }
+        )
 
         assert company_id == "comp-123"
 

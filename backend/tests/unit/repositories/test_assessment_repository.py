@@ -323,6 +323,50 @@ class TestAssessmentRepository:
         assert repo.get_documents("assess-cascade-doc") == []
 
     @mock_aws
+    def test_batch_save_risk_scores(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-batch-rs", "company_id": "comp-1"})
+
+        scores = [
+            {"category": "competitive_displacement", "score": 8, "rationale": "High"},
+            {"category": "data_ip", "score": 3, "rationale": "Low"},
+        ]
+        repo.batch_save_risk_scores("assess-batch-rs", scores)
+
+        result = repo.get_risk_scores("assess-batch-rs")
+        assert len(result) == 2
+        categories = {r["category"] for r in result}
+        assert categories == {"competitive_displacement", "data_ip"}
+
+    @mock_aws
+    def test_batch_save_opportunities(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-batch-opp", "company_id": "comp-1"})
+
+        opportunities = [
+            {
+                "title": "Deploy AI Chatbot",
+                "impact_rating": "High",
+                "related_services": ["Accenture - AI strategy"],
+                "implementation_steps": ["Step 1", "Step 2"],
+                "value_lever": "Revenue Side",
+            },
+            {
+                "title": "Automate QA",
+                "impact_rating": "Medium",
+                "related_services": [],
+                "implementation_steps": [],
+                "value_lever": "Cost Side",
+            },
+        ]
+        repo.batch_save_opportunities("assess-batch-opp", opportunities)
+
+        result = repo.get_opportunities("assess-batch-opp")
+        assert len(result) == 2
+        titles = {r["title"] for r in result}
+        assert titles == {"Deploy AI Chatbot", "Automate QA"}
+
+    @mock_aws
     def test_delete_analysis_results_keeps_documents_and_metadata(self, dynamodb_table):
         repo = DynamoDBAssessmentRepository(dynamodb_table)
         repo.save({"id": "assess-partial", "company_id": "comp-1"})

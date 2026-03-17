@@ -96,6 +96,22 @@ class DynamoDBAssessmentRepository:
         }
         self._table.put_item(item)
 
+    def batch_save_risk_scores(self, assessment_id: str, scores: list[dict[str, Any]]) -> None:
+        """Persist multiple risk score items in a single batch write."""
+        items = [
+            {
+                "pk": f"ASSESSMENT#{assessment_id}",
+                "sk": f"RISK#{score['category']}",
+                "entity_type": "risk_score",
+                "assessment_id": assessment_id,
+                "category": score["category"],
+                "score": score["score"],
+                "rationale": score["rationale"],
+            }
+            for score in scores
+        ]
+        self._table.batch_write(items)
+
     def get_risk_scores(self, assessment_id: str) -> list[dict[str, Any]]:
         """Return all risk score items for the given assessment ID."""
         return self._table.query(
@@ -123,6 +139,27 @@ class DynamoDBAssessmentRepository:
                 item[key] = value
 
         self._table.put_item(item)
+
+    def batch_save_opportunities(
+        self, assessment_id: str, opportunities: list[dict[str, Any]]
+    ) -> None:
+        """Persist multiple opportunity items in a single batch write."""
+        items = []
+        for i, data in enumerate(opportunities):
+            item: dict[str, Any] = {
+                "pk": f"ASSESSMENT#{assessment_id}",
+                "sk": f"OPP#{i:04d}",
+                "entity_type": "opportunity",
+                "assessment_id": assessment_id,
+                "sort_order": i,
+            }
+            for key, value in data.items():
+                if isinstance(value, (list, dict)):
+                    item[key] = json.dumps(value)
+                else:
+                    item[key] = value
+            items.append(item)
+        self._table.batch_write(items)
 
     def get_opportunities(self, assessment_id: str) -> list[dict[str, Any]]:
         """Return all opportunity items for the given assessment ID."""

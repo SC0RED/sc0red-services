@@ -53,7 +53,6 @@ class TestPersistResults:
 
         mock_company_repo = MagicMock()
         mock_assessment_repo = MagicMock()
-        mock_assessment_repo.save_assessment.return_value = "assess-new"
 
         step = PersistResults(
             company_repo=mock_company_repo,
@@ -66,10 +65,18 @@ class TestPersistResults:
 
         mock_company_repo.save_company.assert_called_once()
         mock_assessment_repo.save_assessment.assert_called_once()
-        assert mock_assessment_repo.save_risk_score.call_count == 2
-        assert mock_assessment_repo.save_opportunity.call_count == 1
-        opportunity_call_data = mock_assessment_repo.save_opportunity.call_args[0][2]
-        assert opportunity_call_data["value_lever"] == "Revenue Side"
+        mock_assessment_repo.batch_save_risk_scores.assert_called_once()
+        mock_assessment_repo.batch_save_opportunities.assert_called_once()
+
+        # Verify risk scores batch call content
+        risk_call_args = mock_assessment_repo.batch_save_risk_scores.call_args[0]
+        assert len(risk_call_args[1]) == 2  # 2 risk scores
+
+        # Verify opportunities batch call content
+        opp_call_args = mock_assessment_repo.batch_save_opportunities.call_args[0]
+        assert len(opp_call_args[1]) == 1  # 1 opportunity
+        assert opp_call_args[1][0]["value_lever"] == "Revenue Side"
+
         step._request_executor.mark_question_complete.assert_called_with("persist_results")
 
     def test_persist_company_id_none_raises(self):
@@ -110,7 +117,6 @@ class TestPersistResults:
 
         mock_company_repo = MagicMock()
         mock_assessment_repo = MagicMock()
-        mock_assessment_repo.save_assessment.return_value = "assess-new"
 
         step = PersistResults(
             company_repo=mock_company_repo,
@@ -135,7 +141,6 @@ class TestPersistResults:
 
         mock_company_repo = MagicMock()
         mock_assessment_repo = MagicMock()
-        mock_assessment_repo.save_assessment.return_value = "assess-new"
 
         step = PersistResults(
             company_repo=mock_company_repo,
@@ -173,4 +178,4 @@ class TestPersistResults:
         step.execute()
 
         mock_assessment_repo.save_assessment.assert_not_called()
-        mock_assessment_repo.save_opportunity.assert_not_called()
+        mock_assessment_repo.batch_save_opportunities.assert_not_called()

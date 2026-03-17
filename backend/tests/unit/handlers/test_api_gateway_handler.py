@@ -156,7 +156,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_start_single_company_enqueues_to_sqs(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         mock_sqs = MagicMock()
@@ -335,7 +337,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_confirm_success(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         mock_sqs = MagicMock()
@@ -368,7 +372,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_confirm_partial_failure(self, mock_boto3, mock_authentication):
         """Companies without a URL are skipped; valid ones are still queued."""
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
@@ -402,7 +408,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_confirm_missing_url_in_company(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         mock_sqs = MagicMock()
@@ -1062,9 +1070,7 @@ class TestDocumentEndpoints:
         body = json.loads(result["body"])
         assert body["status"] == "queued"
         mock_sqs.send_message.assert_called_once()
-        message_body = json.loads(
-            mock_sqs.send_message.call_args[1]["MessageBody"]
-        )
+        message_body = json.loads(mock_sqs.send_message.call_args[1]["MessageBody"])
         assert message_body["reanalyze"] is True
         assert message_body["analysis_id"] == "a-1"
 
@@ -1312,7 +1318,9 @@ class TestDocumentEndpoints:
             "DOCUMENTS_BUCKET": "janus-documents-test",
         },
     )
-    def test_create_document_rejects_invalid_document_key_prefix(self, mock_boto3, mock_authentication):
+    def test_create_document_rejects_invalid_document_key_prefix(
+        self, mock_boto3, mock_authentication
+    ):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         mock_boto3.client.return_value = MagicMock()
         handler, storage = self._make_handler()
@@ -1427,9 +1435,7 @@ class TestDocumentEndpoints:
                 "httpMethod": "POST",
                 "path": "/api/analysis/a-1/documents",
                 "headers": {"Authorization": "Bearer token"},
-                "body": json.dumps(
-                    {"filename": "test.txt", "fileType": "txt"}
-                ),
+                "body": json.dumps({"filename": "test.txt", "fileType": "txt"}),
             }
         )
         assert result["statusCode"] == 400
