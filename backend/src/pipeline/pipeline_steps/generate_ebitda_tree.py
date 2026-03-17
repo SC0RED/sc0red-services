@@ -28,7 +28,8 @@ EBITDA_SYSTEM_PROMPT = (
 )
 
 # Flat node schema — no recursive $ref. Each node references its parent via parent_id.
-# Top-level section headers (Revenue, COGS, Gross Profit, Operating Expenses, EBITDA) use parent_id: null.
+# Top-level section headers (Revenue, COGS, Gross Profit, Operating Expenses, EBITDA)
+# use parent_id: null.
 EBITDA_FLAT_NODE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
