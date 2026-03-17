@@ -268,6 +268,8 @@ class TestParallelOpportunitiesAndEbitda:
             step.execute()
 
     def test_ai_call_failure_propagates(self):
+        from signalfield_core.utilities.future_manager import FutureManagerError
+
         mock_factory = MagicMock()
         mock_client = MagicMock()
         mock_factory.get_client.return_value = mock_client
@@ -280,7 +282,7 @@ class TestParallelOpportunitiesAndEbitda:
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
-        with pytest.raises(RuntimeError, match="AI service unavailable"):
+        with pytest.raises(FutureManagerError):
             step.execute()
 
 

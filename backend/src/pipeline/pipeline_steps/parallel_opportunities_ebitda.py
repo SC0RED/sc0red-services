@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
+from signalfield_core.utilities.future_manager import FutureManager
 
 from src.models.model_company import EbitdaTreeResult, OpportunityResult
 from src.models.model_literals import RISK_SCOPE_NAMES
@@ -127,33 +127,33 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
         timer = StepTimer("ParallelOpportunitiesAndEbitda")
 
         # Run all 3 AI calls in parallel
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            future_high = pool.submit(
+        with FutureManager(name="ParallelOpportunitiesAndEbitda", max_workers=3) as manager:
+            manager.submit_task(
                 self._run_ai_call,
                 high_priority_prompt,
                 HIGH_PRIORITY_SCHEMA,
                 OPPS_SYSTEM_PROMPT,
                 "high_priority",
             )
-            future_strategic = pool.submit(
+            manager.submit_task(
                 self._run_ai_call,
                 strategic_prompt,
                 STRATEGIC_SCHEMA,
                 OPPS_SYSTEM_PROMPT,
                 "strategic",
             )
-            future_ebitda = pool.submit(
+            manager.submit_task(
                 self._run_ai_call,
                 ebitda_prompt,
                 EBITDA_TREE_SCHEMA,
                 EBITDA_SYSTEM_PROMPT,
                 "ebitda_tree",
             )
+            all_results = manager.wait_for_all_and_collect_results()
 
-            results: dict[str, tuple[dict[str, Any], float]] = {}
-            for future in as_completed([future_high, future_strategic, future_ebitda]):
-                label, data, elapsed = future.result()
-                results[label] = (data, elapsed)
+        results: dict[str, tuple[dict[str, Any], float]] = {}
+        for label, data, elapsed in all_results:
+            results[label] = (data, elapsed)
 
         high_data, high_elapsed = results["high_priority"]
         strategic_data, strategic_elapsed = results["strategic"]

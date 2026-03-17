@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
+from signalfield_core.utilities.future_manager import FutureManager
 
 from src.documents.extract_text import MAX_CHARS_COMBINED
 from src.models.model_company import CompanyProfile, RiskAssessment, RiskScore
@@ -109,26 +109,26 @@ class ParallelProfileAndRisk(RequestStep):
 
         timer = StepTimer("ParallelProfileAndRisk")
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            future_profile = pool.submit(
+        with FutureManager(name="ParallelProfileAndRisk", max_workers=2) as manager:
+            manager.submit_task(
                 self._run_ai_call,
                 profile_prompt,
                 PROFILE_SCHEMA,
                 PROFILE_SYSTEM_PROMPT,
                 "extract_profile",
             )
-            future_risk = pool.submit(
+            manager.submit_task(
                 self._run_ai_call,
                 risk_prompt,
                 RISK_SCHEMA,
                 RISK_SYSTEM_PROMPT,
                 "assess_risk",
             )
+            all_results = manager.wait_for_all_and_collect_results()
 
-            results: dict[str, tuple[dict[str, Any], float]] = {}
-            for future in as_completed([future_profile, future_risk]):
-                label, data, elapsed = future.result()
-                results[label] = (data, elapsed)
+        results: dict[str, tuple[dict[str, Any], float]] = {}
+        for label, data, elapsed in all_results:
+            results[label] = (data, elapsed)
 
         profile_data, profile_elapsed = results["extract_profile"]
         risk_data, risk_elapsed = results["assess_risk"]
