@@ -597,7 +597,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                                                 }}
                                             >
                                                 <div className="divider" />
-                                                {rs.explanation && (
+                                                {rs.rationale && (
                                                     <p
                                                         style={{
                                                             fontSize: '0.875rem',
@@ -605,40 +605,8 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                                                             color: 'var(--text-primary)',
                                                         }}
                                                     >
-                                                        {rs.explanation}
+                                                        {rs.rationale}
                                                     </p>
-                                                )}
-                                                {rs.evidence && (
-                                                    <div
-                                                        style={{
-                                                            padding: '0.75rem',
-                                                            background: 'var(--bg-surface-3)',
-                                                            borderRadius: 'var(--radius-sm)',
-                                                            borderLeft: `3px solid ${color}`,
-                                                        }}
-                                                    >
-                                                        <div
-                                                            style={{
-                                                                fontSize: '0.75rem',
-                                                                fontWeight: 600,
-                                                                color: 'var(--text-tertiary)',
-                                                                marginBottom: '0.25rem',
-                                                                textTransform: 'uppercase',
-                                                                letterSpacing: '0.06em',
-                                                            }}
-                                                        >
-                                                            Evidence
-                                                        </div>
-                                                        <p
-                                                            style={{
-                                                                fontSize: '0.8375rem',
-                                                                color: 'var(--text-secondary)',
-                                                                lineHeight: 1.6,
-                                                            }}
-                                                        >
-                                                            {rs.evidence}
-                                                        </p>
-                                                    </div>
                                                 )}
                                             </div>
                                         )}

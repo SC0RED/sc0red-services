@@ -18,12 +18,10 @@ from src.pipeline.pipeline_steps.generate_opportunities import (
 
 def _make_opportunity_data(
     title: str = "Deploy AI Chatbot",
-    risk_mitigated: str = "competitive_displacement",
     value_lever: str = "Both",
 ) -> dict:
     return {
         "title": title,
-        "risk_mitigated": risk_mitigated,
         "impact_rating": "High",
         "strategic_category": "Competitive Moat",
         "description": "Build a customer-facing AI chatbot",
@@ -88,14 +86,14 @@ class TestGenerateOpportunities:
     def test_successful_parallel_generation(self):
         high_priority_data = {
             "opportunities": [
-                _make_opportunity_data("AI Chatbot", "competitive_displacement"),
-                _make_opportunity_data("Tech Upgrade", "technology_obsolescence"),
+                _make_opportunity_data("AI Chatbot"),
+                _make_opportunity_data("Tech Upgrade"),
             ],
             "top_three_immediate_actions": ["Action 1", "Action 2", "Action 3"],
         }
         strategic_data = {
             "opportunities": [
-                _make_opportunity_data("Compliance Bot", "regulatory_compliance", "Cost Side"),
+                _make_opportunity_data("Compliance Bot", "Cost Side"),
             ],
         }
         mock_factory = self._make_mock_factory(high_priority_data, strategic_data)
@@ -135,7 +133,7 @@ class TestGenerateOpportunities:
             "top_three_immediate_actions": ["Urgent 1", "Urgent 2", "Urgent 3"],
         }
         strategic_data = {
-            "opportunities": [_make_opportunity_data("Strategic Opp", "data_ip")],
+            "opportunities": [_make_opportunity_data("Strategic Opp")],
         }
         mock_factory = self._make_mock_factory(high_priority_data, strategic_data)
 
@@ -217,8 +215,11 @@ class TestGenerateOpportunities:
         assert "highest-priority" in high_prompt.lower()
 
         other_categories = [
-            "margin_compression", "customer_behavior",
-            "regulatory_compliance", "supply_chain", "data_ip",
+            "margin_compression",
+            "customer_behavior",
+            "regulatory_compliance",
+            "supply_chain",
+            "data_ip",
         ]
         strategic_prompt = _build_strategic_prompt(profile_dict, assessment_dict, other_categories)
         assert "margin_compression" in strategic_prompt

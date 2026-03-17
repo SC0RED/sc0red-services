@@ -47,12 +47,11 @@ class TestRiskScore:
         score = RiskScore(
             category="competitive_displacement",
             score=7,
-            explanation="High risk",
-            evidence="competitor raised Series C",
+            rationale="High risk — competitor raised Series C",
         )
         assert score.category == "competitive_displacement"
         assert score.score == 7
-        assert score.evidence == "competitor raised Series C"
+        assert score.rationale == "High risk — competitor raised Series C"
 
     def test_score_constraints(self):
         # Score must be >= 1 and <= 10
@@ -87,7 +86,6 @@ class TestOpportunity:
     def test_create_with_related_services(self):
         opportunity = Opportunity(
             title="Deploy AI Churn Prediction",
-            risk_mitigated="customer_behavior",
             impact_rating="High",
             strategic_category="Revenue Capture",
             description="Implement churn prediction model",

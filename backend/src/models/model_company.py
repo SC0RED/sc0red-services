@@ -34,8 +34,7 @@ class RiskScore(BaseModel):
 
     category: str
     score: float = Field(ge=1, le=10)
-    explanation: str = ""
-    evidence: str = ""
+    rationale: str = ""
 
 
 class RiskAssessment(BaseModel):
@@ -67,7 +66,6 @@ class Opportunity(BaseModel):
     """AI opportunity recommendation."""
 
     title: str
-    risk_mitigated: str = ""
     impact_rating: str = ""  # High | Medium | Low
     strategic_category: str = ""
     description: str = ""
@@ -94,7 +92,6 @@ class EbitdaNode(BaseModel):
     type: Literal["revenue", "cost", "margin", "subtotal"]
     value_range: str | None = None
     percentage_of_parent: float | None = None
-    parent_id: str | None = None
     description: str = ""
     linked_opportunity_indices: list[int] = Field(default_factory=list)
     children: list[EbitdaNode] = Field(default_factory=list)

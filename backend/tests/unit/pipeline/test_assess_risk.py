@@ -27,14 +27,12 @@ class TestAssessRisk:
                 {
                     "category": "competitive_displacement",
                     "score": 7,
-                    "explanation": "High competition",
-                    "evidence": "many competitors in the space",
+                    "rationale": "High competition with many competitors in the space",
                 },
                 {
                     "category": "technology_obsolescence",
                     "score": 4,
-                    "explanation": "Moderate risk",
-                    "evidence": "some legacy systems",
+                    "rationale": "Moderate risk due to some legacy systems",
                 },
             ],
             "overall_score": 5.5,

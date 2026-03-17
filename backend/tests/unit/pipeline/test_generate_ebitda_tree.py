@@ -32,7 +32,6 @@ _MOCK_AI_RESPONSE = {
             "type": "revenue",
             "value_range": "$10M-$50M",
             "percentage_of_parent": None,
-            "parent_id": None,
             "description": "Total subscription and services revenue",
             "linked_opportunity_indices": [],
             "children": [
@@ -42,7 +41,6 @@ _MOCK_AI_RESPONSE = {
                     "type": "revenue",
                     "value_range": "$8M-$40M",
                     "percentage_of_parent": 80,
-                    "parent_id": "revenue",
                     "description": "Annual SaaS subscriptions",
                     "linked_opportunity_indices": [0],
                     "children": [],
@@ -54,7 +52,6 @@ _MOCK_AI_RESPONSE = {
             "label": "EBITDA",
             "type": "subtotal",
             "value_range": "$2M-$8M",
-            "parent_id": None,
             "description": "Earnings before interest, taxes, depreciation and amortisation",
             "linked_opportunity_indices": [0],
             "children": [],
@@ -85,7 +82,6 @@ def _make_company_with_opportunities() -> Company:
             opportunities=[
                 Opportunity(
                     title="Deploy AI Automation",
-                    risk_mitigated="competitive_displacement",
                     value_lever="Cost Side",
                 ),
             ],
@@ -96,40 +92,41 @@ def _make_company_with_opportunities() -> Company:
 
 class TestBuildEbitdaNode:
     def test_builds_flat_node(self):
-        node = _build_ebitda_node({
-            "id": "revenue",
-            "label": "Total Revenue",
-            "type": "revenue",
-            "parent_id": None,
-            "description": "All revenue",
-            "linked_opportunity_indices": [0, 1],
-            "children": [],
-        })
+        node = _build_ebitda_node(
+            {
+                "id": "revenue",
+                "label": "Total Revenue",
+                "type": "revenue",
+                "description": "All revenue",
+                "linked_opportunity_indices": [0, 1],
+                "children": [],
+            }
+        )
         assert node.id == "revenue"
         assert node.type == "revenue"
         assert node.linked_opportunity_indices == [0, 1]
         assert node.children == []
 
     def test_builds_nested_nodes(self):
-        node = _build_ebitda_node({
-            "id": "revenue",
-            "label": "Revenue",
-            "type": "revenue",
-            "parent_id": None,
-            "description": "Top",
-            "linked_opportunity_indices": [],
-            "children": [
-                {
-                    "id": "subs",
-                    "label": "Subscriptions",
-                    "type": "revenue",
-                    "parent_id": "revenue",
-                    "description": "SaaS subs",
-                    "linked_opportunity_indices": [0],
-                    "children": [],
-                },
-            ],
-        })
+        node = _build_ebitda_node(
+            {
+                "id": "revenue",
+                "label": "Revenue",
+                "type": "revenue",
+                "description": "Top",
+                "linked_opportunity_indices": [],
+                "children": [
+                    {
+                        "id": "subs",
+                        "label": "Subscriptions",
+                        "type": "revenue",
+                        "description": "SaaS subs",
+                        "linked_opportunity_indices": [0],
+                        "children": [],
+                    },
+                ],
+            }
+        )
         assert len(node.children) == 1
         assert node.children[0].id == "subs"
         assert node.children[0].linked_opportunity_indices == [0]
@@ -165,9 +162,7 @@ class TestGenerateEbitdaTree:
         assert result.nodes[0].id == "revenue"
         assert len(result.nodes[0].children) == 1
         assert result.nodes[0].children[0].linked_opportunity_indices == [0]
-        step._request_executor.mark_question_complete.assert_called_with(
-            "generate_ebitda_tree"
-        )
+        step._request_executor.mark_question_complete.assert_called_with("generate_ebitda_tree")
         mock_factory.get_client.assert_called_once_with(
             verbosity=Verbosity.MEDIUM,
             reasoning_effort=ReasoningEffort.LOW,

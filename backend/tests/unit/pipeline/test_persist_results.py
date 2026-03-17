@@ -41,7 +41,7 @@ class TestPersistResults:
             ),
             opportunity_result=OpportunityResult(
                 opportunities=[
-                    Opportunity(title="Deploy AI", risk_mitigated="competitive_displacement", value_lever="Revenue Side"),
+                    Opportunity(title="Deploy AI", value_lever="Revenue Side"),
                 ],
                 top_three_immediate_actions=["Action 1"],
             ),
@@ -101,7 +101,6 @@ class TestPersistResults:
                     id="revenue",
                     label="Total Revenue",
                     type="revenue",
-                    parent_id=None,
                     description="All revenue",
                     linked_opportunity_indices=[0],
                 ),

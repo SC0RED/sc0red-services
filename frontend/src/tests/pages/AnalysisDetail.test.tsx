@@ -59,10 +59,13 @@ function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData 
             {
                 category: 'competitive_displacement',
                 score: 8,
-                explanation: 'Strong competition',
-                evidence: 'AI startups',
+                rationale: 'Strong competition from AI startups',
             },
-            { category: 'technology_obsolescence', score: 5, explanation: 'Moderate', evidence: 'Some risk' },
+            {
+                category: 'technology_obsolescence',
+                score: 5,
+                rationale: 'Moderate risk from some legacy systems',
+            },
         ],
         opportunities: [
             {
@@ -231,7 +234,7 @@ describe('AnalysisDetail — EBITDA Tree', () => {
                         id: 'revenue',
                         label: 'Revenue',
                         type: 'revenue',
-                        parent_id: null,
+
                         description: 'All revenue',
                         linked_opportunity_indices: [],
                         children: [],
@@ -265,7 +268,7 @@ describe('AnalysisDetail — EBITDA Tree', () => {
                         id: 'revenue',
                         label: 'Revenue',
                         type: 'revenue',
-                        parent_id: null,
+
                         description: 'Revenue',
                         linked_opportunity_indices: [],
                         children: [],
