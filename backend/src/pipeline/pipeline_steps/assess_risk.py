@@ -1,29 +1,13 @@
-"""Stage 2: 8-category AI risk scoring.
+"""Risk assessment constants — system prompt, schema, and shared prompt components.
 
-Ports buildRiskPrompt from pe-scan/src/lib/ai/prompts.ts:68-108.
+Used by ParallelProfileAndRisk to build the risk assessment AI call.
 """
 
 from __future__ import annotations
 
-import json
-import logging
-from typing import TYPE_CHECKING, cast
-
-from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
-from signalfield_core.pipeline.step import RequestStep
-
-from src.models.model_company import RiskAssessment, RiskScore
-from src.pipeline.step_timer import StepTimer
-
-if TYPE_CHECKING:
-    from signalfield_core.services.ai_client_factory import AIClientFactory
-
-    from src.facades.company_accessor import CompanyAccessor
 from src.models.model_literals import RISK_SCOPE_DISPLAY
 
-logger = logging.getLogger(__name__)
-
-_SYSTEM_PROMPT = (
+RISK_SYSTEM_PROMPT = (
     "You are a senior AI strategy consultant at a top-tier management consulting firm, "
     "specializing in AI disruption risk assessment for private equity portfolios. You have "
     "deep knowledge of how AI is transforming industries and creating existential risks "
@@ -41,7 +25,7 @@ _SYSTEM_PROMPT = (
     "9-10: Critical/existential risk, business model fundamentally threatened"
 )
 
-_RISK_SCHEMA: dict = {
+RISK_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "risk_scores": {
@@ -77,31 +61,22 @@ _RISK_SCHEMA: dict = {
     "additionalProperties": False,
 }
 
+# Shared prompt components used by ParallelProfileAndRisk
 
-def _build_risk_prompt(profile_dict: dict) -> str:
-    categories = "\n".join(
-        f"- {scope_id}: {info['name']} — {info['description']}"
-        for scope_id, info in RISK_SCOPE_DISPLAY.items()
-    )
+RISK_CATEGORIES_BLOCK = "\n".join(
+    f"- {scope_id}: {info['name']} — {info['description']}"
+    for scope_id, info in RISK_SCOPE_DISPLAY.items()
+)
 
-    industry_sector = profile_dict.get("industry_sector", "")
-
-    return f"""Perform a comprehensive AI disruption risk assessment for this company.
-
-COMPANY PROFILE:
-{json.dumps(profile_dict)}
-
-RISK CATEGORIES TO ASSESS:
-{categories}
-
-INDUSTRY CONTEXT: The company operates in "{industry_sector}". Apply industry-specific weighting:
+RISK_INDUSTRY_WEIGHTING = """\
 - If Financial Services: Weight regulatory_compliance and competitive_displacement higher
 - If Healthcare: Weight regulatory_compliance and data_ip higher
 - If Manufacturing: Weight supply_chain and talent_workforce higher
 - If Technology/SaaS: Weight technology_obsolescence and competitive_displacement higher
 - If Professional Services: Weight talent_workforce and technology_obsolescence higher
-- If Retail/Consumer: Weight customer_behavior and margin_compression higher
+- If Retail/Consumer: Weight customer_behavior and margin_compression higher"""
 
+RISK_ASSESSMENT_QUESTIONS = """\
 For each risk category, consider:
 1. What specific AI technologies are threatening this company's position?
 2. Who are the AI-native competitors entering this space?
@@ -109,67 +84,3 @@ For each risk category, consider:
 4. Are there any moats protecting against this risk?
 
 Assess all risk categories and provide the overall analysis."""
-
-
-class AssessRisk(RequestStep):
-    """Runs 8-category AI risk assessment on the company profile."""
-
-    def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
-        super().__init__()
-        self._ai_client_factory = ai_client_factory
-
-    def execute(self) -> None:
-        """Run the 8-category AI risk assessment and store results on the accessor."""
-        accessor = cast("CompanyAccessor", self.entity_accessor)
-        profile = accessor.company.profile
-        if not profile:
-            message = "Cannot assess risk: no company profile available"
-            raise ValueError(message)
-
-        user_prompt = _build_risk_prompt(profile.model_dump())
-
-        if not self._ai_client_factory:
-            message = "AI client factory not configured"
-            raise RuntimeError(message)
-
-        timer = StepTimer("AssessRisk")
-
-        client = self._ai_client_factory.get_client(
-            verbosity=Verbosity.MEDIUM,
-            reasoning_effort=ReasoningEffort.LOW,
-            precision=Precision.STANDARD,
-            instructions=_SYSTEM_PROMPT,
-        )
-        logger.info(
-            "[AssessRisk] sending AI request: prompt_len=%d, model=%s",
-            len(user_prompt),
-            getattr(client, "model", "unknown"),
-        )
-        with timer.measure("ai_call"):
-            try:
-                response = client.query_structured(input_text=user_prompt, json_schema=_RISK_SCHEMA)
-            except Exception:
-                logger.exception("[AssessRisk] AI request failed")
-                raise
-        logger.info(
-            "[AssessRisk] AI response received: metadata=%s",
-            response.metadata,
-        )
-        data = response.content
-
-        risk_scores = [RiskScore(**rs) for rs in data["risk_scores"]]
-        if not risk_scores:
-            message = "Risk assessment returned no risk scores"
-            raise ValueError(message)
-
-        assessment = RiskAssessment(
-            risk_scores=risk_scores,
-            overall_score=data["overall_score"],
-            tier=data["tier"],
-            top_risks=data["top_risks"],
-            analysis_summary=data["analysis_summary"],
-        )
-
-        accessor.set_risk_assessment(assessment)
-        self.request_executor.add_details(timer.to_details())
-        self.request_executor.mark_question_complete("assess_risk")
