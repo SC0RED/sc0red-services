@@ -98,9 +98,7 @@ def compute_risk_aggregates(
         message = "Cannot compute risk aggregates from empty risk_scores list"
         raise ValueError(message)
 
-    overall_score = round(
-        sum(score.score for score in risk_scores) / len(risk_scores), 1
-    )
+    overall_score = round(sum(score.score for score in risk_scores) / len(risk_scores), 1)
 
     if overall_score >= _TIER_CRITICAL_THRESHOLD:
         tier = "critical"
@@ -115,9 +113,7 @@ def compute_risk_aggregates(
     top_risks = [score.category for score in sorted_scores[:3]]
 
     top_three = sorted_scores[:3]
-    risk_details = ", ".join(
-        f"{s.category} ({s.score}/10)" for s in top_three
-    )
+    risk_details = ", ".join(f"{s.category} ({s.score}/10)" for s in top_three)
     analysis_summary = (
         f"{company_name} faces {tier} AI disruption risk "
         f"(overall: {overall_score}/10). "
