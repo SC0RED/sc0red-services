@@ -225,11 +225,13 @@ class ParallelProfileAndRisk(RequestStep):
             raise ValueError(message)
         accessor.set_profile(profile)
 
-        # Merge risk scores from both batches
-        all_risk_scores = [
-            RiskScore(**rs)
-            for rs in risk_batch_a_data["risk_scores"] + risk_batch_b_data["risk_scores"]
-        ]
+        # Merge risk scores from both batches, deduplicating by category
+        seen_categories: set[str] = set()
+        all_risk_scores: list[RiskScore] = []
+        for rs in risk_batch_a_data["risk_scores"] + risk_batch_b_data["risk_scores"]:
+            if rs["category"] not in seen_categories:
+                seen_categories.add(rs["category"])
+                all_risk_scores.append(RiskScore(**rs))
         if not all_risk_scores:
             message = "Risk assessment returned no risk scores"
             raise ValueError(message)
