@@ -28,7 +28,7 @@ EBITDA_SYSTEM_PROMPT = (
 )
 
 # Flat node schema — no recursive $ref. Each node references its parent via parent_id.
-# Top-level nodes (Revenue, COGS, Gross Profit, OpEx categories, EBITDA) use parent_id: null.
+# Top-level section headers (Revenue, COGS, Gross Profit, Operating Expenses, EBITDA) use parent_id: null.
 EBITDA_FLAT_NODE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -153,9 +153,15 @@ Tree structure guidelines:
 - Show 3-5 key operating expense categories relevant to this business
 - Show EBITDA (subtotal)
 
-OUTPUT FORMAT: Return a FLAT LIST of nodes. Each node has a parent_id \
-field that references the id of its parent node (or null for top-level nodes \
-like Revenue, COGS, Gross Profit, Operating Expenses, EBITDA). \
-Do NOT nest nodes — list them all at the top level.
+OUTPUT FORMAT: Return nodes as a flat JSON array (no nested children objects). \
+Use the parent_id field to express hierarchy — set it to the id of the parent \
+node, or null for the 5 P&L section headers only (Revenue, COGS, Gross Profit, \
+Operating Expenses, EBITDA).
+
+IMPORTANT: Revenue sub-streams MUST have parent_id referencing the Revenue node. \
+Individual cost items (e.g. cloud hosting, customer support) MUST have parent_id \
+referencing COGS. Individual operating expense items (e.g. R&D, Sales & Marketing, \
+G&A) MUST have parent_id referencing an Operating Expenses node. Only the 5 \
+section headers should have parent_id: null.
 
 Generate the EBITDA decomposition tree."""

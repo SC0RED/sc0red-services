@@ -286,9 +286,9 @@ class TestBuildEbitdaPrompt:
             {"company_name": "Test"},
             {"overall_score": 5.0, "tier": "moderate", "analysis_summary": "Test"},
         )
-        assert "FLAT LIST" in prompt
+        assert "flat JSON array" in prompt
         assert "parent_id" in prompt
-        assert "Do NOT nest" in prompt
+        assert "section headers" in prompt
 
 
 class TestSchemas:
