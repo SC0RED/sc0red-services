@@ -60,7 +60,8 @@ _MOCK_RESPONSES: dict[str, object] = {
         "ai_maturity": "Early exploration",
         "key_risks_visible": ["Limited market presence"],
     },
-    # AssessRisk
+    # AssessRisk (batch schema — pipeline calls this twice with 4 categories each;
+    # mock returns all 8 for simplicity; pipeline reads only risk_scores array)
     "risk_scores": {
         "risk_scores": [
             {
@@ -104,19 +105,8 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "rationale": "Minimal supply chain risk for SaaS model with software-only product and no physical supply chain.",
             },
         ],
-        "overall_score": 4.1,
-        "tier": "moderate",
-        "top_risks": [
-            "technology_obsolescence",
-            "competitive_displacement",
-            "margin_compression",
-        ],
-        "analysis_summary": (
-            "Mock risk assessment for E2E testing. "
-            "Overall moderate risk profile with manageable exposure across key categories."
-        ),
     },
-    # GenerateEbitdaTree
+    # GenerateEbitdaTree (flat node format with parent_id references)
     "nodes": {
         "summary": "E2E Test Corp operates a subscription SaaS model with primary revenue from platform fees and analytics add-ons. AI opportunities have the most impact on operational efficiency and revenue expansion.",
         "revenue_estimate": "$5M-$15M",
@@ -124,92 +114,75 @@ _MOCK_RESPONSES: dict[str, object] = {
         "nodes": [
             {
                 "id": "revenue",
+                "parent_id": None,
                 "label": "Total Revenue",
                 "type": "revenue",
                 "value_range": "$5M-$15M",
                 "percentage_of_parent": None,
-
                 "description": "Combined subscription and services revenue",
-                "linked_opportunity_indices": [],
-                "children": [
-                    {
-                        "id": "platform_subscriptions",
-                        "label": "Platform Subscriptions",
-                        "type": "revenue",
-                        "value_range": "$4M-$12M",
-                        "percentage_of_parent": 80,
-
-                        "description": "Annual SaaS subscription fees",
-                        "linked_opportunity_indices": [0],
-                        "children": [],
-                    },
-                    {
-                        "id": "services",
-                        "label": "Professional Services",
-                        "type": "revenue",
-                        "value_range": "$1M-$3M",
-                        "percentage_of_parent": 20,
-
-                        "description": "Implementation and consulting services",
-                        "linked_opportunity_indices": [],
-                        "children": [],
-                    },
-                ],
+            },
+            {
+                "id": "platform_subscriptions",
+                "parent_id": "revenue",
+                "label": "Platform Subscriptions",
+                "type": "revenue",
+                "value_range": "$4M-$12M",
+                "percentage_of_parent": 80,
+                "description": "Annual SaaS subscription fees",
+            },
+            {
+                "id": "services",
+                "parent_id": "revenue",
+                "label": "Professional Services",
+                "type": "revenue",
+                "value_range": "$1M-$3M",
+                "percentage_of_parent": 20,
+                "description": "Implementation and consulting services",
             },
             {
                 "id": "cogs",
+                "parent_id": None,
                 "label": "Cost of Revenue",
                 "type": "cost",
                 "value_range": "$1.5M-$4.5M",
                 "percentage_of_parent": 30,
-                "parent_id": "revenue",
                 "description": "Cloud infrastructure and support costs",
-                "linked_opportunity_indices": [0],
-                "children": [],
             },
             {
                 "id": "gross_profit",
+                "parent_id": None,
                 "label": "Gross Profit",
                 "type": "subtotal",
                 "value_range": "$3.5M-$10.5M",
                 "percentage_of_parent": 70,
-                "parent_id": "revenue",
                 "description": "Revenue minus cost of revenue",
-                "linked_opportunity_indices": [],
-                "children": [],
             },
             {
                 "id": "opex_rnd",
+                "parent_id": None,
                 "label": "R&D Expense",
                 "type": "cost",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": 20,
-                "parent_id": "revenue",
                 "description": "Engineering and product development",
-                "linked_opportunity_indices": [0],
-                "children": [],
             },
             {
                 "id": "opex_sga",
+                "parent_id": None,
                 "label": "SG&A Expense",
                 "type": "cost",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": 20,
-                "parent_id": "revenue",
                 "description": "Sales, general and administrative expenses",
-                "linked_opportunity_indices": [],
-                "children": [],
             },
             {
                 "id": "ebitda",
+                "parent_id": None,
                 "label": "EBITDA",
                 "type": "subtotal",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": None,
-
                 "description": "Earnings before interest, taxes, depreciation and amortisation",
-                "linked_opportunity_indices": [0],
-                "children": [],
             },
         ],
     },

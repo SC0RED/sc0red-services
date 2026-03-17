@@ -23,8 +23,8 @@ from src.models.model_literals import RISK_SCOPE_NAMES
 from src.pipeline.pipeline_steps.generate_ebitda_tree import (
     EBITDA_SYSTEM_PROMPT,
     EBITDA_TREE_SCHEMA,
-    build_ebitda_node,
     build_ebitda_prompt,
+    build_ebitda_tree_from_flat_nodes,
 )
 from src.pipeline.pipeline_steps.generate_opportunities import (
     HIGH_PRIORITY_SCHEMA,
@@ -176,8 +176,8 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
         )
         accessor.set_opportunities(opportunity_result)
 
-        # Build EBITDA tree and link to opportunities
-        ebitda_nodes = [build_ebitda_node(node) for node in ebitda_data["nodes"]]
+        # Reconstruct nested EBITDA tree from flat node list and link to opportunities
+        ebitda_nodes = build_ebitda_tree_from_flat_nodes(ebitda_data["nodes"])
         link_opportunities_to_ebitda_nodes(all_opportunities, ebitda_nodes)
 
         ebitda_result = EbitdaTreeResult(

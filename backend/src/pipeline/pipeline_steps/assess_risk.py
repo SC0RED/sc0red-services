@@ -1,6 +1,8 @@
 """Risk assessment constants — system prompt, schema, and shared prompt components.
 
-Used by ParallelProfileAndRisk to build the risk assessment AI call.
+Used by ParallelProfileAndRisk to build the risk assessment AI calls.
+The risk assessment is split into two parallel batches of 4 categories each,
+grouped by thematic relevance (external market threats vs internal/operational risks).
 """
 
 from __future__ import annotations
@@ -25,7 +27,9 @@ RISK_SYSTEM_PROMPT = (
     "9-10: Critical/existential risk, business model fundamentally threatened"
 )
 
-RISK_SCHEMA: dict[str, object] = {
+# Batch schema -- used for the 2x4 parallel risk split.
+# Returns only risk_scores (no aggregates — those are computed programmatically).
+RISK_BATCH_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "risk_scores": {
@@ -44,29 +48,29 @@ RISK_SCHEMA: dict[str, object] = {
                 "additionalProperties": False,
             },
         },
-        "overall_score": {"type": "number", "description": "Overall risk score 1-10"},
-        "tier": {
-            "type": "string",
-            "enum": ["low", "moderate", "high", "critical"],
-            "description": "Risk tier",
-        },
-        "top_risks": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Top 3 most critical risk category IDs",
-        },
-        "analysis_summary": {"type": "string", "description": "3-4 sentence executive summary"},
     },
-    "required": ["risk_scores", "overall_score", "tier", "top_risks", "analysis_summary"],
+    "required": ["risk_scores"],
     "additionalProperties": False,
 }
 
-# Shared prompt components used by ParallelProfileAndRisk
+# Category batches grouped by thematic relevance for cross-category reasoning.
+# Batch A: external market threats — these naturally cross-reference each other.
+# Batch B: internal/operational risks — these naturally cross-reference each other.
+RISK_BATCH_A_CATEGORIES: list[str] = [
+    "competitive_displacement",
+    "technology_obsolescence",
+    "customer_behavior",
+    "margin_compression",
+]
 
-RISK_CATEGORIES_BLOCK = "\n".join(
-    f"- {scope_id}: {info['name']} — {info['description']}"
-    for scope_id, info in RISK_SCOPE_DISPLAY.items()
-)
+RISK_BATCH_B_CATEGORIES: list[str] = [
+    "talent_workforce",
+    "regulatory_compliance",
+    "supply_chain",
+    "data_ip",
+]
+
+# Shared prompt components used by ParallelProfileAndRisk
 
 RISK_INDUSTRY_WEIGHTING = """\
 - If Financial Services: Weight regulatory_compliance and competitive_displacement higher
@@ -84,3 +88,12 @@ For each risk category, consider:
 4. Are there any moats protecting against this risk?
 
 Assess all risk categories and provide the overall analysis."""
+
+
+def build_risk_batch_categories_block(categories: list[str]) -> str:
+    """Build a categories block for a subset of risk categories."""
+    return "\n".join(
+        f"- {scope_id}: {RISK_SCOPE_DISPLAY[scope_id]['name']} — "
+        f"{RISK_SCOPE_DISPLAY[scope_id]['description']}"
+        for scope_id in categories
+    )
