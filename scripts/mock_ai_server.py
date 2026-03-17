@@ -261,18 +261,30 @@ def _detect_step(body: dict) -> str:
 
 def _extract_prompt_text(body: dict) -> str:
     """Extract the user prompt text from various API formats."""
-    # OpenAI Responses API
-    try:
-        return body.get("input", "")
-    except (KeyError, TypeError):
-        pass
+    # OpenAI Responses API — input can be a string or list of message objects
+    input_field = body.get("input")
+    if isinstance(input_field, str) and input_field:
+        return input_field
+    if isinstance(input_field, list):
+        for item in input_field:
+            if isinstance(item, dict):
+                # Message format: {"role": "user", "content": "..."}
+                content = item.get("content", "")
+                if isinstance(content, str) and content:
+                    return content
     # OpenAI Chat Completions / Anthropic Messages
     for message in body.get("messages", []):
         if message.get("role") == "user":
             content = message.get("content", "")
-            if isinstance(content, str):
+            if isinstance(content, str) and content:
                 return content
-    return ""
+            # Anthropic format: content is a list of blocks
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        return block.get("text", "")
+    # Last resort: stringify the entire body and search
+    return str(body)
 
 
 def _openai_responses_envelope(content: object) -> dict:
