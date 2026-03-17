@@ -60,24 +60,18 @@ _MOCK_RESPONSES: dict[str, object] = {
         "ai_maturity": "Early exploration",
         "key_risks_visible": ["Limited market presence"],
     },
-    # AssessRisk (batch schema — pipeline calls this twice with 4 categories each;
-    # mock returns all 8 for simplicity; pipeline reads only risk_scores array)
-    "risk_scores": {
+    # AssessRisk — Batch A (external market threats)
+    "risk_scores_batch_a": {
         "risk_scores": [
-            {
-                "category": "technology_obsolescence",
-                "score": 5.0,
-                "rationale": "Moderate technology risk given current stack with standard tech choices and some legacy components.",
-            },
             {
                 "category": "competitive_displacement",
                 "score": 5.0,
                 "rationale": "Moderate competitive pressure from AI-native entrants with several well-funded competitors in the space.",
             },
             {
-                "category": "talent_workforce",
-                "score": 4.0,
-                "rationale": "Low talent risk with stable engineering team and low attrition signals from job postings.",
+                "category": "technology_obsolescence",
+                "score": 5.0,
+                "rationale": "Moderate technology risk given current stack with standard tech choices and some legacy components.",
             },
             {
                 "category": "customer_behavior",
@@ -85,24 +79,34 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "rationale": "Low customer churn risk with long-term contract structure observed.",
             },
             {
+                "category": "margin_compression",
+                "score": 5.0,
+                "rationale": "Moderate margin pressure from infrastructure costs with cloud cost trends visible in pricing.",
+            },
+        ],
+    },
+    # AssessRisk — Batch B (internal/operational risks)
+    "risk_scores_batch_b": {
+        "risk_scores": [
+            {
+                "category": "talent_workforce",
+                "score": 4.0,
+                "rationale": "Low talent risk with stable engineering team and low attrition signals from job postings.",
+            },
+            {
                 "category": "regulatory_compliance",
                 "score": 3.0,
                 "rationale": "Low regulatory exposure in current markets with no significant compliance flags visible.",
             },
             {
-                "category": "data_ip",
-                "score": 4.0,
-                "rationale": "Low data and IP risk with standard data handling practices.",
-            },
-            {
-                "category": "margin_compression",
-                "score": 5.0,
-                "rationale": "Moderate margin pressure from infrastructure costs with cloud cost trends visible in pricing.",
-            },
-            {
                 "category": "supply_chain",
                 "score": 3.0,
                 "rationale": "Minimal supply chain risk for SaaS model with software-only product and no physical supply chain.",
+            },
+            {
+                "category": "data_ip",
+                "score": 4.0,
+                "rationale": "Low data and IP risk with standard data handling practices.",
             },
         ],
     },
@@ -225,6 +229,10 @@ def _detect_step(body: dict) -> str:
      - OpenAI Responses API: body["text"]["format"]["schema"]["properties"]
      - OpenAI Chat Completions API: body["response_format"]["json_schema"]["schema"]["properties"]
      - Anthropic Messages API: body["response_format"]["json_schema"]["schema"]["properties"]
+
+    For risk assessment, dispatches to batch A or B by inspecting the prompt
+    for batch-specific category keywords (competitive_displacement = batch A,
+    talent_workforce = batch B).
     """
     candidates: list[dict] = []
     try:
@@ -238,11 +246,33 @@ def _detect_step(body: dict) -> str:
 
     for schema in candidates:
         props = set(schema.get("properties", {}).keys())
-        for key in ("actual_url", "company_name", "risk_scores", "nodes", "opportunities"):
+        for key in ("actual_url", "company_name", "nodes", "opportunities"):
             if key in props:
                 return key
+        if "risk_scores" in props:
+            # Dispatch risk batches by checking prompt for category keywords
+            prompt_text = _extract_prompt_text(body)
+            if "competitive_displacement" in prompt_text:
+                return "risk_scores_batch_a"
+            return "risk_scores_batch_b"
 
     return "unknown"
+
+
+def _extract_prompt_text(body: dict) -> str:
+    """Extract the user prompt text from various API formats."""
+    # OpenAI Responses API
+    try:
+        return body.get("input", "")
+    except (KeyError, TypeError):
+        pass
+    # OpenAI Chat Completions / Anthropic Messages
+    for message in body.get("messages", []):
+        if message.get("role") == "user":
+            content = message.get("content", "")
+            if isinstance(content, str):
+                return content
+    return ""
 
 
 def _openai_responses_envelope(content: object) -> dict:
