@@ -1,102 +1,22 @@
-"""Tests for GenerateEbitdaTree pipeline step."""
+"""Tests for EBITDA tree constants, schemas, and node builder."""
 
-from unittest.mock import MagicMock
-
-import pytest
-from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
-
-from src.facades.company_accessor import CompanyAccessor
-from src.models.model_company import (
-    Company,
-    CompanyProfile,
-    EbitdaTreeResult,
-    Opportunity,
-    OpportunityResult,
-    RiskAssessment,
-    RiskScore,
-)
 from src.pipeline.pipeline_steps.generate_ebitda_tree import (
-    _SYSTEM_PROMPT,
-    GenerateEbitdaTree,
-    _build_ebitda_node,
+    EBITDA_SYSTEM_PROMPT,
+    EBITDA_TREE_SCHEMA,
+    build_ebitda_node,
+    build_ebitda_prompt,
 )
-
-_MOCK_AI_RESPONSE = {
-    "summary": "SaaS model with subscription revenue and moderate EBITDA margins.",
-    "revenue_estimate": "$10M-$50M",
-    "ebitda_estimate": "$2M-$8M",
-    "nodes": [
-        {
-            "id": "revenue",
-            "label": "Total Revenue",
-            "type": "revenue",
-            "value_range": "$10M-$50M",
-            "percentage_of_parent": None,
-            "description": "Total subscription and services revenue",
-            "linked_opportunity_indices": [],
-            "children": [
-                {
-                    "id": "subscriptions",
-                    "label": "Subscription Revenue",
-                    "type": "revenue",
-                    "value_range": "$8M-$40M",
-                    "percentage_of_parent": 80,
-                    "description": "Annual SaaS subscriptions",
-                    "linked_opportunity_indices": [0],
-                    "children": [],
-                },
-            ],
-        },
-        {
-            "id": "ebitda",
-            "label": "EBITDA",
-            "type": "subtotal",
-            "value_range": "$2M-$8M",
-            "description": "Earnings before interest, taxes, depreciation and amortisation",
-            "linked_opportunity_indices": [0],
-            "children": [],
-        },
-    ],
-}
-
-
-def _make_company_with_opportunities() -> Company:
-    return Company(
-        id="comp-1",
-        url="https://example.com",
-        profile=CompanyProfile(
-            company_name="Test Corp",
-            industry="SaaS",
-            industry_sector="Technology",
-        ),
-        risk_assessment=RiskAssessment(
-            risk_scores=[
-                RiskScore(category="competitive_displacement", score=7),
-            ],
-            overall_score=5.0,
-            tier="moderate",
-            top_risks=["competitive_displacement"],
-            analysis_summary="Moderate risk",
-        ),
-        opportunity_result=OpportunityResult(
-            opportunities=[
-                Opportunity(
-                    title="Deploy AI Automation",
-                    value_lever="Cost Side",
-                ),
-            ],
-            top_three_immediate_actions=["Action 1"],
-        ),
-    )
 
 
 class TestBuildEbitdaNode:
     def test_builds_flat_node(self):
-        node = _build_ebitda_node(
+        node = build_ebitda_node(
             {
                 "id": "revenue",
                 "label": "Total Revenue",
                 "type": "revenue",
+                "value_range": "$10M-$50M",
+                "percentage_of_parent": None,
                 "description": "All revenue",
                 "linked_opportunity_indices": [0, 1],
                 "children": [],
@@ -108,11 +28,13 @@ class TestBuildEbitdaNode:
         assert node.children == []
 
     def test_builds_nested_nodes(self):
-        node = _build_ebitda_node(
+        node = build_ebitda_node(
             {
                 "id": "revenue",
                 "label": "Revenue",
                 "type": "revenue",
+                "value_range": "$10M-$50M",
+                "percentage_of_parent": None,
                 "description": "Top",
                 "linked_opportunity_indices": [],
                 "children": [
@@ -120,6 +42,8 @@ class TestBuildEbitdaNode:
                         "id": "subs",
                         "label": "Subscriptions",
                         "type": "revenue",
+                        "value_range": "$8M-$40M",
+                        "percentage_of_parent": 80,
                         "description": "SaaS subs",
                         "linked_opportunity_indices": [0],
                         "children": [],
@@ -131,83 +55,85 @@ class TestBuildEbitdaNode:
         assert node.children[0].id == "subs"
         assert node.children[0].linked_opportunity_indices == [0]
 
-
-class TestGenerateEbitdaTree:
-    def test_execute_sets_ebitda_tree(self):
-        company = _make_company_with_opportunities()
-        accessor = CompanyAccessor(company)
-
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = _MOCK_AI_RESPONSE
-        mock_response.metadata = {"tokens": 100}
-        mock_client.query_structured.return_value = mock_response
-
-        mock_factory = MagicMock()
-        mock_factory.get_client.return_value = mock_client
-
-        step = GenerateEbitdaTree(ai_client_factory=mock_factory)
-        step._entity_accessor = accessor
-        step._request_executor = MagicMock()
-
-        step.execute()
-
-        result = accessor.company.ebitda_tree
-        assert result is not None
-        assert isinstance(result, EbitdaTreeResult)
-        assert result.summary == "SaaS model with subscription revenue and moderate EBITDA margins."
-        assert result.revenue_estimate == "$10M-$50M"
-        assert result.ebitda_estimate == "$2M-$8M"
-        assert len(result.nodes) == 2
-        assert result.nodes[0].id == "revenue"
-        assert len(result.nodes[0].children) == 1
-        assert result.nodes[0].children[0].linked_opportunity_indices == [0]
-        step._request_executor.mark_question_complete.assert_called_with("generate_ebitda_tree")
-        mock_factory.get_client.assert_called_once_with(
-            verbosity=Verbosity.MEDIUM,
-            reasoning_effort=ReasoningEffort.LOW,
-            precision=Precision.STANDARD,
-            instructions=_SYSTEM_PROMPT,
+    def test_builds_node_without_linked_indices(self):
+        """Nodes from AI response won't have linked_opportunity_indices — defaults to empty."""
+        node = build_ebitda_node(
+            {
+                "id": "cogs",
+                "label": "COGS",
+                "type": "cost",
+                "value_range": "$3M-$15M",
+                "percentage_of_parent": None,
+                "description": "Cost of goods",
+                "children": [],
+            }
         )
+        assert node.linked_opportunity_indices == []
 
-    def test_execute_missing_profile_raises(self):
-        company = Company(id="comp-1", url="https://example.com")
-        accessor = CompanyAccessor(company)
-
-        step = GenerateEbitdaTree(ai_client_factory=MagicMock())
-        step._entity_accessor = accessor
-        step._request_executor = MagicMock()
-
-        with pytest.raises(ValueError, match="profile, risk assessment, or opportunities missing"):
-            step.execute()
-
-    def test_execute_missing_opportunities_raises(self):
-        company = Company(
-            id="comp-1",
-            url="https://example.com",
-            profile=CompanyProfile(company_name="Test", industry="Tech"),
-            risk_assessment=RiskAssessment(
-                risk_scores=[RiskScore(category="data_ip", score=3)],
-                overall_score=3.0,
-                tier="low",
-            ),
+    def test_builds_node_with_optional_fields(self):
+        node = build_ebitda_node(
+            {
+                "id": "margin",
+                "label": "Gross Margin",
+                "type": "margin",
+                "value_range": "$5M-$10M",
+                "percentage_of_parent": 60,
+                "description": "Gross margin",
+                "children": [],
+            }
         )
-        accessor = CompanyAccessor(company)
+        assert node.value_range == "$5M-$10M"
+        assert node.percentage_of_parent == 60
 
-        step = GenerateEbitdaTree(ai_client_factory=MagicMock())
-        step._entity_accessor = accessor
-        step._request_executor = MagicMock()
+    def test_missing_required_field_raises(self):
+        """Missing a required field should raise KeyError — fail-fast."""
+        import pytest
 
-        with pytest.raises(ValueError, match="opportunities missing"):
-            step.execute()
+        with pytest.raises(KeyError):
+            build_ebitda_node(
+                {
+                    "id": "broken",
+                    "label": "Broken",
+                    "type": "revenue",
+                    "description": "Missing children",
+                    "value_range": "$1M",
+                    "percentage_of_parent": None,
+                    # "children" missing — should fail
+                }
+            )
 
-    def test_execute_no_factory_raises(self):
-        company = _make_company_with_opportunities()
-        accessor = CompanyAccessor(company)
 
-        step = GenerateEbitdaTree(ai_client_factory=None)
-        step._entity_accessor = accessor
-        step._request_executor = MagicMock()
+class TestBuildEbitdaPrompt:
+    def test_prompt_includes_profile_and_risk(self):
+        profile = {"company_name": "Acme Corp", "industry": "SaaS"}
+        assessment = {
+            "overall_score": 7.0,
+            "tier": "high",
+            "analysis_summary": "High competitive risk",
+        }
+        prompt = build_ebitda_prompt(profile, assessment)
+        assert "Acme Corp" in prompt
+        assert "7.0/10" in prompt
+        assert "high risk" in prompt.lower()
+        assert "EBITDA" in prompt
 
-        with pytest.raises(RuntimeError, match="AI client factory not configured"):
-            step.execute()
+    def test_prompt_has_tree_structure_guidelines(self):
+        prompt = build_ebitda_prompt(
+            {"company_name": "Test"},
+            {"overall_score": 5.0, "tier": "moderate", "analysis_summary": "Test"},
+        )
+        assert "Revenue" in prompt
+        assert "Gross Profit" in prompt
+        assert "operating expense" in prompt.lower()
+
+
+class TestSchemas:
+    def test_system_prompt_is_non_empty_string(self):
+        assert isinstance(EBITDA_SYSTEM_PROMPT, str)
+        assert len(EBITDA_SYSTEM_PROMPT) > 50
+
+    def test_tree_schema_has_required_fields(self):
+        assert "summary" in EBITDA_TREE_SCHEMA["properties"]
+        assert "nodes" in EBITDA_TREE_SCHEMA["properties"]
+        assert "revenue_estimate" in EBITDA_TREE_SCHEMA["properties"]
+        assert "ebitda_estimate" in EBITDA_TREE_SCHEMA["properties"]

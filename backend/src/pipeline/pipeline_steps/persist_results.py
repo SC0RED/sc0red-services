@@ -75,23 +75,24 @@ class PersistResults(RequestStep):
             }
             self._assessment_repo.save_assessment(assessment_id, assessment_doc)
 
-            # Persist individual risk scores
-            for rs in risk_assessment.risk_scores:
-                self._assessment_repo.save_risk_score(
-                    assessment_id,
-                    rs.category,
+            # Persist risk scores in batch
+            self._assessment_repo.batch_save_risk_scores(
+                assessment_id,
+                [
                     {
+                        "category": rs.category,
                         "score": rs.score,
                         "rationale": rs.rationale,
-                    },
-                )
+                    }
+                    for rs in risk_assessment.risk_scores
+                ],
+            )
 
-        # Persist opportunities (only if we have a valid assessment to attach them to)
+        # Persist opportunities in batch (only if we have a valid assessment)
         if opportunity_result and risk_assessment:
-            for i, opp in enumerate(opportunity_result.opportunities):
-                self._assessment_repo.save_opportunity(
-                    assessment_id,
-                    i,
+            self._assessment_repo.batch_save_opportunities(
+                assessment_id,
+                [
                     {
                         "title": opp.title,
                         "impact_rating": opp.impact_rating,
@@ -103,8 +104,10 @@ class PersistResults(RequestStep):
                         "roi_estimate": opp.roi_estimate,
                         "related_services": opp.related_services,
                         "value_lever": opp.value_lever,
-                    },
-                )
+                    }
+                    for opp in opportunity_result.opportunities
+                ],
+            )
 
             # Save top actions as part of company metadata
             self._company_repo.update_company_metadata(

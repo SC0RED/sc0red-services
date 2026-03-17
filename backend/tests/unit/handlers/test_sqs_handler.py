@@ -88,9 +88,7 @@ class TestSQSHandler:
         """Pipeline errors are recorded on the company and scan — not retried via SQS."""
         handler, storage = self._make_handler()
         handler._factory_manager.run_company_analysis.side_effect = RuntimeError("AI provider boom")
-        self._make_scan_repo(
-            storage, {"progress": 10, "total_companies": 1}, resolved_companies=0
-        )
+        self._make_scan_repo(storage, {"progress": 10, "total_companies": 1}, resolved_companies=0)
         # After recording the error, the company_repo.get_by_id returns a record with error
         company_repo = storage.create_company_repository.return_value
         company_repo.get_by_id.return_value = {"error": "AI provider boom"}

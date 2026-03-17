@@ -9,11 +9,13 @@ class TestRequestRepository:
     @mock_aws
     def test_create_and_find(self, dynamodb_table):
         repo = DynamoDBRequestRepository(dynamodb_table)
-        request_id = repo.create({
-            "request_type": "company_analysis",
-            "url": "https://example.com",
-            "status": "pending",
-        })
+        request_id = repo.create(
+            {
+                "request_type": "company_analysis",
+                "url": "https://example.com",
+                "status": "pending",
+            }
+        )
 
         assert request_id is not None
 

@@ -1,8 +1,8 @@
 """Company analysis pipeline factory.
 
-Wires the 5-step single company analysis pipeline:
+Wires the 4-step single company analysis pipeline:
 ScrapeAndResolve → ParallelProfileAndRisk →
-GenerateOpportunities → GenerateEbitdaTree → PersistResults
+ParallelOpportunitiesAndEbitda → PersistResults
 """
 
 from __future__ import annotations
@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING
 
 from signalfield_core.pipeline.factory import PipelineFactory
 
-from src.pipeline.pipeline_steps.generate_ebitda_tree import GenerateEbitdaTree
-from src.pipeline.pipeline_steps.generate_opportunities import GenerateOpportunities
+from src.pipeline.pipeline_steps.parallel_opportunities_ebitda import (
+    ParallelOpportunitiesAndEbitda,
+)
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileAndRisk
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
@@ -55,10 +56,7 @@ class CompanyAnalysisFactory(PipelineFactory):
             ParallelProfileAndRisk(
                 ai_client_factory=self._ai_client_factory,
             ),
-            GenerateOpportunities(
-                ai_client_factory=self._ai_client_factory,
-            ),
-            GenerateEbitdaTree(
+            ParallelOpportunitiesAndEbitda(
                 ai_client_factory=self._ai_client_factory,
             ),
             PersistResults(

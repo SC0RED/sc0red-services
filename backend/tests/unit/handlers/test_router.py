@@ -1,4 +1,5 @@
 """Unit tests for src.handlers.router."""
+
 from src.handlers.router import Router
 
 
