@@ -106,40 +106,39 @@ _MOCK_EBITDA_RESPONSE = {
     "nodes": [
         {
             "id": "revenue",
+            "parent_id": None,
             "label": "Total Revenue",
             "type": "revenue",
             "value_range": "$10M-$50M",
             "percentage_of_parent": None,
             "description": "Total revenue",
-            "children": [
-                {
-                    "id": "subs",
-                    "label": "Subscriptions",
-                    "type": "revenue",
-                    "value_range": "$8M-$40M",
-                    "percentage_of_parent": 80,
-                    "description": "SaaS subscriptions",
-                    "children": [],
-                },
-            ],
+        },
+        {
+            "id": "subs",
+            "parent_id": "revenue",
+            "label": "Subscriptions",
+            "type": "revenue",
+            "value_range": "$8M-$40M",
+            "percentage_of_parent": 80,
+            "description": "SaaS subscriptions",
         },
         {
             "id": "cogs",
+            "parent_id": None,
             "label": "COGS",
             "type": "cost",
             "value_range": "$3M-$15M",
             "percentage_of_parent": None,
             "description": "Cost of goods sold",
-            "children": [],
         },
         {
             "id": "ebitda",
+            "parent_id": None,
             "label": "EBITDA",
             "type": "subtotal",
             "value_range": "$2M-$8M",
             "percentage_of_parent": None,
             "description": "Earnings",
-            "children": [],
         },
     ],
 }
@@ -185,7 +184,11 @@ class TestParallelOpportunitiesAndEbitda:
         assert isinstance(ebitda, EbitdaTreeResult)
         assert ebitda.summary == "SaaS model with subscription revenue"
         assert ebitda.revenue_estimate == "$10M-$50M"
+        # Flat response has 4 nodes, but top-level roots are 3 (revenue, cogs, ebitda)
+        # subs is a child of revenue after tree reconstruction
         assert len(ebitda.nodes) == 3
+        assert len(ebitda.nodes[0].children) == 1  # revenue has subs as child
+        assert ebitda.nodes[0].children[0].id == "subs"
 
         # Check EBITDA nodes are linked to opportunities
         revenue_node = ebitda.nodes[0]

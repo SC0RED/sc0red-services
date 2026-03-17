@@ -60,23 +60,18 @@ _MOCK_RESPONSES: dict[str, object] = {
         "ai_maturity": "Early exploration",
         "key_risks_visible": ["Limited market presence"],
     },
-    # AssessRisk
-    "risk_scores": {
+    # AssessRisk — Batch A (external market threats)
+    "risk_scores_batch_a": {
         "risk_scores": [
-            {
-                "category": "technology_obsolescence",
-                "score": 5.0,
-                "rationale": "Moderate technology risk given current stack with standard tech choices and some legacy components.",
-            },
             {
                 "category": "competitive_displacement",
                 "score": 5.0,
                 "rationale": "Moderate competitive pressure from AI-native entrants with several well-funded competitors in the space.",
             },
             {
-                "category": "talent_workforce",
-                "score": 4.0,
-                "rationale": "Low talent risk with stable engineering team and low attrition signals from job postings.",
+                "category": "technology_obsolescence",
+                "score": 5.0,
+                "rationale": "Moderate technology risk given current stack with standard tech choices and some legacy components.",
             },
             {
                 "category": "customer_behavior",
@@ -84,39 +79,38 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "rationale": "Low customer churn risk with long-term contract structure observed.",
             },
             {
-                "category": "regulatory_compliance",
-                "score": 3.0,
-                "rationale": "Low regulatory exposure in current markets with no significant compliance flags visible.",
-            },
-            {
-                "category": "data_ip",
-                "score": 4.0,
-                "rationale": "Low data and IP risk with standard data handling practices.",
-            },
-            {
                 "category": "margin_compression",
                 "score": 5.0,
                 "rationale": "Moderate margin pressure from infrastructure costs with cloud cost trends visible in pricing.",
+            },
+        ],
+    },
+    # AssessRisk — Batch B (internal/operational risks)
+    "risk_scores_batch_b": {
+        "risk_scores": [
+            {
+                "category": "talent_workforce",
+                "score": 4.0,
+                "rationale": "Low talent risk with stable engineering team and low attrition signals from job postings.",
+            },
+            {
+                "category": "regulatory_compliance",
+                "score": 3.0,
+                "rationale": "Low regulatory exposure in current markets with no significant compliance flags visible.",
             },
             {
                 "category": "supply_chain",
                 "score": 3.0,
                 "rationale": "Minimal supply chain risk for SaaS model with software-only product and no physical supply chain.",
             },
+            {
+                "category": "data_ip",
+                "score": 4.0,
+                "rationale": "Low data and IP risk with standard data handling practices.",
+            },
         ],
-        "overall_score": 4.1,
-        "tier": "moderate",
-        "top_risks": [
-            "technology_obsolescence",
-            "competitive_displacement",
-            "margin_compression",
-        ],
-        "analysis_summary": (
-            "Mock risk assessment for E2E testing. "
-            "Overall moderate risk profile with manageable exposure across key categories."
-        ),
     },
-    # GenerateEbitdaTree
+    # GenerateEbitdaTree (flat node format with parent_id references)
     "nodes": {
         "summary": "E2E Test Corp operates a subscription SaaS model with primary revenue from platform fees and analytics add-ons. AI opportunities have the most impact on operational efficiency and revenue expansion.",
         "revenue_estimate": "$5M-$15M",
@@ -124,92 +118,75 @@ _MOCK_RESPONSES: dict[str, object] = {
         "nodes": [
             {
                 "id": "revenue",
+                "parent_id": None,
                 "label": "Total Revenue",
                 "type": "revenue",
                 "value_range": "$5M-$15M",
                 "percentage_of_parent": None,
-
                 "description": "Combined subscription and services revenue",
-                "linked_opportunity_indices": [],
-                "children": [
-                    {
-                        "id": "platform_subscriptions",
-                        "label": "Platform Subscriptions",
-                        "type": "revenue",
-                        "value_range": "$4M-$12M",
-                        "percentage_of_parent": 80,
-
-                        "description": "Annual SaaS subscription fees",
-                        "linked_opportunity_indices": [0],
-                        "children": [],
-                    },
-                    {
-                        "id": "services",
-                        "label": "Professional Services",
-                        "type": "revenue",
-                        "value_range": "$1M-$3M",
-                        "percentage_of_parent": 20,
-
-                        "description": "Implementation and consulting services",
-                        "linked_opportunity_indices": [],
-                        "children": [],
-                    },
-                ],
+            },
+            {
+                "id": "platform_subscriptions",
+                "parent_id": "revenue",
+                "label": "Platform Subscriptions",
+                "type": "revenue",
+                "value_range": "$4M-$12M",
+                "percentage_of_parent": 80,
+                "description": "Annual SaaS subscription fees",
+            },
+            {
+                "id": "services",
+                "parent_id": "revenue",
+                "label": "Professional Services",
+                "type": "revenue",
+                "value_range": "$1M-$3M",
+                "percentage_of_parent": 20,
+                "description": "Implementation and consulting services",
             },
             {
                 "id": "cogs",
+                "parent_id": None,
                 "label": "Cost of Revenue",
                 "type": "cost",
                 "value_range": "$1.5M-$4.5M",
                 "percentage_of_parent": 30,
-                "parent_id": "revenue",
                 "description": "Cloud infrastructure and support costs",
-                "linked_opportunity_indices": [0],
-                "children": [],
             },
             {
                 "id": "gross_profit",
+                "parent_id": None,
                 "label": "Gross Profit",
                 "type": "subtotal",
                 "value_range": "$3.5M-$10.5M",
                 "percentage_of_parent": 70,
-                "parent_id": "revenue",
                 "description": "Revenue minus cost of revenue",
-                "linked_opportunity_indices": [],
-                "children": [],
             },
             {
                 "id": "opex_rnd",
+                "parent_id": None,
                 "label": "R&D Expense",
                 "type": "cost",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": 20,
-                "parent_id": "revenue",
                 "description": "Engineering and product development",
-                "linked_opportunity_indices": [0],
-                "children": [],
             },
             {
                 "id": "opex_sga",
+                "parent_id": None,
                 "label": "SG&A Expense",
                 "type": "cost",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": 20,
-                "parent_id": "revenue",
                 "description": "Sales, general and administrative expenses",
-                "linked_opportunity_indices": [],
-                "children": [],
             },
             {
                 "id": "ebitda",
+                "parent_id": None,
                 "label": "EBITDA",
                 "type": "subtotal",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": None,
-
                 "description": "Earnings before interest, taxes, depreciation and amortisation",
-                "linked_opportunity_indices": [0],
-                "children": [],
             },
         ],
     },
@@ -252,6 +229,10 @@ def _detect_step(body: dict) -> str:
      - OpenAI Responses API: body["text"]["format"]["schema"]["properties"]
      - OpenAI Chat Completions API: body["response_format"]["json_schema"]["schema"]["properties"]
      - Anthropic Messages API: body["response_format"]["json_schema"]["schema"]["properties"]
+
+    For risk assessment, dispatches to batch A or B by inspecting the prompt
+    for batch-specific category keywords (competitive_displacement = batch A,
+    talent_workforce = batch B).
     """
     candidates: list[dict] = []
     try:
@@ -265,11 +246,45 @@ def _detect_step(body: dict) -> str:
 
     for schema in candidates:
         props = set(schema.get("properties", {}).keys())
-        for key in ("actual_url", "company_name", "risk_scores", "nodes", "opportunities"):
+        for key in ("actual_url", "company_name", "nodes", "opportunities"):
             if key in props:
                 return key
+        if "risk_scores" in props:
+            # Dispatch risk batches by checking prompt for category keywords
+            prompt_text = _extract_prompt_text(body)
+            if "competitive_displacement" in prompt_text:
+                return "risk_scores_batch_a"
+            return "risk_scores_batch_b"
 
     return "unknown"
+
+
+def _extract_prompt_text(body: dict) -> str:
+    """Extract the user prompt text from various API formats."""
+    # OpenAI Responses API — input can be a string or list of message objects
+    input_field = body.get("input")
+    if isinstance(input_field, str) and input_field:
+        return input_field
+    if isinstance(input_field, list):
+        for item in input_field:
+            if isinstance(item, dict):
+                # Message format: {"role": "user", "content": "..."}
+                content = item.get("content", "")
+                if isinstance(content, str) and content:
+                    return content
+    # OpenAI Chat Completions / Anthropic Messages
+    for message in body.get("messages", []):
+        if message.get("role") == "user":
+            content = message.get("content", "")
+            if isinstance(content, str) and content:
+                return content
+            # Anthropic format: content is a list of blocks
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        return block.get("text", "")
+    # Last resort: stringify the entire body and search
+    return str(body)
 
 
 def _openai_responses_envelope(content: object) -> dict:
