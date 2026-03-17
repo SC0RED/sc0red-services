@@ -51,16 +51,12 @@ _RISK_SCHEMA: dict = {
                 "properties": {
                     "category": {"type": "string", "description": "Risk category ID"},
                     "score": {"type": "number", "description": "Risk score 1-10"},
-                    "explanation": {
+                    "rationale": {
                         "type": "string",
-                        "description": "2-3 sentences explaining this specific score",
-                    },
-                    "evidence": {
-                        "type": "string",
-                        "description": "Specific signals supporting this assessment",
+                        "description": "2-3 sentences explaining score with specific evidence and signals",
                     },
                 },
-                "required": ["category", "score", "explanation", "evidence"],
+                "required": ["category", "score", "rationale"],
                 "additionalProperties": False,
             },
         },

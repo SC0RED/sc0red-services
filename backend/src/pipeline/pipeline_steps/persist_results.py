@@ -82,8 +82,7 @@ class PersistResults(RequestStep):
                     rs.category,
                     {
                         "score": rs.score,
-                        "explanation": rs.explanation,
-                        "evidence": rs.evidence,
+                        "rationale": rs.rationale,
                     },
                 )
 
@@ -95,7 +94,6 @@ class PersistResults(RequestStep):
                     i,
                     {
                         "title": opp.title,
-                        "risk_mitigated": opp.risk_mitigated,
                         "impact_rating": opp.impact_rating,
                         "strategic_category": opp.strategic_category,
                         "description": opp.description,

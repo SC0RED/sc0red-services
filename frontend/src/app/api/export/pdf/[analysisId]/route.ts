@@ -111,7 +111,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
         <div class="bar"><div class="bar-fill" style="width:${(rs.score / 10) * 100}%;background:${sc};"></div></div>
         <div style="width:30px;font-weight:700;color:${sc};text-align:right;">${rs.score}</div>
       </div>
-      ${rs.explanation ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${escapeHtml(rs.explanation)}</p>` : ''}
+      ${rs.rationale ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${escapeHtml(rs.rationale)}</p>` : ''}
     </div>`
       })
       .join('')}

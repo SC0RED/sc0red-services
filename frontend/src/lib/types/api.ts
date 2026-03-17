@@ -1,8 +1,7 @@
 export interface RiskScore {
     category: string
     score: number
-    explanation?: string
-    evidence?: string
+    rationale?: string
 }
 
 export interface Vendor {
@@ -22,7 +21,6 @@ export interface Opportunity {
     impact_rating: 'High' | 'Medium' | 'Low'
     timeline: string
     strategic_category: string
-    risk_mitigated?: string
     implementation_steps?: string[]
     investment_range?: string
     roi_estimate?: string
@@ -36,9 +34,9 @@ export interface EbitdaNode {
     type: 'revenue' | 'cost' | 'margin' | 'subtotal'
     value_range?: string
     percentage_of_parent?: number
-    parent_id: string | null
     description: string
     linked_opportunity_indices: number[]
+    parent_id?: string | null
     children?: EbitdaNode[]
 }
 

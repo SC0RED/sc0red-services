@@ -48,7 +48,6 @@ _EBITDA_NODE_SCHEMA: dict = {
             "type": ["number", "null"],
             "description": "Percentage of parent node value",
         },
-        "parent_id": {"type": ["string", "null"]},
         "description": {"type": "string"},
         "linked_opportunity_indices": {
             "type": "array",
@@ -63,7 +62,6 @@ _EBITDA_NODE_SCHEMA: dict = {
         "type",
         "value_range",
         "percentage_of_parent",
-        "parent_id",
         "description",
         "linked_opportunity_indices",
         "children",
@@ -109,7 +107,6 @@ def _build_ebitda_node(data: dict) -> EbitdaNode:
         type=data["type"],
         value_range=data.get("value_range"),
         percentage_of_parent=data.get("percentage_of_parent"),
-        parent_id=data.get("parent_id"),
         description=data["description"],
         linked_opportunity_indices=data["linked_opportunity_indices"],
         children=children,

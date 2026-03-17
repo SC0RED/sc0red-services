@@ -50,10 +50,6 @@ _OPPORTUNITY_ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "title": {"type": "string", "description": "Specific, action-oriented title"},
-        "risk_mitigated": {
-            "type": "string",
-            "description": "Category ID this primarily addresses",
-        },
         "impact_rating": {"type": "string", "enum": ["High", "Medium", "Low"]},
         "strategic_category": {
             "type": "string",
@@ -80,7 +76,8 @@ _OPPORTUNITY_ITEM_SCHEMA: dict[str, Any] = {
         "related_services": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Relevant vendor or service names (e.g. 'Datadog - Observability', 'Snowflake - Data Platform')",
+            "maxItems": 3,
+            "description": "Up to 3 relevant vendor or service names (e.g. 'Datadog - Observability')",
         },
         "value_lever": {
             "type": "string",
@@ -90,7 +87,6 @@ _OPPORTUNITY_ITEM_SCHEMA: dict[str, Any] = {
     },
     "required": [
         "title",
-        "risk_mitigated",
         "impact_rating",
         "strategic_category",
         "description",
@@ -167,7 +163,7 @@ Generate 2-3 high-priority opportunities targeting the risk categories listed ab
 - Make implementation steps specific to THIS company (3-5 steps)
 - Keep descriptions concise (2-3 sentences)
 - ROI estimates should be realistic for company size and industry
-- For related_services, list relevant vendors as simple strings (e.g. "Datadog - Observability")
+- For related_services, list up to 3 relevant vendors as simple strings (e.g. "Datadog - Observability")
 - Classify each opportunity's value_lever: "Revenue Side" (drives top-line growth, new revenue streams, pricing optimization, market expansion), "Cost Side" (reduces operating expenses, automation, efficiency gains), or "Both" (impacts revenue and cost simultaneously)
 
 {_STRATEGIC_CATEGORIES_INSTRUCTIONS}
@@ -193,7 +189,7 @@ Generate 1-2 strategic opportunities targeting the risk categories listed above.
 - Make implementation steps specific to THIS company (3-5 steps)
 - Keep descriptions concise (2-3 sentences)
 - ROI estimates should be realistic for company size and industry
-- For related_services, list relevant vendors as simple strings (e.g. "Datadog - Observability")
+- For related_services, list up to 3 relevant vendors as simple strings (e.g. "Datadog - Observability")
 - Classify each opportunity's value_lever: "Revenue Side" (drives top-line growth, new revenue streams, pricing optimization, market expansion), "Cost Side" (reduces operating expenses, automation, efficiency gains), or "Both" (impacts revenue and cost simultaneously)
 
 {_STRATEGIC_CATEGORIES_INSTRUCTIONS}

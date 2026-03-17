@@ -66,50 +66,42 @@ _MOCK_RESPONSES: dict[str, object] = {
             {
                 "category": "technology_obsolescence",
                 "score": 5.0,
-                "explanation": "Moderate technology risk given current stack.",
-                "evidence": "Standard tech choices with some legacy components.",
+                "rationale": "Moderate technology risk given current stack with standard tech choices and some legacy components.",
             },
             {
                 "category": "competitive_displacement",
                 "score": 5.0,
-                "explanation": "Moderate competitive pressure from AI-native entrants.",
-                "evidence": "Several well-funded competitors in the space.",
+                "rationale": "Moderate competitive pressure from AI-native entrants with several well-funded competitors in the space.",
             },
             {
                 "category": "talent_workforce",
                 "score": 4.0,
-                "explanation": "Low talent risk; stable engineering team.",
-                "evidence": "Low attrition signals from job postings.",
+                "rationale": "Low talent risk with stable engineering team and low attrition signals from job postings.",
             },
             {
                 "category": "customer_behavior",
                 "score": 4.0,
-                "explanation": "Low customer churn risk.",
-                "evidence": "Long-term contract structure observed.",
+                "rationale": "Low customer churn risk with long-term contract structure observed.",
             },
             {
                 "category": "regulatory_compliance",
                 "score": 3.0,
-                "explanation": "Low regulatory exposure in current markets.",
-                "evidence": "No significant compliance flags visible.",
+                "rationale": "Low regulatory exposure in current markets with no significant compliance flags visible.",
             },
             {
                 "category": "data_ip",
                 "score": 4.0,
-                "explanation": "Low data and IP risk.",
-                "evidence": "Standard data handling practices.",
+                "rationale": "Low data and IP risk with standard data handling practices.",
             },
             {
                 "category": "margin_compression",
                 "score": 5.0,
-                "explanation": "Moderate margin pressure from infrastructure costs.",
-                "evidence": "Cloud cost trends visible in pricing.",
+                "rationale": "Moderate margin pressure from infrastructure costs with cloud cost trends visible in pricing.",
             },
             {
                 "category": "supply_chain",
                 "score": 3.0,
-                "explanation": "Minimal supply chain risk for SaaS model.",
-                "evidence": "Software-only product with no physical supply chain.",
+                "rationale": "Minimal supply chain risk for SaaS model with software-only product and no physical supply chain.",
             },
         ],
         "overall_score": 4.1,
@@ -136,7 +128,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "type": "revenue",
                 "value_range": "$5M-$15M",
                 "percentage_of_parent": None,
-                "parent_id": None,
+
                 "description": "Combined subscription and services revenue",
                 "linked_opportunity_indices": [],
                 "children": [
@@ -146,7 +138,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                         "type": "revenue",
                         "value_range": "$4M-$12M",
                         "percentage_of_parent": 80,
-                        "parent_id": "revenue",
+
                         "description": "Annual SaaS subscription fees",
                         "linked_opportunity_indices": [0],
                         "children": [],
@@ -157,7 +149,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                         "type": "revenue",
                         "value_range": "$1M-$3M",
                         "percentage_of_parent": 20,
-                        "parent_id": "revenue",
+
                         "description": "Implementation and consulting services",
                         "linked_opportunity_indices": [],
                         "children": [],
@@ -214,7 +206,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "type": "subtotal",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": None,
-                "parent_id": None,
+
                 "description": "Earnings before interest, taxes, depreciation and amortisation",
                 "linked_opportunity_indices": [0],
                 "children": [],
@@ -226,7 +218,6 @@ _MOCK_RESPONSES: dict[str, object] = {
         "opportunities": [
             {
                 "title": "Adopt AI-powered workflow automation",
-                "risk_mitigated": "technology_obsolescence",
                 "impact_rating": "High",
                 "strategic_category": "Competitive Moat",
                 "description": (
