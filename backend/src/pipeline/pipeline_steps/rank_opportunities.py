@@ -45,14 +45,10 @@ def deduplicate_ideations(
     for ideation in sorted_ideations:
         words = _normalise_words(str(ideation["title"]))
         if not words:
-            kept.append(ideation)
-            kept_word_sets.append(words)
             continue
 
         is_duplicate = False
         for existing_words in kept_word_sets:
-            if not existing_words:
-                continue
             overlap = len(words & existing_words)
             smaller = min(len(words), len(existing_words))
             if smaller > 0 and overlap / smaller > _TITLE_OVERLAP_THRESHOLD:
