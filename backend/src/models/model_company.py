@@ -6,7 +6,7 @@ Ported from pe-scan/src/lib/ai/prompts.ts interfaces (lines 179-237).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -129,3 +129,4 @@ class Company(BaseModel):
     scraped_links: list[dict[str, str]] = Field(default_factory=list, exclude=True)
     scraped_title: str = Field(default="", exclude=True)
     document_text: str | None = Field(default=None, exclude=True)
+    ranked_ideations: list[dict[str, Any]] = Field(default_factory=list, exclude=True)

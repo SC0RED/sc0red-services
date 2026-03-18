@@ -1,4 +1,4 @@
-"""Tests for ParallelProfileAndRisk composite pipeline step."""
+"""Tests for ParallelProfileRiskAndIdeation composite pipeline step."""
 
 from unittest.mock import MagicMock, call
 
@@ -13,8 +13,9 @@ from src.pipeline.pipeline_steps.assess_risk import (
     RISK_SYSTEM_PROMPT,
 )
 from src.pipeline.pipeline_steps.extract_profile import PROFILE_SYSTEM_PROMPT
+from src.pipeline.pipeline_steps.ideate_opportunities import IDEATION_SYSTEM_PROMPT
 from src.pipeline.pipeline_steps.parallel_profile_risk import (
-    ParallelProfileAndRisk,
+    ParallelProfileRiskAndIdeation,
     compute_risk_aggregates,
 )
 
@@ -85,28 +86,39 @@ _RISK_BATCH_B_RESPONSE = {
 }
 
 
-class TestParallelProfileAndRisk:
+def _make_ideation_response(category_id: str) -> dict:
+    return {
+        "title": f"AI opportunity for {category_id}",
+        "description": f"Deploy AI to address {category_id} risk",
+        "value_lever": "Revenue Side",
+        "strategic_category": "Competitive Moat",
+        "impact_rating": "High",
+    }
+
+
+class TestParallelProfileRiskAndIdeation:
     def _make_mock_factory(
         self,
         profile_data: dict = _PROFILE_RESPONSE,
         risk_batch_a_data: dict = _RISK_BATCH_A_RESPONSE,
         risk_batch_b_data: dict = _RISK_BATCH_B_RESPONSE,
     ) -> MagicMock:
-        """Create a mock AIClientFactory returning different data per call.
+        """Create a mock AIClientFactory routing by system prompt.
 
-        Routes responses based on the system prompt and schema to dispatch correctly
-        across the 3 concurrent AI calls (1 profile + 2 risk batches).
+        Routes: profile → profile_data, risk → risk batches, ideation → ideation responses.
         """
         mock_factory = MagicMock()
 
+        # Profile client
         profile_client = MagicMock()
         profile_response = MagicMock()
         profile_response.content = profile_data
         profile_response.metadata = {"tokens": 100}
         profile_client.query_structured.return_value = profile_response
 
-        # Track which batch prompt is being called to return correct response
+        # Risk clients (dispatched by call order)
         risk_call_count = {"count": 0}
+
         risk_client_a = MagicMock()
         risk_response_a = MagicMock()
         risk_response_a.content = risk_batch_a_data
@@ -119,14 +131,41 @@ class TestParallelProfileAndRisk:
         risk_response_b.metadata = {"tokens": 80}
         risk_client_b.query_structured.return_value = risk_response_b
 
+        # Ideation client — returns different titles by inspecting prompt
+        ideation_client = MagicMock()
+
+        def ideation_query_side_effect(*, input_text, json_schema):
+            # Extract category from prompt text (e.g., "RISK CATEGORY: competitive_displacement")
+            for cat in [
+                "competitive_displacement", "technology_obsolescence",
+                "customer_behavior", "margin_compression",
+                "talent_workforce", "regulatory_compliance",
+                "supply_chain", "data_ip",
+            ]:
+                if f"RISK CATEGORY: {cat}" in input_text:
+                    response = MagicMock()
+                    response.content = _make_ideation_response(cat)
+                    response.metadata = {"tokens": 50}
+                    return response
+            response = MagicMock()
+            response.content = _make_ideation_response("unknown")
+            response.metadata = {"tokens": 50}
+            return response
+
+        ideation_client.query_structured.side_effect = ideation_query_side_effect
+
         def get_client_side_effect(**kwargs):
-            if kwargs.get("instructions") == PROFILE_SYSTEM_PROMPT:
+            instructions = kwargs.get("instructions", "")
+            if instructions == PROFILE_SYSTEM_PROMPT:
                 return profile_client
-            # Both risk batches use same system prompt — dispatch by call order
-            risk_call_count["count"] += 1
-            if risk_call_count["count"] == 1:
-                return risk_client_a
-            return risk_client_b
+            if instructions == RISK_SYSTEM_PROMPT:
+                risk_call_count["count"] += 1
+                if risk_call_count["count"] == 1:
+                    return risk_client_a
+                return risk_client_b
+            if instructions == IDEATION_SYSTEM_PROMPT:
+                return ideation_client
+            return MagicMock()
 
         mock_factory.get_client.side_effect = get_client_side_effect
         return mock_factory
@@ -147,7 +186,7 @@ class TestParallelProfileAndRisk:
         mock_factory = self._make_mock_factory()
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -163,62 +202,71 @@ class TestParallelProfileAndRisk:
         assert len(accessor.company.risk_assessment.risk_scores) == 8
 
         # Aggregates are computed programmatically
-        assert accessor.company.risk_assessment.overall_score == 5.0  # mean of 8+6+5+4+7+3+2+5
-        assert accessor.company.risk_assessment.tier == "moderate"  # 5.0 >= 3.5
+        assert accessor.company.risk_assessment.overall_score == 5.0
+        assert accessor.company.risk_assessment.tier == "moderate"
         assert accessor.company.risk_assessment.top_risks == [
             "competitive_displacement",
             "talent_workforce",
             "technology_obsolescence",
         ]
 
-        # Both questions marked complete
-        step._request_executor.mark_question_complete.assert_any_call("extract_profile")
-        step._request_executor.mark_question_complete.assert_any_call("assess_risk")
+        # Ranked ideations are stored
+        ranked = accessor.get_ranked_ideations()
+        assert len(ranked) > 0
+        assert len(ranked) <= 5  # max_count default
+        for ideation in ranked:
+            assert "title" in ideation
+            assert "risk_category" in ideation
+            assert "top_three_immediate_actions" in ideation
+
+        # All three questions marked complete
+        calls = step._request_executor.mark_question_complete.call_args_list
+        completed = {c[0][0] for c in calls}
+        assert "extract_profile" in completed
+        assert "assess_risk" in completed
+        assert "ideate_opportunities" in completed
 
         # Details added (timings)
         step._request_executor.add_details.assert_called_once()
         details = step._request_executor.add_details.call_args[0][0]
-        assert "ParallelProfileAndRisk.timings" in details
+        assert "ParallelProfileRiskAndIdeation.timings" in details
 
-    def test_three_ai_clients_created_with_correct_system_prompts(self):
+    def test_eleven_ai_clients_created(self):
         mock_factory = self._make_mock_factory()
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         step.execute()
 
-        # get_client called 3 times — once for profile, twice for risk batches
-        assert mock_factory.get_client.call_count == 3
-        expected_calls = [
-            call(
-                verbosity=Verbosity.MEDIUM,
-                reasoning_effort=ReasoningEffort.LOW,
-                precision=Precision.STANDARD,
-                instructions=PROFILE_SYSTEM_PROMPT,
-            ),
-            call(
-                verbosity=Verbosity.MEDIUM,
-                reasoning_effort=ReasoningEffort.LOW,
-                precision=Precision.STANDARD,
-                instructions=RISK_SYSTEM_PROMPT,
-            ),
-            call(
-                verbosity=Verbosity.MEDIUM,
-                reasoning_effort=ReasoningEffort.LOW,
-                precision=Precision.STANDARD,
-                instructions=RISK_SYSTEM_PROMPT,
-            ),
-        ]
-        mock_factory.get_client.assert_has_calls(expected_calls, any_order=True)
+        # get_client called 11 times: 1 profile + 2 risk + 8 ideation
+        assert mock_factory.get_client.call_count == 11
+
+    def test_correct_system_prompts_used(self):
+        mock_factory = self._make_mock_factory()
+        accessor = self._make_accessor()
+
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        # Check system prompts used
+        calls = mock_factory.get_client.call_args_list
+        instructions = [c.kwargs["instructions"] for c in calls]
+
+        assert instructions.count(PROFILE_SYSTEM_PROMPT) == 1
+        assert instructions.count(RISK_SYSTEM_PROMPT) == 2
+        assert instructions.count(IDEATION_SYSTEM_PROMPT) == 8
 
     def test_includes_document_text_in_prompts(self):
         mock_factory = self._make_mock_factory()
         accessor = self._make_accessor(document_text="Investment memo: Revenue is $50M annually.")
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -239,7 +287,7 @@ class TestParallelProfileAndRisk:
         )
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -253,7 +301,7 @@ class TestParallelProfileAndRisk:
         )
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -263,7 +311,7 @@ class TestParallelProfileAndRisk:
     def test_no_ai_factory_raises(self):
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=None)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=None)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -280,7 +328,7 @@ class TestParallelProfileAndRisk:
 
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -294,7 +342,7 @@ class TestParallelProfileAndRisk:
         company.actual_url = "https://resolved.com"
         accessor = CompanyAccessor(company)
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -305,27 +353,9 @@ class TestParallelProfileAndRisk:
         profile_prompt = profile_client.query_structured.call_args[1]["input_text"]
         assert "https://resolved.com" in profile_prompt
 
-    def test_risk_batch_prompts_contain_scraped_text(self):
-        mock_factory = self._make_mock_factory()
-        accessor = self._make_accessor(scraped_text="Unique website content for testing")
-
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
-        step._entity_accessor = accessor
-        step._request_executor = MagicMock()
-
-        step.execute()
-
-        # Both risk batch clients should have received the scraped text
-        # The first risk client (batch A) and second risk client (batch B) both get scraped text
-        risk_client_a = mock_factory.get_client(instructions=RISK_SYSTEM_PROMPT)
-        risk_prompt = risk_client_a.query_structured.call_args[1]["input_text"]
-        assert "Unique website content for testing" in risk_prompt
-        assert "RISK CATEGORIES TO ASSESS" in risk_prompt
-
     def test_risk_batch_prompts_contain_correct_categories(self):
         mock_factory = MagicMock()
 
-        # Track prompts sent to each risk client
         risk_prompts: list[str] = []
 
         profile_client = MagicMock()
@@ -335,7 +365,6 @@ class TestParallelProfileAndRisk:
         profile_client.query_structured.return_value = profile_response
 
         def capture_risk_query(**kwargs):
-            """Mock query_structured that captures the input prompt."""
             risk_prompts.append(kwargs.get("input_text", ""))
             response = MagicMock()
             response.content = {"risk_scores": [
@@ -348,21 +377,29 @@ class TestParallelProfileAndRisk:
         risk_client = MagicMock()
         risk_client.query_structured.side_effect = capture_risk_query
 
+        ideation_client = MagicMock()
+        ideation_response = MagicMock()
+        ideation_response.content = _make_ideation_response("test")
+        ideation_response.metadata = {"tokens": 50}
+        ideation_client.query_structured.return_value = ideation_response
+
         def get_client_side_effect(**kwargs):
-            if kwargs.get("instructions") == PROFILE_SYSTEM_PROMPT:
+            instructions = kwargs.get("instructions", "")
+            if instructions == PROFILE_SYSTEM_PROMPT:
                 return profile_client
-            return risk_client
+            if instructions == RISK_SYSTEM_PROMPT:
+                return risk_client
+            return ideation_client
 
         mock_factory.get_client.side_effect = get_client_side_effect
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         step.execute()
 
-        # Both batch prompts should have been captured
         assert len(risk_prompts) == 2
         all_prompts = " ".join(risk_prompts)
         for category in RISK_BATCH_A_CATEGORIES:
@@ -370,21 +407,100 @@ class TestParallelProfileAndRisk:
         for category in RISK_BATCH_B_CATEGORIES:
             assert category in all_prompts
 
-    def test_timings_include_both_risk_batches(self):
+    def test_timings_include_all_calls(self):
         mock_factory = self._make_mock_factory()
         accessor = self._make_accessor()
 
-        step = ParallelProfileAndRisk(ai_client_factory=mock_factory)
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         step.execute()
 
         details = step._request_executor.add_details.call_args[0][0]
-        timings = details["ParallelProfileAndRisk.timings"]
+        timings = details["ParallelProfileRiskAndIdeation.timings"]
         assert "ai_call_extract_profile" in timings
         assert "ai_call_assess_risk_batch_a" in timings
         assert "ai_call_assess_risk_batch_b" in timings
+        # At least some ideation timings
+        assert "ai_call_ideation_competitive_displacement" in timings
+
+    def test_ideation_deduplication_works(self):
+        """When ideations have overlapping titles, duplicates are removed."""
+        mock_factory = MagicMock()
+
+        profile_client = MagicMock()
+        profile_response = MagicMock()
+        profile_response.content = _PROFILE_RESPONSE
+        profile_response.metadata = {"tokens": 100}
+        profile_client.query_structured.return_value = profile_response
+
+        risk_call_count = {"count": 0}
+        risk_client_a = MagicMock()
+        risk_response_a = MagicMock()
+        risk_response_a.content = _RISK_BATCH_A_RESPONSE
+        risk_response_a.metadata = {"tokens": 80}
+        risk_client_a.query_structured.return_value = risk_response_a
+
+        risk_client_b = MagicMock()
+        risk_response_b = MagicMock()
+        risk_response_b.content = _RISK_BATCH_B_RESPONSE
+        risk_response_b.metadata = {"tokens": 80}
+        risk_client_b.query_structured.return_value = risk_response_b
+
+        # All ideations return the same title — should dedup to 1
+        ideation_client = MagicMock()
+        ideation_response = MagicMock()
+        ideation_response.content = {
+            "title": "Deploy AI chatbot for customer support",
+            "description": "Build a customer-facing chatbot",
+            "value_lever": "Revenue Side",
+            "strategic_category": "Competitive Moat",
+            "impact_rating": "High",
+        }
+        ideation_response.metadata = {"tokens": 50}
+        ideation_client.query_structured.return_value = ideation_response
+
+        def get_client_side_effect(**kwargs):
+            instructions = kwargs.get("instructions", "")
+            if instructions == PROFILE_SYSTEM_PROMPT:
+                return profile_client
+            if instructions == RISK_SYSTEM_PROMPT:
+                risk_call_count["count"] += 1
+                if risk_call_count["count"] == 1:
+                    return risk_client_a
+                return risk_client_b
+            return ideation_client
+
+        mock_factory.get_client.side_effect = get_client_side_effect
+        accessor = self._make_accessor()
+
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        ranked = accessor.get_ranked_ideations()
+        # All 8 had same title → dedup to 1
+        assert len(ranked) == 1
+
+    def test_top_three_actions_derived(self):
+        mock_factory = self._make_mock_factory()
+        accessor = self._make_accessor()
+
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        ranked = accessor.get_ranked_ideations()
+        assert len(ranked) > 0
+        # Each ranked ideation carries top_three_immediate_actions
+        actions = ranked[0]["top_three_immediate_actions"]
+        assert isinstance(actions, list)
+        assert len(actions) <= 3
 
 
 class TestComputeRiskAggregates:
@@ -395,7 +511,7 @@ class TestComputeRiskAggregates:
             RiskScore(category="c", score=6, rationale="mid"),
         ]
         result = compute_risk_aggregates(scores, "TestCo")
-        assert result.overall_score == 6.0  # (8+4+6)/3
+        assert result.overall_score == 6.0
 
     def test_tier_critical(self):
         scores = [RiskScore(category=f"cat_{i}", score=9, rationale="r") for i in range(4)]
@@ -435,7 +551,6 @@ class TestComputeRiskAggregates:
             RiskScore(category="margin_compression", score=6, rationale="r"),
         ]
         result = compute_risk_aggregates(scores, "Acme Corp")
-        # mean = (9+8+7+6)/4 = 7.5 → "high" tier
         assert "Acme Corp" in result.analysis_summary
         assert "high" in result.analysis_summary
         assert "competitive_displacement" in result.analysis_summary

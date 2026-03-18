@@ -1,6 +1,6 @@
 """Risk assessment constants — system prompt, schema, and shared prompt components.
 
-Used by ParallelProfileAndRisk to build the risk assessment AI calls.
+Used by ParallelProfileRiskAndIdeation to build the risk assessment AI calls.
 The risk assessment is split into two parallel batches of 4 categories each,
 grouped by thematic relevance (external market threats vs internal/operational risks).
 """
@@ -70,7 +70,7 @@ RISK_BATCH_B_CATEGORIES: list[str] = [
     "data_ip",
 ]
 
-# Shared prompt components used by ParallelProfileAndRisk
+# Shared prompt components used by ParallelProfileRiskAndIdeation
 
 RISK_INDUSTRY_WEIGHTING = """\
 - If Financial Services: Weight regulatory_compliance and competitive_displacement higher

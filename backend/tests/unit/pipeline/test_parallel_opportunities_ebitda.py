@@ -1,4 +1,4 @@
-"""Tests for ParallelOpportunitiesAndEbitda composite pipeline step."""
+"""Tests for ParallelOpportunityDetailsAndEbitda composite pipeline step."""
 
 from unittest.mock import MagicMock
 
@@ -13,32 +13,44 @@ from src.models.model_company import (
     RiskAssessment,
     RiskScore,
 )
-from src.pipeline.pipeline_steps.generate_opportunities import OPPS_SYSTEM_PROMPT
+from src.pipeline.pipeline_steps.detail_opportunity import DETAIL_SYSTEM_PROMPT
 from src.pipeline.pipeline_steps.parallel_opportunities_ebitda import (
-    ParallelOpportunitiesAndEbitda,
+    ParallelOpportunityDetailsAndEbitda,
     link_opportunities_to_ebitda_nodes,
 )
 
 
-def _make_opportunity_data(
+def _make_ranked_ideation(
     title: str = "Deploy AI Chatbot",
     value_lever: str = "Both",
+    risk_category: str = "competitive_displacement",
+    impact_rating: str = "High",
+    top_actions: list[str] | None = None,
 ) -> dict:
     return {
         "title": title,
-        "impact_rating": "High",
-        "strategic_category": "Competitive Moat",
         "description": "Build a customer-facing AI chatbot",
+        "value_lever": value_lever,
+        "strategic_category": "Competitive Moat",
+        "impact_rating": impact_rating,
+        "risk_category": risk_category,
+        "top_three_immediate_actions": top_actions or ["Action 1", "Action 2", "Action 3"],
+    }
+
+
+def _make_detail_response() -> dict:
+    return {
         "implementation_steps": ["Step 1", "Step 2", "Step 3"],
         "timeline": "Medium-term (3-9 months)",
         "investment_range": "$100K-$500K",
         "roi_estimate": "30% improvement in support efficiency",
         "related_services": ["Accenture - AI strategy"],
-        "value_lever": value_lever,
     }
 
 
-def _make_company_with_profile_and_risk() -> Company:
+def _make_company_with_profile_risk_and_ideations(
+    ideation_count: int = 3,
+) -> Company:
     company = Company(url="https://example.com")
     company.profile = CompanyProfile(
         company_name="Test Corp",
@@ -61,39 +73,43 @@ def _make_company_with_profile_and_risk() -> Company:
         ],
         analysis_summary="High competitive risk",
     )
+    # Simulate ranked ideations from Level 1
+    categories = [
+        "competitive_displacement",
+        "technology_obsolescence",
+        "talent_workforce",
+        "margin_compression",
+        "customer_behavior",
+    ]
+    company.ranked_ideations = [
+        _make_ranked_ideation(
+            title=f"AI Opportunity {i + 1}",
+            value_lever=["Revenue Side", "Cost Side", "Both"][i % 3],
+            risk_category=categories[i],
+        )
+        for i in range(ideation_count)
+    ]
     return company
 
 
-def _make_mock_factory(
-    high_priority_data: dict,
-    strategic_data: dict,
-    ebitda_data: dict,
-) -> MagicMock:
-    """Create a mock AIClientFactory that dispatches by schema.
-
-    Routes responses based on whether the schema requires top_three_immediate_actions
-    (high-priority), nodes (EBITDA tree), or neither (strategic).
-    """
+def _make_mock_factory(detail_count: int = 3) -> MagicMock:
+    """Create a mock AIClientFactory that dispatches detail vs EBITDA by schema."""
     mock_factory = MagicMock()
     mock_client = MagicMock()
     mock_factory.get_client.return_value = mock_client
 
-    response_high = MagicMock()
-    response_high.content = high_priority_data
-    response_high.metadata = {"tokens": 100}
-    response_strategic = MagicMock()
-    response_strategic.content = strategic_data
-    response_strategic.metadata = {"tokens": 80}
-    response_ebitda = MagicMock()
-    response_ebitda.content = ebitda_data
-    response_ebitda.metadata = {"tokens": 120}
+    detail_response = MagicMock()
+    detail_response.content = _make_detail_response()
+    detail_response.metadata = {"tokens": 80}
+
+    ebitda_response = MagicMock()
+    ebitda_response.content = _MOCK_EBITDA_RESPONSE
+    ebitda_response.metadata = {"tokens": 120}
 
     def dispatch_by_schema(*, input_text, json_schema):
-        if "top_three_immediate_actions" in json_schema.get("required", []):
-            return response_high
         if "nodes" in json_schema.get("properties", {}):
-            return response_ebitda
-        return response_strategic
+            return ebitda_response
+        return detail_response
 
     mock_client.query_structured.side_effect = dispatch_by_schema
     return mock_factory
@@ -144,69 +160,50 @@ _MOCK_EBITDA_RESPONSE = {
 }
 
 
-class TestParallelOpportunitiesAndEbitda:
-    def test_successful_parallel_execution(self):
-        high_priority_data = {
-            "opportunities": [
-                _make_opportunity_data("AI Chatbot", "Revenue Side"),
-                _make_opportunity_data("Tech Upgrade", "Cost Side"),
-            ],
-            "top_three_immediate_actions": ["Action 1", "Action 2", "Action 3"],
-        }
-        strategic_data = {
-            "opportunities": [
-                _make_opportunity_data("Compliance Bot", "Both"),
-            ],
-        }
-        mock_factory = _make_mock_factory(high_priority_data, strategic_data, _MOCK_EBITDA_RESPONSE)
-
-        company = _make_company_with_profile_and_risk()
+class TestParallelOpportunityDetailsAndEbitda:
+    def test_successful_parallel_execution_with_three_ideations(self):
+        mock_factory = _make_mock_factory(detail_count=3)
+        company = _make_company_with_profile_risk_and_ideations(ideation_count=3)
         accessor = CompanyAccessor(company)
 
-        step = ParallelOpportunitiesAndEbitda(ai_client_factory=mock_factory)
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         step.execute()
 
-        # Check opportunities
+        # Check opportunities merged from ideation + detail
         result = accessor.company.opportunity_result
         assert result is not None
         assert len(result.opportunities) == 3
-        assert result.opportunities[0].title == "AI Chatbot"
-        assert result.opportunities[1].title == "Tech Upgrade"
-        assert result.opportunities[2].title == "Compliance Bot"
+        assert result.opportunities[0].title == "AI Opportunity 1"
+        assert result.opportunities[1].title == "AI Opportunity 2"
+        assert result.opportunities[2].title == "AI Opportunity 3"
+
+        # Detail fields are present
+        for opp in result.opportunities:
+            assert len(opp.implementation_steps) == 3
+            assert opp.timeline == "Medium-term (3-9 months)"
+            assert opp.investment_range == "$100K-$500K"
+            assert opp.roi_estimate == "30% improvement in support efficiency"
+
+        # Ideation fields preserved
+        assert result.opportunities[0].value_lever == "Revenue Side"
+        assert result.opportunities[1].value_lever == "Cost Side"
+        assert result.opportunities[2].value_lever == "Both"
+
+        # Top actions from ranked ideations
         assert result.top_three_immediate_actions == ["Action 1", "Action 2", "Action 3"]
 
-        # Check EBITDA tree
+        # EBITDA tree
         ebitda = accessor.company.ebitda_tree
         assert ebitda is not None
         assert isinstance(ebitda, EbitdaTreeResult)
         assert ebitda.summary == "SaaS model with subscription revenue"
-        assert ebitda.revenue_estimate == "$10M-$50M"
-        # Flat response has 4 nodes, but top-level roots are 3 (revenue, cogs, ebitda)
-        # subs is a child of revenue after tree reconstruction
-        assert len(ebitda.nodes) == 3
-        assert len(ebitda.nodes[0].children) == 1  # revenue has subs as child
-        assert ebitda.nodes[0].children[0].id == "subs"
+        assert len(ebitda.nodes) == 3  # 3 root nodes after tree reconstruction
 
-        # Check EBITDA nodes are linked to opportunities
-        revenue_node = ebitda.nodes[0]
-        assert 0 in revenue_node.linked_opportunity_indices  # AI Chatbot = Revenue Side
-        assert 2 in revenue_node.linked_opportunity_indices  # Compliance Bot = Both
-
-        cost_node = ebitda.nodes[1]
-        assert 1 in cost_node.linked_opportunity_indices  # Tech Upgrade = Cost Side
-        assert 2 in cost_node.linked_opportunity_indices  # Compliance Bot = Both
-
-        # 3 AI calls (high-priority, strategic, ebitda)
-        assert mock_factory.get_client.call_count == 3
-        mock_factory.get_client.assert_any_call(
-            verbosity=Verbosity.MEDIUM,
-            reasoning_effort=ReasoningEffort.LOW,
-            precision=Precision.STANDARD,
-            instructions=OPPS_SYSTEM_PROMPT,
-        )
+        # 4 AI calls: 3 detail + 1 EBITDA
+        assert mock_factory.get_client.call_count == 4
 
         # Both questions marked complete
         calls = step._request_executor.mark_question_complete.call_args_list
@@ -214,18 +211,12 @@ class TestParallelOpportunitiesAndEbitda:
         assert "generate_opportunities" in completed
         assert "generate_ebitda_tree" in completed
 
-    def test_top_actions_come_from_high_priority_call(self):
-        high_priority_data = {
-            "opportunities": [_make_opportunity_data()],
-            "top_three_immediate_actions": ["Urgent 1", "Urgent 2", "Urgent 3"],
-        }
-        strategic_data = {"opportunities": [_make_opportunity_data("Strategic Opp")]}
-        mock_factory = _make_mock_factory(high_priority_data, strategic_data, _MOCK_EBITDA_RESPONSE)
-
-        company = _make_company_with_profile_and_risk()
+    def test_successful_with_five_ideations(self):
+        mock_factory = _make_mock_factory(detail_count=5)
+        company = _make_company_with_profile_risk_and_ideations(ideation_count=5)
         accessor = CompanyAccessor(company)
 
-        step = ParallelOpportunitiesAndEbitda(ai_client_factory=mock_factory)
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -233,14 +224,40 @@ class TestParallelOpportunitiesAndEbitda:
 
         result = accessor.company.opportunity_result
         assert result is not None
-        assert result.top_three_immediate_actions == ["Urgent 1", "Urgent 2", "Urgent 3"]
+        assert len(result.opportunities) == 5
+
+        # 6 AI calls: 5 detail + 1 EBITDA
+        assert mock_factory.get_client.call_count == 6
+
+    def test_ebitda_nodes_linked_to_opportunities(self):
+        mock_factory = _make_mock_factory()
+        company = _make_company_with_profile_risk_and_ideations(ideation_count=3)
+        accessor = CompanyAccessor(company)
+
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        ebitda = accessor.company.ebitda_tree
+        assert ebitda is not None
+
+        # Opp 0 = Revenue Side, Opp 1 = Cost Side, Opp 2 = Both
+        revenue_node = ebitda.nodes[0]  # revenue type
+        assert 0 in revenue_node.linked_opportunity_indices  # Revenue Side
+        assert 2 in revenue_node.linked_opportunity_indices  # Both
+
+        cost_node = ebitda.nodes[1]  # cost type
+        assert 1 in cost_node.linked_opportunity_indices  # Cost Side
+        assert 2 in cost_node.linked_opportunity_indices  # Both
 
     def test_missing_profile_raises(self):
         company = Company(url="https://example.com")
         company.risk_assessment = RiskAssessment(overall_score=5.0)
         accessor = CompanyAccessor(company)
 
-        step = ParallelOpportunitiesAndEbitda(ai_client_factory=MagicMock())
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -252,7 +269,7 @@ class TestParallelOpportunitiesAndEbitda:
         company.profile = CompanyProfile(company_name="Test", industry="Tech")
         accessor = CompanyAccessor(company)
 
-        step = ParallelOpportunitiesAndEbitda(ai_client_factory=MagicMock())
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -260,14 +277,26 @@ class TestParallelOpportunitiesAndEbitda:
             step.execute()
 
     def test_missing_factory_raises(self):
-        company = _make_company_with_profile_and_risk()
+        company = _make_company_with_profile_risk_and_ideations()
         accessor = CompanyAccessor(company)
 
-        step = ParallelOpportunitiesAndEbitda(ai_client_factory=None)
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=None)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         with pytest.raises(RuntimeError, match="AI client factory not configured"):
+            step.execute()
+
+    def test_no_ranked_ideations_raises(self):
+        company = _make_company_with_profile_risk_and_ideations()
+        company.ranked_ideations = []  # Empty ideations
+        accessor = CompanyAccessor(company)
+
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=MagicMock())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        with pytest.raises(ValueError, match="No ranked ideations"):
             step.execute()
 
     def test_ai_call_failure_propagates(self):
@@ -278,10 +307,10 @@ class TestParallelOpportunitiesAndEbitda:
         mock_factory.get_client.return_value = mock_client
         mock_client.query_structured.side_effect = RuntimeError("AI service unavailable")
 
-        company = _make_company_with_profile_and_risk()
+        company = _make_company_with_profile_risk_and_ideations()
         accessor = CompanyAccessor(company)
 
-        step = ParallelOpportunitiesAndEbitda(ai_client_factory=mock_factory)
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=mock_factory)
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -291,7 +320,6 @@ class TestParallelOpportunitiesAndEbitda:
 
 class TestLinkOpportunitiesToEbitdaNodes:
     def _make_nodes(self):
-        """Build a simple EBITDA tree: revenue, cost, subtotal."""
         from src.models.model_company import EbitdaNode
 
         revenue = EbitdaNode(id="rev", label="Revenue", type="revenue", description="Revenue")
@@ -307,9 +335,9 @@ class TestLinkOpportunitiesToEbitdaNodes:
 
         link_opportunities_to_ebitda_nodes(opps, nodes)
 
-        assert nodes[0].linked_opportunity_indices == [0]  # revenue
-        assert nodes[1].linked_opportunity_indices == []  # cost
-        assert nodes[2].linked_opportunity_indices == [0]  # subtotal (gets revenue)
+        assert nodes[0].linked_opportunity_indices == [0]
+        assert nodes[1].linked_opportunity_indices == []
+        assert nodes[2].linked_opportunity_indices == [0]
 
     def test_cost_side_links_to_cost_nodes(self):
         from src.models.model_company import Opportunity
@@ -319,9 +347,9 @@ class TestLinkOpportunitiesToEbitdaNodes:
 
         link_opportunities_to_ebitda_nodes(opps, nodes)
 
-        assert nodes[0].linked_opportunity_indices == []  # revenue
-        assert nodes[1].linked_opportunity_indices == [0]  # cost
-        assert nodes[2].linked_opportunity_indices == [0]  # subtotal (gets cost)
+        assert nodes[0].linked_opportunity_indices == []
+        assert nodes[1].linked_opportunity_indices == [0]
+        assert nodes[2].linked_opportunity_indices == [0]
 
     def test_both_links_to_all_nodes(self):
         from src.models.model_company import Opportunity
@@ -331,9 +359,9 @@ class TestLinkOpportunitiesToEbitdaNodes:
 
         link_opportunities_to_ebitda_nodes(opps, nodes)
 
-        assert nodes[0].linked_opportunity_indices == [0]  # revenue
-        assert nodes[1].linked_opportunity_indices == [0]  # cost
-        assert nodes[2].linked_opportunity_indices == [0]  # subtotal
+        assert nodes[0].linked_opportunity_indices == [0]
+        assert nodes[1].linked_opportunity_indices == [0]
+        assert nodes[2].linked_opportunity_indices == [0]
 
     def test_multiple_opportunities_mixed_levers(self):
         from src.models.model_company import Opportunity
@@ -347,9 +375,9 @@ class TestLinkOpportunitiesToEbitdaNodes:
 
         link_opportunities_to_ebitda_nodes(opps, nodes)
 
-        assert nodes[0].linked_opportunity_indices == [0, 2]  # revenue: Rev + Both
-        assert nodes[1].linked_opportunity_indices == [1, 2]  # cost: Cost + Both
-        assert sorted(nodes[2].linked_opportunity_indices) == [0, 1, 2]  # subtotal: all
+        assert nodes[0].linked_opportunity_indices == [0, 2]
+        assert nodes[1].linked_opportunity_indices == [1, 2]
+        assert sorted(nodes[2].linked_opportunity_indices) == [0, 1, 2]
 
     def test_nested_children_are_linked(self):
         from src.models.model_company import EbitdaNode, Opportunity

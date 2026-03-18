@@ -1,11 +1,9 @@
-"""Composite step: runs opportunity generation and EBITDA tree AI calls in parallel.
+"""Composite step: runs opportunity detail enrichment and EBITDA tree AI calls in parallel.
 
-Instead of the sequential GenerateOpportunities → GenerateEbitdaTree flow, this step
-runs all 3 AI calls concurrently (2 opportunity calls + 1 EBITDA tree call). The EBITDA
-tree is built from profile + risk assessment only — opportunity-to-node linking is done
-programmatically after all calls complete.
-
-Saves ~60-90s of wall-clock time by overlapping the EBITDA tree call with opportunities.
+Takes the ranked ideations from Level 1 and enriches each with implementation
+details via focused AI calls. Runs N detail calls + 1 EBITDA call in parallel.
+After all complete, merges ideation + detail into full Opportunity objects and
+links to EBITDA nodes programmatically.
 """
 
 from __future__ import annotations
@@ -19,21 +17,18 @@ from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
 from src.models.model_company import EbitdaTreeResult, OpportunityResult
-from src.models.model_literals import RISK_SCOPE_NAMES
+from src.pipeline.pipeline_steps.detail_opportunity import (
+    DETAIL_SCHEMA,
+    DETAIL_SYSTEM_PROMPT,
+    build_detail_prompt,
+)
 from src.pipeline.pipeline_steps.generate_ebitda_tree import (
     EBITDA_SYSTEM_PROMPT,
     EBITDA_TREE_SCHEMA,
     build_ebitda_prompt,
     build_ebitda_tree_from_flat_nodes,
 )
-from src.pipeline.pipeline_steps.generate_opportunities import (
-    HIGH_PRIORITY_SCHEMA,
-    OPPS_SYSTEM_PROMPT,
-    STRATEGIC_SCHEMA,
-    build_high_priority_prompt,
-    build_opportunity,
-    build_strategic_prompt,
-)
+from src.pipeline.pipeline_steps.generate_opportunities import build_opportunity
 from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
@@ -70,7 +65,6 @@ def link_opportunities_to_ebitda_nodes(
         elif node.type == "cost":
             node.linked_opportunity_indices = list(cost_indices)
         elif node.type in ("subtotal", "margin"):
-            # Subtotals and margins get both revenue and cost indices (deduplicated)
             node.linked_opportunity_indices = sorted(set(revenue_indices + cost_indices))
         for child in node.children:
             _link_node(child)
@@ -79,13 +73,12 @@ def link_opportunities_to_ebitda_nodes(
         _link_node(node)
 
 
-class ParallelOpportunitiesAndEbitda(RequestStep):
-    """Runs opportunity generation and EBITDA tree AI calls in parallel.
+class ParallelOpportunityDetailsAndEbitda(RequestStep):
+    """Runs opportunity detail enrichment and EBITDA tree AI calls in parallel.
 
-    Replaces the sequential GenerateOpportunities → GenerateEbitdaTree pair.
-    Runs 3 AI calls concurrently: high-priority opportunities, strategic
-    opportunities, and EBITDA tree. After all complete, links EBITDA nodes
-    to opportunities programmatically based on value_lever.
+    Takes ranked ideations from Level 1 and runs N detail calls (one per ideation)
+    plus 1 EBITDA tree call in parallel. Merges ideation + detail into full
+    Opportunity objects and links to EBITDA nodes programmatically.
     """
 
     def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
@@ -93,7 +86,7 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
         self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
-        """Run opportunity generation and EBITDA tree in parallel."""
+        """Run opportunity detail and EBITDA tree in parallel."""
         accessor = cast("CompanyAccessor", self.entity_accessor)
         profile = accessor.company.profile
         risk_assessment = accessor.company.risk_assessment
@@ -111,37 +104,44 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
         profile_dict = profile.model_dump()
         assessment_dict = risk_assessment.model_dump()
 
-        # Build opportunity prompts
-        top_risk_categories = risk_assessment.top_risks[:3]
-        other_categories = [
-            category for category in RISK_SCOPE_NAMES if category not in top_risk_categories
-        ]
-        high_priority_prompt = build_high_priority_prompt(
-            profile_dict, assessment_dict, top_risk_categories
-        )
-        strategic_prompt = build_strategic_prompt(profile_dict, assessment_dict, other_categories)
+        # Get ranked ideations from Level 1
+        ranked_ideations = accessor.get_ranked_ideations()
+        if not ranked_ideations:
+            message = "No ranked ideations available for detail phase"
+            raise ValueError(message)
 
-        # Build EBITDA prompt (from profile + risk only, no opportunities)
+        # Extract top_three_immediate_actions (stored on each ideation by Level 1)
+        top_actions = ranked_ideations[0]["top_three_immediate_actions"]
+
+        # Build detail prompts (one per ranked ideation)
+        detail_prompts: list[tuple[str, str, dict[str, Any]]] = []  # (label, prompt, ideation)
+        for i, ideation in enumerate(ranked_ideations):
+            prompt = build_detail_prompt(
+                profile_dict=profile_dict,
+                assessment_dict=assessment_dict,
+                opportunity_title=str(ideation["title"]),
+                opportunity_description=str(ideation["description"]),
+            )
+            detail_prompts.append((f"detail_{i}", prompt, ideation))
+
+        # Build EBITDA prompt
         ebitda_prompt = build_ebitda_prompt(profile_dict, assessment_dict)
 
-        timer = StepTimer("ParallelOpportunitiesAndEbitda")
+        timer = StepTimer("ParallelOpportunityDetailsAndEbitda")
 
-        # Run all 3 AI calls in parallel
-        with FutureManager(name="ParallelOpportunitiesAndEbitda", max_workers=3) as manager:
-            manager.submit_task(
-                self._run_ai_call,
-                high_priority_prompt,
-                HIGH_PRIORITY_SCHEMA,
-                OPPS_SYSTEM_PROMPT,
-                "high_priority",
-            )
-            manager.submit_task(
-                self._run_ai_call,
-                strategic_prompt,
-                STRATEGIC_SCHEMA,
-                OPPS_SYSTEM_PROMPT,
-                "strategic",
-            )
+        # Run all detail + EBITDA calls in parallel
+        total_workers = len(detail_prompts) + 1
+        with FutureManager(
+            name="ParallelOpportunityDetailsAndEbitda", max_workers=total_workers
+        ) as manager:
+            for label, prompt, _ideation in detail_prompts:
+                manager.submit_task(
+                    self._run_ai_call,
+                    prompt,
+                    DETAIL_SCHEMA,
+                    DETAIL_SYSTEM_PROMPT,
+                    label,
+                )
             manager.submit_task(
                 self._run_ai_call,
                 ebitda_prompt,
@@ -155,20 +155,21 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
         for label, data, elapsed in all_results:
             results[label] = (data, elapsed)
 
-        high_data, high_elapsed = results["high_priority"]
-        strategic_data, strategic_elapsed = results["strategic"]
-        ebitda_data, ebitda_elapsed = results["ebitda_tree"]
+        # Merge ideation + detail into full Opportunity objects
+        all_opportunities = []
+        for i, (_label, _prompt, ideation) in enumerate(detail_prompts):
+            detail_data, detail_elapsed = results[f"detail_{i}"]
+            timer.record(f"ai_call_detail_{i}", detail_elapsed)
 
-        timer.record("ai_call_high_priority", high_elapsed)
-        timer.record("ai_call_strategic", strategic_elapsed)
-        timer.record("ai_call_ebitda_tree", ebitda_elapsed)
-
-        # Build opportunities
-        all_opportunities = [
-            build_opportunity(opp)
-            for opp in high_data["opportunities"] + strategic_data["opportunities"]
-        ]
-        top_actions = high_data["top_three_immediate_actions"]
+            merged = {
+                "title": ideation["title"],
+                "description": ideation["description"],
+                "value_lever": ideation["value_lever"],
+                "strategic_category": ideation["strategic_category"],
+                "impact_rating": ideation["impact_rating"],
+                **detail_data,
+            }
+            all_opportunities.append(build_opportunity(merged))
 
         opportunity_result = OpportunityResult(
             opportunities=all_opportunities,
@@ -176,7 +177,10 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
         )
         accessor.set_opportunities(opportunity_result)
 
-        # Reconstruct nested EBITDA tree from flat node list and link to opportunities
+        # Reconstruct nested EBITDA tree and link to opportunities
+        ebitda_data, ebitda_elapsed = results["ebitda_tree"]
+        timer.record("ai_call_ebitda_tree", ebitda_elapsed)
+
         ebitda_nodes = build_ebitda_tree_from_flat_nodes(ebitda_data["nodes"])
         link_opportunities_to_ebitda_nodes(all_opportunities, ebitda_nodes)
 
@@ -207,7 +211,7 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
             instructions=system_prompt,
         )
         logger.info(
-            "[ParallelOppsAndEbitda:%s] sending AI request: prompt_len=%d, model=%s",
+            "[ParallelDetailsAndEbitda:%s] sending AI request: prompt_len=%d, model=%s",
             label,
             len(user_prompt),
             getattr(client, "model", "unknown"),
@@ -216,11 +220,11 @@ class ParallelOpportunitiesAndEbitda(RequestStep):
         try:
             response = client.query_structured(input_text=user_prompt, json_schema=schema)
         except Exception:
-            logger.exception("[ParallelOppsAndEbitda:%s] AI request failed", label)
+            logger.exception("[ParallelDetailsAndEbitda:%s] AI request failed", label)
             raise
         elapsed = time.monotonic() - start
         logger.info(
-            "[ParallelOppsAndEbitda:%s] AI response in %.2fs: metadata=%s",
+            "[ParallelDetailsAndEbitda:%s] AI response in %.2fs: metadata=%s",
             label,
             elapsed,
             response.metadata,
