@@ -1,6 +1,6 @@
 """EBITDA tree constants — system prompt, schema, prompt builder, and node builder.
 
-Used by ParallelOpportunitiesAndEbitda to build the EBITDA decomposition AI call.
+Used by ParallelOpportunityDetailsAndEbitda to build the EBITDA decomposition AI call.
 
 The schema uses a flat list of nodes with parent_id references instead of recursive
 $ref nesting. This eliminates the complex constrained decoding state machine and

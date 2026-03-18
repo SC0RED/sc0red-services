@@ -66,22 +66,34 @@ _MOCK_RESPONSES: dict[str, object] = {
             {
                 "category": "competitive_displacement",
                 "score": 5.0,
-                "rationale": "Moderate competitive pressure from AI-native entrants with several well-funded competitors in the space.",
+                "rationale": (
+                    "Moderate competitive pressure from AI-native entrants"
+                    " with several well-funded competitors in the space."
+                ),
             },
             {
                 "category": "technology_obsolescence",
                 "score": 5.0,
-                "rationale": "Moderate technology risk given current stack with standard tech choices and some legacy components.",
+                "rationale": (
+                    "Moderate technology risk given current stack"
+                    " with standard tech choices and some legacy components."
+                ),
             },
             {
                 "category": "customer_behavior",
                 "score": 4.0,
-                "rationale": "Low customer churn risk with long-term contract structure observed.",
+                "rationale": (
+                    "Low customer churn risk"
+                    " with long-term contract structure observed."
+                ),
             },
             {
                 "category": "margin_compression",
                 "score": 5.0,
-                "rationale": "Moderate margin pressure from infrastructure costs with cloud cost trends visible in pricing.",
+                "rationale": (
+                    "Moderate margin pressure from infrastructure costs"
+                    " with cloud cost trends visible in pricing."
+                ),
             },
         ],
     },
@@ -91,28 +103,45 @@ _MOCK_RESPONSES: dict[str, object] = {
             {
                 "category": "talent_workforce",
                 "score": 4.0,
-                "rationale": "Low talent risk with stable engineering team and low attrition signals from job postings.",
+                "rationale": (
+                    "Low talent risk with stable engineering team"
+                    " and low attrition signals from job postings."
+                ),
             },
             {
                 "category": "regulatory_compliance",
                 "score": 3.0,
-                "rationale": "Low regulatory exposure in current markets with no significant compliance flags visible.",
+                "rationale": (
+                    "Low regulatory exposure in current markets"
+                    " with no significant compliance flags visible."
+                ),
             },
             {
                 "category": "supply_chain",
                 "score": 3.0,
-                "rationale": "Minimal supply chain risk for SaaS model with software-only product and no physical supply chain.",
+                "rationale": (
+                    "Minimal supply chain risk for SaaS model"
+                    " with software-only product and no physical supply chain."
+                ),
             },
             {
                 "category": "data_ip",
                 "score": 4.0,
-                "rationale": "Low data and IP risk with standard data handling practices.",
+                "rationale": (
+                    "Low data and IP risk"
+                    " with standard data handling practices."
+                ),
             },
         ],
     },
     # GenerateEbitdaTree (flat node format with parent_id references)
     "nodes": {
-        "summary": "E2E Test Corp operates a subscription SaaS model with primary revenue from platform fees and analytics add-ons. AI opportunities have the most impact on operational efficiency and revenue expansion.",
+        "summary": (
+            "E2E Test Corp operates a subscription SaaS model with primary"
+            " revenue from platform fees and analytics add-ons."
+            " AI opportunities have the most impact on operational"
+            " efficiency and revenue expansion."
+        ),
         "revenue_estimate": "$5M-$15M",
         "ebitda_estimate": "$1M-$3M (15-25% margin)",
         "nodes": [
@@ -213,53 +242,135 @@ _MOCK_RESPONSES: dict[str, object] = {
                 "type": "subtotal",
                 "value_range": "$1M-$3M",
                 "percentage_of_parent": None,
-                "description": "Earnings before interest, taxes, depreciation and amortisation",
+                "description": (
+                    "Earnings before interest, taxes,"
+                    " depreciation and amortisation"
+                ),
             },
         ],
     },
-    # GenerateOpportunities
-    "opportunities": {
-        "opportunities": [
-            {
-                "title": "Adopt AI-powered workflow automation",
-                "impact_rating": "High",
-                "strategic_category": "Competitive Moat",
-                "description": (
-                    "Implement AI-driven automation to reduce manual overhead. "
-                    "This creates a defensible efficiency advantage."
-                ),
-                "implementation_steps": [
-                    "Audit current manual workflows",
-                    "Pilot AI tooling on highest-volume tasks",
-                    "Roll out across the organisation",
-                ],
-                "timeline": "Quick Win (1-3 months)",
-                "investment_range": "$50K-$100K",
-                "roi_estimate": "2x ROI within 12 months through headcount reallocation",
-                "related_services": ["Mock AI Co - Workflow automation"],
-                "value_lever": "Cost Side",
-            }
+    # Ideation (8 calls — one per risk category, dispatched by prompt keyword)
+    "ideation_competitive_displacement": {
+        "title": "AI-powered competitive intelligence platform",
+        "description": (
+            "Deploy real-time AI monitoring of competitor moves to stay"
+            " ahead of AI-native entrants in the risk intelligence space."
+        ),
+        "value_lever": "Revenue Side",
+        "strategic_category": "Competitive Moat",
+        "impact_rating": "High",
+    },
+    "ideation_technology_obsolescence": {
+        "title": "Modernise analytics engine with LLM integration",
+        "description": (
+            "Replace legacy analytics with LLM-powered insights"
+            " to prevent technology obsolescence."
+        ),
+        "value_lever": "Both",
+        "strategic_category": "Competitive Moat",
+        "impact_rating": "High",
+    },
+    "ideation_customer_behavior": {
+        "title": "AI-driven customer success automation",
+        "description": (
+            "Implement predictive churn models and automated engagement"
+            " to counter shifting customer expectations."
+        ),
+        "value_lever": "Revenue Side",
+        "strategic_category": "Revenue Capture",
+        "impact_rating": "Medium",
+    },
+    "ideation_margin_compression": {
+        "title": "Automate infrastructure cost optimisation",
+        "description": (
+            "Use AI to dynamically right-size cloud resources"
+            " and reduce infrastructure spend."
+        ),
+        "value_lever": "Cost Side",
+        "strategic_category": "Operational Efficiency",
+        "impact_rating": "Medium",
+    },
+    "ideation_talent_workforce": {
+        "title": "AI-augmented analyst workflow",
+        "description": (
+            "Equip analysts with AI copilots to handle"
+            " higher volume without additional headcount."
+        ),
+        "value_lever": "Cost Side",
+        "strategic_category": "Talent Strategy",
+        "impact_rating": "Medium",
+    },
+    "ideation_regulatory_compliance": {
+        "title": "Automated compliance monitoring dashboard",
+        "description": (
+            "Build AI-powered regulatory tracking for"
+            " emerging AI governance frameworks."
+        ),
+        "value_lever": "Cost Side",
+        "strategic_category": "Operational Efficiency",
+        "impact_rating": "Low",
+    },
+    "ideation_supply_chain": {
+        "title": "Vendor risk assessment automation",
+        "description": (
+            "Automate monitoring of key SaaS vendors"
+            " for disruption signals."
+        ),
+        "value_lever": "Cost Side",
+        "strategic_category": "Operational Efficiency",
+        "impact_rating": "Low",
+    },
+    "ideation_data_ip": {
+        "title": "Proprietary data moat strategy",
+        "description": (
+            "Build unique datasets from analysis outputs"
+            " to create defensible IP."
+        ),
+        "value_lever": "Revenue Side",
+        "strategic_category": "Competitive Moat",
+        "impact_rating": "Medium",
+    },
+    # Detail (enrichment for selected opportunities)
+    "detail": {
+        "implementation_steps": [
+            "Audit current manual workflows",
+            "Pilot AI tooling on highest-volume tasks",
+            "Roll out across the organisation",
         ],
-        "top_three_immediate_actions": [
-            "Audit current automation coverage",
-            "Identify highest-ROI AI use cases",
-            "Build internal AI literacy programme",
-        ],
+        "timeline": "Quick Win (1-3 months)",
+        "investment_range": "$50K-$100K",
+        "roi_estimate": "2x ROI within 12 months through efficiency gains",
+        "related_services": ["Mock AI Co - Workflow automation"],
     },
 }
 
+# Category keywords used to dispatch ideation responses
+_IDEATION_CATEGORIES = [
+    "competitive_displacement",
+    "technology_obsolescence",
+    "customer_behavior",
+    "margin_compression",
+    "talent_workforce",
+    "regulatory_compliance",
+    "supply_chain",
+    "data_ip",
+]
+
 
 def _detect_step(body: dict) -> str:
-    """Return the key in _MOCK_RESPONSES that matches this request's schema.
+    """Return the key in _MOCK_RESPONSES that matches this request.
 
-    Handles both:
+    Handles:
      - OpenAI Responses API: body["text"]["format"]["schema"]["properties"]
-     - OpenAI Chat Completions API: body["response_format"]["json_schema"]["schema"]["properties"]
-     - Anthropic Messages API: body["response_format"]["json_schema"]["schema"]["properties"]
+     - OpenAI Chat Completions / Anthropic: body["response_format"]["json_schema"]["schema"]["properties"]
 
-    For risk assessment, dispatches to batch A or B by inspecting the prompt
-    for batch-specific category keywords (competitive_displacement = batch A,
-    talent_workforce = batch B).
+    Routing logic:
+     - "actual_url" in props → URL resolution
+     - "company_name" in props → profile extraction
+     - "nodes" in props → EBITDA tree
+     - "risk_scores" in props → risk batch A or B (by prompt keyword)
+     - "impact_rating" in props but NOT "implementation_steps" → ideation
+     - "implementation_steps" in props but NOT "title" → detail
     """
     candidates: list[dict] = []
     try:
@@ -273,15 +384,30 @@ def _detect_step(body: dict) -> str:
 
     for schema in candidates:
         props = set(schema.get("properties", {}).keys())
-        for key in ("actual_url", "company_name", "nodes", "opportunities"):
+
+        # Exact matches on unique top-level properties
+        for key in ("actual_url", "company_name", "nodes"):
             if key in props:
                 return key
+
+        # Risk batches
         if "risk_scores" in props:
-            # Dispatch risk batches by checking prompt for category keywords
             prompt_text = _extract_prompt_text(body)
             if "competitive_displacement" in prompt_text:
                 return "risk_scores_batch_a"
             return "risk_scores_batch_b"
+
+        # Ideation: has impact_rating but NOT implementation_steps
+        if "impact_rating" in props and "implementation_steps" not in props:
+            prompt_text = _extract_prompt_text(body)
+            for category in _IDEATION_CATEGORIES:
+                if category in prompt_text:
+                    return f"ideation_{category}"
+            return "ideation_competitive_displacement"
+
+        # Detail: has implementation_steps but NOT title
+        if "implementation_steps" in props and "title" not in props:
+            return "detail"
 
     return "unknown"
 
@@ -295,7 +421,6 @@ def _extract_prompt_text(body: dict) -> str:
     if isinstance(input_field, list):
         for item in input_field:
             if isinstance(item, dict):
-                # Message format: {"role": "user", "content": "..."}
                 content = item.get("content", "")
                 if isinstance(content, str) and content:
                     return content
@@ -305,12 +430,10 @@ def _extract_prompt_text(body: dict) -> str:
             content = message.get("content", "")
             if isinstance(content, str) and content:
                 return content
-            # Anthropic format: content is a list of blocks
             if isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "text":
                         return block.get("text", "")
-    # Last resort: stringify the entire body and search
     return str(body)
 
 
@@ -334,12 +457,16 @@ def _openai_responses_envelope(content: object) -> dict:
                 ],
             }
         ],
-        "usage": {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+        "usage": {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "total_tokens": 150,
+        },
     }
 
 
 def _openai_chat_envelope(content: object) -> dict:
-    """Response format for the OpenAI Chat Completions API (/v1/chat/completions)."""
+    """Response format for OpenAI Chat Completions API."""
     return {
         "id": "chatcmpl-mock",
         "object": "chat.completion",
@@ -357,7 +484,11 @@ def _openai_chat_envelope(content: object) -> dict:
                 "logprobs": None,
             }
         ],
-        "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+        "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "total_tokens": 150,
+        },
     }
 
 

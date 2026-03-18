@@ -1,11 +1,9 @@
-"""Tests for opportunity generation constants, schemas, and prompt builders."""
+"""Tests for opportunity generation shared constants and helpers."""
 
 from src.pipeline.pipeline_steps.generate_opportunities import (
     OPPS_SYSTEM_PROMPT,
-    build_context_block,
-    build_high_priority_prompt,
+    STRATEGIC_CATEGORIES_INSTRUCTIONS,
     build_opportunity,
-    build_strategic_prompt,
 )
 
 
@@ -36,81 +34,14 @@ class TestBuildOpportunity:
         assert opp.value_lever == "Cost Side"
 
 
-class TestPromptBuilders:
-    def test_context_block_includes_profile_and_scores(self):
-        profile = {"company_name": "Acme", "industry": "Tech"}
-        assessment = {
-            "risk_scores": [{"category": "data_ip", "score": 5}],
-            "overall_score": 5.0,
-            "tier": "moderate",
-            "top_risks": ["data_ip"],
-            "analysis_summary": "Moderate risk",
-        }
-        context = build_context_block(profile, assessment)
-        assert "Acme" in context
-        assert "data_ip" in context
-        assert "5.0/10" in context
-
-    def test_high_priority_prompt_includes_actions_instruction(self):
-        assessment = {
-            "risk_scores": [],
-            "overall_score": 5.0,
-            "tier": "moderate",
-            "top_risks": ["data_ip"],
-            "analysis_summary": "Test summary",
-        }
-        prompt = build_high_priority_prompt({}, assessment, ["data_ip"])
-        assert "top_three_immediate_actions" in prompt
-        assert "2-3 high-priority" in prompt
-
-    def test_strategic_prompt_excludes_actions_instruction(self):
-        assessment = {
-            "risk_scores": [],
-            "overall_score": 5.0,
-            "tier": "moderate",
-            "top_risks": ["data_ip"],
-            "analysis_summary": "Test summary",
-        }
-        prompt = build_strategic_prompt({}, assessment, ["data_ip"])
-        assert "Do NOT include top_three_immediate_actions" in prompt
-        assert "1-2 strategic" in prompt
-
-    def test_high_priority_prompt_includes_focus_categories(self):
-        assessment = {
-            "risk_scores": [],
-            "overall_score": 7.0,
-            "tier": "high",
-            "top_risks": ["competitive_displacement", "technology_obsolescence"],
-            "analysis_summary": "High risk",
-        }
-        prompt = build_high_priority_prompt(
-            {"company_name": "Test"},
-            assessment,
-            ["competitive_displacement", "technology_obsolescence"],
-        )
-        assert "competitive_displacement" in prompt
-        assert "technology_obsolescence" in prompt
-        assert "highest-priority" in prompt.lower()
-
-    def test_strategic_prompt_includes_focus_categories(self):
-        assessment = {
-            "risk_scores": [],
-            "overall_score": 5.0,
-            "tier": "moderate",
-            "top_risks": ["data_ip"],
-            "analysis_summary": "Test",
-        }
-        prompt = build_strategic_prompt(
-            {"company_name": "Test"},
-            assessment,
-            ["margin_compression", "customer_behavior"],
-        )
-        assert "margin_compression" in prompt
-        assert "customer_behavior" in prompt
-        assert "strategic" in prompt.lower()
-
-
-class TestSchemas:
+class TestSharedConstants:
     def test_system_prompt_is_non_empty_string(self):
         assert isinstance(OPPS_SYSTEM_PROMPT, str)
         assert len(OPPS_SYSTEM_PROMPT) > 50
+
+    def test_strategic_categories_lists_five(self):
+        assert "Competitive Moat" in STRATEGIC_CATEGORIES_INSTRUCTIONS
+        assert "Revenue Capture" in STRATEGIC_CATEGORIES_INSTRUCTIONS
+        assert "Market Expansion" in STRATEGIC_CATEGORIES_INSTRUCTIONS
+        assert "Operational Efficiency" in STRATEGIC_CATEGORIES_INSTRUCTIONS
+        assert "Talent Strategy" in STRATEGIC_CATEGORIES_INSTRUCTIONS

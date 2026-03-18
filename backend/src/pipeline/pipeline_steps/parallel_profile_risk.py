@@ -1,14 +1,12 @@
-"""Composite step: runs profile extraction and risk assessment AI calls in parallel.
+"""Composite step: runs profile, risk, and ideation AI calls in parallel.
 
-Instead of the sequential ExtractProfile → AssessRisk flow, this step makes 3
-AI calls concurrently: 1 profile extraction + 2 risk assessment batches (4
-categories each). The risk batches are split by thematic relevance — external
-market threats vs internal/operational risks — preserving cross-category
-reasoning within each batch. Aggregate fields (overall_score, tier, top_risks,
-analysis_summary) are computed programmatically after both batches complete.
+Runs 11 AI calls concurrently at Level 1:
+  - 1 profile extraction
+  - 2 risk assessment batches (4 categories each)
+  - 8 opportunity ideation calls (one per risk category)
 
-Saves ~30-45s of wall-clock time by overlapping all three calls, and the 2x4
-risk split further reduces the risk assessment from ~49s to ~25-30s.
+After all complete, risk aggregates are computed programmatically and ideations
+are deduplicated, ranked, and stored for the detail phase.
 """
 
 from __future__ import annotations
@@ -36,6 +34,17 @@ from src.pipeline.pipeline_steps.extract_profile import (
     PROFILE_PROMPT_TEMPLATE,
     PROFILE_SCHEMA,
     PROFILE_SYSTEM_PROMPT,
+)
+from src.pipeline.pipeline_steps.ideate_opportunities import (
+    IDEATION_SCHEMA,
+    IDEATION_SYSTEM_PROMPT,
+    build_ideation_prompt,
+    get_all_ideation_categories,
+)
+from src.pipeline.pipeline_steps.rank_opportunities import (
+    deduplicate_ideations,
+    derive_top_three_actions,
+    rank_ideations,
 )
 from src.pipeline.step_timer import StepTimer
 
@@ -129,13 +138,12 @@ def compute_risk_aggregates(
     )
 
 
-class ParallelProfileAndRisk(RequestStep):
-    """Runs profile extraction and risk assessment AI calls in parallel.
+class ParallelProfileRiskAndIdeation(RequestStep):
+    """Runs profile, risk, and ideation AI calls in parallel.
 
-    Replaces the sequential ExtractProfile → AssessRisk pair in the pipeline.
-    Runs 3 AI calls concurrently: 1 profile extraction + 2 risk assessment batches
-    (4 categories each, split by thematic relevance). Risk aggregates are computed
-    programmatically after both batches complete.
+    Runs 11 AI calls concurrently: 1 profile extraction + 2 risk assessment
+    batches (4 categories each) + 8 ideation calls (one per risk category).
+    Risk aggregates and ideation ranking are computed programmatically.
     """
 
     def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
@@ -143,7 +151,7 @@ class ParallelProfileAndRisk(RequestStep):
         self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
-        """Run profile extraction and risk assessment in parallel."""
+        """Run profile extraction, risk assessment, and ideation in parallel."""
         accessor = cast("CompanyAccessor", self.entity_accessor)
         scraped_text = accessor.get_scraped_text()
         actual_url = accessor.company.actual_url or accessor.company.url
@@ -153,7 +161,7 @@ class ParallelProfileAndRisk(RequestStep):
             message = "AI client factory not configured"
             raise RuntimeError(message)
 
-        # Build profile prompt (same as ExtractProfile)
+        # Build profile prompt
         document_section = ""
         if document_text:
             document_section = (
@@ -166,7 +174,7 @@ class ParallelProfileAndRisk(RequestStep):
             document_section=document_section,
         )
 
-        # Build risk batch prompts (2 batches of 4 categories each)
+        # Build risk batch prompts
         risk_batch_a_prompt = _build_risk_batch_prompt(
             scraped_text, actual_url, RISK_BATCH_A_CATEGORIES, document_text
         )
@@ -174,9 +182,24 @@ class ParallelProfileAndRisk(RequestStep):
             scraped_text, actual_url, RISK_BATCH_B_CATEGORIES, document_text
         )
 
-        timer = StepTimer("ParallelProfileAndRisk")
+        # Build 8 ideation prompts (one per risk category)
+        ideation_categories = get_all_ideation_categories()
+        ideation_prompts: list[tuple[str, str]] = []  # (label, prompt)
+        for category in ideation_categories:
+            prompt = build_ideation_prompt(
+                scraped_text=scraped_text,
+                url=actual_url,
+                category_id=category["id"],
+                category_name=category["name"],
+                category_description=category["description"],
+                document_text=document_text,
+            )
+            ideation_prompts.append((f"ideation_{category['id']}", prompt))
 
-        with FutureManager(name="ParallelProfileAndRisk", max_workers=3) as manager:
+        timer = StepTimer("ParallelProfileRiskAndIdeation")
+
+        # Run all 11 AI calls in parallel
+        with FutureManager(name="ParallelProfileRiskAndIdeation", max_workers=11) as manager:
             manager.submit_task(
                 self._run_ai_call,
                 profile_prompt,
@@ -198,6 +221,14 @@ class ParallelProfileAndRisk(RequestStep):
                 RISK_SYSTEM_PROMPT,
                 "assess_risk_batch_b",
             )
+            for label, prompt in ideation_prompts:
+                manager.submit_task(
+                    self._run_ai_call,
+                    prompt,
+                    IDEATION_SCHEMA,
+                    IDEATION_SYSTEM_PROMPT,
+                    label,
+                )
             all_results = manager.wait_for_all_and_collect_results()
 
         results: dict[str, tuple[dict[str, Any], float]] = {}
@@ -236,9 +267,34 @@ class ParallelProfileAndRisk(RequestStep):
         assessment = compute_risk_aggregates(all_risk_scores, profile.company_name)
         accessor.set_risk_assessment(assessment)
 
+        # Build risk score lookup for ranking
+        risk_score_lookup: dict[str, float] = {
+            score.category: score.score for score in all_risk_scores
+        }
+
+        # Collect and process ideation results (copy dicts to avoid mutating AI response)
+        raw_ideations: list[dict[str, Any]] = []
+        for category in ideation_categories:
+            label = f"ideation_{category['id']}"
+            ideation_data, ideation_elapsed = results[label]
+            timer.record(f"ai_call_{label}", ideation_elapsed)
+            raw_ideations.append({**ideation_data, "risk_category": category["id"]})
+
+        # Deduplicate, rank, and derive top actions
+        deduped = deduplicate_ideations(raw_ideations, risk_score_lookup)
+        ranked = rank_ideations(deduped, risk_score_lookup)
+        top_actions = derive_top_three_actions(ranked)
+
+        # Store ranked ideations with top actions for the detail phase
+        ranked_with_actions = [
+            {**ideation, "top_three_immediate_actions": top_actions} for ideation in ranked
+        ]
+        accessor.set_ranked_ideations(ranked_with_actions)
+
         self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("extract_profile")
         self.request_executor.mark_question_complete("assess_risk")
+        self.request_executor.mark_question_complete("ideate_opportunities")
 
     def _run_ai_call(
         self,
@@ -255,7 +311,7 @@ class ParallelProfileAndRisk(RequestStep):
             instructions=system_prompt,
         )
         logger.info(
-            "[ParallelProfileAndRisk:%s] sending AI request: prompt_len=%d, model=%s",
+            "[ParallelProfileRiskAndIdeation:%s] sending AI request: prompt_len=%d, model=%s",
             label,
             len(user_prompt),
             getattr(client, "model", "unknown"),
@@ -264,11 +320,11 @@ class ParallelProfileAndRisk(RequestStep):
         try:
             response = client.query_structured(input_text=user_prompt, json_schema=schema)
         except Exception:
-            logger.exception("[ParallelProfileAndRisk:%s] AI request failed", label)
+            logger.exception("[ParallelProfileRiskAndIdeation:%s] AI request failed", label)
             raise
         elapsed = time.monotonic() - start
         logger.info(
-            "[ParallelProfileAndRisk:%s] AI response received in %.2fs: metadata=%s",
+            "[ParallelProfileRiskAndIdeation:%s] AI response received in %.2fs: metadata=%s",
             label,
             elapsed,
             response.metadata,

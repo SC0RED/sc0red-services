@@ -1,8 +1,8 @@
 """Company analysis pipeline factory.
 
 Wires the 4-step single company analysis pipeline:
-ScrapeAndResolve → ParallelProfileAndRisk →
-ParallelOpportunitiesAndEbitda → PersistResults
+ScrapeAndResolve → ParallelProfileRiskAndIdeation →
+ParallelOpportunityDetailsAndEbitda → PersistResults
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING
 from signalfield_core.pipeline.factory import PipelineFactory
 
 from src.pipeline.pipeline_steps.parallel_opportunities_ebitda import (
-    ParallelOpportunitiesAndEbitda,
+    ParallelOpportunityDetailsAndEbitda,
 )
-from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileAndRisk
+from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
 from src.pipeline.request_executor import JanusRequestExecutor
@@ -53,10 +53,10 @@ class CompanyAnalysisFactory(PipelineFactory):
             ScrapeAndResolveURL(
                 ai_client_factory=self._ai_client_factory,
             ),
-            ParallelProfileAndRisk(
+            ParallelProfileRiskAndIdeation(
                 ai_client_factory=self._ai_client_factory,
             ),
-            ParallelOpportunitiesAndEbitda(
+            ParallelOpportunityDetailsAndEbitda(
                 ai_client_factory=self._ai_client_factory,
             ),
             PersistResults(
@@ -73,7 +73,6 @@ class CompanyAnalysisFactory(PipelineFactory):
             request_id=self._request_id,
             pipeline=pipeline,
         )
-        # Wire entity accessor and executor into all steps
         for step in pipeline:
             step.request_executor = executor
             step.entity_accessor = self._entity_accessor

@@ -149,3 +149,11 @@ class CompanyAccessor:
     def get_document_text(self) -> str | None:
         """Return supplementary document text, or None if no documents uploaded."""
         return self._company.document_text
+
+    def set_ranked_ideations(self, ideations: list[dict[str, Any]]) -> None:
+        """Set the ranked opportunity ideations for the detail phase."""
+        self._company.ranked_ideations = ideations
+
+    def get_ranked_ideations(self) -> list[dict[str, Any]]:
+        """Return the ranked opportunity ideations."""
+        return self._company.ranked_ideations

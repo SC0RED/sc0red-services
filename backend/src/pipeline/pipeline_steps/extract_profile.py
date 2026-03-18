@@ -1,6 +1,6 @@
 """Profile extraction constants — system prompt, schema, and prompt template.
 
-Used by ParallelProfileAndRisk to build the profile extraction AI call.
+Used by ParallelProfileRiskAndIdeation to build the profile extraction AI call.
 """
 
 from __future__ import annotations

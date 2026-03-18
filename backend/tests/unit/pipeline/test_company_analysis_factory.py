@@ -6,9 +6,9 @@ from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnalysisFactory
 from src.pipeline.pipeline_steps.parallel_opportunities_ebitda import (
-    ParallelOpportunitiesAndEbitda,
+    ParallelOpportunityDetailsAndEbitda,
 )
-from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileAndRisk
+from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
 
@@ -29,8 +29,8 @@ class TestCompanyAnalysisFactory:
         pipeline = factory.get_pipeline()
         assert len(pipeline) == 4
         assert isinstance(pipeline[0], ScrapeAndResolveURL)
-        assert isinstance(pipeline[1], ParallelProfileAndRisk)
-        assert isinstance(pipeline[2], ParallelOpportunitiesAndEbitda)
+        assert isinstance(pipeline[1], ParallelProfileRiskAndIdeation)
+        assert isinstance(pipeline[2], ParallelOpportunityDetailsAndEbitda)
         assert isinstance(pipeline[3], PersistResults)
 
     def test_build_executor_wires_accessor(self):
