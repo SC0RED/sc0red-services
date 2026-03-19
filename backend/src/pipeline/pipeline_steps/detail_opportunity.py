@@ -2,12 +2,11 @@
 
 Each selected opportunity from the ideation phase gets a focused detail call
 that adds implementation steps, timeline, investment, ROI, and services.
-Runs at Level 3, after profile and risk assessment are available.
+Runs at Level 2, after profile and risk assessment are available.
 """
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from src.pipeline.pipeline_steps.generate_opportunities import OPPS_SYSTEM_PROMPT
@@ -56,6 +55,36 @@ DETAIL_SCHEMA: dict[str, Any] = {
 }
 
 
+def _build_company_context(profile_dict: dict[str, Any]) -> str:
+    """Build a focused company context string from profile fields.
+
+    Includes only the fields relevant to implementation planning:
+    identity, scale, offerings, and tech stack. Drops fields that
+    informed ideation but not implementation (competitive_positioning,
+    ai_maturity, key_risks_visible, revenue_model, target_market).
+    """
+    lines = [f"Company: {profile_dict.get('company_name', 'Unknown')}"]
+
+    if profile_dict.get("industry"):
+        lines.append(f"Industry: {profile_dict['industry']}")
+    if profile_dict.get("business_model"):
+        lines.append(f"Business Model: {profile_dict['business_model']}")
+    if profile_dict.get("company_size"):
+        lines.append(f"Company Size: {profile_dict['company_size']}")
+    if profile_dict.get("description"):
+        lines.append(f"Description: {profile_dict['description']}")
+
+    products = profile_dict.get("products_services", [])
+    if products:
+        lines.append(f"Products/Services: {', '.join(products)}")
+
+    tech = profile_dict.get("tech_signals", [])
+    if tech:
+        lines.append(f"Tech Stack: {', '.join(tech)}")
+
+    return "\n".join(lines)
+
+
 def build_detail_prompt(
     profile_dict: dict[str, Any],
     assessment_dict: dict[str, Any],
@@ -63,21 +92,18 @@ def build_detail_prompt(
     opportunity_description: str,
 ) -> str:
     """Build prompt to detail a single opportunity with implementation specifics."""
-    risk_scores_json = json.dumps(assessment_dict["risk_scores"])
+    company_context = _build_company_context(profile_dict)
     top_risks = ", ".join(assessment_dict["top_risks"])
 
     return f"""Provide detailed implementation specifics for the following AI opportunity.
 
-COMPANY PROFILE:
-{json.dumps(profile_dict)}
+COMPANY CONTEXT:
+{company_context}
 
-RISK ASSESSMENT:
+RISK CONTEXT:
 Overall Score: {assessment_dict["overall_score"]}/10 ({assessment_dict["tier"]} risk)
 Top Risks: {top_risks}
-Risk Summary: {assessment_dict["analysis_summary"]}
-
-DETAILED RISK SCORES:
-{risk_scores_json}
+Summary: {assessment_dict["analysis_summary"]}
 
 OPPORTUNITY TO DETAIL:
 Title: {opportunity_title}
