@@ -13,7 +13,9 @@ from src.models.model_company import (
     RiskAssessment,
     RiskScore,
 )
+from src.pipeline.ai_guides.ebitda_estimation_guide import EBITDA_ESTIMATION_GUIDE
 from src.pipeline.pipeline_steps.detail_opportunity import DETAIL_SYSTEM_PROMPT
+from src.pipeline.pipeline_steps.generate_ebitda_tree import EBITDA_SYSTEM_PROMPT
 from src.pipeline.pipeline_steps.parallel_opportunities_ebitda import (
     ParallelOpportunityDetailsAndEbitda,
     link_opportunities_to_ebitda_nodes,
@@ -210,6 +212,28 @@ class TestParallelOpportunityDetailsAndEbitda:
         completed = {c[0][0] for c in calls}
         assert "generate_opportunities" in completed
         assert "generate_ebitda_tree" in completed
+
+    def test_ebitda_instructions_include_guide(self):
+        mock_factory = _make_mock_factory(detail_count=3)
+        company = _make_company_with_profile_risk_and_ideations(ideation_count=3)
+        accessor = CompanyAccessor(company)
+
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        calls = mock_factory.get_client.call_args_list
+        instructions_list = [c.kwargs["instructions"] for c in calls]
+
+        # One call should have EBITDA guide appended
+        ebitda_instructions = [i for i in instructions_list if EBITDA_SYSTEM_PROMPT in i and EBITDA_ESTIMATION_GUIDE in i]
+        assert len(ebitda_instructions) == 1
+
+        # Detail calls should NOT have EBITDA guide
+        detail_instructions = [i for i in instructions_list if i == DETAIL_SYSTEM_PROMPT]
+        assert len(detail_instructions) == 3
 
     def test_successful_with_five_ideations(self):
         mock_factory = _make_mock_factory(detail_count=5)

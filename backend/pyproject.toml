@@ -205,6 +205,8 @@ ignore = [
 "**/local_server.py" = ["TCH002"]
 # Boolean positional args OK in tests
 "**/tests/**/*.py" = ["FBT003"]
+# AI guide constants contain markdown tables with long lines and special chars
+"**/ai_guides/**/*.py" = ["E501", "RUF001"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

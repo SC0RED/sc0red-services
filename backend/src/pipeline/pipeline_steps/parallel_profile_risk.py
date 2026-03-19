@@ -21,6 +21,8 @@ from signalfield_core.utilities.future_manager import FutureManager
 
 from src.documents.extract_text import MAX_CHARS_COMBINED
 from src.models.model_company import CompanyProfile, RiskAssessment, RiskScore
+from src.pipeline.ai_guides.ideation_guide import IDEATION_GUIDE
+from src.pipeline.ai_guides.risk_scoring_guide import RISK_SCORING_GUIDE
 from src.pipeline.pipeline_steps.assess_risk import (
     RISK_ASSESSMENT_QUESTIONS,
     RISK_BATCH_A_CATEGORIES,
@@ -207,26 +209,28 @@ class ParallelProfileRiskAndIdeation(RequestStep):
                 PROFILE_SYSTEM_PROMPT,
                 "extract_profile",
             )
+            risk_instructions = RISK_SYSTEM_PROMPT + "\n\n" + RISK_SCORING_GUIDE
             manager.submit_task(
                 self._run_ai_call,
                 risk_batch_a_prompt,
                 RISK_BATCH_SCHEMA,
-                RISK_SYSTEM_PROMPT,
+                risk_instructions,
                 "assess_risk_batch_a",
             )
             manager.submit_task(
                 self._run_ai_call,
                 risk_batch_b_prompt,
                 RISK_BATCH_SCHEMA,
-                RISK_SYSTEM_PROMPT,
+                risk_instructions,
                 "assess_risk_batch_b",
             )
+            ideation_instructions = IDEATION_SYSTEM_PROMPT + "\n\n" + IDEATION_GUIDE
             for label, prompt in ideation_prompts:
                 manager.submit_task(
                     self._run_ai_call,
                     prompt,
                     IDEATION_SCHEMA,
-                    IDEATION_SYSTEM_PROMPT,
+                    ideation_instructions,
                     label,
                 )
             all_results = manager.wait_for_all_and_collect_results()
