@@ -17,6 +17,7 @@ from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
 from src.models.model_company import EbitdaTreeResult, OpportunityResult
+from src.pipeline.ai_guides.ebitda_estimation_guide import EBITDA_ESTIMATION_GUIDE
 from src.pipeline.pipeline_steps.detail_opportunity import (
     DETAIL_SCHEMA,
     DETAIL_SYSTEM_PROMPT,
@@ -142,11 +143,12 @@ class ParallelOpportunityDetailsAndEbitda(RequestStep):
                     DETAIL_SYSTEM_PROMPT,
                     label,
                 )
+            ebitda_instructions = EBITDA_SYSTEM_PROMPT + "\n\n" + EBITDA_ESTIMATION_GUIDE
             manager.submit_task(
                 self._run_ai_call,
                 ebitda_prompt,
                 EBITDA_TREE_SCHEMA,
-                EBITDA_SYSTEM_PROMPT,
+                ebitda_instructions,
                 "ebitda_tree",
             )
             all_results = manager.wait_for_all_and_collect_results()

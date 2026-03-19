@@ -7,6 +7,8 @@ from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company, RiskScore
+from src.pipeline.ai_guides.ideation_guide import IDEATION_GUIDE
+from src.pipeline.ai_guides.risk_scoring_guide import RISK_SCORING_GUIDE
 from src.pipeline.pipeline_steps.assess_risk import (
     RISK_BATCH_A_CATEGORIES,
     RISK_BATCH_B_CATEGORIES,
@@ -158,12 +160,12 @@ class TestParallelProfileRiskAndIdeation:
             instructions = kwargs.get("instructions", "")
             if instructions == PROFILE_SYSTEM_PROMPT:
                 return profile_client
-            if instructions == RISK_SYSTEM_PROMPT:
+            if RISK_SYSTEM_PROMPT in instructions:
                 risk_call_count["count"] += 1
                 if risk_call_count["count"] == 1:
                     return risk_client_a
                 return risk_client_b
-            if instructions == IDEATION_SYSTEM_PROMPT:
+            if IDEATION_SYSTEM_PROMPT in instructions:
                 return ideation_client
             return MagicMock()
 
@@ -254,13 +256,21 @@ class TestParallelProfileRiskAndIdeation:
 
         step.execute()
 
-        # Check system prompts used
+        # Check system prompts used (guides are now appended)
         calls = mock_factory.get_client.call_args_list
         instructions = [c.kwargs["instructions"] for c in calls]
 
         assert instructions.count(PROFILE_SYSTEM_PROMPT) == 1
-        assert instructions.count(RISK_SYSTEM_PROMPT) == 2
-        assert instructions.count(IDEATION_SYSTEM_PROMPT) == 8
+
+        risk_instructions = [i for i in instructions if RISK_SYSTEM_PROMPT in i and i != PROFILE_SYSTEM_PROMPT]
+        assert len(risk_instructions) == 2
+        for instruction in risk_instructions:
+            assert RISK_SCORING_GUIDE in instruction
+
+        ideation_instructions = [i for i in instructions if IDEATION_SYSTEM_PROMPT in i]
+        assert len(ideation_instructions) == 8
+        for instruction in ideation_instructions:
+            assert IDEATION_GUIDE in instruction
 
     def test_includes_document_text_in_prompts(self):
         mock_factory = self._make_mock_factory()
@@ -387,7 +397,7 @@ class TestParallelProfileRiskAndIdeation:
             instructions = kwargs.get("instructions", "")
             if instructions == PROFILE_SYSTEM_PROMPT:
                 return profile_client
-            if instructions == RISK_SYSTEM_PROMPT:
+            if RISK_SYSTEM_PROMPT in instructions:
                 return risk_client
             return ideation_client
 
@@ -465,7 +475,7 @@ class TestParallelProfileRiskAndIdeation:
             instructions = kwargs.get("instructions", "")
             if instructions == PROFILE_SYSTEM_PROMPT:
                 return profile_client
-            if instructions == RISK_SYSTEM_PROMPT:
+            if RISK_SYSTEM_PROMPT in instructions:
                 risk_call_count["count"] += 1
                 if risk_call_count["count"] == 1:
                     return risk_client_a
