@@ -1,9 +1,8 @@
-"""Composite step: runs opportunity detail enrichment and EBITDA tree AI calls in parallel.
+"""Composite step: runs opportunity detail enrichment and programmatic EBITDA tree.
 
 Takes the ranked ideations from Level 1 and enriches each with implementation
-details via focused AI calls. Runs N detail calls + 1 EBITDA call in parallel.
-After all complete, merges ideation + detail into full Opportunity objects and
-links to EBITDA nodes programmatically.
+details via focused AI calls. EBITDA tree is built programmatically from the
+company profile using industry templates — no AI call required.
 """
 
 from __future__ import annotations
@@ -16,18 +15,12 @@ from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
-from src.models.model_company import EbitdaTreeResult, OpportunityResult
-from src.pipeline.ai_guides.ebitda_estimation_guide import EBITDA_ESTIMATION_GUIDE
+from src.models.model_company import OpportunityResult
+from src.pipeline.pipeline_steps.build_ebitda_tree import build_programmatic_ebitda_tree
 from src.pipeline.pipeline_steps.detail_opportunity import (
     DETAIL_SCHEMA,
     DETAIL_SYSTEM_PROMPT,
     build_detail_prompt,
-)
-from src.pipeline.pipeline_steps.generate_ebitda_tree import (
-    EBITDA_SYSTEM_PROMPT,
-    EBITDA_TREE_SCHEMA,
-    build_ebitda_prompt,
-    build_ebitda_tree_from_flat_nodes,
 )
 from src.pipeline.pipeline_steps.generate_opportunities import build_opportunity
 from src.pipeline.step_timer import StepTimer
@@ -75,11 +68,10 @@ def link_opportunities_to_ebitda_nodes(
 
 
 class ParallelOpportunityDetailsAndEbitda(RequestStep):
-    """Runs opportunity detail enrichment and EBITDA tree AI calls in parallel.
+    """Runs opportunity detail enrichment and builds EBITDA tree programmatically.
 
     Takes ranked ideations from Level 1 and runs N detail calls (one per ideation)
-    plus 1 EBITDA tree call in parallel. Merges ideation + detail into full
-    Opportunity objects and links to EBITDA nodes programmatically.
+    in parallel. EBITDA tree is built deterministically from company profile.
     """
 
     def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
@@ -87,7 +79,7 @@ class ParallelOpportunityDetailsAndEbitda(RequestStep):
         self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
-        """Run opportunity detail and EBITDA tree in parallel."""
+        """Run opportunity detail calls and build programmatic EBITDA tree."""
         accessor = cast("CompanyAccessor", self.entity_accessor)
         profile = accessor.company.profile
         risk_assessment = accessor.company.risk_assessment
@@ -125,15 +117,16 @@ class ParallelOpportunityDetailsAndEbitda(RequestStep):
             )
             detail_prompts.append((f"detail_{i}", prompt, ideation))
 
-        # Build EBITDA prompt
-        ebitda_prompt = build_ebitda_prompt(profile_dict, assessment_dict)
-
         timer = StepTimer("ParallelOpportunityDetailsAndEbitda")
 
-        # Run all detail + EBITDA calls in parallel
-        total_workers = len(detail_prompts) + 1
+        # Build EBITDA tree programmatically (no AI call — deterministic)
+        ebitda_start = time.monotonic()
+        ebitda_result = build_programmatic_ebitda_tree(profile)
+        timer.record("build_ebitda_tree", time.monotonic() - ebitda_start)
+
+        # Run detail AI calls in parallel
         with FutureManager(
-            name="ParallelOpportunityDetailsAndEbitda", max_workers=total_workers
+            name="ParallelOpportunityDetailsAndEbitda", max_workers=len(detail_prompts)
         ) as manager:
             for label, prompt, _ideation in detail_prompts:
                 manager.submit_task(
@@ -143,14 +136,6 @@ class ParallelOpportunityDetailsAndEbitda(RequestStep):
                     DETAIL_SYSTEM_PROMPT,
                     label,
                 )
-            ebitda_instructions = EBITDA_SYSTEM_PROMPT + "\n\n" + EBITDA_ESTIMATION_GUIDE
-            manager.submit_task(
-                self._run_ai_call,
-                ebitda_prompt,
-                EBITDA_TREE_SCHEMA,
-                ebitda_instructions,
-                "ebitda_tree",
-            )
             all_results = manager.wait_for_all_and_collect_results()
 
         results: dict[str, tuple[dict[str, Any], float]] = {}
@@ -179,19 +164,8 @@ class ParallelOpportunityDetailsAndEbitda(RequestStep):
         )
         accessor.set_opportunities(opportunity_result)
 
-        # Reconstruct nested EBITDA tree and link to opportunities
-        ebitda_data, ebitda_elapsed = results["ebitda_tree"]
-        timer.record("ai_call_ebitda_tree", ebitda_elapsed)
-
-        ebitda_nodes = build_ebitda_tree_from_flat_nodes(ebitda_data["nodes"])
-        link_opportunities_to_ebitda_nodes(all_opportunities, ebitda_nodes)
-
-        ebitda_result = EbitdaTreeResult(
-            summary=ebitda_data["summary"],
-            revenue_estimate=ebitda_data["revenue_estimate"],
-            ebitda_estimate=ebitda_data["ebitda_estimate"],
-            nodes=ebitda_nodes,
-        )
+        # Link EBITDA nodes to opportunities
+        link_opportunities_to_ebitda_nodes(all_opportunities, ebitda_result.nodes)
         accessor.set_ebitda_tree(ebitda_result)
 
         self.request_executor.add_details(timer.to_details())
