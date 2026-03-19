@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import (
@@ -13,9 +12,6 @@ from src.models.model_company import (
     RiskAssessment,
     RiskScore,
 )
-from src.pipeline.ai_guides.ebitda_estimation_guide import EBITDA_ESTIMATION_GUIDE
-from src.pipeline.pipeline_steps.detail_opportunity import DETAIL_SYSTEM_PROMPT
-from src.pipeline.pipeline_steps.generate_ebitda_tree import EBITDA_SYSTEM_PROMPT
 from src.pipeline.pipeline_steps.parallel_opportunities_ebitda import (
     ParallelOpportunityDetailsAndEbitda,
     link_opportunities_to_ebitda_nodes,
@@ -59,6 +55,7 @@ def _make_company_with_profile_risk_and_ideations(
         industry="SaaS",
         industry_sector="Technology",
         business_model="SaaS",
+        company_size="Mid-market 200-1000",
     )
     company.risk_assessment = RiskAssessment(
         risk_scores=[
@@ -94,8 +91,8 @@ def _make_company_with_profile_risk_and_ideations(
     return company
 
 
-def _make_mock_factory(detail_count: int = 3) -> MagicMock:
-    """Create a mock AIClientFactory that dispatches detail vs EBITDA by schema."""
+def _make_mock_factory() -> MagicMock:
+    """Create a mock AIClientFactory that returns detail responses."""
     mock_factory = MagicMock()
     mock_client = MagicMock()
     mock_factory.get_client.return_value = mock_client
@@ -103,68 +100,14 @@ def _make_mock_factory(detail_count: int = 3) -> MagicMock:
     detail_response = MagicMock()
     detail_response.content = _make_detail_response()
     detail_response.metadata = {"tokens": 80}
+    mock_client.query_structured.return_value = detail_response
 
-    ebitda_response = MagicMock()
-    ebitda_response.content = _MOCK_EBITDA_RESPONSE
-    ebitda_response.metadata = {"tokens": 120}
-
-    def dispatch_by_schema(*, input_text, json_schema):
-        if "nodes" in json_schema.get("properties", {}):
-            return ebitda_response
-        return detail_response
-
-    mock_client.query_structured.side_effect = dispatch_by_schema
     return mock_factory
-
-
-_MOCK_EBITDA_RESPONSE = {
-    "summary": "SaaS model with subscription revenue",
-    "revenue_estimate": "$10M-$50M",
-    "ebitda_estimate": "$2M-$8M",
-    "nodes": [
-        {
-            "id": "revenue",
-            "parent_id": None,
-            "label": "Total Revenue",
-            "type": "revenue",
-            "value_range": "$10M-$50M",
-            "percentage_of_parent": None,
-            "description": "Total revenue",
-        },
-        {
-            "id": "subs",
-            "parent_id": "revenue",
-            "label": "Subscriptions",
-            "type": "revenue",
-            "value_range": "$8M-$40M",
-            "percentage_of_parent": 80,
-            "description": "SaaS subscriptions",
-        },
-        {
-            "id": "cogs",
-            "parent_id": None,
-            "label": "COGS",
-            "type": "cost",
-            "value_range": "$3M-$15M",
-            "percentage_of_parent": None,
-            "description": "Cost of goods sold",
-        },
-        {
-            "id": "ebitda",
-            "parent_id": None,
-            "label": "EBITDA",
-            "type": "subtotal",
-            "value_range": "$2M-$8M",
-            "percentage_of_parent": None,
-            "description": "Earnings",
-        },
-    ],
-}
 
 
 class TestParallelOpportunityDetailsAndEbitda:
     def test_successful_parallel_execution_with_three_ideations(self):
-        mock_factory = _make_mock_factory(detail_count=3)
+        mock_factory = _make_mock_factory()
         company = _make_company_with_profile_risk_and_ideations(ideation_count=3)
         accessor = CompanyAccessor(company)
 
@@ -197,15 +140,15 @@ class TestParallelOpportunityDetailsAndEbitda:
         # Top actions from ranked ideations
         assert result.top_three_immediate_actions == ["Action 1", "Action 2", "Action 3"]
 
-        # EBITDA tree
+        # EBITDA tree built programmatically
         ebitda = accessor.company.ebitda_tree
         assert ebitda is not None
         assert isinstance(ebitda, EbitdaTreeResult)
-        assert ebitda.summary == "SaaS model with subscription revenue"
-        assert len(ebitda.nodes) == 3  # 3 root nodes after tree reconstruction
+        assert "Test Corp" in ebitda.summary
+        assert len(ebitda.nodes) == 5  # revenue, cogs, gross_profit, opex, ebitda
 
-        # 4 AI calls: 3 detail + 1 EBITDA
-        assert mock_factory.get_client.call_count == 4
+        # Only detail AI calls — no EBITDA AI call
+        assert mock_factory.get_client.call_count == 3
 
         # Both questions marked complete
         calls = step._request_executor.mark_question_complete.call_args_list
@@ -213,8 +156,9 @@ class TestParallelOpportunityDetailsAndEbitda:
         assert "generate_opportunities" in completed
         assert "generate_ebitda_tree" in completed
 
-    def test_ebitda_instructions_include_guide(self):
-        mock_factory = _make_mock_factory(detail_count=3)
+    def test_ebitda_tree_is_programmatic_not_ai(self):
+        """EBITDA tree should be built without any AI call."""
+        mock_factory = _make_mock_factory()
         company = _make_company_with_profile_risk_and_ideations(ideation_count=3)
         accessor = CompanyAccessor(company)
 
@@ -224,19 +168,17 @@ class TestParallelOpportunityDetailsAndEbitda:
 
         step.execute()
 
-        calls = mock_factory.get_client.call_args_list
-        instructions_list = [c.kwargs["instructions"] for c in calls]
+        # Only 3 AI calls (detail only), not 4 (detail + EBITDA)
+        assert mock_factory.get_client.call_count == 3
 
-        # One call should have EBITDA guide appended
-        ebitda_instructions = [i for i in instructions_list if EBITDA_SYSTEM_PROMPT in i and EBITDA_ESTIMATION_GUIDE in i]
-        assert len(ebitda_instructions) == 1
-
-        # Detail calls should NOT have EBITDA guide
-        detail_instructions = [i for i in instructions_list if i == DETAIL_SYSTEM_PROMPT]
-        assert len(detail_instructions) == 3
+        # EBITDA tree should still be populated
+        ebitda = accessor.company.ebitda_tree
+        assert ebitda is not None
+        assert ebitda.revenue_estimate
+        assert ebitda.ebitda_estimate
 
     def test_successful_with_five_ideations(self):
-        mock_factory = _make_mock_factory(detail_count=5)
+        mock_factory = _make_mock_factory()
         company = _make_company_with_profile_risk_and_ideations(ideation_count=5)
         accessor = CompanyAccessor(company)
 
@@ -250,8 +192,8 @@ class TestParallelOpportunityDetailsAndEbitda:
         assert result is not None
         assert len(result.opportunities) == 5
 
-        # 6 AI calls: 5 detail + 1 EBITDA
-        assert mock_factory.get_client.call_count == 6
+        # 5 detail AI calls only
+        assert mock_factory.get_client.call_count == 5
 
     def test_ebitda_nodes_linked_to_opportunities(self):
         mock_factory = _make_mock_factory()
@@ -272,9 +214,25 @@ class TestParallelOpportunityDetailsAndEbitda:
         assert 0 in revenue_node.linked_opportunity_indices  # Revenue Side
         assert 2 in revenue_node.linked_opportunity_indices  # Both
 
-        cost_node = ebitda.nodes[1]  # cost type
-        assert 1 in cost_node.linked_opportunity_indices  # Cost Side
-        assert 2 in cost_node.linked_opportunity_indices  # Both
+        cogs_node = ebitda.nodes[1]  # cost type
+        assert 1 in cogs_node.linked_opportunity_indices  # Cost Side
+        assert 2 in cogs_node.linked_opportunity_indices  # Both
+
+    def test_timings_include_ebitda_build(self):
+        mock_factory = _make_mock_factory()
+        company = _make_company_with_profile_risk_and_ideations(ideation_count=1)
+        accessor = CompanyAccessor(company)
+
+        step = ParallelOpportunityDetailsAndEbitda(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        details = step._request_executor.add_details.call_args[0][0]
+        timings = details["ParallelOpportunityDetailsAndEbitda.timings"]
+        assert "build_ebitda_tree" in timings
+        assert "ai_call_detail_0" in timings
 
     def test_missing_profile_raises(self):
         company = Company(url="https://example.com")

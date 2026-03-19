@@ -134,121 +134,6 @@ _MOCK_RESPONSES: dict[str, object] = {
             },
         ],
     },
-    # GenerateEbitdaTree (flat node format with parent_id references)
-    "nodes": {
-        "summary": (
-            "E2E Test Corp operates a subscription SaaS model with primary"
-            " revenue from platform fees and analytics add-ons."
-            " AI opportunities have the most impact on operational"
-            " efficiency and revenue expansion."
-        ),
-        "revenue_estimate": "$5M-$15M",
-        "ebitda_estimate": "$1M-$3M (15-25% margin)",
-        "nodes": [
-            {
-                "id": "revenue",
-                "parent_id": None,
-                "label": "Total Revenue",
-                "type": "revenue",
-                "value_range": "$5M-$15M",
-                "percentage_of_parent": None,
-                "description": "Combined subscription and services revenue",
-            },
-            {
-                "id": "platform_subscriptions",
-                "parent_id": "revenue",
-                "label": "Platform Subscriptions",
-                "type": "revenue",
-                "value_range": "$4M-$12M",
-                "percentage_of_parent": 80,
-                "description": "Annual SaaS subscription fees",
-            },
-            {
-                "id": "services",
-                "parent_id": "revenue",
-                "label": "Professional Services",
-                "type": "revenue",
-                "value_range": "$1M-$3M",
-                "percentage_of_parent": 20,
-                "description": "Implementation and consulting services",
-            },
-            {
-                "id": "cogs",
-                "parent_id": None,
-                "label": "Cost of Revenue",
-                "type": "cost",
-                "value_range": "$1.5M-$4.5M",
-                "percentage_of_parent": None,
-                "description": "Cloud infrastructure and support costs",
-            },
-            {
-                "id": "cloud_infra",
-                "parent_id": "cogs",
-                "label": "Cloud Infrastructure",
-                "type": "cost",
-                "value_range": "$1M-$3M",
-                "percentage_of_parent": 65,
-                "description": "AWS hosting and compute costs",
-            },
-            {
-                "id": "support_costs",
-                "parent_id": "cogs",
-                "label": "Customer Support",
-                "type": "cost",
-                "value_range": "$0.5M-$1.5M",
-                "percentage_of_parent": 35,
-                "description": "Support team and tooling costs",
-            },
-            {
-                "id": "gross_profit",
-                "parent_id": None,
-                "label": "Gross Profit",
-                "type": "subtotal",
-                "value_range": "$3.5M-$10.5M",
-                "percentage_of_parent": None,
-                "description": "Revenue minus cost of revenue",
-            },
-            {
-                "id": "opex",
-                "parent_id": None,
-                "label": "Operating Expenses",
-                "type": "cost",
-                "value_range": "$2M-$6M",
-                "percentage_of_parent": None,
-                "description": "Total operating expenses",
-            },
-            {
-                "id": "opex_rnd",
-                "parent_id": "opex",
-                "label": "R&D Expense",
-                "type": "cost",
-                "value_range": "$1M-$3M",
-                "percentage_of_parent": 50,
-                "description": "Engineering and product development",
-            },
-            {
-                "id": "opex_sga",
-                "parent_id": "opex",
-                "label": "SG&A Expense",
-                "type": "cost",
-                "value_range": "$1M-$3M",
-                "percentage_of_parent": 50,
-                "description": "Sales, general and administrative expenses",
-            },
-            {
-                "id": "ebitda",
-                "parent_id": None,
-                "label": "EBITDA",
-                "type": "subtotal",
-                "value_range": "$1M-$3M",
-                "percentage_of_parent": None,
-                "description": (
-                    "Earnings before interest, taxes,"
-                    " depreciation and amortisation"
-                ),
-            },
-        ],
-    },
     # Ideation (8 calls — one per risk category, dispatched by prompt keyword)
     "ideation_competitive_displacement": {
         "title": "AI-powered competitive intelligence platform",
@@ -367,7 +252,6 @@ def _detect_step(body: dict) -> str:
     Routing logic:
      - "actual_url" in props → URL resolution
      - "company_name" in props → profile extraction
-     - "nodes" in props → EBITDA tree
      - "risk_scores" in props → risk batch A or B (by prompt keyword)
      - "impact_rating" in props but NOT "implementation_steps" → ideation
      - "implementation_steps" in props but NOT "title" → detail
@@ -386,7 +270,7 @@ def _detect_step(body: dict) -> str:
         props = set(schema.get("properties", {}).keys())
 
         # Exact matches on unique top-level properties
-        for key in ("actual_url", "company_name", "nodes"):
+        for key in ("actual_url", "company_name"):
             if key in props:
                 return key
 
