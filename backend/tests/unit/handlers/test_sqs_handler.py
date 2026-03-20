@@ -391,4 +391,7 @@ class TestSQSHandlerReanalysis:
         handler._process_message(message)
 
         # scan_id is "" → _update_scan_progress should NOT be called
-        storage.create_scan_repository.assert_not_called()
+        # create_scan_repository is called at init (for progress tracking), but
+        # the scan repo's get_by_id should never be called (no progress update)
+        scan_repo = storage.create_scan_repository.return_value
+        scan_repo.get_by_id.assert_not_called()

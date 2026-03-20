@@ -37,34 +37,12 @@ function NewScanContent() {
         setProgress(5)
         setProgressLabel('Starting analysis...')
 
-        // Animate progress bar while waiting for long-running request
-        const progressInterval = setInterval(() => {
-            setProgress((prev) => {
-                if (prev >= 85) return prev
-                return prev + Math.random() * 3
-            })
-        }, 2000)
-
-        const stages = [
-            'Gathering company intelligence...',
-            'Extracting company profile...',
-            'Running AI risk assessment...',
-            'Generating opportunity recommendations...',
-        ]
-        let stageIdx = 0
-        const stageInterval = setInterval(() => {
-            stageIdx = Math.min(stageIdx + 1, stages.length - 1)
-            setProgressLabel(stages[stageIdx])
-        }, 8000)
-
         try {
             const res = await fetch('/api/scan/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: url.trim(), type: mode }),
             })
-            clearInterval(progressInterval)
-            clearInterval(stageInterval)
 
             const data = await res.json()
             if (!res.ok) {
@@ -95,11 +73,9 @@ function NewScanContent() {
                 return
             }
 
-            // Fallback: poll for status if the request returned early
+            // Poll backend for real progress updates
             pollStatus(data.scanId)
         } catch (err) {
-            clearInterval(progressInterval)
-            clearInterval(stageInterval)
             setError(
                 err instanceof Error
                     ? err.message
@@ -110,63 +86,54 @@ function NewScanContent() {
     }
 
     async function pollStatus(id: string) {
-        const stages = [
-            'Gathering company intelligence...',
-            'Extracting company profile...',
-            'Running AI risk assessment...',
-            'Generating opportunity recommendations...',
-        ]
-        let stageIdx = 0
-
-        // Animate progress bar while waiting for backend to finish
-        const animateInterval = setInterval(() => {
-            setProgress((prev) => {
-                if (prev >= 90) return prev
-                return prev + Math.random() * 3
-            })
-            stageIdx = Math.min(stageIdx + 1, stages.length - 1)
-            setProgressLabel(stages[stageIdx])
-        }, 4000)
-
         const pollInterval = setInterval(async () => {
-            const res = await fetch(`/api/scan/${id}`)
-            if (!res.ok) return
-            const data = await res.json()
+            try {
+                const res = await fetch(`/api/scan/${id}`)
+                if (!res.ok) return
+                const data = await res.json()
 
-            if (data.status === 'awaiting_confirmation') {
-                clearInterval(pollInterval)
-                clearInterval(animateInterval)
-                const companiesWithSelect = (
-                    (data.portfolioCompanies as Omit<Company, 'selected'>[] | undefined) ?? []
-                ).map((c) => ({ ...c, selected: true }))
-                setCompanies(companiesWithSelect)
-                setPhase('portfolio_confirm')
-            } else if (data.status === 'complete') {
-                clearInterval(pollInterval)
-                clearInterval(animateInterval)
-                setProgress(100)
-                setProgressLabel('Analysis complete!')
-                if (mode === 'portfolio') {
-                    router.push(`/portfolio/${id}`)
-                } else if (data.analyses?.[0]?.id) {
-                    if (data.analyses[0].error) {
+                // Update progress from backend
+                if (typeof data.progress === 'number') {
+                    setProgress((prev) => Math.max(prev, data.progress))
+                }
+                if (data.progressLabel) {
+                    setProgressLabel(data.progressLabel)
+                }
+
+                if (data.status === 'awaiting_confirmation') {
+                    clearInterval(pollInterval)
+                    const companiesWithSelect = (
+                        (data.portfolioCompanies as Omit<Company, 'selected'>[] | undefined) ?? []
+                    ).map((c) => ({ ...c, selected: true }))
+                    setCompanies(companiesWithSelect)
+                    setPhase('portfolio_confirm')
+                } else if (data.status === 'complete') {
+                    clearInterval(pollInterval)
+                    setProgress(100)
+                    setProgressLabel('Analysis complete!')
+                    if (mode === 'portfolio') {
+                        router.push(`/portfolio/${id}`)
+                    } else if (data.analyses?.[0]?.id) {
+                        if (data.analyses[0].error) {
+                            setError(`Analysis failed: ${data.analyses[0].error}`)
+                            setPhase('input')
+                        } else {
+                            router.push(`/analysis/${data.analyses[0].id}`)
+                        }
+                    } else if (data.analyses?.[0]?.error) {
                         setError(`Analysis failed: ${data.analyses[0].error}`)
                         setPhase('input')
                     } else {
-                        router.push(`/analysis/${data.analyses[0].id}`)
+                        setError('Analysis completed but no results were returned.')
+                        setPhase('input')
                     }
-                } else if (data.analyses?.[0]?.error) {
-                    setError(`Analysis failed: ${data.analyses[0].error}`)
-                    setPhase('input')
-                } else {
-                    setError('Analysis completed but no results were returned.')
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval)
+                    setError('Analysis failed. Please try again.')
                     setPhase('input')
                 }
-            } else if (data.status === 'failed') {
-                clearInterval(pollInterval)
-                clearInterval(animateInterval)
-                setError('Analysis failed. Please try again.')
-                setPhase('input')
+            } catch {
+                // Silently retry on network errors
             }
         }, 3000)
     }
@@ -174,20 +141,8 @@ function NewScanContent() {
     async function confirmPortfolio() {
         const selected = companies.filter((c) => c.selected)
         setPhase('running')
-        setProgress(25)
-        setProgressLabel('Starting portfolio analysis...')
-
-        // Animate progress bar while waiting
-        const completed = 0
-        const progressInterval = setInterval(() => {
-            setProgress((prev) => {
-                if (prev >= 90) return prev
-                return prev + Math.random() * 2
-            })
-            setProgressLabel(
-                `Analyzing companies... (${Math.min(completed, selected.length)}/${selected.length} complete)`
-            )
-        }, 5000)
+        setProgress(5)
+        setProgressLabel('Queuing company analyses...')
 
         try {
             const res = await fetch(`/api/scan/${scanId}/confirm`, {
@@ -195,7 +150,6 @@ function NewScanContent() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ companies: selected }),
             })
-            clearInterval(progressInterval)
 
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}))
@@ -204,31 +158,48 @@ function NewScanContent() {
                 return
             }
 
-            // Backend returns 202 — analysis runs async via SQS, poll for completion
+            setProgress(10)
+            setProgressLabel(`Analyzing companies... (0/${selected.length} complete)`)
             pollRunning(scanId, selected.length)
         } catch {
-            clearInterval(progressInterval)
             pollRunning(scanId, selected.length)
         }
     }
 
     async function pollRunning(id: string, total: number) {
         const interval = setInterval(async () => {
-            const res = await fetch(`/api/scan/${id}`)
-            if (!res.ok) return
-            const data = await res.json()
-            const done =
-                data.analyses?.filter((a: { analyzed_at?: string | null }) => a.analyzed_at)?.length || 0
-            setProgress(25 + Math.round((done / Math.max(total, 1)) * 70))
-            setProgressLabel(`Analyzing companies... (${done}/${total} complete)`)
+            try {
+                const res = await fetch(`/api/scan/${id}`)
+                if (!res.ok) return
+                const data = await res.json()
+                const done =
+                    data.analyses?.filter((a: { analyzed_at?: string | null }) => a.analyzed_at)?.length || 0
 
-            if (data.status === 'complete') {
-                clearInterval(interval)
-                router.push(`/portfolio/${id}`)
-            } else if (data.status === 'failed') {
-                clearInterval(interval)
-                setError('Portfolio analysis failed.')
-                setPhase('input')
+                // 10% base + 85% for completions + 5% reserved for redirect
+                const targetProgress = 10 + Math.round((done / Math.max(total, 1)) * 85)
+                setProgress((prev) => Math.max(prev, targetProgress))
+
+                if (done < total) {
+                    const inProgress = total - done
+                    setProgressLabel(
+                        `Analyzing companies... (${done}/${total} complete, ${inProgress} in progress)`
+                    )
+                } else {
+                    setProgressLabel(`Finishing up... (${done}/${total} complete)`)
+                }
+
+                if (data.status === 'complete') {
+                    clearInterval(interval)
+                    setProgress(100)
+                    setProgressLabel('Portfolio analysis complete!')
+                    router.push(`/portfolio/${id}`)
+                } else if (data.status === 'failed') {
+                    clearInterval(interval)
+                    setError('Portfolio analysis failed.')
+                    setPhase('input')
+                }
+            } catch {
+                // Silently retry on network errors
             }
         }, 3000)
     }
@@ -542,7 +513,7 @@ function NewScanContent() {
                                     color: 'var(--text-tertiary)',
                                 }}
                             >
-                                This typically takes 2–5 minutes. Please keep this page open.
+                                This typically takes 1–3 minutes. Please keep this page open.
                             </p>
                         </div>
                     )}
