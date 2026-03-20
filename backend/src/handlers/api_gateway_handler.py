@@ -282,6 +282,7 @@ class APIGatewayHandler:
             {
                 "status": status,
                 "progress": progress,
+                "progressLabel": scan.get("progress_label", ""),
                 "type": scan.get("type"),
                 "portfolioCompanies": scan.get("portfolio_companies", []),
                 "analyses": analyses,

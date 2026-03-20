@@ -14,7 +14,20 @@ if TYPE_CHECKING:
     from signalfield_core.domain.entity import EntityAccessor
     from signalfield_core.pipeline.step import RequestStep
 
+    from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
+
 logger = logging.getLogger(__name__)
+
+# Maps pipeline question keys → (progress percentage, user-visible label)
+_PROGRESS_MAP: dict[str, tuple[int, str]] = {
+    "scrape_and_resolve": (15, "Scraping website content..."),
+    "extract_profile": (30, "Extracting company profile..."),
+    "assess_risk": (45, "Running AI risk assessment..."),
+    "ideate_opportunities": (55, "Generating opportunity ideas..."),
+    "generate_opportunities": (80, "Gathering implementation details..."),
+    "generate_ebitda_tree": (85, "Building EBITDA analysis..."),
+    "persist_results": (95, "Saving results..."),
+}
 
 
 class JanusRequestExecutor:
@@ -29,6 +42,8 @@ class JanusRequestExecutor:
         tenant_id: str | None = None,
         request_id: str = "",
         pipeline: list[RequestStep] | None = None,
+        scan_repo: DynamoDBScanRepository | None = None,
+        scan_id: str = "",
     ) -> None:
         self.tenant_id = tenant_id
         self.request_id = request_id
@@ -38,13 +53,16 @@ class JanusRequestExecutor:
         self._pipeline: list[RequestStep] = list(pipeline) if pipeline else []
         self._step_timings: dict[str, float] = {}
         self._entity_accessor: EntityAccessor | None = None
+        self._scan_repo = scan_repo
+        self._scan_id = scan_id
 
     # ── PipelineExecutor protocol ────────────────────────────────────
 
     def mark_question_complete(self, question_key: str) -> None:
-        """Mark a single question as complete."""
+        """Mark a single question as complete and update scan progress in DynamoDB."""
         self._completed_questions.add(question_key)
         logger.info("Question complete: %s", question_key)
+        self._report_progress(question_key)
 
     def mark_multiple_questions_complete(self, question_keys: list[str]) -> None:
         """Mark multiple questions as complete."""
@@ -161,3 +179,32 @@ class JanusRequestExecutor:
             total_elapsed,
             summary,
         )
+
+    # ── Progress reporting ───────────────────────────────────────────
+
+    def _report_progress(self, question_key: str) -> None:
+        """Write pipeline progress to the scan record in DynamoDB.
+
+        Only writes if scan_repo and scan_id were provided (i.e. this is
+        a real pipeline run, not a test). Silently skips if not configured.
+        """
+        if not self._scan_repo or not self._scan_id:
+            return
+
+        progress_entry = _PROGRESS_MAP.get(question_key)
+        if not progress_entry:
+            return
+
+        progress, label = progress_entry
+        try:
+            self._scan_repo.update(
+                self._scan_id,
+                {"progress": progress, "progress_label": label},
+            )
+        except Exception:
+            logger.warning(
+                "Failed to update scan progress for %s (step=%s)",
+                self._scan_id,
+                question_key,
+                exc_info=True,
+            )
