@@ -246,7 +246,7 @@ class JanusStack(Stack):
             code=lambda_.Code.from_asset("../backend", bundling=bundling),
             timeout=Duration.seconds(540),
             memory_size=1769,
-            reserved_concurrent_executions=4,
+            reserved_concurrent_executions=3,
             log_group=log_group,
             environment=environment,
         )
