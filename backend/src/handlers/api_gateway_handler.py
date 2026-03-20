@@ -278,8 +278,7 @@ class APIGatewayHandler:
         if analyses:
             total = len(analyses)
             company_progress_sum = sum(
-                100 if a.get("analyzedAt") else a.get("pipelineProgress", 0)
-                for a in analyses
+                100 if a.get("analyzedAt") else a.get("pipelineProgress", 0) for a in analyses
             )
             computed_progress = company_progress_sum // total
         else:
