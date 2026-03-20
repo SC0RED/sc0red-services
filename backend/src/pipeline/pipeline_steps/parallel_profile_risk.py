@@ -46,6 +46,7 @@ from src.pipeline.pipeline_steps.ideate_opportunities import (
 from src.pipeline.pipeline_steps.rank_opportunities import (
     deduplicate_ideations,
     derive_top_three_actions,
+    filter_low_quality_ideations,
     rank_ideations,
 )
 from src.pipeline.step_timer import StepTimer
@@ -284,8 +285,9 @@ class ParallelProfileRiskAndIdeation(RequestStep):
             timer.record(f"ai_call_{label}", ideation_elapsed)
             raw_ideations.append({**ideation_data, "risk_category": category["id"]})
 
-        # Deduplicate, rank, and derive top actions
-        deduped = deduplicate_ideations(raw_ideations, risk_score_lookup)
+        # Filter low-quality, deduplicate, rank, and derive top actions
+        filtered = filter_low_quality_ideations(raw_ideations, risk_score_lookup)
+        deduped = deduplicate_ideations(filtered, risk_score_lookup)
         ranked = rank_ideations(deduped, risk_score_lookup)
         top_actions = derive_top_three_actions(ranked)
 

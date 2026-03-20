@@ -8,6 +8,10 @@ from __future__ import annotations
 
 IMPACT_RATING_SCORES: dict[str, int] = {"High": 3, "Medium": 2, "Low": 1}
 
+# Ideations rated "Low" from risk categories below this score are dropped.
+# A "Low" impact idea for a risk the company barely faces is filler, not insight.
+_LOW_IMPACT_RISK_THRESHOLD = 5.0
+
 _STOP_WORDS = frozenset(
     {"a", "an", "the", "and", "or", "of", "to", "in", "for", "with", "on", "at", "by", "is"}
 )
@@ -18,6 +22,27 @@ _TITLE_OVERLAP_THRESHOLD = 0.6
 def _normalise_words(title: str) -> set[str]:
     """Extract meaningful lowercase words from a title, excluding stop words."""
     return {word for word in title.lower().split() if word not in _STOP_WORDS}
+
+
+def filter_low_quality_ideations(
+    ideations: list[dict[str, object]],
+    risk_scores: dict[str, float],
+) -> list[dict[str, object]]:
+    """Drop Low-impact ideations from low-risk categories.
+
+    Keeps an ideation if:
+    - impact_rating is High or Medium, OR
+    - the parent risk score is >= threshold (the category matters enough to keep even Low ideas)
+
+    This prevents padding the detail phase with filler opportunities for
+    risk categories that barely apply to the company.
+    """
+    return [
+        ideation
+        for ideation in ideations
+        if str(ideation["impact_rating"]) != "Low"
+        or risk_scores.get(str(ideation["risk_category"]), 0.0) >= _LOW_IMPACT_RISK_THRESHOLD
+    ]
 
 
 def deduplicate_ideations(
