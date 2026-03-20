@@ -69,6 +69,8 @@ def _build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
         "riskTier": company.get("risk_tier"),
         "error": company.get("error"),
         "analyzedAt": company.get("analyzed_at"),
+        "pipelineProgress": company.get("pipeline_progress", 0),
+        "pipelineLabel": company.get("pipeline_label", ""),
     }
 
 
