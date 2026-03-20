@@ -1,7 +1,6 @@
 """Tests for opportunity generation shared constants and helpers."""
 
 from src.pipeline.pipeline_steps.generate_opportunities import (
-    OPPS_SYSTEM_PROMPT,
     STRATEGIC_CATEGORIES_INSTRUCTIONS,
     build_opportunity,
 )
@@ -35,10 +34,6 @@ class TestBuildOpportunity:
 
 
 class TestSharedConstants:
-    def test_system_prompt_is_non_empty_string(self):
-        assert isinstance(OPPS_SYSTEM_PROMPT, str)
-        assert len(OPPS_SYSTEM_PROMPT) > 50
-
     def test_strategic_categories_lists_five(self):
         assert "Competitive Moat" in STRATEGIC_CATEGORIES_INSTRUCTIONS
         assert "Revenue Capture" in STRATEGIC_CATEGORIES_INSTRUCTIONS
