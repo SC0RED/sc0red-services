@@ -18,7 +18,6 @@ class FactoryManager:
         self._factories_factory = JanusFactoriesFactory(
             company_repo=self._storage.create_company_repository(),
             assessment_repo=self._storage.create_assessment_repository(),
-            scan_repo=self._storage.create_scan_repository(),
         )
 
     @property

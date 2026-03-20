@@ -174,15 +174,15 @@ function NewScanContent() {
                 const data = await res.json()
 
                 interface AnalysisSummary {
-                    analyzed_at?: string | null
+                    analyzedAt?: string | null
                     pipelineProgress?: number
                     pipelineLabel?: string
                 }
                 const analysisList: AnalysisSummary[] = data.analyses || []
 
-                const done = analysisList.filter((a) => a.analyzed_at).length
+                const done = analysisList.filter((a) => a.analyzedAt).length
                 const inProgressItems = analysisList.filter(
-                    (a) => !a.analyzed_at && (a.pipelineProgress || 0) > 0
+                    (a) => !a.analyzedAt && (a.pipelineProgress || 0) > 0
                 )
 
                 // Combine completion count + average pipeline progress of in-flight companies
