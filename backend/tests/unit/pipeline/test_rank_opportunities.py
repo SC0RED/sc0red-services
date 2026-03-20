@@ -6,6 +6,7 @@ from src.pipeline.pipeline_steps.rank_opportunities import (
     IMPACT_RATING_SCORES,
     deduplicate_ideations,
     derive_top_three_actions,
+    filter_low_quality_ideations,
     rank_ideations,
 )
 
@@ -146,6 +147,70 @@ class TestDeriveTopThreeActions:
     def test_empty_list_returns_empty(self):
         result = derive_top_three_actions([])
         assert result == []
+
+
+class TestFilterLowQualityIdeations:
+    def test_keeps_high_and_medium_regardless_of_risk_score(self):
+        ideations = [
+            _make_ideation("High idea", impact_rating="High", risk_category="supply_chain"),
+            _make_ideation("Medium idea", impact_rating="Medium", risk_category="data_ip"),
+        ]
+        result = filter_low_quality_ideations(ideations, _RISK_SCORES)
+        assert len(result) == 2
+
+    def test_drops_low_impact_from_low_risk_category(self):
+        ideations = [
+            _make_ideation("Weak idea", impact_rating="Low", risk_category="supply_chain"),  # risk=2
+        ]
+        result = filter_low_quality_ideations(ideations, _RISK_SCORES)
+        assert len(result) == 0
+
+    def test_keeps_low_impact_from_high_risk_category(self):
+        ideations = [
+            _make_ideation("Still relevant", impact_rating="Low", risk_category="competitive_displacement"),  # risk=8
+        ]
+        result = filter_low_quality_ideations(ideations, _RISK_SCORES)
+        assert len(result) == 1
+
+    def test_threshold_boundary_keeps_at_five(self):
+        ideations = [
+            _make_ideation("Borderline", impact_rating="Low", risk_category="margin_compression"),  # risk=5
+        ]
+        result = filter_low_quality_ideations(ideations, _RISK_SCORES)
+        assert len(result) == 1
+
+    def test_threshold_boundary_drops_below_five(self):
+        ideations = [
+            _make_ideation("Below threshold", impact_rating="Low", risk_category="customer_behavior"),  # risk=4
+        ]
+        result = filter_low_quality_ideations(ideations, _RISK_SCORES)
+        assert len(result) == 0
+
+    def test_mixed_keeps_only_quality(self):
+        ideations = [
+            _make_ideation("Strong", impact_rating="High", risk_category="competitive_displacement"),
+            _make_ideation("Decent", impact_rating="Medium", risk_category="technology_obsolescence"),
+            _make_ideation("Filler 1", impact_rating="Low", risk_category="supply_chain"),  # risk=2
+            _make_ideation("Filler 2", impact_rating="Low", risk_category="regulatory_compliance"),  # risk=3
+            _make_ideation("Low but relevant", impact_rating="Low", risk_category="talent_workforce"),  # risk=6
+        ]
+        result = filter_low_quality_ideations(ideations, _RISK_SCORES)
+        assert len(result) == 3
+        titles = [str(r["title"]) for r in result]
+        assert "Strong" in titles
+        assert "Decent" in titles
+        assert "Low but relevant" in titles
+
+    def test_empty_list_returns_empty(self):
+        result = filter_low_quality_ideations([], _RISK_SCORES)
+        assert result == []
+
+    def test_unknown_risk_category_treated_as_zero(self):
+        ideations = [
+            _make_ideation("Unknown cat", impact_rating="Low", risk_category="nonexistent"),
+        ]
+        result = filter_low_quality_ideations(ideations, _RISK_SCORES)
+        assert len(result) == 0
 
 
 class TestImpactRatingScores:

@@ -64,5 +64,19 @@ job descriptions or service delivery bottlenecks visible in case studies.
 
 - **Talent Strategy**: Must reference observable workforce signals — hiring patterns, skill \
 gaps in job postings, team composition, or roles at risk from automation. Not "invest in \
-talent" but "redeploy [specific role type] from [manual task] to [higher-value function]."\
+talent" but "redeploy [specific role type] from [manual task] to [higher-value function]."
+
+### Quality Gate
+
+Not every risk category will have a meaningful AI opportunity for every company. \
+If the risk category is not material to this company (low risk score, no observable \
+signals), do NOT force a weak or generic idea. Instead:
+
+- Set impact_rating to "Low"
+- Make the title and description honest about the limited opportunity
+- A candid "Low" rating is more valuable than an inflated "Medium" with a generic idea
+
+Quality over quantity: 3 strong, specific opportunities are worth more to a PE sponsor \
+than 5 opportunities padded with filler. Do not stretch to fill the category if the \
+evidence does not support a substantial recommendation.\
 """
