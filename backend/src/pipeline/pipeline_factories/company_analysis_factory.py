@@ -79,6 +79,7 @@ class CompanyAnalysisFactory(PipelineFactory):
             pipeline=pipeline,
             scan_repo=self._scan_repo,
             scan_id=self._scan_id,
+            company_repo=self._company_repo,
         )
         for step in pipeline:
             step.request_executor = executor

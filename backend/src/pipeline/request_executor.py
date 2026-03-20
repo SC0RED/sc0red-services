@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from signalfield_core.domain.entity import EntityAccessor
     from signalfield_core.pipeline.step import RequestStep
 
+    from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
     from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class JanusRequestExecutor:
         pipeline: list[RequestStep] | None = None,
         scan_repo: DynamoDBScanRepository | None = None,
         scan_id: str = "",
+        company_repo: DynamoDBCompanyRepository | None = None,
     ) -> None:
         self.tenant_id = tenant_id
         self.request_id = request_id
@@ -55,6 +57,7 @@ class JanusRequestExecutor:
         self._entity_accessor: EntityAccessor | None = None
         self._scan_repo = scan_repo
         self._scan_id = scan_id
+        self._company_repo = company_repo
 
     # ── PipelineExecutor protocol ────────────────────────────────────
 
@@ -183,28 +186,49 @@ class JanusRequestExecutor:
     # ── Progress reporting ───────────────────────────────────────────
 
     def _report_progress(self, question_key: str) -> None:
-        """Write pipeline progress to the scan record in DynamoDB.
+        """Write pipeline progress to DynamoDB.
 
-        Only writes if scan_repo and scan_id were provided (i.e. this is
-        a real pipeline run, not a test). Silently skips if not configured.
+        Writes to:
+        1. The company record (pipeline_progress + pipeline_label) — always, if company_repo
+           is configured. This enables per-company progress for portfolio scans.
+        2. The scan record (progress + progress_label) — only for standalone scans where
+           a single company's progress IS the scan progress. For portfolio scans, the
+           scan-level progress is computed from company completion counts in sqs_handler.
+
+        Silently skips if repos are not configured (i.e. running in tests).
         """
-        if not self._scan_repo or not self._scan_id:
-            return
-
         progress_entry = _PROGRESS_MAP.get(question_key)
         if not progress_entry:
             return
 
         progress, label = progress_entry
-        try:
-            self._scan_repo.update(
-                self._scan_id,
-                {"progress": progress, "progress_label": label},
-            )
-        except Exception:
-            logger.warning(
-                "Failed to update scan progress for %s (step=%s)",
-                self._scan_id,
-                question_key,
-                exc_info=True,
-            )
+
+        # Always write to company record (per-company progress)
+        if self._company_repo and self.request_id:
+            try:
+                self._company_repo.update(
+                    self.request_id,
+                    {"pipeline_progress": progress, "pipeline_label": label},
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to update company progress for %s (step=%s)",
+                    self.request_id,
+                    question_key,
+                    exc_info=True,
+                )
+
+        # Write to scan record only for standalone scans (not portfolio)
+        if self._scan_repo and self._scan_id:
+            try:
+                self._scan_repo.update(
+                    self._scan_id,
+                    {"progress": progress, "progress_label": label},
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to update scan progress for %s (step=%s)",
+                    self._scan_id,
+                    question_key,
+                    exc_info=True,
+                )

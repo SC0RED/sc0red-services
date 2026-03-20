@@ -172,20 +172,45 @@ function NewScanContent() {
                 const res = await fetch(`/api/scan/${id}`)
                 if (!res.ok) return
                 const data = await res.json()
-                const done =
-                    data.analyses?.filter((a: { analyzed_at?: string | null }) => a.analyzed_at)?.length || 0
 
-                // 10% base + 85% for completions + 5% reserved for redirect
-                const targetProgress = 10 + Math.round((done / Math.max(total, 1)) * 85)
+                interface AnalysisSummary {
+                    analyzed_at?: string | null
+                    pipelineProgress?: number
+                    pipelineLabel?: string
+                }
+                const analysisList: AnalysisSummary[] = data.analyses || []
+
+                const done = analysisList.filter((a) => a.analyzed_at).length
+                const inProgressItems = analysisList.filter(
+                    (a) => !a.analyzed_at && (a.pipelineProgress || 0) > 0
+                )
+
+                // Combine completion count + average pipeline progress of in-flight companies
+                // Done companies contribute 100%, in-progress contribute their pipeline %
+                const doneProgress = done * 100
+                const inFlightProgress = inProgressItems.reduce(
+                    (sum, a) => sum + (a.pipelineProgress || 0),
+                    0
+                )
+                const avgProgress = (doneProgress + inFlightProgress) / Math.max(total, 1)
+
+                // Map 0-100 average to 10-95 display range
+                const targetProgress = 10 + Math.round(avgProgress * 0.85)
                 setProgress((prev) => Math.max(prev, targetProgress))
 
-                if (done < total) {
-                    const inProgress = total - done
+                // Build label from most advanced in-progress company
+                if (done >= total) {
+                    setProgressLabel(`Finishing up... (${done}/${total} complete)`)
+                } else if (inProgressItems.length > 0) {
+                    const furthest = inProgressItems.reduce((best, a) =>
+                        (a.pipelineProgress || 0) > (best.pipelineProgress || 0) ? a : best
+                    )
+                    const stepLabel = furthest.pipelineLabel || 'Processing...'
                     setProgressLabel(
-                        `Analyzing companies... (${done}/${total} complete, ${inProgress} in progress)`
+                        `${stepLabel} (${done}/${total} complete, ${inProgressItems.length} in progress)`
                     )
                 } else {
-                    setProgressLabel(`Finishing up... (${done}/${total} complete)`)
+                    setProgressLabel(`Analyzing companies... (${done}/${total} complete)`)
                 }
 
                 if (data.status === 'complete') {
