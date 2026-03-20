@@ -271,25 +271,38 @@ class APIGatewayHandler:
                     analyses.append(_build_company_summary(full))
 
         status = scan.get("status")
+        total_companies = scan.get("total_companies", 0)
 
-        # Compute progress from per-company pipeline_progress (works for both
-        # standalone and portfolio scans — no reliance on scan-level progress
-        # which can be overwritten by concurrent workers).
+        # Compute progress from per-company pipeline_progress
         if analyses:
             total = len(analyses)
+            done_count = sum(1 for a in analyses if a.get("analyzedAt") or a.get("error"))
             company_progress_sum = sum(
-                100 if a.get("analyzedAt") else a.get("pipelineProgress", 0) for a in analyses
+                100 if (a.get("analyzedAt") or a.get("error")) else a.get("pipelineProgress", 0)
+                for a in analyses
             )
             computed_progress = company_progress_sum // total
         else:
+            done_count = 0
             computed_progress = scan.get("progress", 0)
 
-        # Use the higher of scan-level (from sqs_handler) or computed progress
+        # Detect completion from company data even if scan record is stale.
+        # Handles race conditions where _update_scan_progress hasn't run yet.
+        if status == "running" and total_companies and done_count >= total_companies:
+            scan_repo.update(scan_id, {"status": "complete", "progress": 100})
+            status = "complete"
+            computed_progress = 100
+
+        # Use the higher of scan-level or computed progress
         progress = max(scan.get("progress", 0), computed_progress)
 
         # Build label from the most advanced in-progress company
         progress_label = scan.get("progress_label", "")
-        in_progress = [a for a in analyses if not a.get("analyzedAt") and a.get("pipelineProgress")]
+        in_progress = [
+            a
+            for a in analyses
+            if not a.get("analyzedAt") and not a.get("error") and a.get("pipelineProgress")
+        ]
         if in_progress:
             furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
             progress_label = furthest.get("pipelineLabel", progress_label)
