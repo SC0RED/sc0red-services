@@ -271,7 +271,30 @@ class APIGatewayHandler:
                     analyses.append(_build_company_summary(full))
 
         status = scan.get("status")
-        progress = scan.get("progress", 0)
+
+        # Compute progress from per-company pipeline_progress (works for both
+        # standalone and portfolio scans — no reliance on scan-level progress
+        # which can be overwritten by concurrent workers).
+        if analyses:
+            total = len(analyses)
+            company_progress_sum = sum(
+                100 if a.get("analyzedAt") else a.get("pipelineProgress", 0)
+                for a in analyses
+            )
+            computed_progress = company_progress_sum // total
+        else:
+            computed_progress = scan.get("progress", 0)
+
+        # Use the higher of scan-level (from sqs_handler) or computed progress
+        progress = max(scan.get("progress", 0), computed_progress)
+
+        # Build label from the most advanced in-progress company
+        progress_label = scan.get("progress_label", "")
+        in_progress = [a for a in analyses if not a.get("analyzedAt") and a.get("pipelineProgress")]
+        if in_progress:
+            furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
+            progress_label = furthest.get("pipelineLabel", progress_label)
+
         logger.info(
             "[poll] scan=%s status=%s progress=%s analyses=%d",
             scan_id,
@@ -284,7 +307,7 @@ class APIGatewayHandler:
             {
                 "status": status,
                 "progress": progress,
-                "progressLabel": scan.get("progress_label", ""),
+                "progressLabel": progress_label,
                 "type": scan.get("type"),
                 "portfolioCompanies": scan.get("portfolio_companies", []),
                 "analyses": analyses,

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from signalfield_core.pipeline.step import RequestStep
 
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
-    from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +42,6 @@ class JanusRequestExecutor:
         tenant_id: str | None = None,
         request_id: str = "",
         pipeline: list[RequestStep] | None = None,
-        scan_repo: DynamoDBScanRepository | None = None,
-        scan_id: str = "",
         company_repo: DynamoDBCompanyRepository | None = None,
     ) -> None:
         self.tenant_id = tenant_id
@@ -55,8 +52,6 @@ class JanusRequestExecutor:
         self._pipeline: list[RequestStep] = list(pipeline) if pipeline else []
         self._step_timings: dict[str, float] = {}
         self._entity_accessor: EntityAccessor | None = None
-        self._scan_repo = scan_repo
-        self._scan_id = scan_id
         self._company_repo = company_repo
 
     # ── PipelineExecutor protocol ────────────────────────────────────
@@ -218,17 +213,8 @@ class JanusRequestExecutor:
                     exc_info=True,
                 )
 
-        # Write to scan record only for standalone scans (not portfolio)
-        if self._scan_repo and self._scan_id:
-            try:
-                self._scan_repo.update(
-                    self._scan_id,
-                    {"progress": progress, "progress_label": label},
-                )
-            except Exception:
-                logger.warning(
-                    "Failed to update scan progress for %s (step=%s)",
-                    self._scan_id,
-                    question_key,
-                    exc_info=True,
-                )
+        # NOTE: scan-level progress is NOT written here. For standalone scans,
+        # the handler computes it from the single company's pipeline_progress.
+        # For portfolio scans, sqs_handler._update_scan_progress handles it
+        # based on company completion counts. Writing step progress to the
+        # scan record from workers would cause conflicts in portfolio mode.

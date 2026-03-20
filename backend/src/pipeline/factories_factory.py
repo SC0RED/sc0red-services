@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from src.pipeline.request_executor import JanusRequestExecutor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
-    from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 
 
 def _initialize_ai_client_factory() -> AIClientFactory:
@@ -55,11 +54,9 @@ class JanusFactoriesFactory:
         self,
         company_repo: DynamoDBCompanyRepository | None = None,
         assessment_repo: DynamoDBAssessmentRepository | None = None,
-        scan_repo: DynamoDBScanRepository | None = None,
     ) -> None:
         self._company_repo = company_repo
         self._assessment_repo = assessment_repo
-        self._scan_repo = scan_repo
         self._ai_client_factory = _initialize_ai_client_factory()
 
     def create_and_execute(
@@ -92,8 +89,6 @@ class JanusFactoriesFactory:
                 request_id=event.request_id,
                 company_repo=self._company_repo,
                 assessment_repo=self._assessment_repo,
-                scan_repo=self._scan_repo,
-                scan_id=event.scan_id,
             )
 
         return factory.execute_pipeline()
