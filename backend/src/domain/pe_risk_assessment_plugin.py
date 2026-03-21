@@ -36,7 +36,7 @@ class PERiskAssessmentPlugin:
 
     def get_scope_names(self) -> list[str]:
         """Return sorted list of available risk scope names."""
-        return sorted(RiskScopeManager._SCOPE_CONFIG.keys())
+        return RiskScopeManager.get_scope_names()
 
     def get_scope_configuration(self, scope: str) -> ScopeConfiguration:
         """Return the ScopeConfiguration instance for the given scope name."""

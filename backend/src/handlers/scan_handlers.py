@@ -229,7 +229,7 @@ def handle_scan_confirm(
     if not scan or scan.get("org_id") != authentication.org_id:
         return _error("Scan not found", 404)
 
-    valid_companies = [c for c in companies if c.get("url")]
+    valid_companies = [c for c in companies if c.get("url", "").startswith(("http://", "https://"))]
     if not valid_companies:
         return _error("At least one company with a url is required")
 
