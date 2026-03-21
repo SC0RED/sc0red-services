@@ -169,13 +169,14 @@ class JanusStack(Stack):
         """Build the environment variables shared by both Lambdas."""
         nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
         if not nextauth_secret:
-            if self._environment == "production":
+            if self._environment == "development":
+                nextauth_secret = "dev-secret-minimum-32-characters-long"
+            else:
                 message = (
-                    "NEXTAUTH_SECRET must be set for production. "
-                    "A production deployment with a default dev secret is a security risk."
+                    f"NEXTAUTH_SECRET must be set for environment '{self._environment}'. "
+                    "A deployment with a default dev secret is a security risk."
                 )
                 raise ValueError(message)
-            nextauth_secret = "dev-secret-minimum-32-characters-long"
 
         return {
             "DYNAMODB_TABLE": table.table_name,
@@ -282,15 +283,14 @@ class JanusStack(Stack):
 
         if frontend_domain:
             cors_origins = [frontend_domain]
-        elif self._environment == "production":
+        elif self._environment == "development":
+            cors_origins = apigw.Cors.ALL_ORIGINS
+        else:
             message = (
-                "FRONTEND_DOMAIN must be set for production. "
+                f"FRONTEND_DOMAIN must be set for environment '{self._environment}'. "
                 "Example: https://janus.vercel.app"
             )
             raise ValueError(message)
-        else:
-            # Development and staging allow all origins
-            cors_origins = apigw.Cors.ALL_ORIGINS
 
         api = apigw.LambdaRestApi(
             self,
