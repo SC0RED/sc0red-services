@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import DashboardSidebar from '@/components/DashboardSidebar'
@@ -29,6 +29,13 @@ function NewScanContent() {
     const [progressLabel, setProgressLabel] = useState('')
     const [scanId, setScanId] = useState('')
     const [companies, setCompanies] = useState<Company[]>([])
+    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+    useEffect(() => {
+        return () => {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+        }
+    }, [])
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -86,7 +93,7 @@ function NewScanContent() {
     }
 
     async function pollStatus(id: string) {
-        const pollInterval = setInterval(async () => {
+        pollIntervalRef.current = setInterval(async () => {
             try {
                 const res = await fetch(`/api/scan/${id}`)
                 if (!res.ok) return
@@ -101,14 +108,16 @@ function NewScanContent() {
                 }
 
                 if (data.status === 'awaiting_confirmation') {
-                    clearInterval(pollInterval)
+                    clearInterval(pollIntervalRef.current!)
+                    pollIntervalRef.current = null
                     const companiesWithSelect = (
                         (data.portfolioCompanies as Omit<Company, 'selected'>[] | undefined) ?? []
                     ).map((c) => ({ ...c, selected: true }))
                     setCompanies(companiesWithSelect)
                     setPhase('portfolio_confirm')
                 } else if (data.status === 'complete') {
-                    clearInterval(pollInterval)
+                    clearInterval(pollIntervalRef.current!)
+                    pollIntervalRef.current = null
                     setProgress(100)
                     setProgressLabel('Analysis complete!')
                     if (mode === 'portfolio') {
@@ -128,7 +137,8 @@ function NewScanContent() {
                         setPhase('input')
                     }
                 } else if (data.status === 'failed') {
-                    clearInterval(pollInterval)
+                    clearInterval(pollIntervalRef.current!)
+                    pollIntervalRef.current = null
                     setError('Analysis failed. Please try again.')
                     setPhase('input')
                 }
@@ -167,7 +177,7 @@ function NewScanContent() {
     }
 
     async function pollRunning(id: string, total: number) {
-        const interval = setInterval(async () => {
+        pollIntervalRef.current = setInterval(async () => {
             try {
                 const res = await fetch(`/api/scan/${id}`)
                 if (!res.ok) return
@@ -214,12 +224,14 @@ function NewScanContent() {
                 }
 
                 if (data.status === 'complete') {
-                    clearInterval(interval)
+                    clearInterval(pollIntervalRef.current!)
+                    pollIntervalRef.current = null
                     setProgress(100)
                     setProgressLabel('Portfolio analysis complete!')
                     router.push(`/portfolio/${id}`)
                 } else if (data.status === 'failed') {
-                    clearInterval(interval)
+                    clearInterval(pollIntervalRef.current!)
+                    pollIntervalRef.current = null
                     setError('Portfolio analysis failed.')
                     setPhase('input')
                 }

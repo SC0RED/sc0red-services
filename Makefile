@@ -78,37 +78,7 @@ format: ## Auto-fix lint issues and format code
 # =============================================================================
 
 setup-db: ## Create DynamoDB table with GSIs (for local dev)
-	cd backend && python -c "\
-	import boto3; \
-	ddb = boto3.client('dynamodb', endpoint_url='http://localhost:8000', region_name='us-east-1'); \
-	try: \
-	    ddb.create_table( \
-	        TableName='janus-dev', \
-	        KeySchema=[{'AttributeName': 'pk', 'KeyType': 'HASH'}, {'AttributeName': 'sk', 'KeyType': 'RANGE'}], \
-	        AttributeDefinitions=[ \
-	            {'AttributeName': 'pk', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'sk', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI1PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI1SK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI2PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI2SK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI3PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI3SK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI4PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI4SK', 'AttributeType': 'S'}, \
-	        ], \
-	        GlobalSecondaryIndexes=[ \
-	            {'IndexName': 'GSI1', 'KeySchema': [{'AttributeName': 'GSI1PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI1SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	            {'IndexName': 'GSI2', 'KeySchema': [{'AttributeName': 'GSI2PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI2SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	            {'IndexName': 'GSI3', 'KeySchema': [{'AttributeName': 'GSI3PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI3SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	            {'IndexName': 'GSI4', 'KeySchema': [{'AttributeName': 'GSI4PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI4SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	        ], \
-	        BillingMode='PAY_PER_REQUEST', \
-	    ); \
-	    print('Table created') \
-	except ddb.exceptions.ResourceInUseException: \
-	    print('Table already exists') \
-	"
+	python3 scripts/setup_dynamodb.py --table janus-dev --endpoint http://localhost:8000
 
 dev: lint-quick ## Start all services (lint must pass first)
 	@echo ""

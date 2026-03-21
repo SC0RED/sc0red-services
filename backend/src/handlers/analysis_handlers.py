@@ -11,6 +11,7 @@ from src.handlers.api_gateway_handler import (
     _error,
     _json_response,
 )
+from src.handlers.sqs_messages import build_reanalysis_message
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -212,16 +213,12 @@ def handle_reanalyze(
 
     sqs.send_message(
         QueueUrl=queue_url,
-        MessageBody=json.dumps(
-            {
-                "reanalyze": True,
-                "analysis_id": analysis_id,
-                "url": company_url,
-                "org_id": authentication.org_id,
-                "user_id": authentication.user_id,
-                "scan_id": scan_id,
-                "request_id": analysis_id,
-            }
+        MessageBody=build_reanalysis_message(
+            analysis_id=analysis_id,
+            url=company_url,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
         ),
     )
 
