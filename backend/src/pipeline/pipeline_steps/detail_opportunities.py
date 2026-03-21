@@ -75,6 +75,16 @@ class DetailOpportunities(RequestStep):
                 opportunity_description=str(ideation["description"]),
             )
             detail_prompts.append((f"detail_{i}", prompt, ideation))
+            logger.info(
+                "[DetailOpportunities:detail_%d] system_prompt:\n%s",
+                i,
+                DETAIL_SYSTEM_PROMPT,
+            )
+            logger.info(
+                "[DetailOpportunities:detail_%d] user_prompt:\n%s",
+                i,
+                prompt,
+            )
 
         timer = StepTimer("DetailOpportunities")
 
