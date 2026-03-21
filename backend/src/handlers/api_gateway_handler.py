@@ -6,28 +6,17 @@ Request/response shapes are identical to minimize frontend changes.
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
-import uuid
-from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-import bcrypt
 import boto3
-from botocore.exceptions import ClientError
 
-from src.documents.extract_text import SUPPORTED_TYPES, extract_text
 from src.handlers.auth_middleware import require_authentication
-from src.handlers.router import Router
-
-if TYPE_CHECKING:
-    from src.handlers.auth_middleware import AuthContext
-    from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
-
 from src.handlers.factory_manager import FactoryManager
+from src.handlers.router import Router
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logger = logging.getLogger(__name__)
@@ -80,7 +69,6 @@ class APIGatewayHandler:
     def __init__(self, storage: DynamoDBStorageProvider | None = None) -> None:
         self._storage = storage or DynamoDBStorageProvider()
         self._factory_manager = FactoryManager(self._storage)
-        self._router = self._build_router()
         self._queue_url = os.environ["ANALYSIS_QUEUE_URL"]
         self._sqs = boto3.client("sqs")
         self._documents_bucket = os.environ.get("DOCUMENTS_BUCKET", "")
@@ -89,33 +77,132 @@ class APIGatewayHandler:
                 "DOCUMENTS_BUCKET not set — S3 document upload disabled, falling back to base64"
             )
         self._s3 = boto3.client("s3") if self._documents_bucket else None
+        self._router = self._build_router()
 
     def _build_router(self) -> Router:
+        from src.handlers.analysis_handlers import (
+            handle_dashboard,
+            handle_delete_analysis,
+            handle_get_analysis,
+            handle_list_analyses,
+            handle_reanalyze,
+        )
+        from src.handlers.auth_handlers import handle_login, handle_register
+        from src.handlers.document_handlers import (
+            handle_create_document,
+            handle_delete_document,
+            handle_upload_url,
+        )
+        from src.handlers.scan_handlers import (
+            handle_delete_scan,
+            handle_scan_confirm,
+            handle_scan_start,
+            handle_scan_status,
+        )
+
         router = Router()
-        router.public("POST", "/api/auth/register", self._handle_register)
-        router.public("POST", "/api/auth/login", self._handle_login)
-        router.protected("POST", "/api/scan/start", self._handle_scan_start)
-        router.protected("GET", "/api/scan/{scan_id}", self._handle_scan_status)
-        router.protected("POST", "/api/scan/{scan_id}/confirm", self._handle_scan_confirm)
-        router.protected("DELETE", "/api/scan/{scan_id}", self._handle_delete_scan)
-        router.protected("GET", "/api/analysis/{analysis_id}", self._handle_get_analysis)
-        router.protected("DELETE", "/api/analysis/{analysis_id}", self._handle_delete_analysis)
-        router.protected("GET", "/api/analyses", self._handle_list_analyses)
-        router.protected("GET", "/api/dashboard", self._handle_dashboard)
+
+        router.public(
+            "POST",
+            "/api/auth/register",
+            lambda event: handle_register(event, self._storage),
+        )
+        router.public(
+            "POST",
+            "/api/auth/login",
+            lambda event: handle_login(event, self._storage),
+        )
+
+        router.protected(
+            "POST",
+            "/api/scan/start",
+            lambda event, authentication: handle_scan_start(
+                event,
+                authentication,
+                self._storage,
+                self._factory_manager,
+                self._sqs,
+                self._queue_url,
+            ),
+        )
+        router.protected(
+            "GET",
+            "/api/scan/{scan_id}",
+            lambda event, authentication, scan_id: handle_scan_status(
+                event, authentication, self._storage, scan_id
+            ),
+        )
+        router.protected(
+            "POST",
+            "/api/scan/{scan_id}/confirm",
+            lambda event, authentication, scan_id: handle_scan_confirm(
+                event, authentication, self._storage, self._sqs, self._queue_url, scan_id
+            ),
+        )
+        router.protected(
+            "DELETE",
+            "/api/scan/{scan_id}",
+            lambda event, authentication, scan_id: handle_delete_scan(
+                event, authentication, self._storage, scan_id
+            ),
+        )
+
+        router.protected(
+            "GET",
+            "/api/analysis/{analysis_id}",
+            lambda event, authentication, analysis_id: handle_get_analysis(
+                event, authentication, self._storage, analysis_id
+            ),
+        )
+        router.protected(
+            "DELETE",
+            "/api/analysis/{analysis_id}",
+            lambda event, authentication, analysis_id: handle_delete_analysis(
+                event, authentication, self._storage, analysis_id
+            ),
+        )
+        router.protected(
+            "GET",
+            "/api/analyses",
+            lambda event, authentication: handle_list_analyses(
+                event, authentication, self._storage
+            ),
+        )
+        router.protected(
+            "GET",
+            "/api/dashboard",
+            lambda event, authentication: handle_dashboard(event, authentication, self._storage),
+        )
+        router.protected(
+            "POST",
+            "/api/analysis/{analysis_id}/reanalyze",
+            lambda event, authentication, analysis_id: handle_reanalyze(
+                event, authentication, self._storage, self._sqs, self._queue_url, analysis_id
+            ),
+        )
+
         router.protected(
             "POST",
             "/api/analysis/{analysis_id}/upload-url",
-            self._handle_upload_url,
+            lambda event, authentication, analysis_id: handle_upload_url(
+                event, authentication, self._storage, self._s3, self._documents_bucket, analysis_id
+            ),
         )
         router.protected(
-            "POST", "/api/analysis/{analysis_id}/documents", self._handle_create_document
+            "POST",
+            "/api/analysis/{analysis_id}/documents",
+            lambda event, authentication, analysis_id: handle_create_document(
+                event, authentication, self._storage, self._s3, self._documents_bucket, analysis_id
+            ),
         )
         router.protected(
             "DELETE",
             "/api/analysis/{analysis_id}/documents/{document_id}",
-            self._handle_delete_document,
+            lambda event, authentication, analysis_id, document_id: handle_delete_document(
+                event, authentication, self._storage, analysis_id, document_id
+            ),
         )
-        router.protected("POST", "/api/analysis/{analysis_id}/reanalyze", self._handle_reanalyze)
+
         return router
 
     def handle(self, event: dict[str, Any]) -> LambdaResponse:
@@ -141,661 +228,3 @@ class APIGatewayHandler:
             return _error(str(e), 401)
 
         return handler(event, authentication, **path_params)
-
-    # ── POST /api/scan/start ─────────────────────────────────────────
-
-    def _handle_scan_start(
-        self, event: dict[str, Any], authentication: AuthContext
-    ) -> LambdaResponse:
-        body = json.loads(event.get("body") or "{}")
-        url = body.get("url", "")
-        scan_type = body.get("type", "")
-
-        if not url or not scan_type:
-            return _error("url and type required")
-
-        scan_repo = self._storage.create_scan_repository()
-        scan_id = self._create_scan_record(scan_repo, url, scan_type, authentication)
-
-        if scan_type == "portfolio":
-            return self._start_portfolio_scan(scan_repo, scan_id, url, authentication)
-        return self._start_single_scan(scan_repo, scan_id, url, authentication)
-
-    def _create_scan_record(
-        self,
-        scan_repo: DynamoDBScanRepository,
-        url: str,
-        scan_type: str,
-        authentication: AuthContext,
-    ) -> str:
-        scan_id = str(uuid.uuid4())
-        scan_repo.create(
-            {
-                "id": scan_id,
-                "org_id": authentication.org_id,
-                "created_by": authentication.user_id,
-                "type": scan_type,
-                "source_url": url,
-                "status": "running",
-                "progress": 0,
-                "created_at": datetime.now(UTC).isoformat(),
-            }
-        )
-        return scan_id
-
-    def _start_portfolio_scan(
-        self,
-        scan_repo: DynamoDBScanRepository,
-        scan_id: str,
-        url: str,
-        authentication: AuthContext,
-    ) -> LambdaResponse:
-        scan_repo.update(scan_id, {"progress": 5})
-        result = self._factory_manager.run_portfolio_discovery(
-            url=url,
-            org_id=authentication.org_id,
-            user_id=authentication.user_id,
-            scan_id=scan_id,
-        )
-        companies = result["details"]["portfolio_companies"]
-        scan_repo.update(
-            scan_id,
-            {
-                "status": "awaiting_confirmation",
-                "progress": 20,
-                "portfolio_companies": companies,
-            },
-        )
-        return _json_response(
-            {
-                "scanId": scan_id,
-                "status": "awaiting_confirmation",
-                "portfolioCompanies": companies,
-            }
-        )
-
-    def _start_single_scan(
-        self,
-        scan_repo: DynamoDBScanRepository,
-        scan_id: str,
-        url: str,
-        authentication: AuthContext,
-    ) -> LambdaResponse:
-        analysis_id = str(uuid.uuid4())
-        scan_repo.update(scan_id, {"status": "running", "progress": 10, "total_companies": 1})
-        scan_repo.link_company(scan_id, analysis_id, "")
-
-        self._sqs.send_message(
-            QueueUrl=self._queue_url,
-            MessageBody=json.dumps(
-                {
-                    "url": url,
-                    "org_id": authentication.org_id,
-                    "user_id": authentication.user_id,
-                    "scan_id": scan_id,
-                    "company_name": "",
-                    "request_id": analysis_id,
-                }
-            ),
-        )
-
-        return _json_response(
-            {
-                "scanId": scan_id,
-                "status": "running",
-                "analysisId": analysis_id,
-            }
-        )
-
-    # ── GET /api/scan/{scanId} ───────────────────────────────────────
-
-    def _handle_scan_status(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-        scan_id: str,
-    ) -> LambdaResponse:
-        scan_repo = self._storage.create_scan_repository()
-        scan = scan_repo.get_by_id(scan_id)
-        if not scan or scan.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        company_repo = self._storage.create_company_repository()
-        scan_companies = scan_repo.get_scan_companies(scan_id)
-        company_ids = [link["company_id"] for link in scan_companies if link.get("company_id")]
-        companies_batch = company_repo.get_by_ids(company_ids) if company_ids else []
-        analyses = [_build_company_summary(c) for c in companies_batch]
-
-        status = scan.get("status")
-        total_companies = scan.get("total_companies", 0)
-
-        # Compute progress from per-company pipeline_progress
-        if analyses:
-            total = len(analyses)
-            done_count = sum(1 for a in analyses if a.get("analyzedAt") or a.get("error"))
-            company_progress_sum = sum(
-                100 if (a.get("analyzedAt") or a.get("error")) else a.get("pipelineProgress", 0)
-                for a in analyses
-            )
-            computed_progress = company_progress_sum // total
-        else:
-            done_count = 0
-            computed_progress = scan.get("progress", 0)
-
-        # Detect completion from company data even if scan record is stale.
-        # Handles race conditions where _update_scan_progress hasn't run yet.
-        if status == "running" and total_companies and done_count >= total_companies:
-            scan_repo.update(scan_id, {"status": "complete", "progress": 100})
-            status = "complete"
-            computed_progress = 100
-
-        # Use the higher of scan-level or computed progress
-        progress = max(scan.get("progress", 0), computed_progress)
-
-        # Build label from the most advanced in-progress company
-        progress_label = scan.get("progress_label", "")
-        in_progress = [
-            a
-            for a in analyses
-            if not a.get("analyzedAt") and not a.get("error") and a.get("pipelineProgress")
-        ]
-        if in_progress:
-            furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
-            progress_label = furthest.get("pipelineLabel", progress_label)
-
-        logger.info(
-            "[poll] scan=%s status=%s progress=%s analyses=%d",
-            scan_id,
-            status,
-            progress,
-            len(analyses),
-        )
-
-        return _json_response(
-            {
-                "status": status,
-                "progress": progress,
-                "progressLabel": progress_label,
-                "type": scan.get("type"),
-                "portfolioCompanies": scan.get("portfolio_companies", []),
-                "analyses": analyses,
-            }
-        )
-
-    # ── POST /api/scan/{scanId}/confirm ──────────────────────────────
-
-    def _handle_scan_confirm(
-        self,
-        event: dict[str, Any],
-        authentication: AuthContext,
-        scan_id: str,
-    ) -> LambdaResponse:
-        body = json.loads(event.get("body") or "{}")
-        companies = body.get("companies", [])
-        if not companies:
-            return _error("No companies provided")
-
-        scan_repo = self._storage.create_scan_repository()
-        scan = scan_repo.get_by_id(scan_id)
-        if not scan or scan.get("org_id") != authentication.org_id:
-            return _error("Scan not found", 404)
-
-        valid_companies = [c for c in companies if c.get("url")]
-        if not valid_companies:
-            return _error("At least one company with a url is required")
-
-        scan_repo.update(
-            scan_id,
-            {"status": "running", "progress": 10, "total_companies": len(valid_companies)},
-        )
-
-        queued = []
-        for company in valid_companies:
-            company_name = company.get("name", "")
-            company_url = company["url"]
-            analysis_id = str(uuid.uuid4())
-            scan_repo.link_company(scan_id, analysis_id, company_name)
-
-            self._sqs.send_message(
-                QueueUrl=self._queue_url,
-                MessageBody=json.dumps(
-                    {
-                        "url": company_url,
-                        "org_id": authentication.org_id,
-                        "user_id": authentication.user_id,
-                        "scan_id": scan_id,
-                        "company_name": company_name,
-                        "request_id": analysis_id,
-                    }
-                ),
-            )
-            queued.append({"name": company_name, "analysisId": analysis_id})
-
-        return _json_response({"ok": True, "queued": queued}, 202)
-
-    # ── DELETE /api/scan/{scanId} ─────────────────────────────────────
-
-    def _handle_delete_scan(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-        scan_id: str,
-    ) -> LambdaResponse:
-        scan_repo = self._storage.create_scan_repository()
-        scan = scan_repo.get_by_id(scan_id)
-        if not scan or scan.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        company_repo = self._storage.create_company_repository()
-        assessment_repo = self._storage.create_assessment_repository()
-
-        scan_companies = scan_repo.get_scan_companies(scan_id)
-        for link in scan_companies:
-            company_id = link.get("company_id", "")
-            if company_id:
-                assessments = assessment_repo.find_by_company(company_id)
-                for assessment in assessments:
-                    assessment_repo.delete(assessment["id"])
-                company_repo.delete(company_id)
-
-        scan_repo.delete_all_company_links(scan_id)
-        scan_repo.delete(scan_id)
-        return _json_response({"ok": True})
-
-    # ── GET /api/analysis/{id} ───────────────────────────────────────
-
-    def _handle_get_analysis(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-        analysis_id: str,
-    ) -> LambdaResponse:
-        company_repo = self._storage.create_company_repository()
-        company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        assessment_repo = self._storage.create_assessment_repository()
-        assessments = assessment_repo.find_by_company(analysis_id)
-
-        risk_scores = []
-        opportunities = []
-        analysis_summary = ""
-        top_actions: list[str] = []
-        ebitda_tree = None
-
-        documents: list[dict[str, Any]] = []
-
-        if assessments:
-            assessment = assessments[0]
-            assessment_id = assessment["id"]
-            risk_scores = assessment_repo.get_risk_scores(assessment_id)
-            opportunities = assessment_repo.get_opportunities(assessment_id)
-            ebitda_tree = assessment_repo.get_ebitda_tree(assessment_id)
-            documents = assessment_repo.get_documents(assessment_id)
-
-        metadata_json = company.get("metadata_json", "")
-        if metadata_json:
-            meta = json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
-            analysis_summary = meta.get("analysis_summary", "")
-            top_actions = meta.get("top_actions", [])
-
-        return _json_response(
-            {
-                "companyName": company.get("company_name", ""),
-                "companyUrl": company.get("company_url", ""),
-                "industry": company.get("industry", ""),
-                "overallRiskScore": company.get("overall_risk_score"),
-                "riskTier": company.get("risk_tier"),
-                "analysisSummary": analysis_summary,
-                "topActions": top_actions,
-                "riskScores": risk_scores,
-                "opportunities": opportunities,
-                "ebitdaTree": ebitda_tree,
-                "documents": documents,
-            }
-        )
-
-    # ── DELETE /api/analysis/{id} ────────────────────────────────────
-
-    def _handle_delete_analysis(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-        analysis_id: str,
-    ) -> LambdaResponse:
-        company_repo = self._storage.create_company_repository()
-        company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        assessment_repo = self._storage.create_assessment_repository()
-        assessments = assessment_repo.find_by_company(analysis_id)
-        for assessment in assessments:
-            assessment_repo.delete(assessment["id"])
-
-        company_repo.delete(analysis_id)
-
-        scan_id = company.get("scan_id", "")
-        if scan_id:
-            scan_repo = self._storage.create_scan_repository()
-            scan_repo.unlink_company(scan_id, analysis_id)
-            remaining = scan_repo.get_scan_companies(scan_id)
-            if not remaining:
-                scan_repo.delete(scan_id)
-
-        return _json_response({"ok": True})
-
-    # ── GET /api/analyses ────────────────────────────────────────────
-
-    def _handle_list_analyses(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-    ) -> LambdaResponse:
-        company_repo = self._storage.create_company_repository()
-        companies = company_repo.find_by_org(authentication.org_id)
-        return _json_response({"analyses": [_build_company_summary(c) for c in companies]})
-
-    # ── POST /api/auth/login ─────────────────────────────────────────
-
-    def _handle_login(self, event: dict[str, Any]) -> LambdaResponse:
-        body = json.loads(event.get("body") or "{}")
-        email = body.get("email", "")
-        password = body.get("password", "")
-
-        if not email or not password:
-            return _error("Email and password required")
-
-        user_repo = self._storage.create_user_repository()
-        user_info = user_repo.verify_password(email, password)
-        if not user_info:
-            return _error("Invalid credentials", 401)
-
-        return _json_response({"success": True, "user": user_info})
-
-    # ── GET /api/dashboard ─────────────────────────────────────────
-
-    def _handle_dashboard(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-    ) -> LambdaResponse:
-        company_repo = self._storage.create_company_repository()
-        scan_repo = self._storage.create_scan_repository()
-
-        companies = company_repo.find_by_org(authentication.org_id)
-        analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
-
-        total_analyses = len(analyzed)
-        avg_risk_score = (
-            round(sum(float(c["overall_risk_score"]) for c in analyzed) / total_analyses, 1)
-            if total_analyses
-            else 0
-        )
-        critical_count = sum(1 for c in analyzed if c.get("risk_tier") == "critical")
-
-        all_scans = scan_repo.find_recent_by_org(authentication.org_id, limit=None)
-        scan_count = len(all_scans)
-        recent_scans = all_scans[:10]
-
-        scan_type_map = {s["id"]: s.get("type", "") for s in all_scans}
-
-        # Build fallback date map: scan_id → earliest analyzed_at from linked companies
-        scan_date_fallback: dict[str, str] = {}
-        for company in companies:
-            scan_id = company.get("scan_id", "")
-            analyzed_at = company.get("analyzed_at", "")
-            if scan_id and analyzed_at:
-                existing = scan_date_fallback.get(scan_id, "")
-                if not existing or analyzed_at < existing:
-                    scan_date_fallback[scan_id] = analyzed_at
-
-        analyzed.sort(key=lambda c: c.get("analyzed_at", ""), reverse=True)
-        recent_analyses = [
-            {
-                "id": c.get("id"),
-                "companyName": c.get("company_name", ""),
-                "companyUrl": c.get("company_url", ""),
-                "overallRiskScore": c.get("overall_risk_score"),
-                "riskTier": c.get("risk_tier"),
-                "analyzedAt": c.get("analyzed_at"),
-                "scanType": scan_type_map.get(c.get("scan_id", ""), ""),
-            }
-            for c in analyzed[:8]
-        ]
-
-        recent_scan_list = [
-            {
-                "id": s.get("id"),
-                "sourceUrl": s.get("source_url", ""),
-                "type": s.get("type", ""),
-                "status": s.get("status", ""),
-                "progress": s.get("progress", 0),
-                "completedCount": s.get("completed_count", 0),
-                "createdAt": s.get("created_at") or scan_date_fallback.get(s.get("id", ""), ""),
-            }
-            for s in recent_scans
-        ]
-
-        return _json_response(
-            {
-                "totalAnalyses": total_analyses,
-                "avgRiskScore": avg_risk_score,
-                "criticalCount": critical_count,
-                "scanCount": scan_count,
-                "recentAnalyses": recent_analyses,
-                "recentScans": recent_scan_list,
-            }
-        )
-
-    # ── POST /api/analysis/{id}/upload-url ───────────────────────────
-
-    def _handle_upload_url(
-        self,
-        event: dict[str, Any],
-        authentication: AuthContext,
-        analysis_id: str,
-    ) -> LambdaResponse:
-        if not self._s3 or not self._documents_bucket:
-            return _error("Document uploads via S3 not configured", 501)
-
-        body = json.loads(event.get("body") or "{}")
-        filename = body.get("filename", "")
-        file_type = body.get("fileType", "")
-        if not filename or not file_type:
-            return _error("filename and fileType required")
-
-        if file_type not in SUPPORTED_TYPES:
-            return _error(f"Unsupported file type: {file_type}")
-
-        company_repo = self._storage.create_company_repository()
-        company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        document_key = f"uploads/{analysis_id}/{uuid.uuid4()}.{file_type}"
-
-        upload_url = self._s3.generate_presigned_url(
-            "put_object",
-            Params={
-                "Bucket": self._documents_bucket,
-                "Key": document_key,
-                "ContentType": "application/octet-stream",
-            },
-            ExpiresIn=300,
-        )
-
-        return _json_response({"uploadUrl": upload_url, "documentKey": document_key})
-
-    # ── POST /api/analysis/{id}/documents ──────────────────────────
-
-    def _handle_create_document(
-        self,
-        event: dict[str, Any],
-        authentication: AuthContext,
-        analysis_id: str,
-    ) -> LambdaResponse:
-        body = json.loads(event.get("body") or "{}")
-        filename = body.get("filename", "")
-        file_type = body.get("fileType", "")
-        document_key = body.get("documentKey", "")
-        file_content_b64 = body.get("fileContent", "")
-
-        if not filename or not file_type:
-            return _error("filename and fileType required")
-
-        company_repo = self._storage.create_company_repository()
-        company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        # Get file bytes — from S3 if documentKey provided, else from base64 body
-        if document_key:
-            if not self._s3 or not self._documents_bucket:
-                return _error("S3 not configured — cannot retrieve uploaded file", 500)
-            expected_prefix = f"uploads/{analysis_id}/"
-            if not document_key.startswith(expected_prefix):
-                return _error("Invalid documentKey", 400)
-            try:
-                response = self._s3.get_object(
-                    Bucket=self._documents_bucket,
-                    Key=document_key,
-                )
-                file_bytes = response["Body"].read()
-            except ClientError as error:
-                code = error.response["Error"]["Code"]
-                if code == "NoSuchKey":
-                    return _error("Uploaded file not found — presigned URL may have expired", 404)
-                raise
-        elif file_content_b64:
-            file_bytes = base64.b64decode(file_content_b64)
-        else:
-            return _error("documentKey or fileContent required")
-
-        try:
-            extracted_text = extract_text(file_bytes, file_type)
-        except ValueError as error:
-            return _error(str(error))
-
-        assessment_repo = self._storage.create_assessment_repository()
-        assessments = assessment_repo.find_by_company(analysis_id)
-        if not assessments:
-            return _error("No assessment found for this analysis", 404)
-
-        assessment_id = assessments[0]["id"]
-        document_id = str(uuid.uuid4())
-        document = {
-            "id": document_id,
-            "filename": filename,
-            "file_type": file_type,
-            "extracted_text": extracted_text,
-            "char_count": len(extracted_text),
-            "uploaded_at": datetime.now(UTC).isoformat(),
-        }
-        assessment_repo.save_document(assessment_id, document)
-
-        return _json_response(
-            {
-                "id": document_id,
-                "filename": filename,
-                "fileType": file_type,
-                "charCount": len(extracted_text),
-            },
-            201,
-        )
-
-    # ── DELETE /api/analysis/{id}/documents/{docId} ────────────────
-
-    def _handle_delete_document(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-        analysis_id: str,
-        document_id: str,
-    ) -> LambdaResponse:
-        company_repo = self._storage.create_company_repository()
-        company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        assessment_repo = self._storage.create_assessment_repository()
-        assessments = assessment_repo.find_by_company(analysis_id)
-        if not assessments:
-            return _error("No assessment found", 404)
-
-        assessment_repo.delete_document(assessments[0]["id"], document_id)
-        return _json_response({"ok": True})
-
-    # ── POST /api/analysis/{id}/reanalyze ──────────────────────────
-
-    def _handle_reanalyze(
-        self,
-        _event: dict[str, Any],
-        authentication: AuthContext,
-        analysis_id: str,
-    ) -> LambdaResponse:
-        company_repo = self._storage.create_company_repository()
-        company = company_repo.get_by_id(analysis_id)
-        if not company or company.get("org_id") != authentication.org_id:
-            return _error("Not found", 404)
-
-        company_url = company.get("company_url", "")
-        if not company_url:
-            return _error("Analysis has no company URL — cannot re-analyze")
-
-        scan_id = company.get("scan_id", "")
-
-        self._sqs.send_message(
-            QueueUrl=self._queue_url,
-            MessageBody=json.dumps(
-                {
-                    "reanalyze": True,
-                    "analysis_id": analysis_id,
-                    "url": company_url,
-                    "org_id": authentication.org_id,
-                    "user_id": authentication.user_id,
-                    "scan_id": scan_id,
-                    "request_id": analysis_id,
-                }
-            ),
-        )
-
-        return _json_response({"status": "queued"}, 202)
-
-    # ── POST /api/auth/register ──────────────────────────────────────
-
-    def _handle_register(self, event: dict[str, Any]) -> LambdaResponse:
-        body = json.loads(event.get("body") or "{}")
-        name = body.get("name", "")
-        email = body.get("email", "")
-        password = body.get("password", "")
-        org_name = body.get("orgName", "")
-        org_type = body.get("orgType", "company")
-
-        if not all([name, email, password, org_name]):
-            return _error("All fields required")
-
-        user_repo = self._storage.create_user_repository()
-        org_repo = self._storage.create_organization_repository()
-
-        if user_repo.has_email(email):
-            return _error("Email already registered")
-
-        org_id = str(uuid.uuid4())
-        user_id = str(uuid.uuid4())
-        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(10)).decode()
-
-        org_repo.create({"id": org_id, "name": org_name, "type": org_type})
-        user_repo.create(
-            {
-                "id": user_id,
-                "org_id": org_id,
-                "email": email,
-                "password_hash": password_hash,
-                "name": name,
-                "role": "admin",
-            }
-        )
-
-        return _json_response({"success": True})
