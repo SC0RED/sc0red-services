@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth'
+import { redirect } from 'next/navigation'
 
 import { authOptions } from '@/lib/auth/authOptions'
 import { backendFetch } from '@/lib/api/serverToken'
@@ -11,7 +12,6 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
     const orgId = session?.user?.orgId
 
     if (!session || !orgId) {
-        const { redirect } = await import('next/navigation')
         redirect('/login')
     }
 

@@ -41,6 +41,8 @@ export default function RiskBreakdown({ riskScores }: RiskBreakdownProps) {
                             <div key={rs.category} className="card" style={{ overflow: 'hidden' }}>
                                 <button
                                     onClick={() => setExpandedRisk(isOpen ? null : rs.category)}
+                                    aria-expanded={isOpen}
+                                    aria-controls={`risk-detail-${rs.category}`}
                                     style={{
                                         width: '100%',
                                         background: 'none',
@@ -135,6 +137,7 @@ export default function RiskBreakdown({ riskScores }: RiskBreakdownProps) {
                                 </button>
                                 {isOpen && (
                                     <div
+                                        id={`risk-detail-${rs.category}`}
                                         style={{
                                             padding: '0 1.25rem 1.25rem',
                                             display: 'flex',

@@ -32,7 +32,7 @@ describe('DeleteAnalysisButton', () => {
     it('shows confirm UI after clicking icon', () => {
         render(<DeleteAnalysisButton analysisId="test-id" companyName="Acme Corp" />)
         fireEvent.click(screen.getByTitle('Delete analysis'))
-        expect(screen.getByText('Delete?')).toBeInTheDocument()
+        expect(screen.getByText('Delete Acme Corp?')).toBeInTheDocument()
         expect(screen.getByText('Yes')).toBeInTheDocument()
         expect(screen.getByText('No')).toBeInTheDocument()
     })

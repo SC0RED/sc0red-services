@@ -48,11 +48,10 @@ export default async function DashboardPage() {
                 <div style={{ marginBottom: '2rem' }}>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
                         Good{' '}
-                        {new Date().getHours() < 12
-                            ? 'morning'
-                            : new Date().getHours() < 17
-                              ? 'afternoon'
-                              : 'evening'}
+                        {(() => {
+                            const hour = new Date().getHours()
+                            return hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+                        })()}
                         , {userName} 👋
                     </h1>
                     <p style={{ color: 'var(--text-secondary)' }}>

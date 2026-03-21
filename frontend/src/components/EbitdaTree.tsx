@@ -53,8 +53,6 @@ const NODE_COLORS: Record<string, { bg: string; border: string; text: string; gl
     },
 }
 
-const LEVER_DOT_COLORS = LEVER_COLORS
-
 function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeData>>) {
     const [hovered, setHovered] = useState(false)
     const colors = NODE_COLORS[data.type] || NODE_COLORS.margin
@@ -118,7 +116,7 @@ function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeData>>) {
                                 width: '8px',
                                 height: '8px',
                                 borderRadius: '50%',
-                                background: LEVER_DOT_COLORS[opp.valueLever] || '#8B9AC4',
+                                background: LEVER_COLORS[opp.valueLever] || '#8B9AC4',
                             }}
                             title={`${opp.title} (${opp.valueLever})`}
                         />
@@ -183,7 +181,7 @@ function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeData>>) {
                                             height: '6px',
                                             borderRadius: '50%',
                                             flexShrink: 0,
-                                            background: LEVER_DOT_COLORS[opp.valueLever] || '#8B9AC4',
+                                            background: LEVER_COLORS[opp.valueLever] || '#8B9AC4',
                                         }}
                                     />
                                     <span style={{ fontSize: '0.6875rem' }}>{opp.title}</span>
