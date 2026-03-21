@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 export default function DeleteAnalysisButton({
     analysisId,
-    companyName: _companyName,
+    companyName,
     variant = 'icon',
     redirectTo,
 }: {
@@ -54,7 +54,7 @@ export default function DeleteAnalysisButton({
                         maxWidth: '120px',
                     }}
                 >
-                    Delete?
+                    Delete {companyName}?
                 </span>
                 <button
                     onClick={handleDelete}

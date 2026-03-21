@@ -139,8 +139,6 @@ export default async function LandingPage() {
             {/* Hero */}
             <section
                 style={{
-                    paddingTop: '140px',
-                    paddingBottom: '100px',
                     textAlign: 'center',
                     padding: '140px 2rem 100px',
                     position: 'relative',

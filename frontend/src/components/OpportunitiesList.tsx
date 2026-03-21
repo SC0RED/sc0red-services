@@ -83,6 +83,8 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                         <div key={i} className="card" style={{ overflow: 'hidden' }}>
                             <button
                                 onClick={() => setExpandedOpp(isOpen ? null : `${i}`)}
+                                aria-expanded={isOpen}
+                                aria-controls={`opportunity-detail-${i}`}
                                 style={{
                                     width: '100%',
                                     background: 'none',
@@ -165,7 +167,7 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                             </button>
 
                             {isOpen && (
-                                <div style={{ padding: '0 1.25rem 1.5rem' }}>
+                                <div id={`opportunity-detail-${i}`} style={{ padding: '0 1.25rem 1.5rem' }}>
                                     <div className="divider" style={{ marginBottom: '1.25rem' }} />
 
                                     <p
