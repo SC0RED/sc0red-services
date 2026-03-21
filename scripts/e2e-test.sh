@@ -85,35 +85,7 @@ done
 
 # ── Create DynamoDB table ────────────────────────────────────────
 echo -e "\n${YELLOW}Ensuring DynamoDB table exists ...${NC}"
-python3 -c "
-import boto3, os
-endpoint = os.environ.get('DYNAMODB_ENDPOINT', 'http://localhost:8000')
-table = os.environ.get('DYNAMODB_TABLE', 'janus-dev')
-ddb = boto3.client('dynamodb', endpoint_url=endpoint, region_name='us-east-1',
-    aws_access_key_id='local', aws_secret_access_key='local')
-try:
-    ddb.create_table(
-        TableName=table,
-        KeySchema=[{'AttributeName':'pk','KeyType':'HASH'},{'AttributeName':'sk','KeyType':'RANGE'}],
-        AttributeDefinitions=[
-            {'AttributeName':'pk','AttributeType':'S'},{'AttributeName':'sk','AttributeType':'S'},
-            {'AttributeName':'GSI1PK','AttributeType':'S'},{'AttributeName':'GSI1SK','AttributeType':'S'},
-            {'AttributeName':'GSI2PK','AttributeType':'S'},{'AttributeName':'GSI2SK','AttributeType':'S'},
-            {'AttributeName':'GSI3PK','AttributeType':'S'},{'AttributeName':'GSI3SK','AttributeType':'S'},
-            {'AttributeName':'GSI4PK','AttributeType':'S'},{'AttributeName':'GSI4SK','AttributeType':'S'},
-        ],
-        GlobalSecondaryIndexes=[
-            {'IndexName':'GSI1','KeySchema':[{'AttributeName':'GSI1PK','KeyType':'HASH'},{'AttributeName':'GSI1SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-            {'IndexName':'GSI2','KeySchema':[{'AttributeName':'GSI2PK','KeyType':'HASH'},{'AttributeName':'GSI2SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-            {'IndexName':'GSI3','KeySchema':[{'AttributeName':'GSI3PK','KeyType':'HASH'},{'AttributeName':'GSI3SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-            {'IndexName':'GSI4','KeySchema':[{'AttributeName':'GSI4PK','KeyType':'HASH'},{'AttributeName':'GSI4SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-        ],
-        BillingMode='PAY_PER_REQUEST',
-    )
-    print(f'Table {table} created')
-except ddb.exceptions.ResourceInUseException:
-    print(f'Table {table} already exists')
-" 2>&1
+python3 scripts/setup_dynamodb.py --table "$DYNAMODB_TABLE" --endpoint "$DYNAMODB_ENDPOINT"
 
 # ── Create SQS queue (E2E mode only) ─────────────────────────────
 if [ "$E2E_MODE" = "full" ]; then

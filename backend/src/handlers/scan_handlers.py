@@ -13,6 +13,7 @@ from src.handlers.api_gateway_handler import (
     _error,
     _json_response,
 )
+from src.handlers.sqs_messages import build_analysis_message
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -116,15 +117,12 @@ def _start_single_scan(
 
     sqs.send_message(
         QueueUrl=queue_url,
-        MessageBody=json.dumps(
-            {
-                "url": url,
-                "org_id": authentication.org_id,
-                "user_id": authentication.user_id,
-                "scan_id": scan_id,
-                "company_name": "",
-                "request_id": analysis_id,
-            }
+        MessageBody=build_analysis_message(
+            url=url,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
+            request_id=analysis_id,
         ),
     )
 
@@ -249,15 +247,13 @@ def handle_scan_confirm(
 
         sqs.send_message(
             QueueUrl=queue_url,
-            MessageBody=json.dumps(
-                {
-                    "url": company_url,
-                    "org_id": authentication.org_id,
-                    "user_id": authentication.user_id,
-                    "scan_id": scan_id,
-                    "company_name": company_name,
-                    "request_id": analysis_id,
-                }
+            MessageBody=build_analysis_message(
+                url=company_url,
+                org_id=authentication.org_id,
+                user_id=authentication.user_id,
+                scan_id=scan_id,
+                request_id=analysis_id,
+                company_name=company_name,
             ),
         )
         queued.append({"name": company_name, "analysisId": analysis_id})
