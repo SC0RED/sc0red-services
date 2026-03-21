@@ -23,16 +23,11 @@
 set -euo pipefail
 
 ENVIRONMENT="${1:-staging}"
-CDK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../infrastructure" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CDK_DIR="$(cd "$SCRIPT_DIR/../infrastructure" && pwd)"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-log() { echo -e "${YELLOW}▶ $*${NC}"; }
-ok()  { echo -e "${GREEN}✓ $*${NC}"; }
-err() { echo -e "${RED}✗ $*${NC}" >&2; exit 1; }
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
 # ── Validate environment ────────────────────────────────────────────────────────
 
@@ -58,15 +53,7 @@ REGION="${AWS_REGION:-us-east-1}"
 ok "AWS account: $ACCOUNT, region: $REGION"
 
 # GH_TOKEN
-if [ -z "${GH_TOKEN:-}" ]; then
-    if command -v gh >/dev/null 2>&1; then
-        export GH_TOKEN
-        GH_TOKEN=$(gh auth token)
-        ok "GH_TOKEN obtained from gh CLI"
-    else
-        err "GH_TOKEN not set and gh CLI not available — needed to bundle signalfield-core"
-    fi
-fi
+require_gh_token
 
 # NEXTAUTH_SECRET
 if [ -z "${NEXTAUTH_SECRET:-}" ]; then

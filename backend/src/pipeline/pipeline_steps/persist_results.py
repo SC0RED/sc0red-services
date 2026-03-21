@@ -60,7 +60,8 @@ class PersistResults(RequestStep):
             "org_id": company.org_id,
             "analyzed_at": datetime.now(UTC).isoformat(),
         }
-        self._company_repo.save_company(company_id, company_doc)
+        company_doc["id"] = company_id
+        self._company_repo.save(company_doc)
 
         # Persist assessment with risk scores
         assessment_id = ""
@@ -73,7 +74,8 @@ class PersistResults(RequestStep):
                 "top_risks": risk_assessment.top_risks,
                 "analysis_summary": risk_assessment.analysis_summary,
             }
-            self._assessment_repo.save_assessment(assessment_id, assessment_doc)
+            assessment_doc["id"] = assessment_id
+            self._assessment_repo.save(assessment_doc)
 
             # Persist risk scores in batch
             self._assessment_repo.batch_save_risk_scores(

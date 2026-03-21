@@ -63,8 +63,8 @@ class TestPersistResults:
 
         step.execute()
 
-        mock_company_repo.save_company.assert_called_once()
-        mock_assessment_repo.save_assessment.assert_called_once()
+        mock_company_repo.save.assert_called_once()
+        mock_assessment_repo.save.assert_called_once()
         mock_assessment_repo.batch_save_risk_scores.assert_called_once()
         mock_assessment_repo.batch_save_opportunities.assert_called_once()
 
@@ -177,5 +177,5 @@ class TestPersistResults:
 
         step.execute()
 
-        mock_assessment_repo.save_assessment.assert_not_called()
+        mock_assessment_repo.save.assert_not_called()
         mock_assessment_repo.batch_save_opportunities.assert_not_called()

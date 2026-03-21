@@ -77,14 +77,14 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                {filteredOpps.map((opp: Opportunity, i: number) => {
-                    const isOpen = expandedOpp === `${i}`
+                {filteredOpps.map((opp: Opportunity) => {
+                    const isOpen = expandedOpp === opp.title
                     return (
-                        <div key={i} className="card" style={{ overflow: 'hidden' }}>
+                        <div key={opp.title} className="card" style={{ overflow: 'hidden' }}>
                             <button
-                                onClick={() => setExpandedOpp(isOpen ? null : `${i}`)}
+                                onClick={() => setExpandedOpp(isOpen ? null : opp.title)}
                                 aria-expanded={isOpen}
-                                aria-controls={`opportunity-detail-${i}`}
+                                aria-controls={`opportunity-detail-${opp.title}`}
                                 style={{
                                     width: '100%',
                                     background: 'none',
@@ -167,7 +167,10 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                             </button>
 
                             {isOpen && (
-                                <div id={`opportunity-detail-${i}`} style={{ padding: '0 1.25rem 1.5rem' }}>
+                                <div
+                                    id={`opportunity-detail-${opp.title}`}
+                                    style={{ padding: '0 1.25rem 1.5rem' }}
+                                >
                                     <div className="divider" style={{ marginBottom: '1.25rem' }} />
 
                                     <p

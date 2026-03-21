@@ -57,11 +57,6 @@ class DynamoDBCompanyRepository:
         self._table.put_item(item)
         return company_id
 
-    def save_company(self, company_id: str, doc: dict[str, Any]) -> None:
-        """Save a company document under the given ID."""
-        doc["id"] = company_id
-        self.save(doc)
-
     def update(self, company_id: str, changes: dict[str, Any]) -> None:
         """Apply attribute-level updates to an existing company item."""
         self._table.update_item(

@@ -71,9 +71,9 @@ class TestCompanyRepository:
         assert len(results_b) == 1
 
     @mock_aws
-    def test_save_company(self, dynamodb_table):
+    def test_save_with_explicit_id(self, dynamodb_table):
         repo = DynamoDBCompanyRepository(dynamodb_table)
-        repo.save_company("comp-sc", {"company_name": "SaveCompany Test"})
+        repo.save({"id": "comp-sc", "company_name": "SaveCompany Test"})
 
         result = repo.get_by_id("comp-sc")
         assert result is not None
