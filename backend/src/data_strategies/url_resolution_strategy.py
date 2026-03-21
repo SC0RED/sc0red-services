@@ -30,7 +30,7 @@ _SYSTEM_PROMPT = (
     "company."
 )
 
-_URL_RESOLUTION_SCHEMA: dict = {
+_URL_RESOLUTION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "actual_url": {"type": "string", "description": "The actual company website URL"},

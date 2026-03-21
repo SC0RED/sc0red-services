@@ -50,8 +50,8 @@ def _error(message: str, status: int = 400) -> LambdaResponse:
 
 def _build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": company.get("id"),
-        "companyName": company.get("company_name", ""),
+        "id": company["id"],
+        "companyName": company["company_name"],
         "companyUrl": company.get("company_url", ""),
         "industry": company.get("industry", ""),
         "overallRiskScore": company.get("overall_risk_score"),

@@ -11,6 +11,7 @@ from typing import Any
 
 _MAX_CHARS_PER_DOCUMENT = 15_000
 MAX_CHARS_COMBINED = 25_000
+MAX_SCRAPED_TEXT_CHARS = 12_000
 
 SUPPORTED_TYPES = frozenset({"pdf", "docx", "xlsx", "xls", "txt", "csv", "md"})
 
