@@ -8,14 +8,13 @@ range, ROI estimate, and vendor recommendations.
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Any, cast
 
-from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
 from src.models.model_company import OpportunityResult
+from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
 from src.pipeline.pipeline_steps.detail_opportunity import (
     DETAIL_SCHEMA,
     DETAIL_SYSTEM_PROMPT,
@@ -134,30 +133,12 @@ class DetailOpportunities(RequestStep):
         system_prompt: str,
         label: str,
     ) -> tuple[str, dict[str, Any], float]:
-        """Execute a single AI call and return (label, response_data, elapsed)."""
-        client = self._ai_client_factory.get_client(
-            verbosity=Verbosity.MEDIUM,
-            reasoning_effort=ReasoningEffort.LOW,
-            precision=Precision.STANDARD,
-            instructions=system_prompt,
+        """Execute a single AI call via the shared run_structured_ai_call."""
+        return run_structured_ai_call(
+            ai_client_factory=self._ai_client_factory,
+            user_prompt=user_prompt,
+            schema=schema,
+            system_prompt=system_prompt,
+            label=label,
+            step_name="DetailOpportunities",
         )
-        logger.info(
-            "[DetailOpportunities:%s] sending AI request: prompt_len=%d, model=%s",
-            label,
-            len(user_prompt),
-            getattr(client, "model", "unknown"),
-        )
-        start = time.monotonic()
-        try:
-            response = client.query_structured(input_text=user_prompt, json_schema=schema)
-        except Exception:
-            logger.exception("[DetailOpportunities:%s] AI request failed", label)
-            raise
-        elapsed = time.monotonic() - start
-        logger.info(
-            "[DetailOpportunities:%s] AI response in %.2fs: metadata=%s",
-            label,
-            elapsed,
-            response.metadata,
-        )
-        return label, response.content, elapsed

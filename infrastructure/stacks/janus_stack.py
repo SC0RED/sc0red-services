@@ -174,7 +174,7 @@ class JanusStack(Stack):
             else:
                 message = (
                     f"NEXTAUTH_SECRET must be set for environment '{self._environment}'. "
-                    "A production deployment with a default dev secret is a security risk."
+                    "A deployment with a default dev secret is a security risk."
                 )
                 raise ValueError(message)
 

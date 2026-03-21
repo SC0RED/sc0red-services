@@ -164,9 +164,12 @@ class SQSHandler:
         )
 
         if total_companies and resolved >= total_companies:
-            scan_repo.update(scan_id, {"status": "complete", "progress": 100})
+            scan_repo.update(
+                scan_id,
+                {"status": "complete", "progress": 100, "completed_count": resolved},
+            )
         else:
             progress = (
                 min(10 + round((resolved / total_companies) * 85), 95) if total_companies else 50
             )
-            scan_repo.update(scan_id, {"progress": progress})
+            scan_repo.update(scan_id, {"progress": progress, "completed_count": resolved})
