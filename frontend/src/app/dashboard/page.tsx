@@ -6,6 +6,7 @@ import type { Metadata } from 'next'
 import { backendFetch } from '@/lib/api/serverToken'
 import { authOptions } from '@/lib/auth/authOptions'
 import type { DashboardData } from '@/lib/types/api'
+import { TIER_COLORS, TIER_BG_COLORS } from '@/lib/utils/riskUtils'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import DeleteScanButton from '@/components/DeleteScanButton'
 
@@ -32,20 +33,6 @@ export default async function DashboardPage() {
         { label: 'Critical Risks', value: data.criticalCount, color: 'var(--risk-critical)' },
         { label: 'Total Scans', value: data.scanCount, color: 'var(--text-secondary)' },
     ]
-
-    const tierColors: Record<string, string> = {
-        low: 'var(--risk-low)',
-        moderate: 'var(--risk-moderate)',
-        high: 'var(--risk-high)',
-        critical: 'var(--risk-critical)',
-    }
-
-    const tierBgColors: Record<string, string> = {
-        low: 'var(--risk-low-bg)',
-        moderate: 'var(--risk-moderate-bg)',
-        high: 'var(--risk-high-bg)',
-        critical: 'var(--risk-critical-bg)',
-    }
 
     return (
         <>
@@ -231,7 +218,7 @@ export default async function DashboardPage() {
                                                                 fontSize: '1.125rem',
                                                                 fontWeight: 700,
                                                                 color:
-                                                                    tierColors[analysisTier] ||
+                                                                    TIER_COLORS[analysisTier] ||
                                                                     'var(--text-primary)',
                                                             }}
                                                         >
@@ -248,10 +235,10 @@ export default async function DashboardPage() {
                                                                 fontWeight: 600,
                                                                 textTransform: 'capitalize',
                                                                 background:
-                                                                    tierBgColors[analysisTier] ||
+                                                                    TIER_BG_COLORS[analysisTier] ||
                                                                     'var(--bg-surface-2)',
                                                                 color:
-                                                                    tierColors[analysisTier] ||
+                                                                    TIER_COLORS[analysisTier] ||
                                                                     'var(--text-primary)',
                                                             }}
                                                         >

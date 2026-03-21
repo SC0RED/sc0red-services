@@ -68,6 +68,20 @@ export const TIER_COLORS: Record<string, string> = {
     critical: 'var(--risk-critical)',
 }
 
+export const TIER_BG_COLORS: Record<string, string> = {
+    low: 'var(--risk-low-bg)',
+    moderate: 'var(--risk-moderate-bg)',
+    high: 'var(--risk-high-bg)',
+    critical: 'var(--risk-critical-bg)',
+}
+
+export const TIER_COLORS_HEX: Record<string, string> = {
+    low: '#22C55E',
+    moderate: '#F59E0B',
+    high: '#F97316',
+    critical: '#EF4444',
+}
+
 export function getRiskTier(score: number): 'low' | 'moderate' | 'high' | 'critical' {
     if (score <= 3) return 'low'
     if (score <= 6) return 'moderate'

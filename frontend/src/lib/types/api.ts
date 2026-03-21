@@ -93,6 +93,25 @@ export interface ScanItem {
     createdAt: string
 }
 
+export interface ScanAnalysis {
+    id: string
+    companyName: string
+    companyUrl: string
+    industry: string
+    overallRiskScore: number | null
+    riskTier: string | null
+    error: string | null
+    analyzedAt: string | null
+}
+
+export interface ScanData {
+    status: string
+    progress: number
+    type: string
+    portfolioCompanies: Array<{ name: string; url: string }>
+    analyses: ScanAnalysis[]
+}
+
 export interface DashboardData {
     totalAnalyses: number
     avgRiskScore: number

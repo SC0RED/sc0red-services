@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { BackendError } from '@/lib/api/errors'
+import { handleRouteError } from '@/lib/api/routeError'
 import { backendFetch } from '@/lib/api/serverToken'
 
 export async function POST(_req: NextRequest, { params }: { params: { analysisId: string } }) {
@@ -11,8 +11,6 @@ export async function POST(_req: NextRequest, { params }: { params: { analysisId
         })
         return NextResponse.json(data, { status: 202 })
     } catch (error: unknown) {
-        const status = error instanceof BackendError ? error.status : 500
-        const message = error instanceof Error ? error.message : 'Internal Server Error'
-        return NextResponse.json({ error: message }, { status })
+        return handleRouteError(error)
     }
 }

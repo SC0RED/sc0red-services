@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { BackendError } from '@/lib/api/errors'
+import { handleRouteError } from '@/lib/api/routeError'
 import { backendFetch } from '@/lib/api/serverToken'
 
 export const maxDuration = 300
@@ -11,8 +11,6 @@ export async function POST(req: NextRequest, { params }: { params: { scanId: str
         const data = await backendFetch(`/api/scan/${params.scanId}/confirm`, { method: 'POST', body })
         return NextResponse.json(data)
     } catch (error: unknown) {
-        const status = error instanceof BackendError ? error.status : 500
-        const message = error instanceof Error ? error.message : 'Internal Server Error'
-        return NextResponse.json({ error: message }, { status })
+        return handleRouteError(error)
     }
 }
