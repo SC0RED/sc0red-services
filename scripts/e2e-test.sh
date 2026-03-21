@@ -102,16 +102,16 @@ print('Queue URL:', response['QueueUrl'])
     echo -e "\n${YELLOW}Ensuring S3 bucket exists ...${NC}"
     python3 -c "
 import boto3, os
+from botocore.exceptions import ClientError
 endpoint = os.environ.get('AWS_ENDPOINT_URL', 'http://localhost:4566')
 s3 = boto3.client('s3', endpoint_url=endpoint, region_name='us-east-1',
     aws_access_key_id='local', aws_secret_access_key='local')
 try:
     s3.create_bucket(Bucket='janus-documents-e2e')
     print('Bucket janus-documents-e2e created')
-except s3.exceptions.BucketAlreadyOwnedByYou:
-    print('Bucket janus-documents-e2e already exists')
-except Exception as e:
-    if 'BucketAlreadyOwnedByYou' in str(e) or 'BucketAlreadyExists' in str(e):
+except ClientError as e:
+    code = e.response['Error']['Code']
+    if code in ('BucketAlreadyOwnedByYou', 'BucketAlreadyExists'):
         print('Bucket janus-documents-e2e already exists')
     else:
         raise

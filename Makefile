@@ -1,4 +1,4 @@
-.PHONY: help install lint lint-quick test check check-all format security naming setup-db dev backend frontend clean docker-up docker-down e2e
+.PHONY: help install lint lint-quick test check format security naming setup-db dev backend frontend clean docker-up docker-down e2e
 
 # Colors for output
 BLUE := \033[0;34m
@@ -61,9 +61,6 @@ naming: ## Check naming conventions, abbreviations, imports, and skip comments
 check: lint test security naming ## Run ALL checks (lint + test + security + naming)
 	@echo "$(GREEN)All local checks passed$(NC)"
 
-check-all: check ## Run all checks (same as check)
-	@echo "$(GREEN)Completed all checks$(NC)"
-
 # =============================================================================
 # FORMATTING
 # =============================================================================
@@ -85,7 +82,8 @@ dev: lint-quick ## Start all services (lint must pass first)
 	@echo "$(GREEN)All checks passed - Starting services...$(NC)"
 	@echo "Starting DynamoDB Local..."
 	docker compose up -d dynamodb-local
-	@sleep 2
+	@echo "Waiting for DynamoDB..."
+	@until curl -sf http://localhost:8000 -o /dev/null 2>&1; do sleep 1; done
 	$(MAKE) setup-db
 	@echo "Starting backend on :8001..."
 	cd backend && uvicorn src.local_server:app --port 8001 --reload &
@@ -102,7 +100,8 @@ frontend: ## Start frontend only
 dev-unsafe: ## Start dev without lint checks (debugging only)
 	@echo "$(RED)WARNING: Running WITHOUT lint checks!$(NC)"
 	docker compose up -d dynamodb-local
-	@sleep 2
+	@echo "Waiting for DynamoDB..."
+	@until curl -sf http://localhost:8000 -o /dev/null 2>&1; do sleep 1; done
 	$(MAKE) setup-db
 	cd backend && uvicorn src.local_server:app --port 8001 --reload &
 	cd frontend && npm run dev
