@@ -85,6 +85,7 @@ export AWS_DEFAULT_REGION=us-east-1
 export CDK_ENVIRONMENT=development
 
 log "Bootstrapping CDK..."
+# LocalStack default account
 cdklocal bootstrap aws://000000000000/us-east-1 --quiet 2>&1 | grep -v "^$" || true
 
 log "Deploying Janus-development to LocalStack..."
