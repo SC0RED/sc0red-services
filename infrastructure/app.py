@@ -36,18 +36,21 @@ environment_config: dict[str, object] = {
         "log_retention_days": 7,
         "enable_monitoring": False,
         "point_in_time_recovery": False,
+        "lambda_architecture": "arm64",
     },
     "staging": {
         "removal_policy": cdk.RemovalPolicy.SNAPSHOT,
         "log_retention_days": 30,
         "enable_monitoring": True,
         "point_in_time_recovery": False,
+        "lambda_architecture": "x86_64",
     },
     "production": {
         "removal_policy": cdk.RemovalPolicy.RETAIN,
         "log_retention_days": 90,
         "enable_monitoring": True,
         "point_in_time_recovery": True,
+        "lambda_architecture": "x86_64",
     },
 }
 

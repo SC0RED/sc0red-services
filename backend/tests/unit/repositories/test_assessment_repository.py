@@ -141,10 +141,10 @@ class TestAssessmentRepository:
         assert "GSI3SK" not in raw
 
     @mock_aws
-    def test_save_assessment_wrapper(self, dynamodb_table):
-        """save_assessment() sets the id and delegates to save()."""
+    def test_save_with_explicit_id(self, dynamodb_table):
+        """save() with an explicit id persists under that id."""
         repo = DynamoDBAssessmentRepository(dynamodb_table)
-        repo.save_assessment("custom-id-123", {"tier": "high", "company_id": "comp-5"})
+        repo.save({"id": "custom-id-123", "tier": "high", "company_id": "comp-5"})
 
         result = repo.get_by_id("custom-id-123")
         assert result is not None

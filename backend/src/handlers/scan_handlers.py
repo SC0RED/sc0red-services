@@ -135,6 +135,38 @@ def _start_single_scan(
     )
 
 
+def _compute_scan_progress(
+    analyses: list[dict[str, Any]],
+    scan_progress: int,
+) -> tuple[int, int]:
+    """Return (done_count, computed_progress) from per-company pipeline progress."""
+    if not analyses:
+        return 0, scan_progress
+    total = len(analyses)
+    done_count = sum(1 for a in analyses if a.get("analyzedAt") or a.get("error"))
+    company_progress_sum = sum(
+        100 if (a.get("analyzedAt") or a.get("error")) else a.get("pipelineProgress", 0)
+        for a in analyses
+    )
+    return done_count, company_progress_sum // total
+
+
+def _derive_progress_label(
+    analyses: list[dict[str, Any]],
+    fallback_label: str,
+) -> str:
+    """Return the progress label from the most advanced in-progress company."""
+    in_progress = [
+        a
+        for a in analyses
+        if not a.get("analyzedAt") and not a.get("error") and a.get("pipelineProgress")
+    ]
+    if in_progress:
+        furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
+        return str(furthest.get("pipelineLabel", fallback_label))
+    return fallback_label
+
+
 def handle_scan_status(
     _event: dict[str, Any],
     authentication: AuthContext,
@@ -156,18 +188,7 @@ def handle_scan_status(
     status = scan.get("status")
     total_companies = scan.get("total_companies", 0)
 
-    # Compute progress from per-company pipeline_progress
-    if analyses:
-        total = len(analyses)
-        done_count = sum(1 for a in analyses if a.get("analyzedAt") or a.get("error"))
-        company_progress_sum = sum(
-            100 if (a.get("analyzedAt") or a.get("error")) else a.get("pipelineProgress", 0)
-            for a in analyses
-        )
-        computed_progress = company_progress_sum // total
-    else:
-        done_count = 0
-        computed_progress = scan.get("progress", 0)
+    done_count, computed_progress = _compute_scan_progress(analyses, scan.get("progress", 0))
 
     # Detect completion from company data even if scan record is stale.
     # Handles race conditions where _update_scan_progress hasn't run yet.
@@ -179,16 +200,7 @@ def handle_scan_status(
     # Use the higher of scan-level or computed progress
     progress = max(scan.get("progress", 0), computed_progress)
 
-    # Build label from the most advanced in-progress company
-    progress_label = scan.get("progress_label", "")
-    in_progress = [
-        a
-        for a in analyses
-        if not a.get("analyzedAt") and not a.get("error") and a.get("pipelineProgress")
-    ]
-    if in_progress:
-        furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
-        progress_label = furthest.get("pipelineLabel", progress_label)
+    progress_label = _derive_progress_label(analyses, scan.get("progress_label", ""))
 
     logger.info(
         "[poll] scan=%s status=%s progress=%s analyses=%d",

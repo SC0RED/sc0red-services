@@ -39,6 +39,11 @@ class JanusStack(Stack):
         self._environment = environment
         self._config = config
 
+        arch_value = config.get("lambda_architecture", "x86_64")
+        self._lambda_architecture = (
+            lambda_.Architecture.ARM_64 if arch_value == "arm64" else lambda_.Architecture.X86_64
+        )
+
         table = self._create_table()
         queue, dlq = self._create_queues()
         documents_bucket = self._create_documents_bucket()
@@ -130,7 +135,15 @@ class JanusStack(Stack):
     # ── Shared helpers ─────────────────────────────────────────────────────────
 
     def _build_bundling_options(self) -> cdk.BundlingOptions:
-        """Build the Docker bundling config shared by both Lambdas."""
+        """Build the Docker bundling config shared by both Lambdas.
+
+        TODO: Extract the inline bash command to infrastructure/scripts/bundle.sh
+        for readability and testability. The script should cd /asset-input before
+        running pip install, since CDK mounts the asset source there.
+        """
+        # Note: GH_TOKEN and DEPLOY_KEY_B64 are visible in Docker layer history.
+        # This is acceptable because the bundling container is ephemeral and the
+        # layers are never pushed to a registry — they exist only during cdk deploy.
         gh_token = os.environ.get("GH_TOKEN", "")
         deploy_key_b64 = os.environ.get("DEPLOY_KEY_B64", "")
 
@@ -214,11 +227,7 @@ class JanusStack(Stack):
             "ApiHandler",
             function_name=f"janus-api-{self._environment}",
             runtime=lambda_.Runtime.PYTHON_3_12,
-            architecture=(
-                lambda_.Architecture.ARM_64
-                if self._environment == "development"
-                else lambda_.Architecture.X86_64
-            ),
+            architecture=self._lambda_architecture,
             handler="src.handlers.api_handler_entry.handle_api_event",
             code=lambda_.Code.from_asset("../backend", bundling=bundling),
             timeout=Duration.seconds(30),
@@ -257,11 +266,7 @@ class JanusStack(Stack):
             "WorkerHandler",
             function_name=f"janus-worker-{self._environment}",
             runtime=lambda_.Runtime.PYTHON_3_12,
-            architecture=(
-                lambda_.Architecture.ARM_64
-                if self._environment == "development"
-                else lambda_.Architecture.X86_64
-            ),
+            architecture=self._lambda_architecture,
             handler="src.handlers.worker_handler_entry.handle_worker_event",
             code=lambda_.Code.from_asset("../backend", bundling=bundling),
             timeout=Duration.seconds(540),

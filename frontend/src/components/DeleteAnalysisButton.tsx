@@ -17,18 +17,24 @@ export default function DeleteAnalysisButton({
     const router = useRouter()
     const [confirming, setConfirming] = useState(false)
     const [deleting, setDeleting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
     async function handleDelete() {
+        setError(null)
         setDeleting(true)
         try {
             const res = await fetch(`/api/analysis/${analysisId}`, { method: 'DELETE' })
-            if (res.ok) {
-                if (redirectTo) {
-                    router.push(redirectTo)
-                } else {
-                    router.refresh()
-                }
+            if (!res.ok) {
+                setError('Delete failed. Please try again.')
+                return
             }
+            if (redirectTo) {
+                router.push(redirectTo)
+            } else {
+                router.refresh()
+            }
+        } catch {
+            setError('Network error. Please try again.')
         } finally {
             setDeleting(false)
             setConfirming(false)
@@ -79,6 +85,7 @@ export default function DeleteAnalysisButton({
                 >
                     No
                 </button>
+                {error && <span style={{ fontSize: '0.75rem', color: 'var(--risk-critical)' }}>{error}</span>}
             </div>
         )
     }

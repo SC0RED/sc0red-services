@@ -62,11 +62,6 @@ class DynamoDBAssessmentRepository:
         self._table.put_item(item)
         return assessment_id
 
-    def save_assessment(self, assessment_id: str, doc: dict[str, Any]) -> None:
-        """Save an assessment document under the given ID."""
-        doc["id"] = assessment_id
-        self.save(doc)
-
     def find_by_company(self, company_id: str) -> list[dict[str, Any]]:
         """Return all assessments associated with the given company ID."""
         return self._table.query_gsi(

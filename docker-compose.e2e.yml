@@ -10,6 +10,21 @@
 #   BACKEND_URL=http://localhost:8001 ./scripts/e2e-test.sh
 #   docker compose -f docker-compose.e2e.yml down -v
 
+x-shared-env: &shared-env
+  DYNAMODB_TABLE: janus-e2e
+  DYNAMODB_ENDPOINT: http://localstack:4566
+  AWS_REGION: us-east-1
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
+  AWS_ENDPOINT_URL: http://localstack:4566
+  NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}
+  AI_PROVIDER: openai
+  OPENAI_API_KEY: mock-key
+  OPENAI_BASE_URL: http://ai-mock:8080/v1/
+  ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/janus-analysis-e2e
+  DOCUMENTS_BUCKET: janus-documents-e2e
+
 services:
 
   localstack:
@@ -54,19 +69,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      DYNAMODB_TABLE: janus-e2e
-      DYNAMODB_ENDPOINT: http://localstack:4566
-      AWS_REGION: us-east-1
-      AWS_DEFAULT_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: local
-      AWS_SECRET_ACCESS_KEY: local
-      AWS_ENDPOINT_URL: http://localstack:4566
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}
-      AI_PROVIDER: openai
-      OPENAI_API_KEY: mock-key
-      OPENAI_BASE_URL: http://ai-mock:8080/v1/
-      ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/janus-analysis-e2e
-      DOCUMENTS_BUCKET: janus-documents-e2e
+      <<: *shared-env
     depends_on:
       localstack:
         condition: service_healthy
@@ -89,19 +92,7 @@ services:
     container_name: janus-worker-e2e
     command: ["python", "scripts/sqs_worker.py"]
     environment:
-      DYNAMODB_TABLE: janus-e2e
-      DYNAMODB_ENDPOINT: http://localstack:4566
-      AWS_REGION: us-east-1
-      AWS_DEFAULT_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: local
-      AWS_SECRET_ACCESS_KEY: local
-      AWS_ENDPOINT_URL: http://localstack:4566
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}
-      AI_PROVIDER: openai
-      OPENAI_API_KEY: mock-key
-      OPENAI_BASE_URL: http://ai-mock:8080/v1/
-      ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/janus-analysis-e2e
-      DOCUMENTS_BUCKET: janus-documents-e2e
+      <<: *shared-env
     depends_on:
       backend:
         condition: service_healthy
