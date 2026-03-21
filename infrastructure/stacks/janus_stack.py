@@ -15,6 +15,13 @@ from aws_cdk import aws_sqs as sqs
 from constructs import Construct
 
 
+_LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
+    7: logs.RetentionDays.ONE_WEEK,
+    30: logs.RetentionDays.ONE_MONTH,
+    90: logs.RetentionDays.THREE_MONTHS,
+}
+
+
 class JanusStack(Stack):
     """Main stack: DynamoDB table, SQS queue, API + Worker Lambdas, API Gateway."""
 
@@ -69,7 +76,7 @@ class JanusStack(Stack):
             sort_key=dynamodb.Attribute(name="sk", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=self._config["removal_policy"],
-            point_in_time_recovery=False,
+            point_in_time_recovery=bool(self._config.get("point_in_time_recovery", False)),
             encryption=dynamodb.TableEncryption.AWS_MANAGED,
         )
 
@@ -160,14 +167,23 @@ class JanusStack(Stack):
         documents_bucket: s3.Bucket,
     ) -> dict[str, str]:
         """Build the environment variables shared by both Lambdas."""
+        nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
+        if not nextauth_secret:
+            if self._environment == "development":
+                nextauth_secret = "dev-secret-minimum-32-characters-long"
+            else:
+                message = (
+                    f"NEXTAUTH_SECRET must be set for environment '{self._environment}'. "
+                    "A production deployment with a default dev secret is a security risk."
+                )
+                raise ValueError(message)
+
         return {
             "DYNAMODB_TABLE": table.table_name,
             "ANALYSIS_QUEUE_URL": queue.queue_url,
             "DOCUMENTS_BUCKET": documents_bucket.bucket_name,
             "STAGE": self._environment,
-            "NEXTAUTH_SECRET": os.environ.get(
-                "NEXTAUTH_SECRET", "dev-secret-minimum-32-characters-long"
-            ),
+            "NEXTAUTH_SECRET": nextauth_secret,
             "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-placeholder"),
             "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
             "AI_PROVIDER": os.environ.get("AI_PROVIDER", "anthropic"),
@@ -187,7 +203,9 @@ class JanusStack(Stack):
             self,
             "ApiHandlerLogs",
             log_group_name=f"/aws/lambda/janus-api-{self._environment}",
-            retention=logs.RetentionDays.THREE_DAYS,
+            retention=_LOG_RETENTION_MAP.get(
+                self._config.get("log_retention_days", 7), logs.RetentionDays.ONE_WEEK
+            ),
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
@@ -228,7 +246,9 @@ class JanusStack(Stack):
             self,
             "WorkerHandlerLogs",
             log_group_name=f"/aws/lambda/janus-worker-{self._environment}",
-            retention=logs.RetentionDays.THREE_DAYS,
+            retention=_LOG_RETENTION_MAP.get(
+                self._config.get("log_retention_days", 7), logs.RetentionDays.ONE_WEEK
+            ),
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
@@ -259,13 +279,18 @@ class JanusStack(Stack):
     # ── API Gateway ───────────────────────────────────────────────────────────
 
     def _create_api(self, handler: lambda_.Function) -> apigw.LambdaRestApi:
-        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "*")
+        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
 
-        cors_origins = (
-            apigw.Cors.ALL_ORIGINS
-            if frontend_domain == "*"
-            else [frontend_domain]
-        )
+        if frontend_domain:
+            cors_origins = [frontend_domain]
+        elif self._environment == "development":
+            cors_origins = apigw.Cors.ALL_ORIGINS
+        else:
+            message = (
+                f"FRONTEND_DOMAIN must be set for environment '{self._environment}'. "
+                "Example: https://janus.vercel.app"
+            )
+            raise ValueError(message)
 
         api = apigw.LambdaRestApi(
             self,

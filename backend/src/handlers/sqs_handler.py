@@ -10,6 +10,8 @@ import json
 import logging
 from typing import Any
 
+from signalfield_core.exceptions.base import EngineError
+
 from src.handlers.factory_manager import FactoryManager
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
@@ -67,7 +69,7 @@ class SQSHandler:
                 company_name=company_name,
                 request_id=request_id,
             )
-        except Exception as error:
+        except (EngineError, ValueError, RuntimeError) as error:
             logger.exception(
                 "Pipeline failed for %s (scan=%s, request=%s)",
                 company_name or url,
@@ -76,6 +78,8 @@ class SQSHandler:
             )
             self._record_failure(scan_id, request_id, str(error))
             return
+        # Programming errors (AttributeError, KeyError, TypeError) propagate
+        # to the outer SQS handler, triggering retry via batchItemFailures.
 
         self._update_scan_progress(scan_id)
 
@@ -113,7 +117,7 @@ class SQSHandler:
                 request_id=analysis_id,
                 document_text=document_text or None,
             )
-        except Exception as error:
+        except (EngineError, ValueError, RuntimeError) as error:
             logger.exception("Re-analysis pipeline failed for %s", analysis_id)
             company_repo = self._storage.create_company_repository()
             company_repo.update(analysis_id, {"error": str(error)})
