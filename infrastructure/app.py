@@ -41,7 +41,7 @@ environment_config: dict[str, object] = {
         "removal_policy": cdk.RemovalPolicy.SNAPSHOT,
         "log_retention_days": 30,
         "enable_monitoring": True,
-        "point_in_time_recovery": True,
+        "point_in_time_recovery": False,
     },
     "production": {
         "removal_policy": cdk.RemovalPolicy.RETAIN,
