@@ -40,8 +40,8 @@ class DynamoDBTable:
             kwargs["endpoint_url"] = self._endpoint_url
             kwargs["region_name"] = os.environ.get("AWS_REGION", "us-east-1")
 
-        dynamodb = boto3.resource("dynamodb", **kwargs)
-        self._table = dynamodb.Table(self._table_name)
+        self._dynamodb = boto3.resource("dynamodb", **kwargs)
+        self._table = self._dynamodb.Table(self._table_name)
 
     @property
     def table_name(self) -> str:
@@ -131,6 +131,21 @@ class DynamoDBTable:
             kwargs["ExclusiveStartKey"] = last_key
 
         return items
+
+    def batch_get(self, keys: list[dict[str, str]]) -> list[dict[str, Any]]:
+        """Fetch multiple items in a single BatchGetItem call (max 100 keys).
+
+        Uses the DynamoDB resource API so items are auto-deserialized,
+        consistent with get_item() and query().
+        """
+        if not keys:
+            return []
+        response = self._dynamodb.batch_get_item(
+            RequestItems={
+                self._table_name: {"Keys": [{"pk": k["pk"], "sk": k["sk"]} for k in keys]}
+            }
+        )
+        return response.get("Responses", {}).get(self._table_name, [])
 
     def update_item(
         self,

@@ -282,11 +282,13 @@ class TestAPIGatewayHandler:
         }
         scan_repo.get_scan_companies.return_value = [{"company_id": "c-1"}]
         company_repo = MagicMock()
-        company_repo.get_by_id.return_value = {
-            "id": "c-1",
-            "company_name": "Test",
-            "company_url": "https://test.com",
-        }
+        company_repo.get_by_ids.return_value = [
+            {
+                "id": "c-1",
+                "company_name": "Test",
+                "company_url": "https://test.com",
+            }
+        ]
         storage.create_scan_repository.return_value = scan_repo
         storage.create_company_repository.return_value = company_repo
 
@@ -838,6 +840,7 @@ class TestDashboardEndpoint:
                 "type": "portfolio",
                 "status": "complete",
                 "progress": 100,
+                "completed_count": 2,
                 "created_at": "2026-03-01",
             },
             {

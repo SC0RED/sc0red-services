@@ -126,7 +126,7 @@ class TestSQSHandler:
         company_repo.update.assert_called_once_with(
             "analysis-id-1", {"id": "analysis-id-1", "error": "timeout"}
         )
-        scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100})
+        scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100, "completed_count": 1})
 
     def test_json_parse_error_reports_batch_failure(self):
         """Malformed JSON in the SQS body is a transient issue — report for retry."""
@@ -155,7 +155,7 @@ class TestSQSHandler:
         handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
 
         scan_repo = storage.create_scan_repository.return_value
-        scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100})
+        scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100, "completed_count": 2})
 
     def test_process_message_updates_progress_when_not_all_resolved(self):
         handler, storage = self._make_handler()

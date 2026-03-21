@@ -262,13 +262,9 @@ class APIGatewayHandler:
 
         company_repo = self._storage.create_company_repository()
         scan_companies = scan_repo.get_scan_companies(scan_id)
-        analyses = []
-        for link in scan_companies:
-            company_id = link.get("company_id", "")
-            if company_id:
-                full = company_repo.get_by_id(company_id)
-                if full:
-                    analyses.append(_build_company_summary(full))
+        company_ids = [link["company_id"] for link in scan_companies if link.get("company_id")]
+        companies_batch = company_repo.get_by_ids(company_ids) if company_ids else []
+        analyses = [_build_company_summary(c) for c in companies_batch]
 
         status = scan.get("status")
         total_companies = scan.get("total_companies", 0)
@@ -576,7 +572,7 @@ class APIGatewayHandler:
                 "type": s.get("type", ""),
                 "status": s.get("status", ""),
                 "progress": s.get("progress", 0),
-                "completedCount": len(scan_repo.get_scan_companies(s["id"])),
+                "completedCount": s.get("completed_count", 0),
                 "createdAt": s.get("created_at") or scan_date_fallback.get(s.get("id", ""), ""),
             }
             for s in recent_scans

@@ -30,6 +30,13 @@ class DynamoDBCompanyRepository:
             sk="COMPANY#METADATA",
         )
 
+    def get_by_ids(self, company_ids: list[str]) -> list[dict[str, Any]]:
+        """Fetch multiple companies in a single BatchGetItem call."""
+        if not company_ids:
+            return []
+        keys = [{"pk": f"COMPANY#{cid}", "sk": "COMPANY#METADATA"} for cid in company_ids]
+        return self._table.batch_get(keys)
+
     def save(self, entity: dict[str, Any]) -> str:
         """Persist a full company entity document and return its ID."""
         company_id = entity.get("id") or str(uuid.uuid4())

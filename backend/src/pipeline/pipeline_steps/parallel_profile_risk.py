@@ -12,10 +12,8 @@ are deduplicated, ranked, and stored for the detail phase.
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Any, cast
 
-from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
@@ -23,6 +21,7 @@ from src.documents.extract_text import MAX_CHARS_COMBINED
 from src.models.model_company import CompanyProfile, RiskAssessment, RiskScore
 from src.pipeline.ai_guides.ideation_guide import IDEATION_GUIDE
 from src.pipeline.ai_guides.risk_scoring_guide import RISK_SCORING_GUIDE
+from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
 from src.pipeline.pipeline_steps.assess_risk import (
     RISK_ASSESSMENT_QUESTIONS,
     RISK_BATCH_A_CATEGORIES,
@@ -309,30 +308,12 @@ class ParallelProfileRiskAndIdeation(RequestStep):
         system_prompt: str,
         label: str,
     ) -> tuple[str, dict[str, Any], float]:
-        """Execute a single AI call and return (label, response_data, elapsed_seconds)."""
-        client = self._ai_client_factory.get_client(
-            verbosity=Verbosity.MEDIUM,
-            reasoning_effort=ReasoningEffort.LOW,
-            precision=Precision.STANDARD,
-            instructions=system_prompt,
+        """Execute a single AI call via the shared run_structured_ai_call."""
+        return run_structured_ai_call(
+            ai_client_factory=self._ai_client_factory,
+            user_prompt=user_prompt,
+            schema=schema,
+            system_prompt=system_prompt,
+            label=label,
+            step_name="ParallelProfileRiskAndIdeation",
         )
-        logger.info(
-            "[ParallelProfileRiskAndIdeation:%s] sending AI request: prompt_len=%d, model=%s",
-            label,
-            len(user_prompt),
-            getattr(client, "model", "unknown"),
-        )
-        start = time.monotonic()
-        try:
-            response = client.query_structured(input_text=user_prompt, json_schema=schema)
-        except Exception:
-            logger.exception("[ParallelProfileRiskAndIdeation:%s] AI request failed", label)
-            raise
-        elapsed = time.monotonic() - start
-        logger.info(
-            "[ParallelProfileRiskAndIdeation:%s] AI response received in %.2fs: metadata=%s",
-            label,
-            elapsed,
-            response.metadata,
-        )
-        return label, response.content, elapsed
