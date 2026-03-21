@@ -5,7 +5,7 @@ Ported from pe-scan/src/lib/ai/prompts.ts interfaces (lines 179-237).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -42,24 +42,9 @@ class RiskAssessment(BaseModel):
 
     risk_scores: list[RiskScore] = Field(default_factory=list)
     overall_score: float = 0.0
-    tier: str = "low"  # low | moderate | high | critical
+    tier: Literal["low", "moderate", "high", "critical"] = "low"
     top_risks: list[str] = Field(default_factory=list)
     analysis_summary: str = ""
-
-
-class Vendor(BaseModel):
-    """Vendor recommendation within a related service."""
-
-    name: str
-    url: str = ""
-    specialty: str = ""
-
-
-class RelatedService(BaseModel):
-    """Service type with vendor recommendations."""
-
-    service_type: str
-    vendors: list[Vendor] = Field(default_factory=list)
 
 
 class Opportunity(BaseModel):
@@ -123,7 +108,7 @@ class Company(BaseModel):
     ebitda_tree: EbitdaTreeResult | None = None
     error: str | None = None
     analyzed_at: datetime | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     # Transient fields for pipeline execution (not persisted)
     scraped_text: str = Field(default="", exclude=True)
     scraped_links: list[dict[str, str]] = Field(default_factory=list, exclude=True)

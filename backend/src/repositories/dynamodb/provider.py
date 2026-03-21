@@ -5,7 +5,6 @@ from __future__ import annotations
 from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
 from src.repositories.dynamodb.client import DynamoDBTable
 from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
-from src.repositories.dynamodb.request_repository import DynamoDBRequestRepository
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 from src.repositories.dynamodb.user_repository import (
     DynamoDBOrganizationRepository,
@@ -31,10 +30,6 @@ class DynamoDBStorageProvider:
     def create_assessment_repository(self) -> DynamoDBAssessmentRepository:
         """Return a new DynamoDBAssessmentRepository backed by the shared table."""
         return DynamoDBAssessmentRepository(self._table)
-
-    def create_request_repository(self) -> DynamoDBRequestRepository:
-        """Return a new DynamoDBRequestRepository backed by the shared table."""
-        return DynamoDBRequestRepository(self._table)
 
     def create_scan_repository(self) -> DynamoDBScanRepository:
         """Return a new DynamoDBScanRepository backed by the shared table."""

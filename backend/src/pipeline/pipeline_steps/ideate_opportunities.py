@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.documents.extract_text import MAX_CHARS_COMBINED
+from src.documents.extract_text import MAX_CHARS_COMBINED, MAX_SCRAPED_TEXT_CHARS
 from src.models.model_literals import RISK_SCOPE_DISPLAY
 from src.pipeline.pipeline_steps.generate_opportunities import STRATEGIC_CATEGORIES_INSTRUCTIONS
 
@@ -72,7 +72,7 @@ that addresses the risk category below.
 COMPANY URL: {url}
 
 WEBSITE CONTENT:
-{scraped_text[:12000]}{document_section}
+{scraped_text[:MAX_SCRAPED_TEXT_CHARS]}{document_section}
 
 RISK CATEGORY: {category_id} — {category_name}
 {category_description}

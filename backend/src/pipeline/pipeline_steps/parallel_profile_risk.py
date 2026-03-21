@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, cast
 from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
-from src.documents.extract_text import MAX_CHARS_COMBINED
+from src.documents.extract_text import MAX_CHARS_COMBINED, MAX_SCRAPED_TEXT_CHARS
 from src.models.model_company import CompanyProfile, RiskAssessment, RiskScore
 from src.pipeline.ai_guides.ideation_guide import IDEATION_GUIDE
 from src.pipeline.ai_guides.risk_scoring_guide import RISK_SCORING_GUIDE
@@ -77,7 +77,7 @@ focusing on the specific risk categories listed below.
 COMPANY URL: {url}
 
 WEBSITE CONTENT:
-{scraped_text[:12000]}{document_section}
+{scraped_text[:MAX_SCRAPED_TEXT_CHARS]}{document_section}
 
 RISK CATEGORIES TO ASSESS:
 {categories_block}
@@ -172,7 +172,7 @@ class ParallelProfileRiskAndIdeation(RequestStep):
             )
         profile_prompt = PROFILE_PROMPT_TEMPLATE.format(
             url=actual_url,
-            content=scraped_text[:12000],
+            content=scraped_text[:MAX_SCRAPED_TEXT_CHARS],
             document_section=document_section,
         )
 
