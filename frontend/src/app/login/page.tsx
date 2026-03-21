@@ -194,8 +194,6 @@ export default function LoginPage() {
                     </p>
                 </div>
             </div>
-
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     )
 }

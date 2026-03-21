@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { backendFetch } from '@/lib/api/serverToken'
 import { authOptions } from '@/lib/auth/authOptions'
 import type { AnalysisItem } from '@/lib/types/api'
-import { getRiskTierLabel } from '@/lib/utils/riskUtils'
+import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import DashboardSidebar from '@/components/DashboardSidebar'
 
@@ -76,12 +76,6 @@ export default async function AnalysesPage() {
                             <tbody>
                                 {analyses.map((a, i) => {
                                     const tier = a.riskTier ?? ''
-                                    const tierColors: Record<string, string> = {
-                                        low: 'var(--risk-low)',
-                                        moderate: 'var(--risk-moderate)',
-                                        high: 'var(--risk-high)',
-                                        critical: 'var(--risk-critical)',
-                                    }
                                     return (
                                         <tr
                                             key={a.id}
@@ -131,7 +125,7 @@ export default async function AnalysesPage() {
                                                     style={{
                                                         fontWeight: 700,
                                                         fontSize: '1.1rem',
-                                                        color: tierColors[tier],
+                                                        color: TIER_COLORS[tier],
                                                     }}
                                                 >
                                                     {a.overallRiskScore?.toFixed(1)}

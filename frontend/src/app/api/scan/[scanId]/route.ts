@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { BackendError } from '@/lib/api/errors'
+import { handleRouteError } from '@/lib/api/routeError'
 import { backendFetch } from '@/lib/api/serverToken'
 
 export async function GET(_req: NextRequest, { params }: { params: { scanId: string } }) {
@@ -17,11 +17,11 @@ export async function GET(_req: NextRequest, { params }: { params: { scanId: str
         )
         return NextResponse.json(data)
     } catch (error: unknown) {
-        const status = error instanceof BackendError ? error.status : 500
-        const message = error instanceof Error ? error.message : 'Internal Server Error'
         // eslint-disable-next-line no-console
-        console.error(`[poll] scan=${params.scanId} error=${message} status=${status}`)
-        return NextResponse.json({ error: message }, { status })
+        console.error(
+            `[poll] scan=${params.scanId} error=${error instanceof Error ? error.message : 'unknown'}`
+        )
+        return handleRouteError(error)
     }
 }
 
@@ -30,8 +30,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { scanId: 
         const data = await backendFetch(`/api/scan/${params.scanId}`, { method: 'DELETE' })
         return NextResponse.json(data)
     } catch (error: unknown) {
-        const status = error instanceof BackendError ? error.status : 500
-        const message = error instanceof Error ? error.message : 'Internal Server Error'
-        return NextResponse.json({ error: message }, { status })
+        return handleRouteError(error)
     }
 }

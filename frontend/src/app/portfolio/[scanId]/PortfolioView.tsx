@@ -2,26 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getRiskTierLabel, getRiskTier } from '@/lib/utils/riskUtils'
-
-interface ScanAnalysis {
-    id: string
-    companyName: string
-    companyUrl: string
-    industry: string
-    overallRiskScore: number | null
-    riskTier: string | null
-    error: string | null
-    analyzedAt: string | null
-}
-
-interface ScanData {
-    status: string
-    progress: number
-    type: string
-    portfolioCompanies: Array<{ name: string; url: string }>
-    analyses: ScanAnalysis[]
-}
+import { getRiskTierLabel, getRiskTier, TIER_COLORS } from '@/lib/utils/riskUtils'
+import type { ScanAnalysis, ScanData } from '@/lib/types/api'
 
 const POLL_INTERVAL_MS = 4000
 
@@ -61,13 +43,6 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
     completed.forEach((a) => {
         if (a.riskTier) tierCounts[a.riskTier as keyof typeof tierCounts]++
     })
-
-    const tierColors: Record<string, string> = {
-        low: 'var(--risk-low)',
-        moderate: 'var(--risk-moderate)',
-        high: 'var(--risk-high)',
-        critical: 'var(--risk-critical)',
-    }
 
     const pending = hasPendingAnalyses(analyses)
 
@@ -184,7 +159,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                             (a.overallRiskScore ? getRiskTier(Number(a.overallRiskScore)) : null)) as
                             | string
                             | null
-                        const color = tier ? tierColors[tier] : 'var(--text-tertiary)'
+                        const color = tier ? TIER_COLORS[tier] : 'var(--text-tertiary)'
                         const isAnalyzed = a.overallRiskScore !== null
                         return (
                             <Link key={a.id} href={`/analysis/${a.id}`} style={{ textDecoration: 'none' }}>
@@ -342,7 +317,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                                                         fontWeight: 700,
                                                         fontSize: '1.1rem',
                                                         color: tier
-                                                            ? tierColors[tier]
+                                                            ? TIER_COLORS[tier]
                                                             : 'var(--text-secondary)',
                                                     }}
                                                 >
@@ -376,7 +351,6 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                     </table>
                 </div>
             </div>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </>
     )
 }

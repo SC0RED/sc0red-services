@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { BackendError } from '@/lib/api/errors'
 import { backendFetch } from '@/lib/api/serverToken'
 import type { AnalysisData, Opportunity, RiskScore } from '@/lib/types/api'
+import { TIER_COLORS_HEX } from '@/lib/utils/riskUtils'
 
 function escapeHtml(text: string | null | undefined): string {
     if (!text) return ''
@@ -18,13 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
     try {
         const analysis = await backendFetch<AnalysisData>(`/api/analysis/${params.analysisId}`)
 
-        const tierColors: Record<string, string> = {
-            low: '#22C55E',
-            moderate: '#F59E0B',
-            high: '#F97316',
-            critical: '#EF4444',
-        }
-        const tierColor = (analysis.riskTier && tierColors[analysis.riskTier]) || '#8B9AC4'
+        const tierColor = (analysis.riskTier && TIER_COLORS_HEX[analysis.riskTier]) || '#8B9AC4'
 
         const riskScores: RiskScore[] = analysis.riskScores || []
         const opportunities: Opportunity[] = analysis.opportunities || []

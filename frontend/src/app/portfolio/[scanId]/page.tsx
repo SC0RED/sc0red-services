@@ -2,27 +2,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth/authOptions'
 import { backendFetch } from '@/lib/api/serverToken'
+import type { ScanData } from '@/lib/types/api'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import PortfolioView from './PortfolioView'
-
-interface ScanAnalysis {
-    id: string
-    companyName: string
-    companyUrl: string
-    industry: string
-    overallRiskScore: number | null
-    riskTier: string | null
-    error: string | null
-    analyzedAt: string | null
-}
-
-interface ScanData {
-    status: string
-    progress: number
-    type: string
-    portfolioCompanies: Array<{ name: string; url: string }>
-    analyses: ScanAnalysis[]
-}
 
 export default async function PortfolioPage({ params }: { params: { scanId: string } }) {
     const session = await getServerSession(authOptions)

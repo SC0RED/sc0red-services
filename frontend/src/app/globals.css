@@ -444,6 +444,12 @@ select {
     border-radius: var(--radius-sm);
 }
 
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @keyframes skeleton-shimmer {
     0% {
         background-position: 200% 0;
