@@ -69,7 +69,11 @@ class DynamoDBTable:
         limit: int | None = None,
         scan_forward: bool = True,
     ) -> list[dict[str, Any]]:
-        """Query items by partition key, with optional sort-key prefix and pagination."""
+        """Query items by partition key, with optional sort-key prefix.
+
+        Automatically paginates through all results using LastEvaluatedKey.
+        If limit is specified, returns at most that many items.
+        """
         kwargs: dict[str, Any] = {}
         if index_name:
             kwargs["IndexName"] = index_name
@@ -81,11 +85,19 @@ class DynamoDBTable:
         kwargs["KeyConditionExpression"] = key_condition
         kwargs["ScanIndexForward"] = scan_forward
 
-        if limit:
-            kwargs["Limit"] = limit
+        items: list[dict[str, Any]] = []
+        while True:
+            response = self._table.query(**kwargs)
+            items.extend(response.get("Items", []))
 
-        response = self._table.query(**kwargs)
-        return response.get("Items", [])
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            if limit and len(items) >= limit:
+                break
+            kwargs["ExclusiveStartKey"] = last_key
+
+        return items[:limit] if limit else items
 
     def query_gsi(
         self,
@@ -95,16 +107,30 @@ class DynamoDBTable:
         sk_attr: str | None = None,
         sk_prefix: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Query a Global Secondary Index by partition key with optional sort-key prefix."""
+        """Query a Global Secondary Index by partition key with optional sort-key prefix.
+
+        Automatically paginates through all results using LastEvaluatedKey.
+        """
         key_condition = Key(pk_attr).eq(pk_value)
         if sk_attr and sk_prefix:
             key_condition = key_condition & Key(sk_attr).begins_with(sk_prefix)
 
-        response = self._table.query(
-            IndexName=index_name,
-            KeyConditionExpression=key_condition,
-        )
-        return response.get("Items", [])
+        kwargs: dict[str, Any] = {
+            "IndexName": index_name,
+            "KeyConditionExpression": key_condition,
+        }
+
+        items: list[dict[str, Any]] = []
+        while True:
+            response = self._table.query(**kwargs)
+            items.extend(response.get("Items", []))
+
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            kwargs["ExclusiveStartKey"] = last_key
+
+        return items
 
     def update_item(
         self,
