@@ -125,6 +125,11 @@ class RiskScopeManager:
         },
     }
 
+    @classmethod
+    def get_scope_names(cls) -> list[str]:
+        """Return sorted list of available risk scope names."""
+        return sorted(cls._SCOPE_CONFIG.keys())
+
     def __init__(self, scope: str) -> None:
         if scope not in self._SCOPE_CONFIG:
             valid = sorted(self._SCOPE_CONFIG.keys())

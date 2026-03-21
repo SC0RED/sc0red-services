@@ -54,6 +54,7 @@ def handle_get_analysis(
 
     metadata_json = company.get("metadata_json", "")
     if metadata_json:
+        # DynamoDB may return string (json.dumps'd) or dict (Map type from legacy records)
         meta = json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
         analysis_summary = meta.get("analysis_summary", "")
         top_actions = meta.get("top_actions", [])

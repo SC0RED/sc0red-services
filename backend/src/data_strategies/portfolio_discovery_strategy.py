@@ -16,7 +16,15 @@ import httpx
 from bs4 import BeautifulSoup
 from signalfield_core.data.strategy import DataStrategyExecutor
 
-from src.data_strategies.web_scraper_strategy import scrape_url
+from src.data_strategies.web_scraper_strategy import (
+    _HEADERS as _SHARED_HEADERS,
+)
+from src.data_strategies.web_scraper_strategy import (
+    _TIMEOUT as _SHARED_TIMEOUT,
+)
+from src.data_strategies.web_scraper_strategy import (
+    scrape_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +131,10 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 if full_url in seen_urls:
                     continue
 
-                if any(social in domain for social in _SOCIAL_DOMAINS):
+                is_social = any(
+                    domain == social or domain.endswith(f".{social}") for social in _SOCIAL_DOMAINS
+                )
+                if is_social:
                     continue
 
                 # Filter link text to look like company names
@@ -162,16 +173,10 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         for path in _PORTFOLIO_PATHS:
             page_url = f"{base_origin}{path}" if path else base_origin
             try:
-                with httpx.Client(follow_redirects=True, timeout=15.0) as client:
+                with httpx.Client(follow_redirects=True, timeout=_SHARED_TIMEOUT) as client:
                     response = client.get(
                         page_url,
-                        headers={
-                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "Accept": (
-                                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                            ),
-                        },
+                        headers=_SHARED_HEADERS,
                     )
                     if response.status_code != _HTTP_OK:
                         continue
