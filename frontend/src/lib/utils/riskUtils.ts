@@ -61,6 +61,13 @@ export const STRATEGIC_CATEGORIES = [
 
 export type StrategicCategory = (typeof STRATEGIC_CATEGORIES)[number]
 
+export const TIER_COLORS: Record<string, string> = {
+    low: 'var(--risk-low)',
+    moderate: 'var(--risk-moderate)',
+    high: 'var(--risk-high)',
+    critical: 'var(--risk-critical)',
+}
+
 export function getRiskTier(score: number): 'low' | 'moderate' | 'high' | 'critical' {
     if (score <= 3) return 'low'
     if (score <= 6) return 'moderate'
