@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 const mockPush = vi.fn()
 const mockGet = vi.fn()
@@ -173,6 +173,279 @@ describe('NewScanPage', () => {
 
         await waitFor(() => {
             expect(mockPush).toHaveBeenCalledWith('/analysis/analysis-1')
+        })
+    })
+
+    describe('standalone scan polling flow', () => {
+        let pollCallback: (() => void) | null
+        const realSetInterval = globalThis.setInterval.bind(globalThis)
+
+        beforeEach(() => {
+            pollCallback = null
+            // Intercept setInterval: capture 3000ms poll callbacks, pass others through
+            vi.spyOn(global, 'setInterval').mockImplementation((callback: () => void, delay?: number) => {
+                if (delay === 3000) {
+                    pollCallback = callback
+                    return 999 as unknown as ReturnType<typeof setInterval>
+                }
+                return realSetInterval(callback, delay)
+            })
+            vi.spyOn(global, 'clearInterval').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            vi.restoreAllMocks()
+        })
+
+        async function triggerPoll(): Promise<void> {
+            if (pollCallback) {
+                await act(async () => {
+                    await pollCallback!()
+                })
+            }
+        }
+
+        it('polls for status after scan starts running', async () => {
+            const fetchMock = vi.fn()
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ scanId: 's-1', status: 'running' }),
+            })
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'running',
+                        progress: 30,
+                        progressLabel: 'Scraping website...',
+                    }),
+            })
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({ status: 'running', progress: 60, progressLabel: 'Assessing risks...' }),
+            })
+            global.fetch = fetchMock
+
+            mockGet.mockReturnValue('standalone')
+            render(<NewScanPage />)
+
+            fireEvent.change(screen.getByLabelText('Company Website URL'), {
+                target: { value: 'https://stripe.com' },
+            })
+            fireEvent.click(screen.getByText('Analyze Company'))
+
+            // Wait for initial POST to resolve and set up polling
+            await waitFor(() => {
+                expect(pollCallback).not.toBeNull()
+            })
+
+            // First poll
+            await triggerPoll()
+
+            await waitFor(() => {
+                expect(screen.getByText('Scraping website...')).toBeInTheDocument()
+            })
+
+            // Second poll
+            await triggerPoll()
+
+            await waitFor(() => {
+                expect(screen.getByText('Assessing risks...')).toBeInTheDocument()
+            })
+        })
+
+        it('redirects to analysis when poll returns complete', async () => {
+            const fetchMock = vi.fn()
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ scanId: 's-1', status: 'running' }),
+            })
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'complete',
+                        analyses: [{ id: 'a-1', analyzedAt: '2026-03-23T00:00:00Z' }],
+                    }),
+            })
+            global.fetch = fetchMock
+
+            mockGet.mockReturnValue('standalone')
+            render(<NewScanPage />)
+
+            fireEvent.change(screen.getByLabelText('Company Website URL'), {
+                target: { value: 'https://stripe.com' },
+            })
+            fireEvent.click(screen.getByText('Analyze Company'))
+
+            await waitFor(() => {
+                expect(pollCallback).not.toBeNull()
+            })
+
+            await triggerPoll()
+
+            await waitFor(() => {
+                expect(mockPush).toHaveBeenCalledWith('/analysis/a-1')
+            })
+        })
+
+        it('shows error when scan fails during polling', async () => {
+            const fetchMock = vi.fn()
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ scanId: 's-1', status: 'running' }),
+            })
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ status: 'failed' }),
+            })
+            global.fetch = fetchMock
+
+            mockGet.mockReturnValue('standalone')
+            render(<NewScanPage />)
+
+            fireEvent.change(screen.getByLabelText('Company Website URL'), {
+                target: { value: 'https://stripe.com' },
+            })
+            fireEvent.click(screen.getByText('Analyze Company'))
+
+            await waitFor(() => {
+                expect(pollCallback).not.toBeNull()
+            })
+
+            await triggerPoll()
+
+            await waitFor(() => {
+                expect(screen.getByText('Analysis failed. Please try again.')).toBeInTheDocument()
+            })
+            expect(screen.getByLabelText('Company Website URL')).toBeInTheDocument()
+        })
+    })
+
+    describe('portfolio confirm and polling flow', () => {
+        let pollCallback: (() => void) | null
+        const realSetInterval = globalThis.setInterval.bind(globalThis)
+
+        beforeEach(() => {
+            pollCallback = null
+            vi.spyOn(global, 'setInterval').mockImplementation((callback: () => void, delay?: number) => {
+                if (delay === 3000) {
+                    pollCallback = callback
+                    return 999 as unknown as ReturnType<typeof setInterval>
+                }
+                return realSetInterval(callback, delay)
+            })
+            vi.spyOn(global, 'clearInterval').mockImplementation(() => {})
+        })
+
+        afterEach(() => {
+            vi.restoreAllMocks()
+        })
+
+        async function triggerPoll(): Promise<void> {
+            if (pollCallback) {
+                await act(async () => {
+                    await pollCallback!()
+                })
+            }
+        }
+
+        it('shows portfolio confirmation after discovery', async () => {
+            const fetchMock = vi.fn()
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        scanId: 's-1',
+                        status: 'awaiting_confirmation',
+                        portfolioCompanies: [
+                            { name: 'Acme Corp', url: 'https://acme.com', description: 'A corp' },
+                            { name: 'Beta Inc', url: 'https://beta.com', description: 'B corp' },
+                        ],
+                    }),
+            })
+            global.fetch = fetchMock
+
+            render(<NewScanPage />)
+
+            fireEvent.change(screen.getByLabelText('PE Firm Website URL'), {
+                target: { value: 'https://pe-firm.com' },
+            })
+            fireEvent.click(screen.getByText('Discover Portfolio & Analyze'))
+
+            await waitFor(() => {
+                expect(screen.getByText('Portfolio companies discovered')).toBeInTheDocument()
+            })
+            expect(screen.getByText('Acme Corp')).toBeInTheDocument()
+            expect(screen.getByText('Beta Inc')).toBeInTheDocument()
+            const checkboxes = screen.getAllByRole('checkbox')
+            expect(checkboxes).toHaveLength(2)
+            expect(checkboxes[0]).toBeChecked()
+            expect(checkboxes[1]).toBeChecked()
+        })
+
+        it('polls for portfolio progress after confirm', async () => {
+            const fetchMock = vi.fn()
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        scanId: 's-1',
+                        status: 'awaiting_confirmation',
+                        portfolioCompanies: [
+                            { name: 'Acme Corp', url: 'https://acme.com', description: 'A corp' },
+                            { name: 'Beta Inc', url: 'https://beta.com', description: 'B corp' },
+                        ],
+                    }),
+            })
+            global.fetch = fetchMock
+
+            render(<NewScanPage />)
+
+            fireEvent.change(screen.getByLabelText('PE Firm Website URL'), {
+                target: { value: 'https://pe-firm.com' },
+            })
+            fireEvent.click(screen.getByText('Discover Portfolio & Analyze'))
+
+            await waitFor(() => {
+                expect(screen.getByText('Portfolio companies discovered')).toBeInTheDocument()
+            })
+
+            // POST /api/scan/s-1/confirm
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ status: 'running' }),
+            })
+            // GET /api/scan/s-1 — first poll: 1/2 complete
+            fetchMock.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'running',
+                        analyses: [
+                            { analyzedAt: '2026-03-23T00:00:00Z', pipelineProgress: 100 },
+                            { analyzedAt: null, pipelineProgress: 50, pipelineLabel: 'Assessing risks...' },
+                        ],
+                    }),
+            })
+
+            fireEvent.click(screen.getByText('Analyze 2 Companies'))
+
+            await waitFor(() => {
+                expect(screen.getByText('Running Portfolio Analysis...')).toBeInTheDocument()
+            })
+
+            // Wait for the confirm fetch to complete and polling to be set up
+            await waitFor(() => {
+                expect(pollCallback).not.toBeNull()
+            })
+
+            await triggerPoll()
+
+            await waitFor(() => {
+                expect(screen.getByText(/1\/2 complete/)).toBeInTheDocument()
+            })
         })
     })
 })
