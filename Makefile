@@ -58,7 +58,10 @@ naming: ## Check naming conventions, abbreviations, imports, and skip comments
 # COMBINED CHECKS
 # =============================================================================
 
-check: lint test security naming ## Run ALL checks (lint + test + security + naming)
+audit: ## Run codebase audit (file sizes, anti-patterns, infra guards)
+	@./scripts/audit.sh
+
+check: lint test security naming audit ## Run ALL checks (lint + test + security + naming + audit)
 	@echo "$(GREEN)All local checks passed$(NC)"
 
 # =============================================================================
