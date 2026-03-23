@@ -49,9 +49,12 @@ def _error(message: str, status: int = 400) -> LambdaResponse:
 
 
 def _build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
+    # Uses .get() because during pipeline execution, the company record is
+    # a partial item (only pipeline_progress + pipeline_label) created by
+    # _report_progress. Full fields are only present after persist_results.
     return {
-        "id": company["id"],
-        "companyName": company["company_name"],
+        "id": company.get("id", ""),
+        "companyName": company.get("company_name", ""),
         "companyUrl": company.get("company_url", ""),
         "industry": company.get("industry", ""),
         "overallRiskScore": company.get("overall_risk_score"),
