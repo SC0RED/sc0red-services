@@ -2,7 +2,7 @@ Run a comprehensive codebase audit checking for quality drift and anti-patterns.
 
 Execute `./scripts/audit.sh` from the project root and report the results. The audit checks:
 
-1. **File size limits** — Backend files over 400 lines, frontend components over 300 lines
+1. **File size limits** — Backend files over 400 lines, frontend components over 360 lines
 2. **Exception handling** — No bare `except Exception` in SQS workers
 3. **DynamoDB pagination** — All queries handle `LastEvaluatedKey`
 4. **N+1 read patterns** — No `get_by_id()` in loops (use `batch_get`)
