@@ -102,8 +102,25 @@ function EbitdaTreeInner({ treeData, opportunities }: EbitdaTreeProps) {
         return getLayoutedElements(rfNodes, rfEdges)
     }, [treeData, opportunities])
 
-    const [nodes, , onNodesChange] = useNodesState(layouted.nodes)
+    const [nodes, setNodes, onNodesChange] = useNodesState(layouted.nodes)
     const [edges, , onEdgesChange] = useEdgesState(layouted.edges)
+
+    // Lift hovered node above siblings so tooltip isn't clipped by adjacent nodes
+    const handleNodeMouseEnter = useCallback(
+        (_event: React.MouseEvent, node: Node) => {
+            setNodes((current) =>
+                current.map((n) => ({
+                    ...n,
+                    zIndex: n.id === node.id ? 1000 : 0,
+                }))
+            )
+        },
+        [setNodes]
+    )
+
+    const handleNodeMouseLeave = useCallback(() => {
+        setNodes((current) => current.map((n) => ({ ...n, zIndex: 0 })))
+    }, [setNodes])
 
     const toggleExpand = useCallback(() => {
         setIsExpanded((prev) => !prev)
@@ -149,6 +166,8 @@ function EbitdaTreeInner({ treeData, opportunities }: EbitdaTreeProps) {
                     edges={edges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
+                    onNodeMouseEnter={handleNodeMouseEnter}
+                    onNodeMouseLeave={handleNodeMouseLeave}
                     nodeTypes={nodeTypes}
                     nodesDraggable={false}
                     fitView

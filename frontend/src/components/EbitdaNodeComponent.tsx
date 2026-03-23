@@ -45,18 +45,21 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
     const colors = NODE_COLORS[data.type] || NODE_COLORS.margin
 
     return (
+        /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
         <div
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             style={{
                 padding: '0.875rem 1.125rem',
                 background: colors.bg,
-                border: `1.5px solid ${colors.border}`,
+                border: `1.5px solid ${hovered ? colors.text : colors.border}`,
                 borderRadius: '10px',
                 minWidth: '200px',
                 maxWidth: '280px',
                 position: 'relative',
-                boxShadow: `0 0 20px ${colors.glow}`,
+                boxShadow: hovered
+                    ? `0 0 30px ${colors.glow}, 0 4px 20px rgba(0,0,0,0.3)`
+                    : `0 0 20px ${colors.glow}`,
                 backdropFilter: 'blur(8px)',
             }}
         >
