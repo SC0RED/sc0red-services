@@ -121,7 +121,9 @@ class JanusStack(Stack):
     # ── S3 ───────────────────────────────────────────────────────────────────
 
     def _create_documents_bucket(self) -> s3.Bucket:
-        return s3.Bucket(
+        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
+
+        bucket = s3.Bucket(
             self,
             "DocumentsBucket",
             bucket_name=f"janus-documents-{self._environment}",
@@ -130,7 +132,16 @@ class JanusStack(Stack):
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
             lifecycle_rules=[s3.LifecycleRule(expiration=Duration.days(90))],
+            cors=[
+                s3.CorsRule(
+                    allowed_methods=[s3.HttpMethods.PUT],
+                    allowed_origins=[frontend_domain] if frontend_domain else ["*"],
+                    allowed_headers=["*"],
+                    max_age=300,
+                )
+            ],
         )
+        return bucket
 
     # ── Shared helpers ─────────────────────────────────────────────────────────
 
