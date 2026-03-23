@@ -88,6 +88,88 @@ except PipelineError as e:
 
 ---
 
+## File Size Limits
+
+- **Backend**: No Python file over 400 lines. Split into focused modules at natural boundaries.
+- **Frontend**: No component over 360 lines. Extract sub-components.
+- If a file exceeds these limits, **split it before adding more code**.
+- Enforced by ruff `max-lines=400` for Python. Frontend is a manual check.
+
+These limits exist because two God objects (APIGatewayHandler at 806 lines, AnalysisDetail at 1,065 lines) accumulated incrementally — no single PR was the problem, but no gate flagged the growth.
+
+---
+
+## DynamoDB Patterns (Non-Negotiable)
+
+- Every `query()` call MUST handle pagination via `LastEvaluatedKey` — DynamoDB silently truncates results at 1MB.
+- Never call `get_by_id()` in a loop — use `batch_get_item()` for multiple reads. The `DynamoDBTable.batch_get()` and `CompanyRepository.get_by_ids()` methods exist for this.
+- Store computed counts on the record at write time (e.g., `completed_count` on scan records) rather than re-counting with queries at read time.
+
+These rules exist because silent pagination bugs and N+1 query patterns were found in production code that passed all tests (tests used small data).
+
+---
+
+## Exception Handling in Workers
+
+SQS/Lambda worker handlers must catch ONLY domain-specific exceptions (`EngineError`, `ValueError`, `RuntimeError`), not bare `Exception`. Programming errors (`AttributeError`, `KeyError`, `TypeError`) must propagate to:
+1. Trigger SQS retry via `batchItemFailures`
+2. Surface in CloudWatch as stack traces, not silent "analysis failed" messages
+
+```python
+# Wrong — hides bugs as user-visible errors
+except Exception as error:
+    record_failure(str(error))
+
+# Right — only catch expected domain errors
+except (EngineError, ValueError, RuntimeError) as error:
+    record_failure(str(error))
+# Programming errors propagate to SQS retry + CloudWatch
+```
+
+---
+
+## Cross-File Duplication
+
+Before defining a constant, color map, interface, or utility function, **search the codebase for existing definitions**. Common shared locations:
+
+| Area | Shared Location |
+|------|----------------|
+| Backend models/literals | `src/models/model_literals.py` |
+| Backend utilities | `src/utilities/` |
+| Frontend types | `src/lib/types/api.ts` |
+| Frontend risk utilities | `src/lib/utils/riskUtils.ts` |
+| Frontend lever colors | `src/lib/utils/leverColors.ts` |
+| Frontend API errors | `src/lib/api/routeError.ts` |
+| SQS message schemas | `src/handlers/sqs_messages.py` |
+| DynamoDB table setup | `scripts/setup_dynamodb.py` |
+| Deploy script helpers | `scripts/lib/common.sh` |
+
+If it exists, import it. If it doesn't, put it in the shared location — not inline.
+
+---
+
+## Infrastructure Defaults
+
+Non-development deployments MUST NOT use fallback default values for:
+- **CORS origins**: must specify exact `FRONTEND_DOMAIN` (CDK synth fails without it)
+- **NEXTAUTH_SECRET**: must be a unique production secret (CDK synth fails without it)
+- **PITR**: enabled for production DynamoDB table
+
+These guards are enforced in `infrastructure/stacks/janus_stack.py`. If adding new infrastructure that has security-relevant defaults, add the same pattern: fail-fast at synth for non-development environments.
+
+---
+
+## Codebase Audit
+
+Run `make audit` periodically (or use `/audit` in Claude Code) to check for:
+- Files exceeding size limits
+- Infrastructure configuration drift
+- Common anti-patterns (bare exceptions, .get() on required fields, hardcoded secrets)
+
+The audit also runs automatically in CI on every PR via the `audit` job.
+
+---
+
 ## Naming Conventions
 
 - No abbreviations: `msg` → `message`, `req` → `request`, `cfg` → `config`, `ctx` → `context`
