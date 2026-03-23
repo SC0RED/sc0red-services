@@ -475,6 +475,39 @@ select {
     transition: width var(--transition-slow);
 }
 
+/* ── ReactFlow Controls (dark theme override) ─────────────── */
+.react-flow__controls {
+    background: rgba(26, 37, 56, 0.95) !important;
+    border: 1px solid rgba(59, 123, 246, 0.2) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
+}
+
+.react-flow__controls-button {
+    background: rgba(26, 37, 56, 0.95) !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(139, 154, 196, 0.15) !important;
+    fill: #8B9AC4 !important;
+    color: #8B9AC4 !important;
+    width: 28px !important;
+    height: 28px !important;
+}
+
+.react-flow__controls-button:hover {
+    background: rgba(59, 123, 246, 0.2) !important;
+    fill: #3B7BF6 !important;
+}
+
+.react-flow__controls-button:last-child {
+    border-bottom: none !important;
+}
+
+.react-flow__controls-button svg {
+    fill: inherit !important;
+    max-width: 14px;
+    max-height: 14px;
+}
+
 /* ── Animated Gradient Border (active scan) ────────────────── */
 .border-glow {
     position: relative;
