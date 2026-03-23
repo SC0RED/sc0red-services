@@ -17,7 +17,7 @@ fail()    { echo -e "  ${RED}✗ $*${NC}"; ERRORS=$((ERRORS + 1)); }
 warn()    { echo -e "  ${YELLOW}⚠ $*${NC}"; }
 
 # ── File size limits ─────────────────────────────────────────────────────────
-section "File size limits (backend: 400 lines, frontend components: 300 lines)"
+section "File size limits (backend: 400 lines, frontend components: 360 lines)"
 
 BACKEND_LIMIT=400
 FRONTEND_LIMIT=360
