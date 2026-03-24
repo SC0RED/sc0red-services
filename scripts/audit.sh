@@ -101,6 +101,18 @@ else
     fail "PITR not configured in CDK stack"
 fi
 
+if grep -q "ThrottleSettings" infrastructure/stacks/janus_stack.py 2>/dev/null; then
+    pass "API rate limiting configured in CDK stack"
+else
+    fail "API rate limiting (ThrottleSettings) not configured in CDK stack"
+fi
+
+if grep -q "DlqAlarm" infrastructure/stacks/janus_stack.py 2>/dev/null; then
+    pass "DLQ alarm configured in CDK stack"
+else
+    fail "DLQ alarm not configured in CDK stack"
+fi
+
 # ── Hardcoded secrets ────────────────────────────────────────────────────────
 section "Hardcoded secrets check"
 
