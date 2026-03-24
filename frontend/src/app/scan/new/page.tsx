@@ -9,6 +9,7 @@ import ScanInputPhase from '@/components/scan/ScanInputPhase'
 import ScanProgressPhase from '@/components/scan/ScanProgressPhase'
 import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
 import { useScanPolling } from '@/lib/hooks/useScanPolling'
+import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import type { Mode, Phase, Company, ScanPollResponse } from '@/lib/types/scan'
 
 function NewScanContent() {
@@ -82,6 +83,12 @@ function NewScanContent() {
         onProgress: handleProgress,
     })
 
+    const discoveryRealtime = useScanRealtime({
+        onProgress: handleProgress,
+        onComplete: () => handleDiscoveryComplete({ status: 'complete' }),
+        onFailed: handleFailed,
+    })
+
     const selectedCount = companies.filter((c) => c.selected).length
 
     const portfolioPolling = useScanPolling({
@@ -90,6 +97,12 @@ function NewScanContent() {
         onComplete: handlePortfolioComplete,
         onFailed: handleFailed,
         onProgress: handleProgress,
+    })
+
+    const portfolioRealtime = useScanRealtime({
+        onProgress: handleProgress,
+        onComplete: () => handlePortfolioComplete({ status: 'complete' }),
+        onFailed: handleFailed,
     })
 
     async function handleSubmit(e: React.FormEvent) {
@@ -135,6 +148,7 @@ function NewScanContent() {
             }
 
             discoveryPolling.startPolling(data.scanId)
+            discoveryRealtime.start(data.scanId)
         } catch (err) {
             setError(
                 err instanceof Error
@@ -168,6 +182,7 @@ function NewScanContent() {
             setProgress(10)
             setProgressLabel(`Analyzing companies... (0/${selected.length} complete)`)
             portfolioPolling.startPolling(scanId)
+            portfolioRealtime.start(scanId)
         } catch {
             setError('Network error — could not start portfolio analysis. Please try again.')
             setPhase('portfolio_confirm')

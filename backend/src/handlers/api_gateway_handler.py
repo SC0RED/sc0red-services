@@ -106,6 +106,15 @@ class APIGatewayHandler:
         router = Router()
 
         router.public(
+            "GET",
+            "/api/config",
+            lambda _event: _json_response({
+                "appsyncEndpoint": os.environ.get("APPSYNC_ENDPOINT", ""),
+                "appsyncApiKey": os.environ.get("APPSYNC_API_KEY", ""),
+            }),
+        )
+
+        router.public(
             "POST",
             "/api/auth/register",
             lambda event: handle_register(event, self._storage),

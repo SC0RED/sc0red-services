@@ -43,9 +43,11 @@ class JanusRequestExecutor:
         request_id: str = "",
         pipeline: list[RequestStep] | None = None,
         company_repo: DynamoDBCompanyRepository | None = None,
+        scan_id: str = "",
     ) -> None:
         self.tenant_id = tenant_id
         self.request_id = request_id
+        self.scan_id = scan_id
         self.exceptions: list[Exception] = []
         self._completed_questions: set[str] = set()
         self._details: dict[str, Any] = {}
@@ -181,17 +183,20 @@ class JanusRequestExecutor:
     # ── Progress reporting ───────────────────────────────────────────
 
     def _report_progress(self, question_key: str) -> None:
-        """Write pipeline progress to DynamoDB.
+        """Write pipeline progress to DynamoDB and push to AppSync.
 
         Writes to:
         1. The company record (pipeline_progress + pipeline_label) — always, if company_repo
            is configured. This enables per-company progress for portfolio scans.
-        2. The scan record (progress + progress_label) — only for standalone scans where
+        2. AppSync (fire-and-forget) — enables real-time UI updates without polling.
+        3. The scan record (progress + progress_label) — only for standalone scans where
            a single company's progress IS the scan progress. For portfolio scans, the
            scan-level progress is computed from company completion counts in sqs_handler.
 
         Silently skips if repos are not configured (i.e. running in tests).
         """
+        from src.pipeline.appsync_notifier import notify_progress
+
         progress_entry = _PROGRESS_MAP.get(question_key)
         if not progress_entry:
             return
@@ -212,6 +217,15 @@ class JanusRequestExecutor:
                     question_key,
                     exc_info=True,
                 )
+
+        # Push real-time update to AppSync (fire-and-forget)
+        if self.scan_id:
+            notify_progress(
+                scan_id=self.scan_id,
+                progress=progress,
+                label=label,
+                company_id=self.request_id,
+            )
 
         # NOTE: scan-level progress is NOT written here. For standalone scans,
         # the handler computes it from the single company's pipeline_progress.

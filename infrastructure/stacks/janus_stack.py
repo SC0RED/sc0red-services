@@ -4,8 +4,9 @@ import os
 from typing import Any
 
 import aws_cdk as cdk
-from aws_cdk import CfnOutput, Duration, Stack
+from aws_cdk import CfnOutput, Duration, Expiration, Stack
 from aws_cdk import aws_apigateway as apigw
+from aws_cdk import aws_appsync as appsync
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cloudwatch_actions
 from aws_cdk import aws_dynamodb as dynamodb
@@ -65,6 +66,12 @@ class JanusStack(Stack):
             lambda_event_sources.SqsEventSource(queue, batch_size=1)
         )
 
+        appsync_url, appsync_api_key = self._create_appsync_api()
+        worker_handler.add_environment("APPSYNC_ENDPOINT", appsync_url)
+        worker_handler.add_environment("APPSYNC_API_KEY", appsync_api_key)
+        api_handler.add_environment("APPSYNC_ENDPOINT", appsync_url)
+        api_handler.add_environment("APPSYNC_API_KEY", appsync_api_key)
+
         self._create_monitoring(dlq)
 
         CfnOutput(self, "ApiUrl", value=api.url, description=f"API Gateway URL — {environment}")
@@ -74,6 +81,8 @@ class JanusStack(Stack):
         CfnOutput(self, "BucketName", value=documents_bucket.bucket_name)
         CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
         CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)
+        CfnOutput(self, "AppSyncUrl", value=appsync_url, description="AppSync GraphQL URL")
+        CfnOutput(self, "AppSyncApiKey", value=appsync_api_key, description="AppSync API key")
 
     # ── DynamoDB ──────────────────────────────────────────────────────────────
 
@@ -349,6 +358,57 @@ class JanusStack(Stack):
         )
 
         return api
+
+    # ── AppSync (real-time progress) ─────────────────────────────────────────
+
+    def _create_appsync_api(self) -> tuple[str, str]:
+        """Create an AppSync GraphQL API for real-time scan progress subscriptions.
+
+        Returns a tuple of (graphql_url, api_key_value) for use as Lambda env vars.
+        """
+        graphql_api = appsync.GraphqlApi(
+            self,
+            "ProgressApi",
+            name=f"janus-progress-{self._environment}",
+            definition=appsync.Definition.from_file(
+                os.path.join(os.path.dirname(__file__), "..", "schema.graphql")
+            ),
+            authorization_config=appsync.AuthorizationConfig(
+                default_authorization=appsync.AuthorizationMode(
+                    authorization_type=appsync.AuthorizationType.API_KEY,
+                    api_key_config=appsync.ApiKeyConfig(
+                        name="progress-key",
+                        expires=Expiration.after(Duration.days(365)),
+                    ),
+                )
+            ),
+            log_config=appsync.LogConfig(
+                field_log_level=appsync.FieldLogLevel.ERROR,
+            ),
+        )
+
+        none_datasource = graphql_api.add_none_data_source(
+            "NoneDataSource",
+            description="Pass-through data source for subscription mutations",
+        )
+
+        none_datasource.create_resolver(
+            "PublishProgressResolver",
+            type_name="Mutation",
+            field_name="publishProgress",
+            request_mapping_template=appsync.MappingTemplate.from_string(
+                '{"version": "2017-02-28", "payload": $util.toJson($context.arguments.input)}'
+            ),
+            response_mapping_template=appsync.MappingTemplate.from_string(
+                "$util.toJson($context.result)"
+            ),
+        )
+
+        api_key = graphql_api.api_key
+        if api_key is None:
+            raise RuntimeError("AppSync API key was not created — check authorization config")
+
+        return graphql_api.graphql_url, api_key
 
     # ── Monitoring ───────────────────────────────────────────────────────────
 
