@@ -101,10 +101,10 @@ else
     fail "PITR not configured in CDK stack"
 fi
 
-if grep -q "ThrottleSettings" infrastructure/stacks/janus_stack.py 2>/dev/null; then
+if grep -q "throttling_rate_limit" infrastructure/stacks/janus_stack.py 2>/dev/null; then
     pass "API rate limiting configured in CDK stack"
 else
-    fail "API rate limiting (ThrottleSettings) not configured in CDK stack"
+    fail "API rate limiting (throttling_rate_limit) not configured in CDK stack"
 fi
 
 if grep -q "DlqAlarm" infrastructure/stacks/janus_stack.py 2>/dev/null; then
