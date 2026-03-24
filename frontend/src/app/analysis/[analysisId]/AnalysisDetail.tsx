@@ -2,17 +2,17 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
 
-import RiskBadge from '@/components/RiskBadge'
-import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import DocumentUpload from '@/components/DocumentUpload'
+import RiskBadge from '@/components/RiskBadge'
 import RiskBreakdown, { CAT_LABELS } from '@/components/RiskBreakdown'
 import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
+import AnalysisHeader from '@/components/analysis/AnalysisHeader'
+import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisData, DocumentInfo } from '@/lib/types/api'
 
@@ -58,7 +58,6 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             })
             if (!response.ok) throw new Error('Re-analysis failed')
 
-            // Poll until analyzedAt changes (indicates pipeline completed) or timeout (2 min)
             const maxAttempts = 40
             const intervalMs = 3000
             const originalAnalyzedAt = data.analyzedAt
@@ -88,7 +87,6 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 }
             }
 
-            // Timeout — refresh anyway to show whatever state we have
             router.refresh()
         } catch (error: unknown) {
             if (error instanceof DOMException && error.name === 'AbortError') return
@@ -123,126 +121,13 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     padding: '2rem',
                 }}
             >
-                {/* Header */}
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        marginBottom: '2rem',
-                        flexWrap: 'wrap',
-                        gap: '1rem',
-                    }}
-                >
-                    <div>
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                marginBottom: '0.5rem',
-                            }}
-                        >
-                            <Link
-                                href="/dashboard"
-                                style={{
-                                    color: 'var(--text-tertiary)',
-                                    fontSize: '0.875rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.25rem',
-                                }}
-                            >
-                                <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path d="m15 18-6-6 6-6" />
-                                </svg>
-                                Dashboard
-                            </Link>
-                        </div>
-                        <h1 style={{ fontSize: '1.625rem', fontWeight: 700, marginBottom: '0.375rem' }}>
-                            {data.companyName}
-                        </h1>
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                flexWrap: 'wrap',
-                            }}
-                        >
-                            <RiskBadge tier={tier} />
-                            {data.industry && <span className="badge badge-neutral">{data.industry}</span>}
-                            {data.companyUrl && (
-                                <a
-                                    href={data.companyUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                        color: 'var(--text-tertiary)',
-                                        fontSize: '0.8125rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.25rem',
-                                    }}
-                                >
-                                    <svg
-                                        width="13"
-                                        height="13"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    >
-                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                        <polyline points="15 3 21 3 21 9" />
-                                        <line x1="10" y1="14" x2="21" y2="3" />
-                                    </svg>
-                                    {data.companyUrl}
-                                </a>
-                            )}
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <Link
-                            href={`/api/export/pdf/${analysisId}`}
-                            target="_blank"
-                            className="btn btn-secondary"
-                        >
-                            <svg
-                                width="15"
-                                height="15"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                            Export PDF
-                        </Link>
-                        <DeleteAnalysisButton
-                            analysisId={analysisId}
-                            companyName={data.companyName}
-                            variant="button"
-                            redirectTo="/analyses"
-                        />
-                    </div>
-                </div>
+                <AnalysisHeader
+                    analysisId={analysisId}
+                    companyName={data.companyName}
+                    companyUrl={data.companyUrl}
+                    industry={data.industry}
+                    tier={tier}
+                />
 
                 {/* Score + Radar */}
                 <div
@@ -342,89 +227,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     </div>
                 </div>
 
-                {/* Top Actions Callout */}
-                {data.topActions && data.topActions.length > 0 && (
-                    <div
-                        className="card"
-                        style={{
-                            padding: '1.25rem 1.5rem',
-                            marginBottom: '1.5rem',
-                            borderColor: 'rgba(59,123,246,0.3)',
-                            background: 'rgba(59,123,246,0.04)',
-                        }}
-                    >
-                        <div
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.625rem',
-                                marginBottom: '0.875rem',
-                            }}
-                        >
-                            <svg
-                                width="17"
-                                height="17"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="var(--accent-blue)"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                            </svg>
-                            <span
-                                style={{
-                                    fontWeight: 700,
-                                    color: 'var(--accent-blue)',
-                                    fontSize: '0.9rem',
-                                }}
-                            >
-                                Top 3 Immediate Actions
-                            </span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {data.topActions.map((action, i) => (
-                                <div
-                                    key={i}
-                                    style={{
-                                        display: 'flex',
-                                        gap: '0.75rem',
-                                        alignItems: 'flex-start',
-                                    }}
-                                >
-                                    <span
-                                        style={{
-                                            minWidth: '22px',
-                                            height: '22px',
-                                            borderRadius: '50%',
-                                            background: 'rgba(59,123,246,0.15)',
-                                            color: 'var(--accent-blue)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 700,
-                                            flexShrink: 0,
-                                            marginTop: '1px',
-                                        }}
-                                    >
-                                        {i + 1}
-                                    </span>
-                                    <p
-                                        style={{
-                                            fontSize: '0.875rem',
-                                            color: 'var(--text-primary)',
-                                            lineHeight: 1.6,
-                                        }}
-                                    >
-                                        {action}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                <TopActionsCallout actions={data.topActions ?? []} />
 
                 <RiskBreakdown riskScores={riskScores} />
 
