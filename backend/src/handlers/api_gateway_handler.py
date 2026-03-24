@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 LambdaResponse = dict[str, Any]
 
 
-def decimal_serializer(value: object) -> float | int | str:
+def serialize_decimal(value: object) -> float | int | str:
     """Convert Decimal to numeric types so JSON output stays numeric, not stringified."""
     if isinstance(value, Decimal):
         return int(value) if value == value.to_integral_value() else float(value)
     return str(value)
 
 
-def json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
+def build_json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
     """Build an API Gateway JSON response with CORS headers."""
     return {
         "statusCode": status,
@@ -41,13 +41,13 @@ def json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
             "Access-Control-Allow-Headers": "Content-Type,Authorization",
             "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
         },
-        "body": json.dumps(body, default=decimal_serializer),
+        "body": json.dumps(body, default=serialize_decimal),
     }
 
 
-def error_response(message: str, status: int = 400) -> LambdaResponse:
+def build_error(message: str, status: int = 400) -> LambdaResponse:
     """Build an error JSON response with the given message and status code."""
-    return json_response({"error": message}, status)
+    return build_json_response({"error": message}, status)
 
 
 def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
@@ -111,7 +111,7 @@ class APIGatewayHandler:
         router.public(
             "GET",
             "/api/config",
-            lambda _event: json_response(
+            lambda _event: build_json_response(
                 {
                     "appsyncEndpoint": os.environ.get("APPSYNC_ENDPOINT", ""),
                     "appsyncApiKey": os.environ.get("APPSYNC_API_KEY", ""),
@@ -229,11 +229,11 @@ class APIGatewayHandler:
         headers = event.get("headers") or {}
 
         if method == "OPTIONS":
-            return json_response({}, 200)
+            return build_json_response({}, 200)
 
         result = self._router.dispatch(method, path)
         if result is None:
-            return error_response("Not found", 404)
+            return build_error("Not found", 404)
 
         handler, path_params, authenticated = result
         if not authenticated:
@@ -242,6 +242,6 @@ class APIGatewayHandler:
         try:
             authentication = require_authentication(headers)
         except ValueError as e:
-            return error_response(str(e), 401)
+            return build_error(str(e), 401)
 
         return handler(event, authentication, **path_params)

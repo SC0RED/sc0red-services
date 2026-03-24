@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import (
     build_company_summary,
-    error_response,
-    json_response,
+    build_error,
+    build_json_response,
 )
 from src.handlers.sqs_messages import build_reanalysis_message
 
@@ -31,7 +31,7 @@ def handle_get_analysis(
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if not company or company.get("org_id") != authentication.org_id:
-        return error_response("Not found", 404)
+        return build_error("Not found", 404)
 
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
@@ -59,7 +59,7 @@ def handle_get_analysis(
         analysis_summary = meta.get("analysis_summary", "")
         top_actions = meta.get("top_actions", [])
 
-    return json_response(
+    return build_json_response(
         {
             "companyName": company.get("company_name", ""),
             "companyUrl": company.get("company_url", ""),
@@ -86,7 +86,7 @@ def handle_delete_analysis(
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if not company or company.get("org_id") != authentication.org_id:
-        return error_response("Not found", 404)
+        return build_error("Not found", 404)
 
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
@@ -103,7 +103,7 @@ def handle_delete_analysis(
         if not remaining:
             scan_repo.delete(scan_id)
 
-    return json_response({"ok": True})
+    return build_json_response({"ok": True})
 
 
 def handle_list_analyses(
@@ -114,7 +114,7 @@ def handle_list_analyses(
     """Handle GET /api/analyses."""
     company_repo = storage.create_company_repository()
     companies = company_repo.find_by_org(authentication.org_id)
-    return json_response({"analyses": [build_company_summary(c) for c in companies]})
+    return build_json_response({"analyses": [build_company_summary(c) for c in companies]})
 
 
 def handle_dashboard(
@@ -180,7 +180,7 @@ def handle_dashboard(
         for s in recent_scans
     ]
 
-    return json_response(
+    return build_json_response(
         {
             "totalAnalyses": total_analyses,
             "avgRiskScore": avg_risk_score,
@@ -204,11 +204,11 @@ def handle_reanalyze(
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if not company or company.get("org_id") != authentication.org_id:
-        return error_response("Not found", 404)
+        return build_error("Not found", 404)
 
     company_url = company.get("company_url", "")
     if not company_url:
-        return error_response("Analysis has no company URL — cannot re-analyze")
+        return build_error("Analysis has no company URL — cannot re-analyze")
 
     scan_id = company.get("scan_id", "")
 
@@ -223,4 +223,4 @@ def handle_reanalyze(
         ),
     )
 
-    return json_response({"status": "queued"}, 202)
+    return build_json_response({"status": "queued"}, 202)
