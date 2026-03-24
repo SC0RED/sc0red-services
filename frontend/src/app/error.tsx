@@ -1,0 +1,88 @@
+'use client'
+
+import Link from 'next/link'
+
+export default function GlobalError({
+    error,
+    reset,
+}: {
+    error: Error & { digest?: string }
+    reset: () => void
+}) {
+    return (
+        <div
+            style={{
+                display: 'flex',
+                minHeight: '100vh',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '2rem',
+            }}
+        >
+            <div className="card" style={{ padding: '3rem', textAlign: 'center', maxWidth: '480px' }}>
+                <div
+                    style={{
+                        width: '64px',
+                        height: '64px',
+                        margin: '0 auto 1.5rem',
+                        borderRadius: '50%',
+                        background: 'var(--risk-critical-bg)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    }}
+                >
+                    <svg
+                        width="28"
+                        height="28"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="var(--risk-critical)"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                </div>
+
+                <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                    Something went wrong
+                </h1>
+                <p
+                    style={{
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.9375rem',
+                        marginBottom: '0.5rem',
+                        lineHeight: 1.6,
+                    }}
+                >
+                    An unexpected error occurred while loading this page.
+                </p>
+                {error.message && (
+                    <p
+                        style={{
+                            color: 'var(--text-tertiary)',
+                            fontSize: '0.8125rem',
+                            marginBottom: '2rem',
+                            fontFamily: 'var(--font-mono)',
+                        }}
+                    >
+                        {error.message}
+                    </p>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                    <button onClick={reset} className="btn btn-primary">
+                        Try again
+                    </button>
+                    <Link href="/dashboard" className="btn btn-ghost">
+                        Go to Dashboard
+                    </Link>
+                </div>
+            </div>
+        </div>
+    )
+}

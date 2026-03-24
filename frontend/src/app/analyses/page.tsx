@@ -20,20 +20,11 @@ export default async function AnalysesPage() {
     const analyses = data.analyses
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <div className="page-layout">
             <DashboardSidebar />
-            <main
-                style={{
-                    flex: 1,
-                    marginLeft: 'var(--sidebar-width)',
-                    padding: '2rem',
-                    maxWidth: '1100px',
-                }}
-            >
+            <main className="page-content">
                 <div style={{ marginBottom: '2rem' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                        All Analyses
-                    </h1>
+                    <h1 className="page-title">All Analyses</h1>
                     <p style={{ color: 'var(--text-secondary)' }}>
                         Browse all completed company risk assessments
                     </p>

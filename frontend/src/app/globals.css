@@ -535,6 +535,57 @@ select {
     }
 }
 
+/* ── Page Layout ──────────────────────────────────────────── */
+.page-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.page-content {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    padding: 2rem;
+    max-width: 1100px;
+}
+
+.page-content-wide {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    padding: 2rem;
+    max-width: 1200px;
+}
+
+.page-content-narrow {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    padding: 2.5rem;
+    display: flex;
+    justify-content: center;
+}
+
+/* ── Section Headers ─────────────────────────────────────── */
+.section-header {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+.page-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+/* ── Alerts ───────────────────────────────────────────────── */
+.alert-error {
+    padding: 0.75rem 1rem;
+    background: var(--risk-critical-bg);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--risk-critical);
+    font-size: 0.875rem;
+}
+
 /* ── Grid Background ───────────────────────────────────────── */
 .grid-bg {
     background-image:

@@ -36,17 +36,11 @@ export default async function DashboardPage() {
 
     return (
         <>
+            {/* DashboardSidebar is position:fixed; no flex wrapper needed */}
             <DashboardSidebar />
-            <main
-                style={{
-                    flex: 1,
-                    marginLeft: 'var(--sidebar-width)',
-                    padding: '2rem',
-                    maxWidth: '1100px',
-                }}
-            >
+            <main className="page-content">
                 <div style={{ marginBottom: '2rem' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                    <h1 className="page-title">
                         Good{' '}
                         {(() => {
                             const hour = new Date().getHours()

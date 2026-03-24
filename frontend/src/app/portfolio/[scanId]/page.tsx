@@ -1,8 +1,9 @@
 import { getServerSession } from 'next-auth'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 import { authOptions } from '@/lib/auth/authOptions'
 import { backendFetch } from '@/lib/api/serverToken'
+import { BackendError } from '@/lib/api/errors'
 import type { ScanData } from '@/lib/types/api'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import PortfolioView from './PortfolioView'
@@ -18,16 +19,15 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
     let scan: ScanData
     try {
         scan = await backendFetch<ScanData>(`/api/scan/${params.scanId}`)
-    } catch {
-        return <div style={{ padding: '2rem', color: 'var(--risk-critical)' }}>Scan not found</div>
+    } catch (error: unknown) {
+        if (error instanceof BackendError && error.status === 404) notFound()
+        throw error
     }
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <div className="page-layout">
             <DashboardSidebar />
-            <main
-                style={{ flex: 1, marginLeft: 'var(--sidebar-width)', padding: '2rem', maxWidth: '1200px' }}
-            >
+            <main className="page-content-wide">
                 <PortfolioView scanId={params.scanId} initialScan={scan} />
             </main>
         </div>

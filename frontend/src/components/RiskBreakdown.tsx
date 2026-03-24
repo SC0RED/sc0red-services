@@ -28,7 +28,7 @@ export default function RiskBreakdown({ riskScores }: RiskBreakdownProps) {
 
     return (
         <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>Risk Breakdown</h2>
+            <h2 className="section-header">Risk Breakdown</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 {[...riskScores]
                     .sort((a: RiskScore, b: RiskScore) => b.score - a.score)
