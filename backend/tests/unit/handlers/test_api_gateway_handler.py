@@ -695,6 +695,60 @@ class TestAPIGatewayHandler:
         assert body["analyses"][0]["companyName"] == "Test"
 
 
+class TestConfigEndpoint:
+    def _make_handler(self):
+        storage = MagicMock()
+        return APIGatewayHandler(storage=storage), storage
+
+    @patch.dict("os.environ", {"APPSYNC_ENDPOINT": "https://appsync.example.com/graphql", "APPSYNC_API_KEY": "da2-fakekey123"})
+    def test_returns_appsync_config_from_env(self):
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/config",
+                "headers": {},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["appsyncEndpoint"] == "https://appsync.example.com/graphql"
+        assert body["appsyncApiKey"] == "da2-fakekey123"
+
+    @patch.dict("os.environ", {}, clear=False)
+    def test_returns_empty_strings_when_env_vars_not_set(self):
+        # Remove the env vars if they exist
+        import os
+        os.environ.pop("APPSYNC_ENDPOINT", None)
+        os.environ.pop("APPSYNC_API_KEY", None)
+
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/config",
+                "headers": {},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["appsyncEndpoint"] == ""
+        assert body["appsyncApiKey"] == ""
+
+    def test_config_endpoint_is_public_no_auth_required(self):
+        handler, _ = self._make_handler()
+        # No Authorization header at all
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/config",
+                "headers": {},
+            }
+        )
+        # Should succeed without auth — not 401
+        assert result["statusCode"] == 200
+
+
 class TestLoginEndpoint:
     def _make_handler(self):
         storage = MagicMock()

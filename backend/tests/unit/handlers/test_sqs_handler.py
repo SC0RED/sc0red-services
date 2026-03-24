@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 from src.handlers.sqs_handler import SQSHandler
 
@@ -227,6 +227,31 @@ class TestSQSHandler:
 
         with pytest.raises(KeyError):
             handler._process_message(message)
+
+    @patch("src.handlers.sqs_handler.notify_progress")
+    def test_update_scan_progress_calls_notify_on_complete(self, mock_notify):
+        """When all companies are resolved, notify_progress is called with status=complete."""
+        handler, storage = self._make_handler()
+        self._make_scan_repo(storage, {"progress": 80, "total_companies": 2}, resolved_companies=2)
+
+        handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
+
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=100,
+            label="Analysis complete!",
+            status="complete",
+        )
+
+    @patch("src.handlers.sqs_handler.notify_progress")
+    def test_update_scan_progress_does_not_notify_when_incomplete(self, mock_notify):
+        """When not all companies are resolved, notify_progress should not be called."""
+        handler, storage = self._make_handler()
+        self._make_scan_repo(storage, {"progress": 10, "total_companies": 4}, resolved_companies=1)
+
+        handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
+
+        mock_notify.assert_not_called()
 
 
 class TestSQSHandlerReanalysis:
