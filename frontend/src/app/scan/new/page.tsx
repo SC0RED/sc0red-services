@@ -179,23 +179,13 @@ function NewScanContent() {
     }
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <div className="page-layout">
             <DashboardSidebar />
-            <main
-                style={{
-                    flex: 1,
-                    marginLeft: 'var(--sidebar-width)',
-                    padding: '2.5rem',
-                    display: 'flex',
-                    justifyContent: 'center',
-                }}
-            >
+            <main className="page-content-narrow">
                 <div style={{ width: '100%', maxWidth: '680px' }}>
                     {/* Header */}
                     <div style={{ marginBottom: '2rem' }}>
-                        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                            New AI Risk Scan
-                        </h1>
+                        <h1 className="page-title">New AI Risk Scan</h1>
                         <p style={{ color: 'var(--text-secondary)' }}>
                             Analyze a company or entire PE portfolio for AI-driven risks and opportunities
                         </p>

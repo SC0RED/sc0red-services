@@ -110,17 +110,9 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     })
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <div className="page-layout">
             <DashboardSidebar />
-            <main
-                style={{
-                    flex: 1,
-                    marginLeft: 'var(--sidebar-width)',
-                    maxWidth: '1100px',
-                    margin: '0 auto 0 var(--sidebar-width)',
-                    padding: '2rem',
-                }}
-            >
+            <main className="page-content" style={{ margin: '0 auto 0 var(--sidebar-width)' }}>
                 <AnalysisHeader
                     analysisId={analysisId}
                     companyName={data.companyName}
@@ -241,16 +233,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
 
                 {/* Document Upload */}
                 {documentError && (
-                    <div
-                        style={{
-                            padding: '0.75rem 1rem',
-                            background: 'rgba(239,68,68,0.1)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--risk-critical)',
-                            fontSize: '0.875rem',
-                            marginBottom: '1rem',
-                        }}
-                    >
+                    <div className="alert-error" style={{ marginBottom: '1rem' }}>
                         {documentError}
                     </div>
                 )}
@@ -265,9 +248,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 {/* EBITDA Impact Model */}
                 {data.ebitdaTree && (
                     <div style={{ marginBottom: '2rem' }}>
-                        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>
-                            EBITDA Impact Model
-                        </h2>
+                        <h2 className="section-header">EBITDA Impact Model</h2>
 
                         <div
                             style={{

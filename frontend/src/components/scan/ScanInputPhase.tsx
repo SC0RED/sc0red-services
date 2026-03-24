@@ -170,20 +170,7 @@ export default function ScanInputPhase({
                     </span>
                 </div>
 
-                {error && (
-                    <div
-                        style={{
-                            padding: '0.75rem 1rem',
-                            background: 'var(--risk-critical-bg)',
-                            border: '1px solid rgba(239,68,68,0.3)',
-                            borderRadius: 'var(--radius-md)',
-                            color: 'var(--risk-critical)',
-                            fontSize: '0.875rem',
-                        }}
-                    >
-                        {error}
-                    </div>
-                )}
+                {error && <div className="alert-error">{error}</div>}
 
                 <button type="submit" className="btn btn-primary btn-lg" style={{ alignSelf: 'flex-start' }}>
                     <svg

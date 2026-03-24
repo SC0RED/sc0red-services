@@ -141,7 +141,7 @@ export default function DocumentUpload({
 
     return (
         <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>Documents</h2>
+            <h2 className="section-header">Documents</h2>
 
             {/* Drop zone */}
             <div
@@ -191,16 +191,7 @@ export default function DocumentUpload({
             </div>
 
             {error && (
-                <div
-                    style={{
-                        padding: '0.75rem 1rem',
-                        background: 'rgba(239,68,68,0.1)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--risk-critical)',
-                        fontSize: '0.875rem',
-                        marginBottom: '1rem',
-                    }}
-                >
+                <div className="alert-error" style={{ marginBottom: '1rem' }}>
                     {error}
                 </div>
             )}
