@@ -336,10 +336,8 @@ class JanusStack(Stack):
             ),
             deploy_options=apigw.StageOptions(
                 stage_name=self._environment,
-                throttle=apigw.ThrottleSettings(
-                    rate_limit=self._config["api_rate_limit"],
-                    burst_limit=self._config["api_burst_limit"],
-                ),
+                throttling_rate_limit=self._config["api_rate_limit"],
+                throttling_burst_limit=self._config["api_burst_limit"],
                 logging_level=(
                     apigw.MethodLoggingLevel.INFO
                     if self._config.get("enable_monitoring")
