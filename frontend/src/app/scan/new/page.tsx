@@ -1,20 +1,15 @@
 'use client'
 
-import { useState, useRef, useEffect, Suspense } from 'react'
+import { useState, Suspense, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import DashboardSidebar from '@/components/DashboardSidebar'
 import SessionWrapper from '@/components/SessionWrapper'
-
-type Mode = 'portfolio' | 'standalone'
-type Phase = 'input' | 'analyzing' | 'portfolio_confirm' | 'running'
-
-interface Company {
-    name: string
-    url: string
-    description: string
-    selected: boolean
-}
+import ScanInputPhase from '@/components/scan/ScanInputPhase'
+import ScanProgressPhase from '@/components/scan/ScanProgressPhase'
+import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
+import { useScanPolling } from '@/lib/hooks/useScanPolling'
+import type { Mode, Phase, Company, ScanPollResponse } from '@/lib/types/scan'
 
 function NewScanContent() {
     const router = useRouter()
@@ -29,13 +24,73 @@ function NewScanContent() {
     const [progressLabel, setProgressLabel] = useState('')
     const [scanId, setScanId] = useState('')
     const [companies, setCompanies] = useState<Company[]>([])
-    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    useEffect(() => {
-        return () => {
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-        }
+    const handleProgress = useCallback((newProgress: number, label: string) => {
+        setProgress((prev) => Math.max(prev, newProgress))
+        if (label) setProgressLabel(label)
     }, [])
+
+    const handleDiscoveryComplete = useCallback(
+        (data: ScanPollResponse) => {
+            setProgress(100)
+            setProgressLabel('Analysis complete!')
+            // Guard: if backend skips awaiting_confirmation and completes a portfolio scan directly
+            if (mode === 'portfolio') {
+                router.push(`/portfolio/${scanId}`)
+            } else if (data.analyses?.[0]?.id) {
+                if (data.analyses[0].error) {
+                    setError(`Analysis failed: ${data.analyses[0].error}`)
+                    setPhase('input')
+                } else {
+                    router.push(`/analysis/${data.analyses[0].id}`)
+                }
+            } else if (data.analyses?.[0]?.error) {
+                setError(`Analysis failed: ${data.analyses[0].error}`)
+                setPhase('input')
+            } else {
+                setError('Analysis completed but no results were returned.')
+                setPhase('input')
+            }
+        },
+        [mode, scanId, router]
+    )
+
+    const handlePortfolioComplete = useCallback(
+        (_data: ScanPollResponse) => {
+            setProgress(100)
+            setProgressLabel('Portfolio analysis complete!')
+            router.push(`/portfolio/${scanId}`)
+        },
+        [scanId, router]
+    )
+
+    const handleFailed = useCallback((errorMessage: string) => {
+        setError(errorMessage)
+        setPhase('input')
+    }, [])
+
+    const handleAwaitingConfirmation = useCallback((discoveredCompanies: Company[]) => {
+        setCompanies(discoveredCompanies)
+        setPhase('portfolio_confirm')
+    }, [])
+
+    const discoveryPolling = useScanPolling({
+        mode: 'discovery',
+        onAwaitingConfirmation: handleAwaitingConfirmation,
+        onComplete: handleDiscoveryComplete,
+        onFailed: handleFailed,
+        onProgress: handleProgress,
+    })
+
+    const selectedCount = companies.filter((c) => c.selected).length
+
+    const portfolioPolling = useScanPolling({
+        mode: 'portfolio',
+        totalCompanies: selectedCount,
+        onComplete: handlePortfolioComplete,
+        onFailed: handleFailed,
+        onProgress: handleProgress,
+    })
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -59,7 +114,6 @@ function NewScanContent() {
             }
             setScanId(data.scanId)
 
-            // Handle inline response from the new awaited API
             if (data.status === 'complete') {
                 setProgress(100)
                 setProgressLabel('Analysis complete!')
@@ -80,8 +134,7 @@ function NewScanContent() {
                 return
             }
 
-            // Poll backend for real progress updates
-            pollStatus(data.scanId)
+            discoveryPolling.startPolling(data.scanId)
         } catch (err) {
             setError(
                 err instanceof Error
@@ -90,62 +143,6 @@ function NewScanContent() {
             )
             setPhase('input')
         }
-    }
-
-    async function pollStatus(id: string) {
-        pollIntervalRef.current = setInterval(async () => {
-            try {
-                const res = await fetch(`/api/scan/${id}`)
-                if (!res.ok) return
-                const data = await res.json()
-
-                // Update progress from backend
-                if (typeof data.progress === 'number') {
-                    setProgress((prev) => Math.max(prev, data.progress))
-                }
-                if (data.progressLabel) {
-                    setProgressLabel(data.progressLabel)
-                }
-
-                if (data.status === 'awaiting_confirmation') {
-                    clearInterval(pollIntervalRef.current!)
-                    pollIntervalRef.current = null
-                    const companiesWithSelect = (
-                        (data.portfolioCompanies as Omit<Company, 'selected'>[] | undefined) ?? []
-                    ).map((c) => ({ ...c, selected: true }))
-                    setCompanies(companiesWithSelect)
-                    setPhase('portfolio_confirm')
-                } else if (data.status === 'complete') {
-                    clearInterval(pollIntervalRef.current!)
-                    pollIntervalRef.current = null
-                    setProgress(100)
-                    setProgressLabel('Analysis complete!')
-                    if (mode === 'portfolio') {
-                        router.push(`/portfolio/${id}`)
-                    } else if (data.analyses?.[0]?.id) {
-                        if (data.analyses[0].error) {
-                            setError(`Analysis failed: ${data.analyses[0].error}`)
-                            setPhase('input')
-                        } else {
-                            router.push(`/analysis/${data.analyses[0].id}`)
-                        }
-                    } else if (data.analyses?.[0]?.error) {
-                        setError(`Analysis failed: ${data.analyses[0].error}`)
-                        setPhase('input')
-                    } else {
-                        setError('Analysis completed but no results were returned.')
-                        setPhase('input')
-                    }
-                } else if (data.status === 'failed') {
-                    clearInterval(pollIntervalRef.current!)
-                    pollIntervalRef.current = null
-                    setError('Analysis failed. Please try again.')
-                    setPhase('input')
-                }
-            } catch {
-                // Silently retry on network errors
-            }
-        }, 3000)
     }
 
     async function confirmPortfolio() {
@@ -170,75 +167,15 @@ function NewScanContent() {
 
             setProgress(10)
             setProgressLabel(`Analyzing companies... (0/${selected.length} complete)`)
-            pollRunning(scanId, selected.length)
+            portfolioPolling.startPolling(scanId)
         } catch {
-            pollRunning(scanId, selected.length)
+            setError('Network error — could not start portfolio analysis. Please try again.')
+            setPhase('portfolio_confirm')
         }
     }
 
-    async function pollRunning(id: string, total: number) {
-        pollIntervalRef.current = setInterval(async () => {
-            try {
-                const res = await fetch(`/api/scan/${id}`)
-                if (!res.ok) return
-                const data = await res.json()
-
-                interface AnalysisSummary {
-                    analyzedAt?: string | null
-                    pipelineProgress?: number
-                    pipelineLabel?: string
-                }
-                const analysisList: AnalysisSummary[] = data.analyses || []
-
-                const done = analysisList.filter((a) => a.analyzedAt).length
-                const inProgressItems = analysisList.filter(
-                    (a) => !a.analyzedAt && (a.pipelineProgress || 0) > 0
-                )
-
-                // Combine completion count + average pipeline progress of in-flight companies
-                // Done companies contribute 100%, in-progress contribute their pipeline %
-                const doneProgress = done * 100
-                const inFlightProgress = inProgressItems.reduce(
-                    (sum, a) => sum + (a.pipelineProgress || 0),
-                    0
-                )
-                const avgProgress = (doneProgress + inFlightProgress) / Math.max(total, 1)
-
-                // Map 0-100 average to 10-95 display range
-                const targetProgress = 10 + Math.round(avgProgress * 0.85)
-                setProgress((prev) => Math.max(prev, targetProgress))
-
-                // Build label from most advanced in-progress company
-                if (done >= total) {
-                    setProgressLabel(`Finishing up... (${done}/${total} complete)`)
-                } else if (inProgressItems.length > 0) {
-                    const furthest = inProgressItems.reduce((best, a) =>
-                        (a.pipelineProgress || 0) > (best.pipelineProgress || 0) ? a : best
-                    )
-                    const stepLabel = furthest.pipelineLabel || 'Processing...'
-                    setProgressLabel(
-                        `${stepLabel} (${done}/${total} complete, ${inProgressItems.length} in progress)`
-                    )
-                } else {
-                    setProgressLabel(`Analyzing companies... (${done}/${total} complete)`)
-                }
-
-                if (data.status === 'complete') {
-                    clearInterval(pollIntervalRef.current!)
-                    pollIntervalRef.current = null
-                    setProgress(100)
-                    setProgressLabel('Portfolio analysis complete!')
-                    router.push(`/portfolio/${id}`)
-                } else if (data.status === 'failed') {
-                    clearInterval(pollIntervalRef.current!)
-                    pollIntervalRef.current = null
-                    setError('Portfolio analysis failed.')
-                    setPhase('input')
-                }
-            } catch {
-                // Silently retry on network errors
-            }
-        }, 3000)
+    function handleCompanyToggle(index: number, selected: boolean) {
+        setCompanies((prev) => prev.map((c, idx) => (idx === index ? { ...c, selected } : c)))
     }
 
     return (
@@ -264,421 +201,28 @@ function NewScanContent() {
                         </p>
                     </div>
 
-                    {/* Input Phase */}
                     {phase === 'input' && (
-                        <div>
-                            {/* Mode Toggle */}
-                            <div
-                                style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr 1fr',
-                                    gap: '0.75rem',
-                                    marginBottom: '1.75rem',
-                                }}
-                            >
-                                {[
-                                    {
-                                        value: 'portfolio' as Mode,
-                                        label: 'PE Portfolio Scan',
-                                        desc: 'Auto-discover and analyze all portfolio companies from a PE firm website',
-                                        icon: (
-                                            <svg
-                                                width="20"
-                                                height="20"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            >
-                                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                                <circle cx="9" cy="7" r="4" />
-                                                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                                                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                                            </svg>
-                                        ),
-                                    },
-                                    {
-                                        value: 'standalone' as Mode,
-                                        label: 'Single Company',
-                                        desc: "Deep-dive analysis of one company's AI risk exposure and opportunities",
-                                        icon: (
-                                            <svg
-                                                width="20"
-                                                height="20"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            >
-                                                <rect x="3" y="3" width="18" height="18" rx="2" />
-                                                <circle cx="12" cy="12" r="4" />
-                                            </svg>
-                                        ),
-                                    },
-                                ].map((opt) => (
-                                    <button
-                                        key={opt.value}
-                                        type="button"
-                                        onClick={() => setMode(opt.value)}
-                                        style={{
-                                            padding: '1.25rem',
-                                            borderRadius: 'var(--radius-lg)',
-                                            border:
-                                                mode === opt.value
-                                                    ? '2px solid var(--accent-blue)'
-                                                    : '1px solid var(--border)',
-                                            background:
-                                                mode === opt.value
-                                                    ? 'rgba(59,123,246,0.06)'
-                                                    : 'var(--bg-surface)',
-                                            textAlign: 'left',
-                                            cursor: 'pointer',
-                                            transition: 'all var(--transition-fast)',
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                color:
-                                                    mode === opt.value
-                                                        ? 'var(--accent-blue)'
-                                                        : 'var(--text-secondary)',
-                                                marginBottom: '0.625rem',
-                                            }}
-                                        >
-                                            {opt.icon}
-                                        </div>
-                                        <div
-                                            style={{
-                                                fontWeight: 600,
-                                                marginBottom: '0.25rem',
-                                                color:
-                                                    mode === opt.value
-                                                        ? 'var(--text-primary)'
-                                                        : 'var(--text-secondary)',
-                                                fontSize: '0.9375rem',
-                                            }}
-                                        >
-                                            {opt.label}
-                                        </div>
-                                        <div
-                                            style={{
-                                                fontSize: '0.8125rem',
-                                                color: 'var(--text-tertiary)',
-                                                lineHeight: 1.5,
-                                            }}
-                                        >
-                                            {opt.desc}
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-
-                            <form
-                                onSubmit={handleSubmit}
-                                style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}
-                            >
-                                <div className="input-group">
-                                    <label className="label" htmlFor="scan-url">
-                                        {mode === 'portfolio' ? 'PE Firm Website URL' : 'Company Website URL'}
-                                    </label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span
-                                            style={{
-                                                position: 'absolute',
-                                                left: '1rem',
-                                                top: '50%',
-                                                transform: 'translateY(-50%)',
-                                                color: 'var(--text-tertiary)',
-                                            }}
-                                        >
-                                            <svg
-                                                width="16"
-                                                height="16"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            >
-                                                <circle cx="12" cy="12" r="10" />
-                                                <line x1="2" y1="12" x2="22" y2="12" />
-                                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                                            </svg>
-                                        </span>
-                                        <input
-                                            id="scan-url"
-                                            type="url"
-                                            className="input"
-                                            style={{ paddingLeft: '2.75rem' }}
-                                            placeholder={
-                                                mode === 'portfolio'
-                                                    ? 'https://a16z.com'
-                                                    : 'https://stripe.com'
-                                            }
-                                            value={url}
-                                            onChange={(e) => setUrl(e.target.value)}
-                                            required
-                                        />
-                                    </div>
-                                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                                        {mode === 'portfolio'
-                                            ? "We'll automatically discover portfolio companies from this URL"
-                                            : "We'll analyze this company's website and public data"}
-                                    </span>
-                                </div>
-
-                                {error && (
-                                    <div
-                                        style={{
-                                            padding: '0.75rem 1rem',
-                                            background: 'var(--risk-critical-bg)',
-                                            border: '1px solid rgba(239,68,68,0.3)',
-                                            borderRadius: 'var(--radius-md)',
-                                            color: 'var(--risk-critical)',
-                                            fontSize: '0.875rem',
-                                        }}
-                                    >
-                                        {error}
-                                    </div>
-                                )}
-
-                                <button
-                                    type="submit"
-                                    className="btn btn-primary btn-lg"
-                                    style={{ alignSelf: 'flex-start' }}
-                                >
-                                    <svg
-                                        width="17"
-                                        height="17"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    >
-                                        <circle cx="11" cy="11" r="8" />
-                                        <path d="m21 21-4.35-4.35" />
-                                    </svg>
-                                    {mode === 'portfolio'
-                                        ? 'Discover Portfolio & Analyze'
-                                        : 'Analyze Company'}
-                                </button>
-                            </form>
-                        </div>
+                        <ScanInputPhase
+                            mode={mode}
+                            url={url}
+                            error={error}
+                            onModeChange={setMode}
+                            onUrlChange={setUrl}
+                            onSubmit={handleSubmit}
+                        />
                     )}
 
-                    {/* Analyzing / Running Phase */}
                     {(phase === 'analyzing' || phase === 'running') && (
-                        <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
-                            <div
-                                style={{
-                                    width: '72px',
-                                    height: '72px',
-                                    margin: '0 auto 1.5rem',
-                                    borderRadius: '50%',
-                                    background:
-                                        'conic-gradient(var(--accent-blue) 0%, var(--accent-cyan) 50%, var(--bg-surface-3) 50%)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    animation: 'spin 2s linear infinite',
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        width: '52px',
-                                        height: '52px',
-                                        borderRadius: '50%',
-                                        background: 'var(--bg-surface)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    <svg
-                                        width="22"
-                                        height="22"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="var(--accent-blue)"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    >
-                                        <circle cx="12" cy="12" r="5" />
-                                        <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
-                                    </svg>
-                                </div>
-                            </div>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                {phase === 'analyzing' ? 'Analyzing...' : 'Running Portfolio Analysis...'}
-                            </h2>
-                            <p
-                                style={{
-                                    color: 'var(--text-secondary)',
-                                    marginBottom: '2rem',
-                                    fontSize: '0.9375rem',
-                                }}
-                            >
-                                {progressLabel}
-                            </p>
-                            <div className="progress-bar" style={{ maxWidth: '360px', margin: '0 auto' }}>
-                                <div
-                                    className="progress-fill"
-                                    style={{ width: `${Math.round(progress)}%` }}
-                                />
-                            </div>
-                            <div
-                                style={{
-                                    marginTop: '0.75rem',
-                                    fontSize: '0.8125rem',
-                                    color: 'var(--text-tertiary)',
-                                }}
-                            >
-                                {Math.round(progress)}% complete
-                            </div>
-                            <p
-                                style={{
-                                    marginTop: '1.5rem',
-                                    fontSize: '0.8125rem',
-                                    color: 'var(--text-tertiary)',
-                                }}
-                            >
-                                This typically takes 1–3 minutes. Please keep this page open.
-                            </p>
-                        </div>
+                        <ScanProgressPhase phase={phase} progress={progress} progressLabel={progressLabel} />
                     )}
 
-                    {/* Portfolio Confirmation Phase */}
                     {phase === 'portfolio_confirm' && (
-                        <div>
-                            <div
-                                className="card"
-                                style={{
-                                    padding: '1.25rem 1.5rem',
-                                    marginBottom: '1.25rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '1rem',
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        width: '40px',
-                                        height: '40px',
-                                        borderRadius: 'var(--radius-md)',
-                                        background: 'var(--risk-low-bg)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        flexShrink: 0,
-                                    }}
-                                >
-                                    <svg
-                                        width="20"
-                                        height="20"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="var(--risk-low)"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                    >
-                                        <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <div style={{ fontWeight: 600 }}>Portfolio companies discovered</div>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                                        Found {companies.length} companies. Review and deselect any you
-                                        don&apos;t want to analyze.
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '0.5rem',
-                                    marginBottom: '1.5rem',
-                                    maxHeight: '400px',
-                                    overflowY: 'auto',
-                                }}
-                            >
-                                {companies.map((company, i) => (
-                                    <div
-                                        key={i}
-                                        className="card-surface-2"
-                                        style={{
-                                            padding: '0.875rem 1rem',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '0.875rem',
-                                        }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            id={`company-${i}`}
-                                            checked={company.selected}
-                                            onChange={(e) =>
-                                                setCompanies((prev) =>
-                                                    prev.map((c, idx) =>
-                                                        idx === i ? { ...c, selected: e.target.checked } : c
-                                                    )
-                                                )
-                                            }
-                                            style={{
-                                                width: '16px',
-                                                height: '16px',
-                                                accentColor: 'var(--accent-blue)',
-                                                cursor: 'pointer',
-                                            }}
-                                        />
-                                        <label
-                                            htmlFor={`company-${i}`}
-                                            style={{ flex: 1, cursor: 'pointer' }}
-                                        >
-                                            <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>
-                                                {company.name}
-                                            </div>
-                                            <div
-                                                style={{
-                                                    color: 'var(--text-tertiary)',
-                                                    fontSize: '0.8125rem',
-                                                }}
-                                            >
-                                                {company.url}
-                                            </div>
-                                        </label>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                                <button onClick={confirmPortfolio} className="btn btn-primary">
-                                    Analyze {companies.filter((c) => c.selected).length} Companies
-                                </button>
-                                <button onClick={() => setPhase('input')} className="btn btn-ghost">
-                                    Start Over
-                                </button>
-                                <span
-                                    style={{
-                                        color: 'var(--text-tertiary)',
-                                        fontSize: '0.8125rem',
-                                        marginLeft: 'auto',
-                                    }}
-                                >
-                                    {companies.filter((c) => c.selected).length}/{companies.length} selected
-                                </span>
-                            </div>
-                        </div>
+                        <PortfolioConfirmPhase
+                            companies={companies}
+                            onCompanyToggle={handleCompanyToggle}
+                            onConfirm={confirmPortfolio}
+                            onReset={() => setPhase('input')}
+                        />
                     )}
                 </div>
             </main>
