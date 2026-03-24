@@ -7,51 +7,16 @@ grouped by thematic relevance (external market threats vs internal/operational r
 
 from __future__ import annotations
 
-from src.models.model_literals import RISK_SCOPE_DISPLAY
+from typing import Any
 
-RISK_SYSTEM_PROMPT = (
-    "You are a senior AI strategy consultant at a top-tier management consulting firm, "
-    "specializing in AI disruption risk assessment for private equity portfolios. You have "
-    "deep knowledge of how AI is transforming industries and creating existential risks "
-    "for incumbent business models.\n\n"
-    "Your analysis is:\n"
-    "- Evidence-based: Always cite specific signals from the company's actual situation\n"
-    "- Industry-calibrated: Consider what risks matter most for this specific industry\n"
-    "- Honest: Don't soften scores — use the full 1-10 scale appropriately\n"
-    "- Forward-looking: Consider 2-5 year AI trajectory, not just today\n\n"
-    "Score scale:\n"
-    "1-2: Minimal risk, company is well-positioned or AI is a tailwind\n"
-    "3-4: Low-moderate risk, some vulnerability but manageable\n"
-    "5-6: Moderate risk, meaningful exposure requiring attention in 12 months\n"
-    "7-8: High risk, significant disruption likely, immediate action needed\n"
-    "9-10: Critical/existential risk, business model fundamentally threatened"
-)
+from src.models.model_literals import RISK_SCOPE_DISPLAY
+from src.pipeline.prompts.loader import load_schema, load_system_prompt
+
+RISK_SYSTEM_PROMPT = load_system_prompt("risk_assessment")
 
 # Batch schema -- used for the 2x4 parallel risk split.
 # Returns only risk_scores (no aggregates — those are computed programmatically).
-RISK_BATCH_SCHEMA: dict[str, object] = {
-    "type": "object",
-    "properties": {
-        "risk_scores": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "category": {"type": "string", "description": "Risk category ID"},
-                    "score": {"type": "number", "description": "Risk score 1-10"},
-                    "rationale": {
-                        "type": "string",
-                        "description": "2-3 sentences explaining score with specific evidence and signals",
-                    },
-                },
-                "required": ["category", "score", "rationale"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": ["risk_scores"],
-    "additionalProperties": False,
-}
+RISK_BATCH_SCHEMA: dict[str, Any] = load_schema("risk_batch")
 
 # Category batches grouped by thematic relevance for cross-category reasoning.
 # Batch A: external market threats — these naturally cross-reference each other.

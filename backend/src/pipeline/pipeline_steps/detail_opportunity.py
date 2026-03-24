@@ -8,52 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
-DETAIL_SYSTEM_PROMPT = (
-    "You are an AI transformation advisor for private equity portfolio companies. "
-    "Provide specific, actionable implementation plans with realistic timelines, "
-    "investment ranges, and vendor recommendations."
-)
+from src.pipeline.prompts.loader import load_schema, load_system_prompt, load_template
 
-DETAIL_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "implementation_steps": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "3 specific implementation steps",
-        },
-        "timeline": {
-            "type": "string",
-            "description": (
-                "Quick Win (1-3 months)|Medium-term (3-9 months)|Long-term (9-18 months)"
-            ),
-        },
-        "investment_range": {
-            "type": "string",
-            "description": "$50K-$100K|$100K-$500K|$500K-$1M|$1M+",
-        },
-        "roi_estimate": {
-            "type": "string",
-            "description": "Specific ROI description tied to this company",
-        },
-        "related_services": {
-            "type": "array",
-            "items": {"type": "string"},
-            "maxItems": 3,
-            "description": (
-                "Up to 3 relevant vendor or service names (e.g. 'Datadog - Observability')"
-            ),
-        },
-    },
-    "required": [
-        "implementation_steps",
-        "timeline",
-        "investment_range",
-        "roi_estimate",
-        "related_services",
-    ],
-    "additionalProperties": False,
-}
+DETAIL_SYSTEM_PROMPT = load_system_prompt("opportunity_detail")
+
+DETAIL_SCHEMA: dict[str, Any] = load_schema("detail")
+
+_DETAIL_TEMPLATE = load_template("detail")
 
 
 def _build_company_context(profile_dict: dict[str, Any]) -> str:
@@ -86,12 +47,8 @@ def build_detail_prompt(
     """Build prompt to detail a single opportunity with implementation specifics."""
     company_context = _build_company_context(profile_dict)
 
-    return f"""Detail this AI opportunity for a PE portfolio company.
-
-{company_context}
-
-Opportunity: {opportunity_title}
-{opportunity_description}
-
-Provide 3 implementation steps, timeline, investment range, ROI estimate, \
-and up to 3 vendor recommendations."""
+    return _DETAIL_TEMPLATE.format(
+        company_context=company_context,
+        opportunity_title=opportunity_title,
+        opportunity_description=opportunity_description,
+    )

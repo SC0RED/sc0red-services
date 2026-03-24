@@ -48,6 +48,7 @@ from src.pipeline.pipeline_steps.rank_opportunities import (
     filter_low_quality_ideations,
     rank_ideations,
 )
+from src.pipeline.prompts.loader import load_template
 from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
@@ -56,6 +57,9 @@ if TYPE_CHECKING:
     from src.facades.company_accessor import CompanyAccessor
 
 logger = logging.getLogger(__name__)
+
+
+_RISK_BATCH_TEMPLATE = load_template("risk_batch")
 
 
 def _build_risk_batch_prompt(
@@ -71,24 +75,15 @@ def _build_risk_batch_prompt(
 
     categories_block = build_risk_batch_categories_block(categories)
 
-    return f"""Perform an AI disruption risk assessment for this company, \
-focusing on the specific risk categories listed below.
-
-COMPANY URL: {url}
-
-WEBSITE CONTENT:
-{scraped_text[:MAX_SCRAPED_TEXT_CHARS]}{document_section}
-
-RISK CATEGORIES TO ASSESS:
-{categories_block}
-
-INDUSTRY CONTEXT: Based on the company information above, apply industry-specific weighting:
-{RISK_INDUSTRY_WEIGHTING}
-
-{RISK_ASSESSMENT_QUESTIONS}
-
-IMPORTANT: Assess ONLY the {len(categories)} risk categories listed above. \
-Score them relative to each other — use the full 1-10 scale, not just the middle range."""
+    return _RISK_BATCH_TEMPLATE.format(
+        url=url,
+        scraped_text=scraped_text[:MAX_SCRAPED_TEXT_CHARS],
+        document_section=document_section,
+        categories_block=categories_block,
+        risk_industry_weighting=RISK_INDUSTRY_WEIGHTING,
+        risk_assessment_questions=RISK_ASSESSMENT_QUESTIONS,
+        num_categories=len(categories),
+    )
 
 
 _TIER_CRITICAL_THRESHOLD = 8.5

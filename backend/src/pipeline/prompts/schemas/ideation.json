@@ -1,0 +1,25 @@
+{
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "Specific, action-oriented title"},
+        "description": {
+            "type": "string",
+            "description": "2-3 sentence description of the opportunity"
+        },
+        "value_lever": {
+            "type": "string",
+            "enum": ["Revenue Side", "Cost Side", "Both"],
+            "description": "Whether this drives revenue growth, reduces costs, or both"
+        },
+        "strategic_category": {
+            "type": "string",
+            "description": "One of: Competitive Moat, Revenue Capture, Market Expansion, Operational Efficiency, Talent Strategy"
+        },
+        "impact_rating": {
+            "type": "string",
+            "enum": ["High", "Medium", "Low"]
+        }
+    },
+    "required": ["title", "description", "value_lever", "strategic_category", "impact_rating"],
+    "additionalProperties": false
+}

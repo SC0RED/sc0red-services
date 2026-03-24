@@ -1,0 +1,23 @@
+{
+    "type": "object",
+    "properties": {
+        "risk_scores": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "description": "Risk category ID"},
+                    "score": {"type": "number", "description": "Risk score 1-10"},
+                    "rationale": {
+                        "type": "string",
+                        "description": "2-3 sentences explaining score with specific evidence and signals"
+                    }
+                },
+                "required": ["category", "score", "rationale"],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": ["risk_scores"],
+    "additionalProperties": false
+}
