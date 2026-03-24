@@ -6,21 +6,21 @@ import pytest
 
 
 class TestConfigureTracing:
-    """Tests for configure_tracing()."""
+    """Tests for setup_tracing()."""
 
     def test_noop_when_daemon_address_not_set(self, monkeypatch):
-        """configure_tracing() does nothing when AWS_XRAY_DAEMON_ADDRESS is absent."""
+        """setup_tracing() does nothing when AWS_XRAY_DAEMON_ADDRESS is absent."""
         monkeypatch.delenv("AWS_XRAY_DAEMON_ADDRESS", raising=False)
 
         mock_patch = MagicMock()
         with patch.dict("sys.modules", {"aws_xray_sdk": MagicMock(), "aws_xray_sdk.core": MagicMock(patch=mock_patch)}):
-            from src.utilities.tracing import configure_tracing
-            configure_tracing()
+            from src.utilities.tracing import setup_tracing
+            setup_tracing()
 
         mock_patch.assert_not_called()
 
     def test_patches_boto3_and_httpx_when_daemon_available(self, monkeypatch):
-        """configure_tracing() calls patch(["boto3", "httpx"]) when daemon is available."""
+        """setup_tracing() calls patch(["boto3", "httpx"]) when daemon is available."""
         monkeypatch.setenv("AWS_XRAY_DAEMON_ADDRESS", "127.0.0.1:2000")
 
         mock_patch_fn = MagicMock()
@@ -32,7 +32,7 @@ class TestConfigureTracing:
             import importlib
             import src.utilities.tracing
             importlib.reload(src.utilities.tracing)
-            src.utilities.tracing.configure_tracing()
+            src.utilities.tracing.setup_tracing()
 
         mock_patch_fn.assert_called_once_with(["boto3", "httpx"])
 
@@ -51,4 +51,4 @@ class TestConfigureTracing:
             import src.utilities.tracing
             importlib.reload(src.utilities.tracing)
             with pytest.raises((ImportError, ModuleNotFoundError)):
-                src.utilities.tracing.configure_tracing()
+                src.utilities.tracing.setup_tracing()

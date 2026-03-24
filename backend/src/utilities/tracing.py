@@ -14,7 +14,7 @@ import os
 logger = logging.getLogger(__name__)
 
 
-def configure_tracing() -> None:
+def setup_tracing() -> None:
     """Patch AWS SDK clients for X-Ray if the X-Ray daemon is available.
 
     Called once at module level in Lambda handler entry points.  The patches
