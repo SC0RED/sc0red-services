@@ -63,7 +63,7 @@ class MockWebSocket {
     }
 
     simulateClose(): void {
-        if (this.onclose) this.onclose(new CloseEvent('close'))
+        if (this.onclose) this.onclose({ code: 1000, reason: '', wasClean: true } as CloseEvent)
     }
 }
 

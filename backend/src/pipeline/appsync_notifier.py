@@ -40,18 +40,20 @@ def notify_progress(
     if not _APPSYNC_ENDPOINT or not _APPSYNC_API_KEY:
         return
 
-    payload = json.dumps({
-        "query": _MUTATION,
-        "variables": {
-            "input": {
-                "scanId": scan_id,
-                "companyId": company_id,
-                "progress": progress,
-                "progressLabel": label,
-                "status": status,
-            }
-        },
-    }).encode()
+    payload = json.dumps(
+        {
+            "query": _MUTATION,
+            "variables": {
+                "input": {
+                    "scanId": scan_id,
+                    "companyId": company_id,
+                    "progress": progress,
+                    "progressLabel": label,
+                    "status": status,
+                }
+            },
+        }
+    ).encode()
 
     request = Request(  # noqa: S310 — URL is from a trusted env var, not user input
         _APPSYNC_ENDPOINT,
@@ -64,7 +66,7 @@ def notify_progress(
     )
 
     try:
-        with urlopen(request, timeout=5) as response:  # noqa: S310
+        with urlopen(request, timeout=5) as response:  # noqa: S310  # nosec B310 — URL is from env var, not user input
             if response.status != _HTTP_OK:
                 logger.warning("AppSync notify failed: status=%d", response.status)
     except (URLError, OSError):
