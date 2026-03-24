@@ -6,14 +6,17 @@ from typing import Any
 import aws_cdk as cdk
 from aws_cdk import CfnOutput, Duration, Stack
 from aws_cdk import aws_apigateway as apigw
+from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import aws_cloudwatch_actions as cloudwatch_actions
 from aws_cdk import aws_dynamodb as dynamodb
-from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources
 from aws_cdk import aws_logs as logs
+from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_sns as sns
+from aws_cdk import aws_sns_subscriptions as sns_subscriptions
 from aws_cdk import aws_sqs as sqs
 from constructs import Construct
-
 
 _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
     7: logs.RetentionDays.ONE_WEEK,
@@ -61,6 +64,8 @@ class JanusStack(Stack):
         worker_handler.add_event_source(
             lambda_event_sources.SqsEventSource(queue, batch_size=1)
         )
+
+        self._create_monitoring(dlq)
 
         CfnOutput(self, "ApiUrl", value=api.url, description=f"API Gateway URL — {environment}")
         CfnOutput(self, "TableName", value=table.table_name)
@@ -321,6 +326,10 @@ class JanusStack(Stack):
             ),
             deploy_options=apigw.StageOptions(
                 stage_name=self._environment,
+                throttle=apigw.ThrottleSettings(
+                    rate_limit=self._config["api_rate_limit"],
+                    burst_limit=self._config["api_burst_limit"],
+                ),
                 logging_level=(
                     apigw.MethodLoggingLevel.INFO
                     if self._config.get("enable_monitoring")
@@ -331,3 +340,50 @@ class JanusStack(Stack):
         )
 
         return api
+
+    # ── Monitoring ───────────────────────────────────────────────────────────
+
+    def _create_monitoring(self, dlq: sqs.Queue) -> None:
+        """Create DLQ alarm and SNS alert topic (staging + production only)."""
+        if not self._config.get("enable_monitoring"):
+            return
+
+        alert_topic = sns.Topic(
+            self,
+            "AlertTopic",
+            topic_name=f"janus-alerts-{self._environment}",
+            display_name=f"Janus Alerts — {self._environment}",
+        )
+
+        dlq_alarm = cloudwatch.Alarm(
+            self,
+            "DlqAlarm",
+            metric=dlq.metric_approximate_number_of_messages_visible(
+                period=Duration.minutes(1),
+                statistic="Maximum",
+            ),
+            threshold=0,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+            evaluation_periods=1,
+            alarm_name=f"janus-dlq-messages-{self._environment}",
+            alarm_description=(
+                f"Messages in DLQ for Janus {self._environment}. "
+                "Pipeline failures exceeded 3 retries."
+            ),
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        dlq_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alert_topic))
+        dlq_alarm.add_ok_action(cloudwatch_actions.SnsAction(alert_topic))
+
+        alert_email = os.environ.get("ALERT_EMAIL", "")
+        if alert_email:
+            alert_topic.add_subscription(
+                sns_subscriptions.EmailSubscription(alert_email)
+            )
+
+        CfnOutput(
+            self,
+            "AlertTopicArn",
+            value=alert_topic.topic_arn,
+            description="SNS topic for DLQ and operational alerts",
+        )

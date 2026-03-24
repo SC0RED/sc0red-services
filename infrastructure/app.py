@@ -37,6 +37,8 @@ environment_config: dict[str, object] = {
         "enable_monitoring": False,
         "point_in_time_recovery": False,
         "lambda_architecture": "arm64",
+        "api_rate_limit": 50,
+        "api_burst_limit": 100,
     },
     "staging": {
         "removal_policy": cdk.RemovalPolicy.SNAPSHOT,
@@ -44,6 +46,8 @@ environment_config: dict[str, object] = {
         "enable_monitoring": True,
         "point_in_time_recovery": False,
         "lambda_architecture": "x86_64",
+        "api_rate_limit": 50,
+        "api_burst_limit": 100,
     },
     "production": {
         "removal_policy": cdk.RemovalPolicy.RETAIN,
@@ -51,6 +55,8 @@ environment_config: dict[str, object] = {
         "enable_monitoring": True,
         "point_in_time_recovery": True,
         "lambda_architecture": "x86_64",
+        "api_rate_limit": 100,
+        "api_burst_limit": 200,
     },
 }
 
