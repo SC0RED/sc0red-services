@@ -13,11 +13,16 @@ from typing import Any
 
 from src.handlers.sqs_handler import SQSHandler
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
+from src.utilities.tracing import configure_tracing
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
-_storage: DynamoDBStorageProvider | None = None
+# configure_tracing() MUST run before _get_storage() creates any boto3 resources.
+# DynamoDB tracing requires botocore to be patched before the first boto3.resource() call.
+configure_tracing()
+
+_storage: DynamoDBStorageProvider | None = None  # Lazy — initialized on first invocation
 _storage_lock = threading.Lock()
 
 

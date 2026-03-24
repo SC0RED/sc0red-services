@@ -250,6 +250,11 @@ class JanusStack(Stack):
             memory_size=512,
             log_group=log_group,
             environment=environment,
+            tracing=(
+                lambda_.Tracing.ACTIVE
+                if self._config.get("enable_monitoring")
+                else lambda_.Tracing.DISABLED
+            ),
         )
 
         table.grant_read_write_data(handler)
@@ -290,6 +295,11 @@ class JanusStack(Stack):
             reserved_concurrent_executions=5,
             log_group=log_group,
             environment=environment,
+            tracing=(
+                lambda_.Tracing.ACTIVE
+                if self._config.get("enable_monitoring")
+                else lambda_.Tracing.DISABLED
+            ),
         )
 
         table.grant_read_write_data(handler)
@@ -336,6 +346,7 @@ class JanusStack(Stack):
                     else apigw.MethodLoggingLevel.OFF
                 ),
                 metrics_enabled=bool(self._config.get("enable_monitoring")),
+                tracing_enabled=bool(self._config.get("enable_monitoring")),
             ),
         )
 
