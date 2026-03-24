@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from botocore.exceptions import ClientError
 
 from src.documents.extract_text import SUPPORTED_TYPES, extract_text
-from src.handlers.api_gateway_handler import _error, _json_response
+from src.handlers.api_gateway_handler import error_response, json_response
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -29,21 +29,21 @@ def handle_upload_url(
 ) -> LambdaResponse:
     """Handle POST /api/analysis/{analysis_id}/upload-url."""
     if not s3 or not documents_bucket:
-        return _error("Document uploads via S3 not configured", 501)
+        return error_response("Document uploads via S3 not configured", 501)
 
     body = json.loads(event.get("body") or "{}")
     filename = body.get("filename", "")
     file_type = body.get("fileType", "")
     if not filename or not file_type:
-        return _error("filename and fileType required")
+        return error_response("filename and fileType required")
 
     if file_type not in SUPPORTED_TYPES:
-        return _error(f"Unsupported file type: {file_type}")
+        return error_response(f"Unsupported file type: {file_type}")
 
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if not company or company.get("org_id") != authentication.org_id:
-        return _error("Not found", 404)
+        return error_response("Not found", 404)
 
     document_key = f"uploads/{analysis_id}/{uuid.uuid4()}.{file_type}"
 
@@ -57,7 +57,7 @@ def handle_upload_url(
         ExpiresIn=300,
     )
 
-    return _json_response({"uploadUrl": upload_url, "documentKey": document_key})
+    return json_response({"uploadUrl": upload_url, "documentKey": document_key})
 
 
 def handle_create_document(
@@ -76,20 +76,20 @@ def handle_create_document(
     file_content_b64 = body.get("fileContent", "")
 
     if not filename or not file_type:
-        return _error("filename and fileType required")
+        return error_response("filename and fileType required")
 
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if not company or company.get("org_id") != authentication.org_id:
-        return _error("Not found", 404)
+        return error_response("Not found", 404)
 
     # Get file bytes — from S3 if documentKey provided, else from base64 body
     if document_key:
         if not s3 or not documents_bucket:
-            return _error("S3 not configured — cannot retrieve uploaded file", 500)
+            return error_response("S3 not configured — cannot retrieve uploaded file", 500)
         expected_prefix = f"uploads/{analysis_id}/"
         if not document_key.startswith(expected_prefix):
-            return _error("Invalid documentKey", 400)
+            return error_response("Invalid documentKey", 400)
         try:
             response = s3.get_object(
                 Bucket=documents_bucket,
@@ -99,22 +99,24 @@ def handle_create_document(
         except ClientError as error:
             code = error.response["Error"]["Code"]
             if code == "NoSuchKey":
-                return _error("Uploaded file not found — presigned URL may have expired", 404)
+                return error_response(
+                    "Uploaded file not found — presigned URL may have expired", 404
+                )
             raise
     elif file_content_b64:
         file_bytes = base64.b64decode(file_content_b64)
     else:
-        return _error("documentKey or fileContent required")
+        return error_response("documentKey or fileContent required")
 
     try:
         extracted_text = extract_text(file_bytes, file_type)
     except ValueError as error:
-        return _error(str(error))
+        return error_response(str(error))
 
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
     if not assessments:
-        return _error("No assessment found for this analysis", 404)
+        return error_response("No assessment found for this analysis", 404)
 
     assessment_id = assessments[0]["id"]
     document_id = str(uuid.uuid4())
@@ -128,7 +130,7 @@ def handle_create_document(
     }
     assessment_repo.save_document(assessment_id, document)
 
-    return _json_response(
+    return json_response(
         {
             "id": document_id,
             "filename": filename,
@@ -150,12 +152,12 @@ def handle_delete_document(
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if not company or company.get("org_id") != authentication.org_id:
-        return _error("Not found", 404)
+        return error_response("Not found", 404)
 
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
     if not assessments:
-        return _error("No assessment found", 404)
+        return error_response("No assessment found", 404)
 
     assessment_repo.delete_document(assessments[0]["id"], document_id)
-    return _json_response({"ok": True})
+    return json_response({"ok": True})

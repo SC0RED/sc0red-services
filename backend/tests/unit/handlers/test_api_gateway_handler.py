@@ -6,34 +6,34 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.handlers.api_gateway_handler import APIGatewayHandler, _error, _json_response
+from src.handlers.api_gateway_handler import APIGatewayHandler, error_response, json_response
 
 
 class TestHelperFunctions:
-    def test_json_response_default_status(self):
-        result = _json_response({"key": "value"})
+    def testjson_response_default_status(self):
+        result = json_response({"key": "value"})
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["key"] == "value"
         assert "Content-Type" in result["headers"]
 
-    def test_json_response_custom_status(self):
-        result = _json_response({"ok": True}, 201)
+    def testjson_response_custom_status(self):
+        result = json_response({"ok": True}, 201)
         assert result["statusCode"] == 201
 
-    def test_json_response_cors_headers(self):
-        result = _json_response({})
+    def testjson_response_cors_headers(self):
+        result = json_response({})
         assert result["headers"]["Access-Control-Allow-Origin"] == "*"
         assert "Authorization" in result["headers"]["Access-Control-Allow-Headers"]
 
-    def test_error_response(self):
-        result = _error("bad request")
+    def testerror_response_response(self):
+        result = error_response("bad request")
         assert result["statusCode"] == 400
         body = json.loads(result["body"])
         assert body["error"] == "bad request"
 
-    def test_error_custom_status(self):
-        result = _error("not found", 404)
+    def testerror_response_custom_status(self):
+        result = error_response("not found", 404)
         assert result["statusCode"] == 404
 
 
