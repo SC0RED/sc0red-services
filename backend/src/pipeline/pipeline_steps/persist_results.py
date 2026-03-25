@@ -73,6 +73,7 @@ class PersistResults(RequestStep):
                 "tier": risk_assessment.tier,
                 "top_risks": risk_assessment.top_risks,
                 "analysis_summary": risk_assessment.analysis_summary,
+                "created_at": datetime.now(UTC).isoformat(),
             }
             assessment_doc["id"] = assessment_id
             self._assessment_repo.save(assessment_doc)

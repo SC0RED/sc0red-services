@@ -45,6 +45,11 @@ def handle_get_analysis(
     documents: list[dict[str, Any]] = []
 
     if assessments:
+        # Take the most recent assessment — during re-analysis, both old and new
+        # assessments exist briefly until the old one is deleted. Sort by created_at
+        # descending to always pick the newest. Legacy assessments without created_at
+        # sort last (empty string).
+        assessments.sort(key=lambda a: a.get("created_at", ""), reverse=True)
         assessment = assessments[0]
         assessment_id = assessment["id"]
         risk_scores = assessment_repo.get_risk_scores(assessment_id)
