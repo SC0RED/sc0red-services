@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense, useCallback } from 'react'
+import { useState, useRef, Suspense, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import DashboardSidebar from '@/components/DashboardSidebar'
@@ -9,6 +9,7 @@ import ScanInputPhase from '@/components/scan/ScanInputPhase'
 import ScanProgressPhase from '@/components/scan/ScanProgressPhase'
 import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
 import { useScanPolling } from '@/lib/hooks/useScanPolling'
+import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import type { Mode, Phase, Company, ScanPollResponse } from '@/lib/types/scan'
 
 function NewScanContent() {
@@ -24,6 +25,7 @@ function NewScanContent() {
     const [progressLabel, setProgressLabel] = useState('')
     const [scanId, setScanId] = useState('')
     const [companies, setCompanies] = useState<Company[]>([])
+    const scanIdRef = useRef('')
 
     const handleProgress = useCallback((newProgress: number, label: string) => {
         setProgress((prev) => Math.max(prev, newProgress))
@@ -82,6 +84,25 @@ function NewScanContent() {
         onProgress: handleProgress,
     })
 
+    const discoveryRealtime = useScanRealtime({
+        onProgress: handleProgress,
+        onComplete: async () => {
+            // AppSync told us it's complete — fetch full data for navigation
+            try {
+                const response = await fetch(`/api/scan/${scanIdRef.current}`)
+                if (response.ok) {
+                    const data = (await response.json()) as ScanPollResponse
+                    handleDiscoveryComplete(data)
+                    return
+                }
+            } catch {
+                // Fetch failed — fall through to minimal data
+            }
+            handleDiscoveryComplete({ status: 'complete' })
+        },
+        onFailed: handleFailed,
+    })
+
     const selectedCount = companies.filter((c) => c.selected).length
 
     const portfolioPolling = useScanPolling({
@@ -90,6 +111,25 @@ function NewScanContent() {
         onComplete: handlePortfolioComplete,
         onFailed: handleFailed,
         onProgress: handleProgress,
+    })
+
+    const portfolioRealtime = useScanRealtime({
+        onProgress: handleProgress,
+        onComplete: async () => {
+            // AppSync told us it's complete — fetch full data for navigation
+            try {
+                const response = await fetch(`/api/scan/${scanIdRef.current}`)
+                if (response.ok) {
+                    const data = (await response.json()) as ScanPollResponse
+                    handlePortfolioComplete(data)
+                    return
+                }
+            } catch {
+                // Fetch failed — fall through to minimal data
+            }
+            handlePortfolioComplete({ status: 'complete' })
+        },
+        onFailed: handleFailed,
     })
 
     async function handleSubmit(e: React.FormEvent) {
@@ -113,6 +153,7 @@ function NewScanContent() {
                 return
             }
             setScanId(data.scanId)
+            scanIdRef.current = data.scanId
 
             if (data.status === 'complete') {
                 setProgress(100)
@@ -134,7 +175,10 @@ function NewScanContent() {
                 return
             }
 
-            discoveryPolling.startPolling(data.scanId)
+            const realtimeConnected = await discoveryRealtime.start(data.scanId)
+            if (!realtimeConnected) {
+                discoveryPolling.startPolling(data.scanId)
+            }
         } catch (err) {
             setError(
                 err instanceof Error
@@ -167,7 +211,10 @@ function NewScanContent() {
 
             setProgress(10)
             setProgressLabel(`Analyzing companies... (0/${selected.length} complete)`)
-            portfolioPolling.startPolling(scanId)
+            const realtimeConnected = await portfolioRealtime.start(scanId)
+            if (!realtimeConnected) {
+                portfolioPolling.startPolling(scanId)
+            }
         } catch {
             setError('Network error — could not start portfolio analysis. Please try again.')
             setPhase('portfolio_confirm')

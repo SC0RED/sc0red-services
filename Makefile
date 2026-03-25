@@ -43,7 +43,7 @@ test: ## Run backend tests with 95% coverage requirement
 
 security: ## Run security checks (bandit + pip-audit)
 	cd backend && bandit -r src/
-	cd backend && pip-audit
+	cd backend && pip-audit --ignore-vuln CVE-2026-4539  # pygments — no fix available yet
 
 naming: ## Check naming conventions, abbreviations, imports, and skip comments
 	@echo "$(BLUE)Checking naming conventions...$(NC)"

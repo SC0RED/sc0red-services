@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import bcrypt
 
-from src.handlers.api_gateway_handler import _error, _json_response
+from src.handlers.api_gateway_handler import build_error, build_json_response
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -25,13 +25,13 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
     org_type = body.get("orgType", "company")
 
     if not all([name, email, password, org_name]):
-        return _error("All fields required")
+        return build_error("All fields required")
 
     user_repo = storage.create_user_repository()
     org_repo = storage.create_organization_repository()
 
     if user_repo.has_email(email):
-        return _error("Email already registered")
+        return build_error("Email already registered")
 
     org_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
@@ -49,7 +49,7 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
         }
     )
 
-    return _json_response({"success": True})
+    return build_json_response({"success": True})
 
 
 def handle_login(event: dict[str, Any], storage: DynamoDBStorageProvider) -> LambdaResponse:
@@ -59,11 +59,11 @@ def handle_login(event: dict[str, Any], storage: DynamoDBStorageProvider) -> Lam
     password = body.get("password", "")
 
     if not email or not password:
-        return _error("Email and password required")
+        return build_error("Email and password required")
 
     user_repo = storage.create_user_repository()
     user_info = user_repo.verify_password(email, password)
     if not user_info:
-        return _error("Invalid credentials", 401)
+        return build_error("Invalid credentials", 401)
 
-    return _json_response({"success": True, "user": user_info})
+    return build_json_response({"success": True, "user": user_info})

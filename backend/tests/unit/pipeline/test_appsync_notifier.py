@@ -1,0 +1,99 @@
+"""Tests for AppSync progress notifier."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+from src.pipeline.appsync_notifier import notify_progress
+
+
+class TestNotifyProgress:
+    def test_skips_when_endpoint_not_configured(self):
+        """When APPSYNC_ENDPOINT is empty, notify_progress is a no-op."""
+        with patch("src.pipeline.appsync_notifier._APPSYNC_ENDPOINT", ""):
+            # Should not raise or make any HTTP calls
+            notify_progress(scan_id="scan-1", progress=50, label="Testing...")
+
+    def test_skips_when_api_key_not_configured(self):
+        """When APPSYNC_API_KEY is empty, notify_progress is a no-op."""
+        with patch("src.pipeline.appsync_notifier._APPSYNC_ENDPOINT", "https://example.com"):
+            with patch("src.pipeline.appsync_notifier._APPSYNC_API_KEY", ""):
+                notify_progress(scan_id="scan-1", progress=50, label="Testing...")
+
+    @patch("src.pipeline.appsync_notifier.urlopen")
+    def test_sends_mutation_when_configured(self, mock_urlopen: MagicMock):
+        """When both endpoint and key are set, sends a GraphQL mutation."""
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        with (
+            patch("src.pipeline.appsync_notifier._APPSYNC_ENDPOINT", "https://appsync.example.com/graphql"),
+            patch("src.pipeline.appsync_notifier._APPSYNC_API_KEY", "da2-fakekey123"),
+        ):
+            notify_progress(
+                scan_id="scan-1",
+                progress=45,
+                label="Assessing risks...",
+                company_id="company-1",
+            )
+
+        mock_urlopen.assert_called_once()
+        request = mock_urlopen.call_args[0][0]
+        assert request.full_url == "https://appsync.example.com/graphql"
+        assert request.get_header("X-api-key") == "da2-fakekey123"
+        assert request.get_header("Content-type") == "application/json"
+
+    @patch("src.pipeline.appsync_notifier.urlopen")
+    def test_handles_network_error_gracefully(self, mock_urlopen: MagicMock):
+        """Network errors are logged but do not propagate."""
+        from urllib.error import URLError
+
+        mock_urlopen.side_effect = URLError("Connection refused")
+
+        with (
+            patch("src.pipeline.appsync_notifier._APPSYNC_ENDPOINT", "https://appsync.example.com/graphql"),
+            patch("src.pipeline.appsync_notifier._APPSYNC_API_KEY", "da2-fakekey123"),
+        ):
+            # Should not raise
+            notify_progress(scan_id="scan-1", progress=50, label="Testing...")
+
+    @patch("src.pipeline.appsync_notifier.urlopen")
+    def test_handles_non_200_response(self, mock_urlopen: MagicMock):
+        """Non-200 responses are logged but do not propagate."""
+        mock_response = MagicMock()
+        mock_response.status = 500
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        with (
+            patch("src.pipeline.appsync_notifier._APPSYNC_ENDPOINT", "https://appsync.example.com/graphql"),
+            patch("src.pipeline.appsync_notifier._APPSYNC_API_KEY", "da2-fakekey123"),
+        ):
+            # Should not raise
+            notify_progress(scan_id="scan-1", progress=50, label="Testing...")
+
+    @patch("src.pipeline.appsync_notifier.urlopen")
+    def test_default_status_is_running(self, mock_urlopen: MagicMock):
+        """When status is not specified, defaults to 'running'."""
+        import json
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        with (
+            patch("src.pipeline.appsync_notifier._APPSYNC_ENDPOINT", "https://appsync.example.com/graphql"),
+            patch("src.pipeline.appsync_notifier._APPSYNC_API_KEY", "da2-fakekey123"),
+        ):
+            notify_progress(scan_id="scan-1", progress=50, label="Testing...")
+
+        request = mock_urlopen.call_args[0][0]
+        body = json.loads(request.data)
+        assert body["variables"]["input"]["status"] == "running"
+        assert body["variables"]["input"]["companyId"] == ""

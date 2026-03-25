@@ -1,7 +1,7 @@
 """Tests for JanusRequestExecutor."""
 
 import contextlib
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -150,3 +150,58 @@ class TestRequestExecutor:
 
         assert step1.entity_accessor == mock_accessor
         assert step2.entity_accessor == mock_accessor
+
+
+class TestRequestExecutorAppSyncIntegration:
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_calls_notify_progress(self, mock_notify: MagicMock) -> None:
+        """When mark_question_complete is called with a known key, notify_progress fires."""
+        company_repo = MagicMock()
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            company_repo=company_repo,
+            scan_id="scan-1",
+        )
+
+        executor.mark_question_complete("extract_profile")
+
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=30,
+            label="Extracting company profile...",
+            company_id="company-1",
+        )
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_skips_notify_for_unknown_key(self, mock_notify: MagicMock) -> None:
+        """Unknown question keys should not trigger notify_progress."""
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            scan_id="scan-1",
+        )
+
+        executor.mark_question_complete("unknown_step")
+
+        mock_notify.assert_not_called()
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_skips_notify_without_scan_id(self, mock_notify: MagicMock) -> None:
+        """When scan_id is empty, notify_progress should not be called."""
+        company_repo = MagicMock()
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            company_repo=company_repo,
+            scan_id="",
+        )
+
+        executor.mark_question_complete("extract_profile")
+
+        mock_notify.assert_not_called()
+        # But company repo should still be updated
+        company_repo.update.assert_called_once()

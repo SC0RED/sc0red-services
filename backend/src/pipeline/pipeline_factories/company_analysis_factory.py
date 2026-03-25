@@ -38,6 +38,7 @@ class CompanyAnalysisFactory(PipelineFactory):
         request_id: str = "",
         company_repo: DynamoDBCompanyRepository | None = None,
         assessment_repo: DynamoDBAssessmentRepository | None = None,
+        scan_id: str = "",
     ) -> None:
         self._entity_accessor = entity_accessor
         self._ai_client_factory = ai_client_factory
@@ -45,6 +46,7 @@ class CompanyAnalysisFactory(PipelineFactory):
         self._request_id = request_id
         self._company_repo = company_repo
         self._assessment_repo = assessment_repo
+        self._scan_id = scan_id
 
     def get_pipeline(self) -> list[RequestStep]:
         """Return the ordered list of pipeline steps for company analysis."""
@@ -73,6 +75,7 @@ class CompanyAnalysisFactory(PipelineFactory):
             request_id=self._request_id,
             pipeline=pipeline,
             company_repo=self._company_repo,
+            scan_id=self._scan_id,
         )
         for step in pipeline:
             step.request_executor = executor

@@ -26,6 +26,23 @@ vi.mock('@/components/SessionWrapper', () => ({
 
 import NewScanPage from '@/app/scan/new/page'
 
+/**
+ * Wraps a fetch mock so that calls to /api/config (used by useScanRealtime)
+ * always return an empty AppSync config, making the hook a no-op in tests.
+ * All other URLs are forwarded to the inner mock.
+ */
+function wrapFetchWithConfigStub(innerMock: ReturnType<typeof vi.fn>): ReturnType<typeof vi.fn> {
+    return vi.fn((url: string | URL | Request, init?: RequestInit) => {
+        if (typeof url === 'string' && url === '/api/config') {
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ appsyncEndpoint: '', appsyncApiKey: '' }),
+            })
+        }
+        return innerMock(url, init)
+    })
+}
+
 describe('NewScanPage', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -103,11 +120,11 @@ describe('NewScanPage', () => {
     })
 
     it('shows analyzing phase after form submission', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({
+        const innerFetch = vi.fn().mockResolvedValue({
             ok: true,
             json: () => Promise.resolve({ scanId: 'scan-1', status: 'running' }),
         })
-        global.fetch = fetchMock
+        global.fetch = wrapFetchWithConfigStub(innerFetch)
 
         render(<NewScanPage />)
 
@@ -119,7 +136,7 @@ describe('NewScanPage', () => {
         await waitFor(() => {
             expect(screen.getByText('Analyzing...')).toBeInTheDocument()
         })
-        expect(fetchMock).toHaveBeenCalledWith(
+        expect(innerFetch).toHaveBeenCalledWith(
             '/api/scan/start',
             expect.objectContaining({
                 method: 'POST',
@@ -128,11 +145,11 @@ describe('NewScanPage', () => {
     })
 
     it('shows error message when scan start fails', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({
+        const innerFetch = vi.fn().mockResolvedValue({
             ok: false,
             json: () => Promise.resolve({ error: 'Invalid URL provided' }),
         })
-        global.fetch = fetchMock
+        global.fetch = wrapFetchWithConfigStub(innerFetch)
 
         render(<NewScanPage />)
 
@@ -157,11 +174,11 @@ describe('NewScanPage', () => {
     })
 
     it('redirects to analysis page on complete standalone scan', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({
+        const innerFetch = vi.fn().mockResolvedValue({
             ok: true,
             json: () => Promise.resolve({ scanId: 'scan-1', status: 'complete', analysisId: 'analysis-1' }),
         })
-        global.fetch = fetchMock
+        global.fetch = wrapFetchWithConfigStub(innerFetch)
 
         mockGet.mockReturnValue('standalone')
         render(<NewScanPage />)
@@ -206,12 +223,12 @@ describe('NewScanPage', () => {
         }
 
         it('polls for status after scan starts running', async () => {
-            const fetchMock = vi.fn()
-            fetchMock.mockResolvedValueOnce({
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () => Promise.resolve({ scanId: 's-1', status: 'running' }),
             })
-            fetchMock.mockResolvedValueOnce({
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () =>
                     Promise.resolve({
@@ -220,12 +237,12 @@ describe('NewScanPage', () => {
                         progressLabel: 'Scraping website...',
                     }),
             })
-            fetchMock.mockResolvedValueOnce({
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () =>
                     Promise.resolve({ status: 'running', progress: 60, progressLabel: 'Assessing risks...' }),
             })
-            global.fetch = fetchMock
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
 
             mockGet.mockReturnValue('standalone')
             render(<NewScanPage />)
@@ -256,12 +273,12 @@ describe('NewScanPage', () => {
         })
 
         it('redirects to analysis when poll returns complete', async () => {
-            const fetchMock = vi.fn()
-            fetchMock.mockResolvedValueOnce({
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () => Promise.resolve({ scanId: 's-1', status: 'running' }),
             })
-            fetchMock.mockResolvedValueOnce({
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () =>
                     Promise.resolve({
@@ -269,7 +286,7 @@ describe('NewScanPage', () => {
                         analyses: [{ id: 'a-1', analyzedAt: '2026-03-23T00:00:00Z' }],
                     }),
             })
-            global.fetch = fetchMock
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
 
             mockGet.mockReturnValue('standalone')
             render(<NewScanPage />)
@@ -291,16 +308,16 @@ describe('NewScanPage', () => {
         })
 
         it('shows error when scan fails during polling', async () => {
-            const fetchMock = vi.fn()
-            fetchMock.mockResolvedValueOnce({
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () => Promise.resolve({ scanId: 's-1', status: 'running' }),
             })
-            fetchMock.mockResolvedValueOnce({
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () => Promise.resolve({ status: 'failed' }),
             })
-            global.fetch = fetchMock
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
 
             mockGet.mockReturnValue('standalone')
             render(<NewScanPage />)
@@ -352,8 +369,8 @@ describe('NewScanPage', () => {
         }
 
         it('shows portfolio confirmation after discovery', async () => {
-            const fetchMock = vi.fn()
-            fetchMock.mockResolvedValueOnce({
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () =>
                     Promise.resolve({
@@ -365,7 +382,7 @@ describe('NewScanPage', () => {
                         ],
                     }),
             })
-            global.fetch = fetchMock
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
 
             render(<NewScanPage />)
 
@@ -386,8 +403,8 @@ describe('NewScanPage', () => {
         })
 
         it('polls for portfolio progress after confirm', async () => {
-            const fetchMock = vi.fn()
-            fetchMock.mockResolvedValueOnce({
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () =>
                     Promise.resolve({
@@ -399,7 +416,7 @@ describe('NewScanPage', () => {
                         ],
                     }),
             })
-            global.fetch = fetchMock
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
 
             render(<NewScanPage />)
 
@@ -413,12 +430,12 @@ describe('NewScanPage', () => {
             })
 
             // POST /api/scan/s-1/confirm
-            fetchMock.mockResolvedValueOnce({
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () => Promise.resolve({ status: 'running' }),
             })
             // GET /api/scan/s-1 — first poll: 1/2 complete
-            fetchMock.mockResolvedValueOnce({
+            innerFetch.mockResolvedValueOnce({
                 ok: true,
                 json: () =>
                     Promise.resolve({

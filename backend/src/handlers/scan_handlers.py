@@ -9,9 +9,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import (
-    _build_company_summary,
-    _error,
-    _json_response,
+    build_company_summary,
+    build_error,
+    build_json_response,
 )
 from src.handlers.sqs_messages import build_analysis_message
 
@@ -39,7 +39,7 @@ def handle_scan_start(
     scan_type = body.get("type", "")
 
     if not url or not scan_type:
-        return _error("url and type required")
+        return build_error("url and type required")
 
     scan_repo = storage.create_scan_repository()
     scan_id = _create_scan_record(scan_repo, url, scan_type, authentication)
@@ -94,7 +94,7 @@ def _start_portfolio_scan(
             "portfolio_companies": companies,
         },
     )
-    return _json_response(
+    return build_json_response(
         {
             "scanId": scan_id,
             "status": "awaiting_confirmation",
@@ -126,7 +126,7 @@ def _start_single_scan(
         ),
     )
 
-    return _json_response(
+    return build_json_response(
         {
             "scanId": scan_id,
             "status": "running",
@@ -177,13 +177,13 @@ def handle_scan_status(
     scan_repo = storage.create_scan_repository()
     scan = scan_repo.get_by_id(scan_id)
     if not scan or scan.get("org_id") != authentication.org_id:
-        return _error("Not found", 404)
+        return build_error("Not found", 404)
 
     company_repo = storage.create_company_repository()
     scan_companies = scan_repo.get_scan_companies(scan_id)
     company_ids = [link["company_id"] for link in scan_companies if link.get("company_id")]
     companies_batch = company_repo.get_by_ids(company_ids) if company_ids else []
-    analyses = [_build_company_summary(c) for c in companies_batch]
+    analyses = [build_company_summary(c) for c in companies_batch]
 
     status = scan.get("status")
     total_companies = scan.get("total_companies", 0)
@@ -210,7 +210,7 @@ def handle_scan_status(
         len(analyses),
     )
 
-    return _json_response(
+    return build_json_response(
         {
             "status": status,
             "progress": progress,
@@ -234,16 +234,16 @@ def handle_scan_confirm(
     body = json.loads(event.get("body") or "{}")
     companies = body.get("companies", [])
     if not companies:
-        return _error("No companies provided")
+        return build_error("No companies provided")
 
     scan_repo = storage.create_scan_repository()
     scan = scan_repo.get_by_id(scan_id)
     if not scan or scan.get("org_id") != authentication.org_id:
-        return _error("Scan not found", 404)
+        return build_error("Scan not found", 404)
 
     valid_companies = [c for c in companies if c.get("url", "").startswith(("http://", "https://"))]
     if not valid_companies:
-        return _error("At least one company with a url is required")
+        return build_error("At least one company with a url is required")
 
     scan_repo.update(
         scan_id,
@@ -270,7 +270,7 @@ def handle_scan_confirm(
         )
         queued.append({"name": company_name, "analysisId": analysis_id})
 
-    return _json_response({"ok": True, "queued": queued}, 202)
+    return build_json_response({"ok": True, "queued": queued}, 202)
 
 
 def handle_delete_scan(
@@ -283,7 +283,7 @@ def handle_delete_scan(
     scan_repo = storage.create_scan_repository()
     scan = scan_repo.get_by_id(scan_id)
     if not scan or scan.get("org_id") != authentication.org_id:
-        return _error("Not found", 404)
+        return build_error("Not found", 404)
 
     company_repo = storage.create_company_repository()
     assessment_repo = storage.create_assessment_repository()
@@ -299,4 +299,4 @@ def handle_delete_scan(
 
     scan_repo.delete_all_company_links(scan_id)
     scan_repo.delete(scan_id)
-    return _json_response({"ok": True})
+    return build_json_response({"ok": True})

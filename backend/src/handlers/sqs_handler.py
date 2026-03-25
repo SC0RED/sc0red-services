@@ -13,6 +13,7 @@ from typing import Any
 from signalfield_core.exceptions.base import EngineError
 
 from src.handlers.factory_manager import FactoryManager
+from src.pipeline.appsync_notifier import notify_progress
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logger = logging.getLogger(__name__)
@@ -167,6 +168,12 @@ class SQSHandler:
             scan_repo.update(
                 scan_id,
                 {"status": "complete", "progress": 100, "completed_count": resolved},
+            )
+            notify_progress(
+                scan_id=scan_id,
+                progress=100,
+                label="Analysis complete!",
+                status="complete",
             )
         else:
             progress = (

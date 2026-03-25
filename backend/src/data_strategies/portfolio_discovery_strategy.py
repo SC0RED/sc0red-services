@@ -17,12 +17,8 @@ from bs4 import BeautifulSoup
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 from src.data_strategies.web_scraper_strategy import (
-    _HEADERS as _SHARED_HEADERS,
-)
-from src.data_strategies.web_scraper_strategy import (
-    _TIMEOUT as _SHARED_TIMEOUT,
-)
-from src.data_strategies.web_scraper_strategy import (
+    SCRAPER_HEADERS,
+    SCRAPER_TIMEOUT,
     scrape_url,
 )
 
@@ -173,10 +169,10 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         for path in _PORTFOLIO_PATHS:
             page_url = f"{base_origin}{path}" if path else base_origin
             try:
-                with httpx.Client(follow_redirects=True, timeout=_SHARED_TIMEOUT) as client:
+                with httpx.Client(follow_redirects=True, timeout=SCRAPER_TIMEOUT) as client:
                     response = client.get(
                         page_url,
-                        headers=_SHARED_HEADERS,
+                        headers=SCRAPER_HEADERS,
                     )
                     if response.status_code != _HTTP_OK:
                         continue

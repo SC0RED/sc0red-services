@@ -24,14 +24,15 @@ logger = logging.getLogger(__name__)
 LambdaResponse = dict[str, Any]
 
 
-def _decimal_serializer(value: object) -> float | int | str:
+def serialize_decimal(value: object) -> float | int | str:
     """Convert Decimal to numeric types so JSON output stays numeric, not stringified."""
     if isinstance(value, Decimal):
         return int(value) if value == value.to_integral_value() else float(value)
     return str(value)
 
 
-def _json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
+def build_json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
+    """Build an API Gateway JSON response with CORS headers."""
     return {
         "statusCode": status,
         "headers": {
@@ -40,15 +41,17 @@ def _json_response(body: dict[str, Any], status: int = 200) -> LambdaResponse:
             "Access-Control-Allow-Headers": "Content-Type,Authorization",
             "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
         },
-        "body": json.dumps(body, default=_decimal_serializer),
+        "body": json.dumps(body, default=serialize_decimal),
     }
 
 
-def _error(message: str, status: int = 400) -> LambdaResponse:
-    return _json_response({"error": message}, status)
+def build_error(message: str, status: int = 400) -> LambdaResponse:
+    """Build an error JSON response with the given message and status code."""
+    return build_json_response({"error": message}, status)
 
 
-def _build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
+def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
+    """Build a camelCase summary dict from a company DynamoDB record."""
     # Uses .get() because during pipeline execution, the company record is
     # a partial item (only pipeline_progress + pipeline_label) created by
     # _report_progress. Full fields are only present after persist_results.
@@ -104,6 +107,17 @@ class APIGatewayHandler:
         )
 
         router = Router()
+
+        router.protected(
+            "GET",
+            "/api/config",
+            lambda _event, _authentication: build_json_response(
+                {
+                    "appsyncEndpoint": os.environ.get("APPSYNC_ENDPOINT", ""),
+                    "appsyncApiKey": os.environ.get("APPSYNC_API_KEY", ""),
+                }
+            ),
+        )
 
         router.public(
             "POST",
@@ -215,11 +229,11 @@ class APIGatewayHandler:
         headers = event.get("headers") or {}
 
         if method == "OPTIONS":
-            return _json_response({}, 200)
+            return build_json_response({}, 200)
 
         result = self._router.dispatch(method, path)
         if result is None:
-            return _error("Not found", 404)
+            return build_error("Not found", 404)
 
         handler, path_params, authenticated = result
         if not authenticated:
@@ -228,6 +242,6 @@ class APIGatewayHandler:
         try:
             authentication = require_authentication(headers)
         except ValueError as e:
-            return _error(str(e), 401)
+            return build_error(str(e), 401)
 
         return handler(event, authentication, **path_params)

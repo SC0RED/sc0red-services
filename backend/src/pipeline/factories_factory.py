@@ -89,6 +89,7 @@ class JanusFactoriesFactory:
                 request_id=event.request_id,
                 company_repo=self._company_repo,
                 assessment_repo=self._assessment_repo,
+                scan_id=event.scan_id,
             )
 
         return factory.execute_pipeline()
