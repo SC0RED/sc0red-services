@@ -23,7 +23,12 @@ input ScanProgressInput {
     status: String!
 }
 
+type Query {
+    _placeholder: String
+}
+
 schema {
+    query: Query
     mutation: Mutation
     subscription: Subscription
 }
