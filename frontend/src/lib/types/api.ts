@@ -70,6 +70,9 @@ export interface AnalysisData {
     documents?: DocumentInfo[]
     analyzedAt?: string
     scanType?: string
+    pipelineProgress?: number
+    pipelineLabel?: string
+    scanId?: string
 }
 
 export interface AnalysisItem {

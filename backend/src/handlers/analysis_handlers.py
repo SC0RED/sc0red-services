@@ -72,6 +72,10 @@ def handle_get_analysis(
             "opportunities": opportunities,
             "ebitdaTree": ebitda_tree,
             "documents": documents,
+            "pipelineProgress": company.get("pipeline_progress", 0),
+            "pipelineLabel": company.get("pipeline_label", ""),
+            "analyzedAt": company.get("analyzed_at"),
+            "scanId": company.get("scan_id", ""),
         }
     )
 
@@ -223,4 +227,4 @@ def handle_reanalyze(
         ),
     )
 
-    return build_json_response({"status": "queued"}, 202)
+    return build_json_response({"status": "queued", "scanId": scan_id}, 202)
