@@ -11,6 +11,8 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 
 _HTTP_OK = 200
+# Read at module level — standard for Lambda where env is fixed per cold start.
+# In tests, patch these module-level values with @patch.
 _APPSYNC_ENDPOINT = os.environ.get("APPSYNC_ENDPOINT", "")
 _APPSYNC_API_KEY = os.environ.get("APPSYNC_API_KEY", "")
 

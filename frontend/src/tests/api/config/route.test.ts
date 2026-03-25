@@ -1,13 +1,14 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
-const mockFetch = vi.fn()
-global.fetch = mockFetch
-
-vi.mock('@/lib/config', () => ({
-    BACKEND_URL: 'http://localhost:8001',
+vi.mock('@/lib/api/serverToken', () => ({
+    backendFetch: vi.fn(),
 }))
 
+import { BackendError } from '@/lib/api/errors'
+import { backendFetch } from '@/lib/api/serverToken'
 import { GET } from '@/app/api/config/route'
+
+const mockBackendFetch = vi.mocked(backendFetch)
 
 describe('GET /api/config', () => {
     beforeEach(() => {
@@ -19,22 +20,18 @@ describe('GET /api/config', () => {
             appsyncEndpoint: 'https://xxx.appsync-api.us-east-1.amazonaws.com/graphql',
             appsyncApiKey: 'da2-fakekey123',
         }
-        mockFetch.mockResolvedValue({
-            json: () => Promise.resolve(configData),
-        })
+        mockBackendFetch.mockResolvedValue(configData)
 
         const response = await GET()
 
-        expect(mockFetch).toHaveBeenCalledWith('http://localhost:8001/api/config')
+        expect(mockBackendFetch).toHaveBeenCalledWith('/api/config')
         expect(response.status).toBe(200)
         expect(await response.json()).toEqual(configData)
     })
 
     it('returns empty strings when backend returns empty config', async () => {
         const configData = { appsyncEndpoint: '', appsyncApiKey: '' }
-        mockFetch.mockResolvedValue({
-            json: () => Promise.resolve(configData),
-        })
+        mockBackendFetch.mockResolvedValue(configData)
 
         const response = await GET()
 
@@ -43,11 +40,20 @@ describe('GET /api/config', () => {
     })
 
     it('returns 500 on fetch error', async () => {
-        mockFetch.mockRejectedValue(new Error('Connection refused'))
+        mockBackendFetch.mockRejectedValue(new Error('Connection refused'))
 
         const response = await GET()
 
         expect(response.status).toBe(500)
         expect(await response.json()).toEqual({ error: 'Connection refused' })
+    })
+
+    it('returns 401 when not authenticated', async () => {
+        mockBackendFetch.mockRejectedValue(new BackendError('Not authenticated', 401))
+
+        const response = await GET()
+
+        expect(response.status).toBe(401)
+        expect(await response.json()).toEqual({ error: 'Not authenticated' })
     })
 })

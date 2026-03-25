@@ -26,7 +26,7 @@ interface UseScanRealtimeOptions {
 }
 
 export function useScanRealtime(options: UseScanRealtimeOptions): {
-    start: (scanId: string) => void
+    start: (scanId: string) => Promise<boolean>
     stop: () => void
 } {
     const optionsRef = useRef(options)
@@ -42,56 +42,61 @@ export function useScanRealtime(options: UseScanRealtimeOptions): {
     }, [])
 
     const start = useCallback(
-        (scanId: string) => {
+        async (scanId: string): Promise<boolean> => {
             stop()
 
-            fetch('/api/config')
-                .then((response) => response.json())
-                .then((config: { appsyncEndpoint?: string; appsyncApiKey?: string }) => {
-                    if (!config.appsyncEndpoint || !config.appsyncApiKey) return
+            try {
+                const response = await fetch('/api/config')
+                const config = (await response.json()) as {
+                    appsyncEndpoint?: string
+                    appsyncApiKey?: string
+                }
 
-                    const appSyncConfig: AppSyncConfig = {
-                        endpoint: config.appsyncEndpoint,
-                        apiKey: config.appsyncApiKey,
+                if (!config.appsyncEndpoint || !config.appsyncApiKey) return false
+
+                const appSyncConfig: AppSyncConfig = {
+                    endpoint: config.appsyncEndpoint,
+                    apiKey: config.appsyncApiKey,
+                }
+
+                const query = `subscription OnProgress($scanId: String!) {
+                    onScanProgress(scanId: $scanId) {
+                        scanId companyId progress progressLabel status
                     }
+                }`
 
-                    const query = `subscription OnProgress($scanId: String!) {
-                        onScanProgress(scanId: $scanId) {
-                            scanId companyId progress progressLabel status
-                        }
-                    }`
+                const unsubscribe = createAppSyncSubscription(
+                    appSyncConfig,
+                    query,
+                    { scanId },
+                    {
+                        onData: (data) => {
+                            const event = data as unknown as ScanProgressEvent
+                            const progress = event.onScanProgress
+                            if (!progress) return
 
-                    const unsubscribe = createAppSyncSubscription(
-                        appSyncConfig,
-                        query,
-                        { scanId },
-                        {
-                            onData: (data) => {
-                                const event = data as unknown as ScanProgressEvent
-                                const progress = event.onScanProgress
-                                if (!progress) return
+                            optionsRef.current.onProgress(progress.progress, progress.progressLabel)
+                            if (progress.status === 'complete') {
+                                optionsRef.current.onComplete()
+                            } else if (progress.status === 'failed') {
+                                optionsRef.current.onFailed('Analysis failed.')
+                            }
+                        },
+                        onError: () => {
+                            // Subscription failed — polling fallback continues
+                        },
+                        onClose: () => {
+                            // Connection closed — polling fallback continues
+                        },
+                    }
+                )
 
-                                optionsRef.current.onProgress(progress.progress, progress.progressLabel)
-                                if (progress.status === 'complete') {
-                                    optionsRef.current.onComplete()
-                                } else if (progress.status === 'failed') {
-                                    optionsRef.current.onFailed('Analysis failed.')
-                                }
-                            },
-                            onError: () => {
-                                // Subscription failed — polling fallback continues
-                            },
-                            onClose: () => {
-                                // Connection closed — polling fallback continues
-                            },
-                        }
-                    )
-
-                    unsubscribeRef.current = unsubscribe
-                })
-                .catch(() => {
-                    // Config fetch failed — polling fallback continues
-                })
+                unsubscribeRef.current = unsubscribe
+                return true
+            } catch {
+                // Config fetch failed — polling fallback continues
+                return false
+            }
         },
         [stop]
     )

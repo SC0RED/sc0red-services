@@ -10,29 +10,29 @@ from src.handlers.api_gateway_handler import APIGatewayHandler, build_error, bui
 
 
 class TestHelperFunctions:
-    def testbuild_json_response_default_status(self):
+    def test_build_json_response_default_status(self):
         result = build_json_response({"key": "value"})
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["key"] == "value"
         assert "Content-Type" in result["headers"]
 
-    def testbuild_json_response_custom_status(self):
+    def test_build_json_response_custom_status(self):
         result = build_json_response({"ok": True}, 201)
         assert result["statusCode"] == 201
 
-    def testbuild_json_response_cors_headers(self):
+    def test_build_json_response_cors_headers(self):
         result = build_json_response({})
         assert result["headers"]["Access-Control-Allow-Origin"] == "*"
         assert "Authorization" in result["headers"]["Access-Control-Allow-Headers"]
 
-    def testbuild_error_response(self):
+    def test_build_error_response(self):
         result = build_error("bad request")
         assert result["statusCode"] == 400
         body = json.loads(result["body"])
         assert body["error"] == "bad request"
 
-    def testbuild_error_custom_status(self):
+    def test_build_error_custom_status(self):
         result = build_error("not found", 404)
         assert result["statusCode"] == 404
 
@@ -700,14 +700,16 @@ class TestConfigEndpoint:
         storage = MagicMock()
         return APIGatewayHandler(storage=storage), storage
 
+    @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch.dict("os.environ", {"APPSYNC_ENDPOINT": "https://appsync.example.com/graphql", "APPSYNC_API_KEY": "da2-fakekey123"})
-    def test_returns_appsync_config_from_env(self):
+    def test_returns_appsync_config_from_env(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, _ = self._make_handler()
         result = handler.handle(
             {
                 "httpMethod": "GET",
                 "path": "/api/config",
-                "headers": {},
+                "headers": {"Authorization": "Bearer valid-token"},
             }
         )
         assert result["statusCode"] == 200
@@ -715,8 +717,10 @@ class TestConfigEndpoint:
         assert body["appsyncEndpoint"] == "https://appsync.example.com/graphql"
         assert body["appsyncApiKey"] == "da2-fakekey123"
 
+    @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch.dict("os.environ", {}, clear=False)
-    def test_returns_empty_strings_when_env_vars_not_set(self):
+    def test_returns_empty_strings_when_env_vars_not_set(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         # Remove the env vars if they exist
         import os
         os.environ.pop("APPSYNC_ENDPOINT", None)
@@ -727,7 +731,7 @@ class TestConfigEndpoint:
             {
                 "httpMethod": "GET",
                 "path": "/api/config",
-                "headers": {},
+                "headers": {"Authorization": "Bearer valid-token"},
             }
         )
         assert result["statusCode"] == 200
@@ -735,7 +739,7 @@ class TestConfigEndpoint:
         assert body["appsyncEndpoint"] == ""
         assert body["appsyncApiKey"] == ""
 
-    def test_config_endpoint_is_public_no_auth_required(self):
+    def test_config_endpoint_requires_auth(self):
         handler, _ = self._make_handler()
         # No Authorization header at all
         result = handler.handle(
@@ -745,8 +749,8 @@ class TestConfigEndpoint:
                 "headers": {},
             }
         )
-        # Should succeed without auth — not 401
-        assert result["statusCode"] == 200
+        # Should fail without auth — 401
+        assert result["statusCode"] == 401
 
 
 class TestLoginEndpoint:

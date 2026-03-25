@@ -108,10 +108,10 @@ class APIGatewayHandler:
 
         router = Router()
 
-        router.public(
+        router.protected(
             "GET",
             "/api/config",
-            lambda _event: build_json_response(
+            lambda _event, _authentication: build_json_response(
                 {
                     "appsyncEndpoint": os.environ.get("APPSYNC_ENDPOINT", ""),
                     "appsyncApiKey": os.environ.get("APPSYNC_API_KEY", ""),
