@@ -13,6 +13,7 @@ import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
+import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisData, DocumentInfo } from '@/lib/types/api'
 
@@ -23,6 +24,8 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     const [activeLever, setActiveLever] = useState<string>('All')
     const [documents, setDocuments] = useState<DocumentInfo[]>(data.documents ?? [])
     const [reanalyzing, setReanalyzing] = useState(false)
+    const [reanalysisProgress, setReanalysisProgress] = useState(0)
+    const [reanalysisLabel, setReanalysisLabel] = useState('')
     const [documentError, setDocumentError] = useState<string | null>(null)
 
     const handleDocumentsChange = useCallback(async () => {
@@ -46,8 +49,30 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
         }
     }, [])
 
+    const reanalysisRealtime = useScanRealtime({
+        onProgress: (progress, label) => {
+            setReanalysisProgress((prev) => Math.max(prev, progress))
+            if (label) setReanalysisLabel(label)
+        },
+        onComplete: () => {
+            setReanalysisProgress(100)
+            setReanalysisLabel('Re-analysis complete!')
+            setReanalyzing(false)
+            abortControllerRef.current?.abort()
+            reanalysisRealtime.stop()
+            router.refresh()
+        },
+        onFailed: (error) => {
+            setDocumentError(error)
+            setReanalyzing(false)
+            reanalysisRealtime.stop()
+        },
+    })
+
     const handleReanalyze = useCallback(async () => {
         setReanalyzing(true)
+        setReanalysisProgress(0)
+        setReanalysisLabel('')
         setDocumentError(null)
         const controller = new AbortController()
         abortControllerRef.current = controller
@@ -57,6 +82,14 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 signal: controller.signal,
             })
             if (!response.ok) throw new Error('Re-analysis failed')
+
+            const responseData = (await response.json()) as { status: string; scanId?: string }
+            const reanalyzeScanId = responseData.scanId
+
+            let realtimeConnected = false
+            if (reanalyzeScanId) {
+                realtimeConnected = await reanalysisRealtime.start(reanalyzeScanId)
+            }
 
             const maxAttempts = 40
             const intervalMs = 3000
@@ -77,7 +110,21 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     }
                     consecutiveErrors = 0
                     const updated = (await pollResponse.json()) as AnalysisData
+
+                    // Update progress from poll data when realtime is not connected
+                    if (!realtimeConnected) {
+                        const pollProgress = updated.pipelineProgress ?? 0
+                        const pollLabel = updated.pipelineLabel ?? ''
+                        if (pollProgress > 0) {
+                            setReanalysisProgress((prev) => Math.max(prev, pollProgress))
+                        }
+                        if (pollLabel) {
+                            setReanalysisLabel(pollLabel)
+                        }
+                    }
+
                     if (updated.analyzedAt && updated.analyzedAt !== originalAnalyzedAt) {
+                        reanalysisRealtime.stop()
                         router.refresh()
                         return
                     }
@@ -87,6 +134,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 }
             }
 
+            reanalysisRealtime.stop()
             router.refresh()
         } catch (error: unknown) {
             if (error instanceof DOMException && error.name === 'AbortError') return
@@ -94,9 +142,11 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             setDocumentError(message)
         } finally {
             setReanalyzing(false)
+            setReanalysisProgress(0)
+            setReanalysisLabel('')
             abortControllerRef.current = null
         }
-    }, [analysisId, data.analyzedAt, router])
+    }, [analysisId, data.analyzedAt, router, reanalysisRealtime])
 
     const riskScores = data.riskScores ?? []
     const opportunities = data.opportunities ?? []
@@ -230,6 +280,39 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 />
 
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
+
+                {/* Re-analysis Progress */}
+                {reanalyzing && (
+                    <div
+                        className="card"
+                        style={{ padding: '1.5rem', marginBottom: '1.5rem', textAlign: 'center' }}
+                    >
+                        <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                            Re-analyzing with documents...
+                        </h3>
+                        <p
+                            style={{
+                                color: 'var(--text-secondary)',
+                                fontSize: '0.875rem',
+                                marginBottom: '1rem',
+                            }}
+                        >
+                            {reanalysisLabel || 'Starting pipeline...'}
+                        </p>
+                        <div className="progress-bar" style={{ maxWidth: '360px', margin: '0 auto' }}>
+                            <div className="progress-fill" style={{ width: `${reanalysisProgress}%` }} />
+                        </div>
+                        <div
+                            style={{
+                                marginTop: '0.5rem',
+                                fontSize: '0.75rem',
+                                color: 'var(--text-tertiary)',
+                            }}
+                        >
+                            {reanalysisProgress}% complete
+                        </div>
+                    </div>
+                )}
 
                 {/* Document Upload */}
                 {documentError && (

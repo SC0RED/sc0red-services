@@ -114,6 +114,7 @@ function NewScanContent() {
     })
 
     const portfolioRealtime = useScanRealtime({
+        totalCompanies: selectedCount,
         onProgress: handleProgress,
         onComplete: async () => {
             // AppSync told us it's complete — fetch full data for navigation

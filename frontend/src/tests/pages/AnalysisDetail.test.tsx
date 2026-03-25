@@ -38,6 +38,16 @@ vi.mock('@/components/DocumentUpload', () => ({
     ),
 }))
 
+const mockRealtimeStart = vi.fn().mockResolvedValue(false)
+const mockRealtimeStop = vi.fn()
+
+vi.mock('@/lib/hooks/useScanRealtime', () => ({
+    useScanRealtime: () => ({
+        start: mockRealtimeStart,
+        stop: mockRealtimeStop,
+    }),
+}))
+
 vi.mock('@/components/EbitdaTree', () => ({
     default: ({ treeData, opportunities }: { treeData: unknown[]; opportunities: unknown[] }) => (
         <div data-testid="ebitda-tree">
@@ -303,7 +313,10 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
         const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
 
         // POST reanalyze succeeds
-        fetchMock.mockResolvedValueOnce({ ok: true })
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ status: 'queued', scanId: 'scan-1' }),
+        })
         // First poll — same analyzedAt
         fetchMock.mockResolvedValueOnce({
             ok: true,
@@ -340,7 +353,10 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
         const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
 
         // POST succeeds
-        fetchMock.mockResolvedValueOnce({ ok: true })
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ status: 'queued', scanId: 'scan-1' }),
+        })
         // All polls return same analyzedAt
         for (let i = 0; i < 40; i++) {
             fetchMock.mockResolvedValueOnce({
@@ -370,7 +386,10 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
         const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
 
         // POST succeeds
-        fetchMock.mockResolvedValueOnce({ ok: true })
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ status: 'queued', scanId: 'scan-1' }),
+        })
         // Three consecutive poll failures
         fetchMock.mockResolvedValueOnce({ ok: false })
         fetchMock.mockResolvedValueOnce({ ok: false })
@@ -401,7 +420,10 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
         const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
 
         // POST succeeds
-        fetchMock.mockResolvedValueOnce({ ok: true })
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ status: 'queued', scanId: 'scan-1' }),
+        })
         // Poll returns same data
         fetchMock.mockResolvedValue({
             ok: true,
