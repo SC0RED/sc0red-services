@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.models.model_event import JanusEvent
 from src.pipeline.factories_factory import JanusFactoriesFactory
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
+
+if TYPE_CHECKING:
+    from signalfield_core.services.ai_client_factory import AIClientFactory
 
 
 class FactoryManager:
@@ -24,6 +27,10 @@ class FactoryManager:
     def storage(self) -> DynamoDBStorageProvider:
         """Return the storage provider."""
         return self._storage
+
+    def get_ai_client_factory(self) -> AIClientFactory:
+        """Return the shared AI client factory for ad-hoc AI calls."""
+        return self._factories_factory._ai_client_factory
 
     def run_company_analysis(
         self,
