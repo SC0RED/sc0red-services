@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
+from signalfield_core.exceptions.base import EngineError
 from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
@@ -118,6 +119,6 @@ class ValidatePortfolioCompanies(RequestStep):
                 label=label,
                 step_name="ValidatePortfolio",
             )
-        except Exception:
+        except (EngineError, ValueError, RuntimeError):
             logger.exception("[ValidatePortfolio:%s] AI call failed — keeping company", label)
             return label, {"is_portfolio_company": True}, 0.0

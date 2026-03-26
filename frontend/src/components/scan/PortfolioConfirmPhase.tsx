@@ -35,6 +35,10 @@ export default function PortfolioConfirmPhase({
             setAddError('URL must start with http:// or https://')
             return
         }
+        if (companies.some((c) => c.url === trimmedUrl)) {
+            setAddError('This URL is already in the list.')
+            return
+        }
 
         onAddCompany(trimmedName, trimmedUrl)
         setNewName('')
