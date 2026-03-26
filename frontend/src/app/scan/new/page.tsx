@@ -226,6 +226,10 @@ function NewScanContent() {
         setCompanies((prev) => prev.map((c, idx) => (idx === index ? { ...c, selected } : c)))
     }
 
+    function handleAddCompany(name: string, url: string) {
+        setCompanies((prev) => [...prev, { name, url, description: '', selected: true }])
+    }
+
     return (
         <div className="page-layout">
             <DashboardSidebar />
@@ -258,6 +262,7 @@ function NewScanContent() {
                         <PortfolioConfirmPhase
                             companies={companies}
                             onCompanyToggle={handleCompanyToggle}
+                            onAddCompany={handleAddCompany}
                             onConfirm={confirmPortfolio}
                             onReset={() => setPhase('input')}
                         />

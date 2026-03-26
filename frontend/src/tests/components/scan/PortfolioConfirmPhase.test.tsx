@@ -13,6 +13,7 @@ describe('PortfolioConfirmPhase', () => {
     const defaultProps = {
         companies: mockCompanies,
         onCompanyToggle: vi.fn(),
+        onAddCompany: vi.fn(),
         onConfirm: vi.fn(),
         onReset: vi.fn(),
     }
@@ -78,5 +79,102 @@ describe('PortfolioConfirmPhase', () => {
         render(<PortfolioConfirmPhase {...defaultProps} />)
         expect(screen.getByText('Portfolio companies discovered')).toBeInTheDocument()
         expect(screen.getByText(/Found 3 companies/)).toBeInTheDocument()
+    })
+
+    describe('manual company addition', () => {
+        it('shows Add Company Manually button', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            expect(screen.getByText('+ Add Company Manually')).toBeInTheDocument()
+        })
+
+        it('expands form when Add Company Manually is clicked', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+
+            expect(screen.getByLabelText('Company Name')).toBeInTheDocument()
+            expect(screen.getByLabelText('Company URL')).toBeInTheDocument()
+            expect(screen.getByText('Add')).toBeInTheDocument()
+            expect(screen.getByText('Cancel')).toBeInTheDocument()
+        })
+
+        it('collapses form when Cancel is clicked', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+            fireEvent.click(screen.getByText('Cancel'))
+
+            expect(screen.getByText('+ Add Company Manually')).toBeInTheDocument()
+            expect(screen.queryByLabelText('Company Name')).not.toBeInTheDocument()
+        })
+
+        it('calls onAddCompany with valid inputs', () => {
+            const onAddCompany = vi.fn()
+            render(<PortfolioConfirmPhase {...defaultProps} onAddCompany={onAddCompany} />)
+
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+            fireEvent.change(screen.getByLabelText('Company Name'), {
+                target: { value: 'New Corp' },
+            })
+            fireEvent.change(screen.getByLabelText('Company URL'), {
+                target: { value: 'https://newcorp.com' },
+            })
+            fireEvent.click(screen.getByText('Add'))
+
+            expect(onAddCompany).toHaveBeenCalledWith('New Corp', 'https://newcorp.com')
+        })
+
+        it('shows error when name is empty', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+            fireEvent.change(screen.getByLabelText('Company URL'), {
+                target: { value: 'https://newcorp.com' },
+            })
+            fireEvent.click(screen.getByText('Add'))
+
+            expect(screen.getByText('Both name and URL are required.')).toBeInTheDocument()
+            expect(defaultProps.onAddCompany).not.toHaveBeenCalled()
+        })
+
+        it('shows error when URL is empty', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+            fireEvent.change(screen.getByLabelText('Company Name'), {
+                target: { value: 'New Corp' },
+            })
+            fireEvent.click(screen.getByText('Add'))
+
+            expect(screen.getByText('Both name and URL are required.')).toBeInTheDocument()
+        })
+
+        it('shows error when URL does not start with http', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+            fireEvent.change(screen.getByLabelText('Company Name'), {
+                target: { value: 'New Corp' },
+            })
+            fireEvent.change(screen.getByLabelText('Company URL'), {
+                target: { value: 'ftp://newcorp.com' },
+            })
+            fireEvent.click(screen.getByText('Add'))
+
+            expect(screen.getByText('URL must start with http:// or https://')).toBeInTheDocument()
+        })
+
+        it('clears form and collapses after successful add', () => {
+            const onAddCompany = vi.fn()
+            render(<PortfolioConfirmPhase {...defaultProps} onAddCompany={onAddCompany} />)
+
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+            fireEvent.change(screen.getByLabelText('Company Name'), {
+                target: { value: 'New Corp' },
+            })
+            fireEvent.change(screen.getByLabelText('Company URL'), {
+                target: { value: 'https://newcorp.com' },
+            })
+            fireEvent.click(screen.getByText('Add'))
+
+            // Form should collapse back to button
+            expect(screen.getByText('+ Add Company Manually')).toBeInTheDocument()
+            expect(screen.queryByLabelText('Company Name')).not.toBeInTheDocument()
+        })
     })
 })

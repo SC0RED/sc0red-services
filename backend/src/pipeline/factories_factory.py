@@ -78,6 +78,7 @@ class JanusFactoriesFactory:
         if event.request_type == "portfolio_scan":
             factory = PortfolioScanFactory(
                 entity_accessor=accessor,
+                ai_client_factory=self._ai_client_factory,
                 tenant_id=event.tenant_id,
                 request_id=event.request_id,
             )

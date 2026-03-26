@@ -1,8 +1,11 @@
+import { useState } from 'react'
+
 import type { Company } from '@/lib/types/scan'
 
 interface PortfolioConfirmPhaseProps {
     companies: Company[]
     onCompanyToggle: (index: number, selected: boolean) => void
+    onAddCompany: (name: string, url: string) => void
     onConfirm: () => void
     onReset: () => void
 }
@@ -10,10 +13,39 @@ interface PortfolioConfirmPhaseProps {
 export default function PortfolioConfirmPhase({
     companies,
     onCompanyToggle,
+    onAddCompany,
     onConfirm,
     onReset,
 }: PortfolioConfirmPhaseProps) {
     const selectedCount = companies.filter((c) => c.selected).length
+    const [showAddForm, setShowAddForm] = useState(false)
+    const [newName, setNewName] = useState('')
+    const [newUrl, setNewUrl] = useState('')
+    const [addError, setAddError] = useState('')
+
+    function handleAddCompany() {
+        const trimmedName = newName.trim()
+        const trimmedUrl = newUrl.trim()
+
+        if (!trimmedName || !trimmedUrl) {
+            setAddError('Both name and URL are required.')
+            return
+        }
+        if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+            setAddError('URL must start with http:// or https://')
+            return
+        }
+        if (companies.some((c) => c.url === trimmedUrl)) {
+            setAddError('This URL is already in the list.')
+            return
+        }
+
+        onAddCompany(trimmedName, trimmedUrl)
+        setNewName('')
+        setNewUrl('')
+        setAddError('')
+        setShowAddForm(false)
+    }
 
     return (
         <div>
@@ -66,7 +98,7 @@ export default function PortfolioConfirmPhase({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.5rem',
-                    marginBottom: '1.5rem',
+                    marginBottom: '1rem',
                     maxHeight: '400px',
                     overflowY: 'auto',
                 }}
@@ -107,6 +139,88 @@ export default function PortfolioConfirmPhase({
                         </label>
                     </div>
                 ))}
+            </div>
+
+            {/* Add Company Manually */}
+            <div style={{ marginBottom: '1.5rem' }}>
+                {!showAddForm ? (
+                    <button
+                        onClick={() => setShowAddForm(true)}
+                        className="btn btn-ghost"
+                        style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem' }}
+                    >
+                        + Add Company Manually
+                    </button>
+                ) : (
+                    <div
+                        className="card-surface-2"
+                        style={{
+                            padding: '0.875rem 1rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.5rem',
+                        }}
+                    >
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <input
+                                type="text"
+                                placeholder="Company Name"
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                                aria-label="Company Name"
+                                style={{
+                                    flex: 1,
+                                    padding: '0.5rem 0.75rem',
+                                    borderRadius: 'var(--radius-sm)',
+                                    border: '1px solid var(--border)',
+                                    background: 'var(--bg-primary)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '0.8125rem',
+                                }}
+                            />
+                            <input
+                                type="url"
+                                placeholder="https://company.com"
+                                value={newUrl}
+                                onChange={(e) => setNewUrl(e.target.value)}
+                                aria-label="Company URL"
+                                style={{
+                                    flex: 1,
+                                    padding: '0.5rem 0.75rem',
+                                    borderRadius: 'var(--radius-sm)',
+                                    border: '1px solid var(--border)',
+                                    background: 'var(--bg-primary)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '0.8125rem',
+                                }}
+                            />
+                        </div>
+                        {addError && (
+                            <div style={{ color: 'var(--risk-high)', fontSize: '0.75rem' }}>{addError}</div>
+                        )}
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                                onClick={handleAddCompany}
+                                className="btn btn-primary"
+                                style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem' }}
+                            >
+                                Add
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowAddForm(false)
+                                    setAddError('')
+                                    setNewName('')
+                                    setNewUrl('')
+                                }}
+                                className="btn btn-ghost"
+                                style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem' }}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>

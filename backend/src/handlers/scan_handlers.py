@@ -86,6 +86,7 @@ def _start_portfolio_scan(
         scan_id=scan_id,
     )
     companies = result["details"]["portfolio_companies"]
+
     scan_repo.update(
         scan_id,
         {
