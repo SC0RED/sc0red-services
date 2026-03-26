@@ -14,7 +14,6 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
 )
 from src.handlers.sqs_messages import build_analysis_message
-from src.pipeline.portfolio_validator import validate_portfolio_companies
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -87,13 +86,6 @@ def _start_portfolio_scan(
         scan_id=scan_id,
     )
     companies = result["details"]["portfolio_companies"]
-
-    # Validate discovered companies with AI to filter false positives
-    companies = validate_portfolio_companies(
-        companies=companies,
-        firm_url=url,
-        ai_client_factory=factory_manager.get_ai_client_factory(),
-    )
 
     scan_repo.update(
         scan_id,

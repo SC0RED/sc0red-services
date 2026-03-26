@@ -1,0 +1,11 @@
+{
+    "type": "object",
+    "properties": {
+        "is_portfolio_company": {
+            "type": "boolean",
+            "description": "true if this is a portfolio company of the firm, false otherwise"
+        }
+    },
+    "required": ["is_portfolio_company"],
+    "additionalProperties": false
+}

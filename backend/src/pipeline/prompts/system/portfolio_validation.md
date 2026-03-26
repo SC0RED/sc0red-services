@@ -1,0 +1,1 @@
+You are validating whether a URL belongs to a PE firm's investment portfolio. Answer only with the structured response.
