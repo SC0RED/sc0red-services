@@ -11,6 +11,13 @@ import { exportAnalysesListCsv } from '@/lib/utils/csvExport'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
+const STICKY_RIGHT: React.CSSProperties = {
+    position: 'sticky',
+    right: 0,
+    background: 'var(--bg-surface)',
+    zIndex: 1,
+}
+
 interface AnalysesTableProps {
     analyses: AnalysisItem[]
 }
@@ -226,7 +233,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                         direction={sortDirection}
                                         onSort={handleSort}
                                     />
-                                    <th style={{ padding: '0.875rem 1.25rem' }} />
+                                    <th style={{ padding: '0.875rem 1.25rem', ...STICKY_RIGHT }} />
                                 </tr>
                             </thead>
                             <tbody>
@@ -322,7 +329,13 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                                     ? new Date(a.analyzedAt).toLocaleDateString()
                                                     : '—'}
                                             </td>
-                                            <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
+                                            <td
+                                                style={{
+                                                    padding: '1rem 1.25rem',
+                                                    whiteSpace: 'nowrap',
+                                                    ...STICKY_RIGHT,
+                                                }}
+                                            >
                                                 <div
                                                     style={{
                                                         display: 'flex',
