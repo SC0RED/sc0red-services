@@ -5,6 +5,7 @@ import Link from 'next/link'
 
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import AnalysesToolbar from '@/components/AnalysesToolbar'
+import { SortableHeader, TableHeader } from '@/components/SortableHeader'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
@@ -21,6 +22,28 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
     const [typeFilter, setTypeFilter] = useState<string | null>(null)
     const [sortField, setSortField] = useState<SortField>('analyzedAt')
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+    function toggleSelection(id: string) {
+        setSelectedIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) {
+                next.delete(id)
+            } else if (next.size < 3) {
+                next.add(id)
+            }
+            return next
+        })
+    }
+
+    function toggleSelectAll() {
+        if (selectedIds.size === filtered.length || selectedIds.size === 3) {
+            setSelectedIds(new Set())
+        } else {
+            const ids = filtered.slice(0, 3).map((a) => a.id)
+            setSelectedIds(new Set(ids))
+        }
+    }
 
     function handleSort(field: SortField) {
         if (sortField === field) {
@@ -102,191 +125,199 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                     )}
                 </div>
             ) : (
-                <div className="card" style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', minWidth: '860px', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                <SortableHeader
-                                    label="Company"
-                                    field="companyName"
-                                    current={sortField}
-                                    direction={sortDirection}
-                                    onSort={handleSort}
-                                />
-                                <TableHeader>Industry</TableHeader>
-                                <TableHeader>Source</TableHeader>
-                                <SortableHeader
-                                    label="Risk Score"
-                                    field="overallRiskScore"
-                                    current={sortField}
-                                    direction={sortDirection}
-                                    onSort={handleSort}
-                                />
-                                <TableHeader>Tier</TableHeader>
-                                <SortableHeader
-                                    label="Date"
-                                    field="analyzedAt"
-                                    current={sortField}
-                                    direction={sortDirection}
-                                    onSort={handleSort}
-                                />
-                                <th style={{ padding: '0.875rem 1.25rem' }} />
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map((a, i) => {
-                                const tier = a.riskTier ?? ''
-                                return (
-                                    <tr
-                                        key={a.id}
-                                        style={{
-                                            borderBottom:
-                                                i < filtered.length - 1
-                                                    ? '1px solid var(--border-subtle)'
-                                                    : 'none',
-                                        }}
-                                    >
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            <div style={{ fontWeight: 500 }}>{a.companyName}</div>
-                                            {a.companyUrl && (
-                                                <div
-                                                    className="truncate"
-                                                    style={{
-                                                        fontSize: '0.8125rem',
-                                                        color: 'var(--text-tertiary)',
-                                                        maxWidth: '200px',
-                                                    }}
-                                                >
-                                                    {a.companyUrl}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td
+                <>
+                    {selectedIds.size >= 2 && (
+                        <div
+                            style={{
+                                position: 'sticky',
+                                bottom: '1rem',
+                                zIndex: 10,
+                                display: 'flex',
+                                justifyContent: 'center',
+                                marginBottom: '1rem',
+                            }}
+                        >
+                            <Link
+                                href={`/analyses/compare?ids=${Array.from(selectedIds).join(',')}`}
+                                className="btn btn-primary"
+                                style={{
+                                    boxShadow: '0 4px 20px rgba(59,123,246,0.4)',
+                                    padding: '0.625rem 1.5rem',
+                                }}
+                            >
+                                Compare {selectedIds.size} Selected
+                            </Link>
+                        </div>
+                    )}
+
+                    <div className="card" style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                                    <th style={{ padding: '0.875rem 0.75rem', width: '40px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={
+                                                selectedIds.size > 0 &&
+                                                selectedIds.size === Math.min(filtered.length, 3)
+                                            }
+                                            onChange={toggleSelectAll}
+                                            aria-label="Select all analyses"
                                             style={{
-                                                padding: '1rem 1.25rem',
-                                                color: 'var(--text-secondary)',
-                                                fontSize: '0.875rem',
+                                                width: '16px',
+                                                height: '16px',
+                                                accentColor: 'var(--accent-blue)',
+                                                cursor: 'pointer',
+                                            }}
+                                        />
+                                    </th>
+                                    <SortableHeader
+                                        label="Company"
+                                        field="companyName"
+                                        current={sortField}
+                                        direction={sortDirection}
+                                        onSort={handleSort}
+                                    />
+                                    <TableHeader>Industry</TableHeader>
+                                    <TableHeader>Source</TableHeader>
+                                    <SortableHeader
+                                        label="Risk Score"
+                                        field="overallRiskScore"
+                                        current={sortField}
+                                        direction={sortDirection}
+                                        onSort={handleSort}
+                                    />
+                                    <TableHeader>Tier</TableHeader>
+                                    <SortableHeader
+                                        label="Date"
+                                        field="analyzedAt"
+                                        current={sortField}
+                                        direction={sortDirection}
+                                        onSort={handleSort}
+                                    />
+                                    <th style={{ padding: '0.875rem 1.25rem' }} />
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.map((a, i) => {
+                                    const tier = a.riskTier ?? ''
+                                    return (
+                                        <tr
+                                            key={a.id}
+                                            style={{
+                                                borderBottom:
+                                                    i < filtered.length - 1
+                                                        ? '1px solid var(--border-subtle)'
+                                                        : 'none',
                                             }}
                                         >
-                                            {a.industry || '—'}
-                                        </td>
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            <span
-                                                className={`badge badge-${a.scanType === 'portfolio' ? 'blue' : 'cyan'}`}
-                                                style={{ fontSize: '0.7rem' }}
-                                            >
-                                                {a.scanType === 'portfolio' ? 'Portfolio' : 'Standalone'}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            <span
+                                            <td style={{ padding: '1rem 0.75rem', width: '40px' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.has(a.id)}
+                                                    onChange={() => toggleSelection(a.id)}
+                                                    disabled={!selectedIds.has(a.id) && selectedIds.size >= 3}
+                                                    aria-label={`Select ${a.companyName}`}
+                                                    style={{
+                                                        width: '16px',
+                                                        height: '16px',
+                                                        accentColor: 'var(--accent-blue)',
+                                                        cursor:
+                                                            selectedIds.has(a.id) || selectedIds.size < 3
+                                                                ? 'pointer'
+                                                                : 'not-allowed',
+                                                    }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '1rem 1.25rem' }}>
+                                                <div style={{ fontWeight: 500 }}>{a.companyName}</div>
+                                                {a.companyUrl && (
+                                                    <div
+                                                        className="truncate"
+                                                        style={{
+                                                            fontSize: '0.8125rem',
+                                                            color: 'var(--text-tertiary)',
+                                                            maxWidth: '200px',
+                                                        }}
+                                                    >
+                                                        {a.companyUrl}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td
                                                 style={{
-                                                    fontWeight: 700,
-                                                    fontSize: '1.1rem',
-                                                    color: TIER_COLORS[tier],
+                                                    padding: '1rem 1.25rem',
+                                                    color: 'var(--text-secondary)',
+                                                    fontSize: '0.875rem',
                                                 }}
                                             >
-                                                {a.overallRiskScore?.toFixed(1)}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            {tier && (
-                                                <span className={`badge badge-${tier}`}>
-                                                    {getRiskTierLabel(tier)}
+                                                {a.industry || '—'}
+                                            </td>
+                                            <td style={{ padding: '1rem 1.25rem' }}>
+                                                <span
+                                                    className={`badge badge-${a.scanType === 'portfolio' ? 'blue' : 'cyan'}`}
+                                                    style={{ fontSize: '0.7rem' }}
+                                                >
+                                                    {a.scanType === 'portfolio' ? 'Portfolio' : 'Standalone'}
                                                 </span>
-                                            )}
-                                        </td>
-                                        <td
-                                            style={{
-                                                padding: '1rem 1.25rem',
-                                                color: 'var(--text-tertiary)',
-                                                fontSize: '0.8125rem',
-                                                whiteSpace: 'nowrap',
-                                            }}
-                                        >
-                                            {a.analyzedAt ? new Date(a.analyzedAt).toLocaleDateString() : '—'}
-                                        </td>
-                                        <td
-                                            style={{
-                                                padding: '1rem 1.25rem',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '0.25rem',
-                                            }}
-                                        >
-                                            <Link href={`/analysis/${a.id}`} className="btn btn-ghost btn-sm">
-                                                View
-                                            </Link>
-                                            <DeleteAnalysisButton
-                                                analysisId={a.id}
-                                                companyName={a.companyName}
-                                            />
-                                        </td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                            </td>
+                                            <td style={{ padding: '1rem 1.25rem' }}>
+                                                <span
+                                                    style={{
+                                                        fontWeight: 700,
+                                                        fontSize: '1.1rem',
+                                                        color: TIER_COLORS[tier],
+                                                    }}
+                                                >
+                                                    {a.overallRiskScore?.toFixed(1)}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem 1.25rem' }}>
+                                                {tier && (
+                                                    <span className={`badge badge-${tier}`}>
+                                                        {getRiskTierLabel(tier)}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td
+                                                style={{
+                                                    padding: '1rem 1.25rem',
+                                                    color: 'var(--text-tertiary)',
+                                                    fontSize: '0.8125rem',
+                                                    whiteSpace: 'nowrap',
+                                                }}
+                                            >
+                                                {a.analyzedAt
+                                                    ? new Date(a.analyzedAt).toLocaleDateString()
+                                                    : '—'}
+                                            </td>
+                                            <td
+                                                style={{
+                                                    padding: '1rem 1.25rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.25rem',
+                                                }}
+                                            >
+                                                <Link
+                                                    href={`/analysis/${a.id}`}
+                                                    className="btn btn-ghost btn-sm"
+                                                >
+                                                    View
+                                                </Link>
+                                                <DeleteAnalysisButton
+                                                    analysisId={a.id}
+                                                    companyName={a.companyName}
+                                                />
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
             )}
         </div>
-    )
-}
-
-const HEADER_STYLE = {
-    padding: '0.875rem 1.25rem',
-    textAlign: 'left' as const,
-    fontSize: '0.8125rem',
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em',
-}
-
-function TableHeader({ children }: { children: React.ReactNode }) {
-    return <th style={HEADER_STYLE}>{children}</th>
-}
-
-function SortableHeader({
-    label,
-    field,
-    current,
-    direction,
-    onSort,
-}: {
-    label: string
-    field: SortField
-    current: SortField
-    direction: SortDirection
-    onSort: (field: SortField) => void
-}) {
-    const isActive = current === field
-    return (
-        <th style={{ ...HEADER_STYLE, cursor: 'pointer', userSelect: 'none' }}>
-            <button
-                type="button"
-                onClick={() => onSort(field)}
-                style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: isActive ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                    fontWeight: 600,
-                    fontSize: '0.8125rem',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.375rem',
-                    padding: 0,
-                }}
-                aria-label={`Sort by ${label}`}
-            >
-                {label}
-                <span style={{ fontSize: '0.625rem' }}>
-                    {isActive ? (direction === 'asc' ? '\u25B2' : '\u25BC') : '\u2195'}
-                </span>
-            </button>
-        </th>
     )
 }
