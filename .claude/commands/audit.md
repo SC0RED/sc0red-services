@@ -10,6 +10,8 @@ Execute `./scripts/audit.sh` from the project root and report the results. The a
 6. **Hardcoded secrets** — Dev secrets not in production paths
 7. **Cross-file duplication** — No inline tierColors, error handlers, etc.
 
+8. **Mandatory patterns** — All AI calls via `run_structured_ai_call`, no `ThreadPoolExecutor` (use `FutureManager`), no inline prompts in Python
+
 If the audit finds issues, explain each one and suggest a fix. If all checks pass, confirm the codebase is clean.
 
 After running the script, also manually check:
