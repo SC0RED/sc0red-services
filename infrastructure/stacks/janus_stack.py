@@ -1,4 +1,4 @@
-"""Janus CDK stack — DynamoDB, SQS, Lambda (API + Worker), API Gateway."""
+"""Janus CDK stack — DynamoDB, SQS, Lambda (API + Worker), API Gateway, Cognito."""
 
 import os
 from typing import Any
@@ -18,6 +18,8 @@ from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as sns_subscriptions
 from aws_cdk import aws_sqs as sqs
 from constructs import Construct
+
+from stacks.cognito_construct import CognitoConstruct
 
 _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
     7: logs.RetentionDays.ONE_WEEK,
@@ -52,8 +54,12 @@ class JanusStack(Stack):
         queue, dlq = self._create_queues()
         documents_bucket = self._create_documents_bucket()
 
+        cognito = self._create_cognito()
+
         bundling = self._build_bundling_options()
-        common_environment = self._build_common_environment(table, queue, documents_bucket)
+        common_environment = self._build_common_environment(
+            table, queue, documents_bucket, cognito
+        )
 
         api_handler = self._create_api_lambda(table, queue, bundling, common_environment)
         worker_handler = self._create_worker_lambda(table, queue, bundling, common_environment)
@@ -157,6 +163,17 @@ class JanusStack(Stack):
         )
         return bucket
 
+    # ── Cognito ─────────────────────────────────────────────────────────────────
+
+    def _create_cognito(self) -> CognitoConstruct:
+        """Create the Cognito User Pool and App Client."""
+        return CognitoConstruct(
+            self,
+            "Cognito",
+            environment=self._environment,
+            removal_policy=self._config["removal_policy"],
+        )
+
     # ── Shared helpers ─────────────────────────────────────────────────────────
 
     def _build_bundling_options(self) -> cdk.BundlingOptions:
@@ -203,6 +220,7 @@ class JanusStack(Stack):
         table: dynamodb.Table,
         queue: sqs.Queue,
         documents_bucket: s3.Bucket,
+        cognito_construct: CognitoConstruct,
     ) -> dict[str, str]:
         """Build the environment variables shared by both Lambdas."""
         nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
@@ -216,12 +234,17 @@ class JanusStack(Stack):
                 )
                 raise ValueError(message)
 
+        region = self.region or os.environ.get("AWS_REGION", "us-east-1")
+
         return {
             "DYNAMODB_TABLE": table.table_name,
             "ANALYSIS_QUEUE_URL": queue.queue_url,
             "DOCUMENTS_BUCKET": documents_bucket.bucket_name,
             "STAGE": self._environment,
             "NEXTAUTH_SECRET": nextauth_secret,
+            "COGNITO_USER_POOL_ID": cognito_construct.user_pool_id,
+            "COGNITO_CLIENT_ID": cognito_construct.app_client_id,
+            "COGNITO_REGION": region,
             "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", "sk-placeholder"),
             "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
             "AI_PROVIDER": os.environ.get("AI_PROVIDER", "anthropic"),
