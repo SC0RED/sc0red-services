@@ -38,7 +38,7 @@ export default async function DashboardPage() {
         <>
             {/* DashboardSidebar is position:fixed; no flex wrapper needed */}
             <DashboardSidebar />
-            <main className="page-content">
+            <main id="main" className="page-content">
                 <div style={{ marginBottom: '2rem' }}>
                     <h1 className="page-title">
                         Good{' '}

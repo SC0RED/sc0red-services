@@ -129,6 +129,39 @@ describe('ValueLeverSummary', () => {
         expect(onLeverChange).toHaveBeenCalledWith('All')
     })
 
+    it('lever cards are keyboard accessible buttons', () => {
+        const onLeverChange = vi.fn()
+        render(
+            <ValueLeverSummary
+                opportunities={mockOpportunities}
+                activeLever="All"
+                onLeverChange={onLeverChange}
+            />
+        )
+
+        const revenueButton = screen.getByText('Revenue Side').closest('button')!
+        expect(revenueButton).toBeInTheDocument()
+        expect(revenueButton.getAttribute('type')).toBe('button')
+        expect(revenueButton.getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('aria-pressed reflects active lever', () => {
+        const onLeverChange = vi.fn()
+        render(
+            <ValueLeverSummary
+                opportunities={mockOpportunities}
+                activeLever="Cost Side"
+                onLeverChange={onLeverChange}
+            />
+        )
+
+        const costButton = screen.getByText('Cost Side').closest('button')!
+        expect(costButton.getAttribute('aria-pressed')).toBe('true')
+
+        const revenueButton = screen.getByText('Revenue Side').closest('button')!
+        expect(revenueButton.getAttribute('aria-pressed')).toBe('false')
+    })
+
     it('active lever has highlighted background', () => {
         const onLeverChange = vi.fn()
         render(

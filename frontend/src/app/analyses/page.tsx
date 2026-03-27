@@ -22,7 +22,7 @@ export default async function AnalysesPage() {
     return (
         <div className="page-layout">
             <DashboardSidebar />
-            <main className="page-content">
+            <main id="main" className="page-content">
                 <div style={{ marginBottom: '2rem' }}>
                     <h1 className="page-title">All Analyses</h1>
                     <p style={{ color: 'var(--text-secondary)' }}>
