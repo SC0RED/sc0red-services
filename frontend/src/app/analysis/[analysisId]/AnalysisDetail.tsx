@@ -162,7 +162,12 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     return (
         <div className="page-layout">
             <DashboardSidebar />
-            <main id="main" className="page-content" style={{ margin: '0 auto 0 var(--sidebar-width)' }}>
+            <main
+                id="main"
+                tabIndex={-1}
+                className="page-content"
+                style={{ margin: '0 auto 0 var(--sidebar-width)' }}
+            >
                 <AnalysisHeader
                     analysisId={analysisId}
                     companyName={data.companyName}

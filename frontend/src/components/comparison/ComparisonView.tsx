@@ -27,7 +27,7 @@ export default function ComparisonView({ analyses }: ComparisonViewProps) {
     return (
         <div className="page-layout">
             <DashboardSidebar />
-            <main id="main" className="page-content-wide">
+            <main id="main" tabIndex={-1} className="page-content-wide">
                 {/* Header */}
                 <div style={{ marginBottom: '2rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>

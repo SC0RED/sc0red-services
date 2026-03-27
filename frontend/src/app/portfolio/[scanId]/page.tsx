@@ -27,7 +27,7 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
     return (
         <div className="page-layout">
             <DashboardSidebar />
-            <main id="main" className="page-content-wide">
+            <main id="main" tabIndex={-1} className="page-content-wide">
                 <PortfolioView scanId={params.scanId} initialScan={scan} />
             </main>
         </div>

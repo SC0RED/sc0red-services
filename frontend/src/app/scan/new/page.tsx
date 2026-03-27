@@ -233,7 +233,7 @@ function NewScanContent() {
     return (
         <div className="page-layout">
             <DashboardSidebar />
-            <main id="main" className="page-content-narrow">
+            <main id="main" tabIndex={-1} className="page-content-narrow">
                 <div style={{ width: '100%', maxWidth: '680px' }}>
                     {/* Header */}
                     <div style={{ marginBottom: '2rem' }}>

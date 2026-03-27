@@ -122,8 +122,19 @@ def handle_list_analyses(
 ) -> LambdaResponse:
     """Handle GET /api/analyses."""
     company_repo = storage.create_company_repository()
+    scan_repo = storage.create_scan_repository()
     companies = company_repo.find_by_org(authentication.org_id)
-    return build_json_response({"analyses": [build_company_summary(c) for c in companies]})
+
+    all_scans = scan_repo.find_recent_by_org(authentication.org_id, limit=None)
+    scan_type_map = {s["id"]: s.get("type", "") for s in all_scans}
+
+    analyses = []
+    for company in companies:
+        summary = build_company_summary(company)
+        summary["scanType"] = scan_type_map.get(company.get("scan_id", ""), "")
+        analyses.append(summary)
+
+    return build_json_response({"analyses": analyses})
 
 
 def handle_dashboard(
