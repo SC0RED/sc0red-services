@@ -798,6 +798,9 @@ a:focus:not(:focus-visible),
 .skip-to-content:focus {
     top: 1rem;
 }
+#main:focus {
+    outline: none;
+}
 
 /* ── Utility ───────────────────────────────────────────────── */
 .sr-only {
