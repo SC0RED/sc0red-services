@@ -182,7 +182,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                     )}
 
                     <div className="card" style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse' }}>
+                        <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                     <th style={{ padding: '0.875rem 0.75rem', width: '40px' }}>
@@ -322,24 +322,25 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                                     ? new Date(a.analyzedAt).toLocaleDateString()
                                                     : '—'}
                                             </td>
-                                            <td
-                                                style={{
-                                                    padding: '1rem 1.25rem',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.25rem',
-                                                }}
-                                            >
-                                                <Link
-                                                    href={`/analysis/${a.id}`}
-                                                    className="btn btn-ghost btn-sm"
+                                            <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
+                                                <div
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.25rem',
+                                                    }}
                                                 >
-                                                    View
-                                                </Link>
-                                                <DeleteAnalysisButton
-                                                    analysisId={a.id}
-                                                    companyName={a.companyName}
-                                                />
+                                                    <Link
+                                                        href={`/analysis/${a.id}`}
+                                                        className="btn btn-ghost btn-sm"
+                                                    >
+                                                        View
+                                                    </Link>
+                                                    <DeleteAnalysisButton
+                                                        analysisId={a.id}
+                                                        companyName={a.companyName}
+                                                    />
+                                                </div>
                                             </td>
                                         </tr>
                                     )
