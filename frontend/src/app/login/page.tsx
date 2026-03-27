@@ -124,6 +124,7 @@ export default function LoginPage() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 autoComplete="email"
+                                aria-describedby={error ? 'login-error' : undefined}
                             />
                         </div>
 
@@ -144,16 +145,7 @@ export default function LoginPage() {
                         </div>
 
                         {error && (
-                            <div
-                                style={{
-                                    padding: '0.75rem 1rem',
-                                    background: 'var(--risk-critical-bg)',
-                                    border: '1px solid rgba(239,68,68,0.3)',
-                                    borderRadius: 'var(--radius-md)',
-                                    color: 'var(--risk-critical)',
-                                    fontSize: '0.875rem',
-                                }}
-                            >
+                            <div id="login-error" role="alert" className="alert-error">
                                 {error}
                             </div>
                         )}

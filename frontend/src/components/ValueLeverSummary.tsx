@@ -38,14 +38,18 @@ export default function ValueLeverSummary({
                 {leverSummary.map(({ lever, count }) => {
                     const color = LEVER_COLORS[lever] || 'var(--text-secondary)'
                     return (
-                        <div
+                        <button
                             key={lever}
+                            type="button"
                             className="card"
+                            aria-pressed={activeLever === lever}
                             style={{
                                 padding: '1.25rem',
                                 borderTop: `3px solid ${color}`,
                                 cursor: 'pointer',
                                 background: activeLever === lever ? `${color}10` : 'var(--bg-surface)',
+                                textAlign: 'left',
+                                width: '100%',
                             }}
                             onClick={() => onLeverChange(activeLever === lever ? 'All' : lever)}
                         >
@@ -68,7 +72,7 @@ export default function ValueLeverSummary({
                             >
                                 {count === 1 ? 'opportunity' : 'opportunities'}
                             </div>
-                        </div>
+                        </button>
                     )
                 })}
             </div>

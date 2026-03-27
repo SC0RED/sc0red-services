@@ -12,6 +12,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return (
         <html lang="en">
             <body>
+                <a href="#main" className="skip-to-content">
+                    Skip to main content
+                </a>
                 <SessionWrapper>{children}</SessionWrapper>
             </body>
         </html>
