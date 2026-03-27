@@ -1,3 +1,5 @@
+'use client'
+
 import { getRiskTierLabel } from '@/lib/utils/riskUtils'
 
 const TIER_OPTIONS = ['critical', 'high', 'moderate', 'low'] as const

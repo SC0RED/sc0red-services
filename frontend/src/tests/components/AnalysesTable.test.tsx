@@ -103,7 +103,8 @@ describe('AnalysesTable', () => {
             // Filter chips have aria-pressed attribute; table badges don't
             const buttons = screen.getAllByText(label)
             const chip = buttons.find((el) => el.closest('[aria-pressed]'))
-            return chip!
+            if (!chip) throw new Error(`Filter chip "${label}" not found`)
+            return chip
         }
 
         it('filters by risk tier when chip is clicked', () => {
@@ -124,11 +125,44 @@ describe('AnalysesTable', () => {
         })
     })
 
+    describe('combined filters', () => {
+        function getFilterChip(label: string) {
+            const buttons = screen.getAllByText(label)
+            const chip = buttons.find((el) => el.closest('[aria-pressed]'))
+            if (!chip) throw new Error(`Filter chip "${label}" not found`)
+            return chip
+        }
+
+        it('search + tier filter combines with AND logic', () => {
+            render(<AnalysesTable analyses={mockAnalyses} />)
+            fireEvent.change(screen.getByLabelText('Search analyses'), {
+                target: { value: 'Acme' },
+            })
+            fireEvent.click(getFilterChip('Critical Risk'))
+
+            // Acme is critical — should still show
+            expect(screen.getByText('Acme Corp')).toBeInTheDocument()
+            expect(screen.getByText('1 of 3')).toBeInTheDocument()
+        })
+
+        it('search + tier filter hides non-matching', () => {
+            render(<AnalysesTable analyses={mockAnalyses} />)
+            fireEvent.change(screen.getByLabelText('Search analyses'), {
+                target: { value: 'Acme' },
+            })
+            fireEvent.click(getFilterChip('Low Risk'))
+
+            // Acme is critical, not low — should show empty
+            expect(screen.getByText('No analyses match your filters.')).toBeInTheDocument()
+        })
+    })
+
     describe('type filter', () => {
         function getTypeChip(label: string) {
             const buttons = screen.getAllByText(label)
             const chip = buttons.find((el) => el.closest('[aria-pressed]'))
-            return chip!
+            if (!chip) throw new Error(`Type chip "${label}" not found`)
+            return chip
         }
 
         it('filters by scan type', () => {
@@ -173,7 +207,8 @@ describe('AnalysesTable', () => {
         function getFilterChip(label: string) {
             const buttons = screen.getAllByText(label)
             const chip = buttons.find((el) => el.closest('[aria-pressed]'))
-            return chip!
+            if (!chip) throw new Error(`Filter chip "${label}" not found`)
+            return chip
         }
 
         it('shows clear button when filters are active', () => {

@@ -283,12 +283,9 @@ function SortableHeader({
                 aria-label={`Sort by ${label}`}
             >
                 {label}
-                <span
-                    style={{ fontSize: '0.625rem' }}
-                    dangerouslySetInnerHTML={{
-                        __html: isActive ? (direction === 'asc' ? '&#9650;' : '&#9660;') : '&#8597;',
-                    }}
-                />
+                <span style={{ fontSize: '0.625rem' }}>
+                    {isActive ? (direction === 'asc' ? '\u25B2' : '\u25BC') : '\u2195'}
+                </span>
             </button>
         </th>
     )
