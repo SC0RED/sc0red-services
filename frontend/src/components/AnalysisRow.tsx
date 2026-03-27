@@ -4,13 +4,6 @@ import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
-const STICKY_RIGHT: React.CSSProperties = {
-    position: 'sticky',
-    right: 0,
-    background: 'var(--bg-surface)',
-    zIndex: 1,
-}
-
 interface AnalysisRowProps {
     analysis: AnalysisItem
     selected: boolean
@@ -89,7 +82,7 @@ export default function AnalysisRow({
             >
                 {analysis.analyzedAt ? new Date(analysis.analyzedAt).toLocaleDateString() : '—'}
             </td>
-            <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', ...STICKY_RIGHT }}>
+            <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                     <Link href={`/analysis/${analysis.id}`} className="btn btn-ghost btn-sm">
                         View

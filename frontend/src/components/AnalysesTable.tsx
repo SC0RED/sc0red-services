@@ -181,7 +181,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                     )}
 
                     <div className="card" style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse' }}>
+                        <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                     <th style={{ padding: '0.875rem 0.75rem', width: '40px' }}>
@@ -225,14 +225,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                         direction={sortDirection}
                                         onSort={handleSort}
                                     />
-                                    <th
-                                        style={{
-                                            padding: '0.875rem 1.25rem',
-                                            position: 'sticky',
-                                            right: 0,
-                                            background: 'var(--bg-surface)',
-                                        }}
-                                    />
+                                    <th style={{ padding: '0.875rem 1.25rem' }} />
                                 </tr>
                             </thead>
                             <tbody>
