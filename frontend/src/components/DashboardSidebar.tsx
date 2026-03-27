@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
+
+import { useMobileMenu } from '@/lib/hooks/useMobileMenu'
 
 const navItems = [
     {
@@ -74,42 +75,13 @@ export default function DashboardSidebar() {
     const pathname = usePathname()
     const sessionRes = useSession()
     const session = sessionRes?.data
-    const [mobileOpen, setMobileOpen] = useState(false)
-    const hamburgerRef = useRef<HTMLButtonElement>(null)
-    const closeRef = useRef<HTMLButtonElement>(null)
-
-    const closeMobileMenu = useCallback(() => {
-        setMobileOpen(false)
-        hamburgerRef.current?.focus()
-    }, [])
-
-    // Close mobile menu on navigation
-    useEffect(() => {
-        setMobileOpen(false)
-    }, [pathname])
-
-    // Prevent body scroll when mobile menu is open
-    useEffect(() => {
-        if (mobileOpen) {
-            document.body.style.overflow = 'hidden'
-            closeRef.current?.focus()
-        } else {
-            document.body.style.overflow = ''
-        }
-        return () => {
-            document.body.style.overflow = ''
-        }
-    }, [mobileOpen])
-
-    // Close on Escape key
-    useEffect(() => {
-        if (!mobileOpen) return
-        const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') closeMobileMenu()
-        }
-        document.addEventListener('keydown', handleEscape)
-        return () => document.removeEventListener('keydown', handleEscape)
-    }, [mobileOpen, closeMobileMenu])
+    const {
+        isOpen: mobileOpen,
+        open: openMobile,
+        close: closeMobile,
+        hamburgerRef,
+        closeRef,
+    } = useMobileMenu()
 
     return (
         <>
@@ -118,7 +90,7 @@ export default function DashboardSidebar() {
                 ref={hamburgerRef}
                 type="button"
                 className="mobile-menu-toggle"
-                onClick={() => setMobileOpen(true)}
+                onClick={openMobile}
                 aria-label="Open navigation menu"
             >
                 <svg
@@ -138,7 +110,7 @@ export default function DashboardSidebar() {
             </button>
 
             {/* Mobile backdrop */}
-            {mobileOpen && <div className="mobile-backdrop" onClick={closeMobileMenu} aria-hidden="true" />}
+            {mobileOpen && <div className="mobile-backdrop" onClick={closeMobile} aria-hidden="true" />}
 
             <aside className={`sidebar ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
                 {/* Mobile close button */}
@@ -146,7 +118,7 @@ export default function DashboardSidebar() {
                     ref={closeRef}
                     type="button"
                     className="mobile-menu-close"
-                    onClick={closeMobileMenu}
+                    onClick={closeMobile}
                     aria-label="Close navigation menu"
                 >
                     <svg
