@@ -4,23 +4,28 @@ import { RISK_CATEGORIES } from '@/lib/utils/riskUtils'
 function escapeCell(value: string | number | null | undefined): string {
     if (value === null || value === undefined) return ''
     const str = String(value)
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`
-    }
-    return str
+    // Prevent CSV injection — prefix formula-triggering chars (OWASP recommendation)
+    const needsPrefix = /^[=+\-@\t\r]/.test(str)
+    const needsQuoting = str.includes(',') || str.includes('"') || str.includes('\n')
+    const escaped = needsQuoting ? `"${str.replace(/"/g, '""')}"` : str
+    return needsPrefix ? `\t${escaped}` : escaped
 }
 
 function buildRow(cells: (string | number | null | undefined)[]): string {
     return cells.map(escapeCell).join(',')
 }
 
+const UTF8_BOM = '\uFEFF'
+
 function triggerDownload(csvContent: string, filename: string): void {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob([UTF8_BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = filename
+    document.body.appendChild(link)
     link.click()
+    document.body.removeChild(link)
     URL.revokeObjectURL(url)
 }
 
@@ -86,7 +91,7 @@ export function exportAnalysesListCsv(analyses: AnalysisItem[]): void {
                 a.industry ?? '',
                 a.overallRiskScore,
                 a.riskTier ?? '',
-                a.scanType ?? '',
+                a.scanType === 'portfolio' ? 'Portfolio' : a.scanType === 'standalone' ? 'Standalone' : '',
                 a.analyzedAt ?? '',
             ])
         )

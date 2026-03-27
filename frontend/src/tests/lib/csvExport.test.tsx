@@ -28,6 +28,8 @@ beforeEach(() => {
         configurable: true,
     })
     vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLElement)
+    vi.spyOn(document.body, 'appendChild').mockReturnValue(mockLink as unknown as HTMLElement)
+    vi.spyOn(document.body, 'removeChild').mockReturnValue(mockLink as unknown as HTMLElement)
 })
 
 function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData {
@@ -90,6 +92,36 @@ describe('exportAnalysisDetailCsv', () => {
         expect(capturedContent).toContain('Deploy AI Chatbot,High,Quick Win')
     })
 
+    it('escapes double quotes in values', () => {
+        exportAnalysisDetailCsv(
+            buildAnalysisData({
+                riskScores: [
+                    {
+                        category: 'competitive_displacement',
+                        score: 8,
+                        rationale: 'Company said "we\'re fine"',
+                    },
+                ],
+            })
+        )
+        expect(capturedContent).toContain('"Company said ""we\'re fine"""')
+    })
+
+    it('prevents CSV injection on formula-triggering chars', () => {
+        exportAnalysisDetailCsv(
+            buildAnalysisData({
+                riskScores: [
+                    {
+                        category: 'competitive_displacement',
+                        score: 8,
+                        rationale: '=SUM(A1:A10)',
+                    },
+                ],
+            })
+        )
+        expect(capturedContent).toContain('\t=SUM(A1:A10)')
+    })
+
     it('escapes commas in values', () => {
         exportAnalysisDetailCsv(
             buildAnalysisData({
@@ -120,7 +152,7 @@ describe('exportAnalysesListCsv', () => {
         ]
         exportAnalysesListCsv(analyses)
         expect(capturedContent).toContain('Company,Industry,Risk Score,Risk Tier,Source,Analyzed At')
-        expect(capturedContent).toContain('Acme,,6.5,high,portfolio,2026-03-01')
+        expect(capturedContent).toContain('Acme,,6.5,high,Portfolio,2026-03-01')
     })
 
     it('uses fixed filename', () => {
