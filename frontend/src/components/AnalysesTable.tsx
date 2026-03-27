@@ -3,12 +3,11 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 
-import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import AnalysesToolbar from '@/components/AnalysesToolbar'
+import AnalysisRow from '@/components/AnalysisRow'
 import { SortableHeader, TableHeader } from '@/components/SortableHeader'
 import type { SortField, SortDirection } from '@/components/SortableHeader'
 import { exportAnalysesListCsv } from '@/lib/utils/csvExport'
-import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
 interface AnalysesTableProps {
@@ -226,125 +225,27 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                         direction={sortDirection}
                                         onSort={handleSort}
                                     />
-                                    <th style={{ padding: '0.875rem 1.25rem' }} />
+                                    <th
+                                        style={{
+                                            padding: '0.875rem 1.25rem',
+                                            position: 'sticky',
+                                            right: 0,
+                                            background: 'var(--bg-surface)',
+                                        }}
+                                    />
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map((a, i) => {
-                                    const tier = a.riskTier ?? ''
-                                    return (
-                                        <tr
-                                            key={a.id}
-                                            style={{
-                                                borderBottom:
-                                                    i < filtered.length - 1
-                                                        ? '1px solid var(--border-subtle)'
-                                                        : 'none',
-                                            }}
-                                        >
-                                            <td style={{ padding: '1rem 0.75rem', width: '40px' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedIds.has(a.id)}
-                                                    onChange={() => toggleSelection(a.id)}
-                                                    disabled={!selectedIds.has(a.id) && selectedIds.size >= 3}
-                                                    aria-label={`Select ${a.companyName}`}
-                                                    style={{
-                                                        width: '16px',
-                                                        height: '16px',
-                                                        accentColor: 'var(--accent-blue)',
-                                                        cursor:
-                                                            selectedIds.has(a.id) || selectedIds.size < 3
-                                                                ? 'pointer'
-                                                                : 'not-allowed',
-                                                    }}
-                                                />
-                                            </td>
-                                            <td style={{ padding: '1rem 1.25rem' }}>
-                                                <div style={{ fontWeight: 500 }}>{a.companyName}</div>
-                                                {a.companyUrl && (
-                                                    <div
-                                                        className="truncate"
-                                                        style={{
-                                                            fontSize: '0.8125rem',
-                                                            color: 'var(--text-tertiary)',
-                                                            maxWidth: '200px',
-                                                        }}
-                                                    >
-                                                        {a.companyUrl}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td
-                                                style={{
-                                                    padding: '1rem 1.25rem',
-                                                    color: 'var(--text-secondary)',
-                                                    fontSize: '0.875rem',
-                                                }}
-                                            >
-                                                {a.industry || '—'}
-                                            </td>
-                                            <td style={{ padding: '1rem 1.25rem' }}>
-                                                <span
-                                                    className={`badge badge-${a.scanType === 'portfolio' ? 'blue' : 'cyan'}`}
-                                                    style={{ fontSize: '0.7rem' }}
-                                                >
-                                                    {a.scanType === 'portfolio' ? 'Portfolio' : 'Standalone'}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '1rem 1.25rem' }}>
-                                                <span
-                                                    style={{
-                                                        fontWeight: 700,
-                                                        fontSize: '1.1rem',
-                                                        color: TIER_COLORS[tier],
-                                                    }}
-                                                >
-                                                    {a.overallRiskScore?.toFixed(1)}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '1rem 1.25rem' }}>
-                                                {tier && (
-                                                    <span className={`badge badge-${tier}`}>
-                                                        {getRiskTierLabel(tier)}
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td
-                                                style={{
-                                                    padding: '1rem 1.25rem',
-                                                    color: 'var(--text-tertiary)',
-                                                    fontSize: '0.8125rem',
-                                                    whiteSpace: 'nowrap',
-                                                }}
-                                            >
-                                                {a.analyzedAt
-                                                    ? new Date(a.analyzedAt).toLocaleDateString()
-                                                    : '—'}
-                                            </td>
-                                            <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
-                                                <div
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.25rem',
-                                                    }}
-                                                >
-                                                    <Link
-                                                        href={`/analysis/${a.id}`}
-                                                        className="btn btn-ghost btn-sm"
-                                                    >
-                                                        View
-                                                    </Link>
-                                                    <DeleteAnalysisButton
-                                                        analysisId={a.id}
-                                                        companyName={a.companyName}
-                                                    />
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )
-                                })}
+                                {filtered.map((a, i) => (
+                                    <AnalysisRow
+                                        key={a.id}
+                                        analysis={a}
+                                        selected={selectedIds.has(a.id)}
+                                        selectionDisabled={!selectedIds.has(a.id) && selectedIds.size >= 3}
+                                        onToggleSelection={() => toggleSelection(a.id)}
+                                        showBorder={i < filtered.length - 1}
+                                    />
+                                ))}
                             </tbody>
                         </table>
                     </div>

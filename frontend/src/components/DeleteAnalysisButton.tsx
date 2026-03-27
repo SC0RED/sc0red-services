@@ -107,7 +107,7 @@ export default function DeleteAnalysisButton({
             onClick={() => setConfirming(true)}
             className="btn btn-ghost btn-sm"
             title="Delete analysis"
-            style={{ color: 'var(--text-tertiary)', padding: '0.25rem 0.5rem' }}
+            style={{ color: 'var(--text-secondary)', padding: '0.25rem 0.5rem' }}
         >
             <svg
                 width="14"
