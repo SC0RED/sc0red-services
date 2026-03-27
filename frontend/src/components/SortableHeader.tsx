@@ -2,7 +2,7 @@ export type SortField = 'companyName' | 'overallRiskScore' | 'analyzedAt'
 export type SortDirection = 'asc' | 'desc'
 
 const HEADER_STYLE = {
-    padding: '0.875rem 1.25rem',
+    padding: '0.875rem 0.75rem',
     textAlign: 'left' as const,
     fontSize: '0.8125rem',
     fontWeight: 600,
