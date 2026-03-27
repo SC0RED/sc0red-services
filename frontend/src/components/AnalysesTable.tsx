@@ -7,6 +7,7 @@ import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import AnalysesToolbar from '@/components/AnalysesToolbar'
 import { SortableHeader, TableHeader } from '@/components/SortableHeader'
 import type { SortField, SortDirection } from '@/components/SortableHeader'
+import { exportAnalysesListCsv } from '@/lib/utils/csvExport'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
@@ -115,6 +116,32 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                 onClearAll={handleClearAll}
             />
 
+            {analyses.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+                    <button
+                        type="button"
+                        onClick={() => exportAnalysesListCsv(filtered)}
+                        className="btn btn-ghost btn-sm"
+                    >
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            )}
+
             {filtered.length === 0 ? (
                 <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)' }}>
@@ -155,7 +182,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                     )}
 
                     <div className="card" style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse' }}>
+                        <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                     <th style={{ padding: '0.875rem 0.75rem', width: '40px' }}>
@@ -295,24 +322,25 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                                     ? new Date(a.analyzedAt).toLocaleDateString()
                                                     : '—'}
                                             </td>
-                                            <td
-                                                style={{
-                                                    padding: '1rem 1.25rem',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.25rem',
-                                                }}
-                                            >
-                                                <Link
-                                                    href={`/analysis/${a.id}`}
-                                                    className="btn btn-ghost btn-sm"
+                                            <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
+                                                <div
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.25rem',
+                                                    }}
                                                 >
-                                                    View
-                                                </Link>
-                                                <DeleteAnalysisButton
-                                                    analysisId={a.id}
-                                                    companyName={a.companyName}
-                                                />
+                                                    <Link
+                                                        href={`/analysis/${a.id}`}
+                                                        className="btn btn-ghost btn-sm"
+                                                    >
+                                                        View
+                                                    </Link>
+                                                    <DeleteAnalysisButton
+                                                        analysisId={a.id}
+                                                        companyName={a.companyName}
+                                                    />
+                                                </div>
                                             </td>
                                         </tr>
                                     )
