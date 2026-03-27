@@ -6,11 +6,9 @@ import Link from 'next/link'
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import AnalysesToolbar from '@/components/AnalysesToolbar'
 import { SortableHeader, TableHeader } from '@/components/SortableHeader'
+import type { SortField, SortDirection } from '@/components/SortableHeader'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
-
-type SortField = 'companyName' | 'overallRiskScore' | 'analyzedAt'
-type SortDirection = 'asc' | 'desc'
 
 interface AnalysesTableProps {
     analyses: AnalysisItem[]
@@ -97,6 +95,12 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
         })
     }, [analyses, search, tierFilter, typeFilter, sortField, sortDirection])
 
+    // Only count selections that are visible in the current filtered view
+    const visibleSelectedIds = useMemo(() => {
+        const filteredIds = new Set(filtered.map((a) => a.id))
+        return new Set([...selectedIds].filter((id) => filteredIds.has(id)))
+    }, [selectedIds, filtered])
+
     return (
         <div>
             <AnalysesToolbar
@@ -126,7 +130,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                 </div>
             ) : (
                 <>
-                    {selectedIds.size >= 2 && (
+                    {visibleSelectedIds.size >= 2 && (
                         <div
                             style={{
                                 position: 'sticky',
@@ -138,14 +142,14 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                             }}
                         >
                             <Link
-                                href={`/analyses/compare?ids=${Array.from(selectedIds).join(',')}`}
+                                href={`/analyses/compare?ids=${Array.from(visibleSelectedIds).join(',')}`}
                                 className="btn btn-primary"
                                 style={{
                                     boxShadow: '0 4px 20px rgba(59,123,246,0.4)',
                                     padding: '0.625rem 1.5rem',
                                 }}
                             >
-                                Compare {selectedIds.size} Selected
+                                Compare {visibleSelectedIds.size} Selected
                             </Link>
                         </div>
                     )}
@@ -158,8 +162,8 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                         <input
                                             type="checkbox"
                                             checked={
-                                                selectedIds.size > 0 &&
-                                                selectedIds.size === Math.min(filtered.length, 3)
+                                                visibleSelectedIds.size > 0 &&
+                                                visibleSelectedIds.size === Math.min(filtered.length, 3)
                                             }
                                             onChange={toggleSelectAll}
                                             aria-label="Select all analyses"

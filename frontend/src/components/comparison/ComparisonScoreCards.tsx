@@ -2,13 +2,11 @@ import RiskBadge from '@/components/RiskBadge'
 import { getRiskTier, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisData } from '@/lib/types/api'
 
-const COMPARISON_COLORS = ['#3b7bf6', '#f59e0b', '#22c55e']
+import { COMPARISON_COLORS } from '@/components/comparison/constants'
 
 interface ComparisonScoreCardsProps {
     analyses: AnalysisData[]
 }
-
-export { COMPARISON_COLORS }
 
 export default function ComparisonScoreCards({ analyses }: ComparisonScoreCardsProps) {
     return (

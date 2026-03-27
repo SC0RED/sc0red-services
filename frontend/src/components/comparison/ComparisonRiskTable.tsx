@@ -1,4 +1,4 @@
-import { COMPARISON_COLORS } from '@/components/comparison/ComparisonScoreCards'
+import { COMPARISON_COLORS } from '@/components/comparison/constants'
 import { RISK_CATEGORIES, TIER_COLORS, getRiskTier } from '@/lib/utils/riskUtils'
 import { CAT_LABELS } from '@/components/RiskBreakdown'
 import type { AnalysisData } from '@/lib/types/api'

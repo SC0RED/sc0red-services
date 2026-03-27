@@ -1,5 +1,5 @@
-type SortField = 'companyName' | 'overallRiskScore' | 'analyzedAt'
-type SortDirection = 'asc' | 'desc'
+export type SortField = 'companyName' | 'overallRiskScore' | 'analyzedAt'
+export type SortDirection = 'asc' | 'desc'
 
 const HEADER_STYLE = {
     padding: '0.875rem 1.25rem',

@@ -2,7 +2,7 @@
 
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Legend } from 'recharts'
 
-import { COMPARISON_COLORS } from '@/components/comparison/ComparisonScoreCards'
+import { COMPARISON_COLORS } from '@/components/comparison/constants'
 import { RISK_CATEGORIES } from '@/lib/utils/riskUtils'
 import { CAT_LABELS } from '@/components/RiskBreakdown'
 import type { AnalysisData } from '@/lib/types/api'
