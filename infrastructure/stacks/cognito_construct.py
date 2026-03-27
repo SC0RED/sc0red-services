@@ -8,10 +8,12 @@ Creates a User Pool with:
 - Slot for migration Lambda trigger (wired in Phase 2)
 """
 
-from typing import Any
-
+import aws_cdk as cdk
 from aws_cdk import CfnOutput, Duration, RemovalPolicy
 from aws_cdk import aws_cognito as cognito
+from aws_cdk import aws_dynamodb as dynamodb
+from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_logs as logs
 from constructs import Construct
 
 
@@ -25,12 +27,18 @@ class CognitoConstruct(Construct):
         *,
         environment: str,
         removal_policy: RemovalPolicy,
+        table: dynamodb.Table,
+        bundling: cdk.BundlingOptions,
+        lambda_architecture: lambda_.Architecture,
     ) -> None:
         super().__init__(scope, construct_id)
 
         self._environment = environment
 
-        self._user_pool = self._create_user_pool(removal_policy)
+        migration_lambda = self._create_migration_lambda(
+            table, bundling, lambda_architecture, removal_policy
+        )
+        self._user_pool = self._create_user_pool(removal_policy, migration_lambda)
         self._app_client = self._create_app_client()
         self._create_outputs()
 
@@ -49,7 +57,51 @@ class CognitoConstruct(Construct):
         """Return the App Client ID."""
         return self._app_client.user_pool_client_id
 
-    def _create_user_pool(self, removal_policy: RemovalPolicy) -> cognito.UserPool:
+    def _create_migration_lambda(
+        self,
+        table: dynamodb.Table,
+        bundling: cdk.BundlingOptions,
+        architecture: lambda_.Architecture,
+        removal_policy: RemovalPolicy,
+    ) -> lambda_.Function:
+        """Create the User Migration Lambda trigger.
+
+        Separate from API/Worker Lambdas for fast cold start — only needs
+        DynamoDB + bcrypt, not the full AI pipeline.
+        """
+        log_group = logs.LogGroup(
+            self,
+            "MigrationLambdaLogs",
+            log_group_name=f"/aws/lambda/janus-cognito-migration-{self._environment}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=removal_policy,
+        )
+
+        handler = lambda_.Function(
+            self,
+            "MigrationLambda",
+            function_name=f"janus-cognito-migration-{self._environment}",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            architecture=architecture,
+            handler="src.handlers.cognito_migration_entry.handle_migration_event",
+            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            timeout=Duration.seconds(10),
+            memory_size=128,
+            log_group=log_group,
+            environment={
+                "DYNAMODB_TABLE": table.table_name,
+            },
+        )
+
+        table.grant_read_data(handler)
+
+        return handler
+
+    def _create_user_pool(
+        self,
+        removal_policy: RemovalPolicy,
+        migration_lambda: lambda_.Function,
+    ) -> cognito.UserPool:
         """Create the Cognito User Pool with custom attributes."""
         pool = cognito.UserPool(
             self,
@@ -107,6 +159,9 @@ class CognitoConstruct(Construct):
                 ),
             ),
             removal_policy=removal_policy,
+            lambda_triggers=cognito.UserPoolTriggers(
+                user_migration=migration_lambda,
+            ),
         )
 
         return pool

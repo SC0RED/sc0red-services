@@ -54,9 +54,10 @@ class JanusStack(Stack):
         queue, dlq = self._create_queues()
         documents_bucket = self._create_documents_bucket()
 
-        cognito = self._create_cognito()
-
         bundling = self._build_bundling_options()
+
+        cognito = self._create_cognito(table, bundling)
+
         common_environment = self._build_common_environment(
             table, queue, documents_bucket, cognito
         )
@@ -165,13 +166,20 @@ class JanusStack(Stack):
 
     # ── Cognito ─────────────────────────────────────────────────────────────────
 
-    def _create_cognito(self) -> CognitoConstruct:
-        """Create the Cognito User Pool and App Client."""
+    def _create_cognito(
+        self,
+        table: dynamodb.Table,
+        bundling: cdk.BundlingOptions,
+    ) -> CognitoConstruct:
+        """Create the Cognito User Pool, App Client, and Migration Lambda."""
         return CognitoConstruct(
             self,
             "Cognito",
             environment=self._environment,
             removal_policy=self._config["removal_policy"],
+            table=table,
+            bundling=bundling,
+            lambda_architecture=self._lambda_architecture,
         )
 
     # ── Shared helpers ─────────────────────────────────────────────────────────
