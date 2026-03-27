@@ -123,6 +123,37 @@ else
     pass "No hardcoded dev secrets in source code"
 fi
 
+# ── Mandatory codebase patterns ──────────────────────────────────────────────
+section "Mandatory codebase patterns"
+
+# All AI calls must go through run_structured_ai_call (not direct client.query_structured)
+# Exclude: ai_call.py (the shared module), tests, comments/docstrings (lines with #, ..., or leading spaces+text)
+DIRECT_AI_CALLS="$(grep -rn "query_structured" backend/src/pipeline/ --include="*.py" 2>/dev/null | grep -v "ai_call.py\|test_\|__pycache__\|run_structured_ai_call\|#\|\.\.\." | grep -v "^$" || true)"
+if [ -n "$DIRECT_AI_CALLS" ]; then
+    fail "Direct query_structured calls found outside ai_call.py — must use run_structured_ai_call:"
+    echo "$DIRECT_AI_CALLS" | head -5 | while read -r line; do echo "    $line"; done
+else
+    pass "All pipeline AI calls go through run_structured_ai_call"
+fi
+
+# All parallel work must use FutureManager (not ThreadPoolExecutor)
+THREAD_POOL="$(grep -rn "ThreadPoolExecutor" backend/src/ --include="*.py" 2>/dev/null | grep -v "test_\|__pycache__" || true)"
+if [ -n "$THREAD_POOL" ]; then
+    fail "ThreadPoolExecutor found in source — must use FutureManager:"
+    echo "$THREAD_POOL" | head -5 | while read -r line; do echo "    $line"; done
+else
+    pass "No ThreadPoolExecutor in source (FutureManager used for parallel work)"
+fi
+
+# All AI prompts must be in prompts/ directory (not inline in Python)
+INLINE_PROMPTS="$(grep -rn 'SYSTEM_PROMPT\s*=' backend/src/pipeline/ --include="*.py" 2>/dev/null | grep -v "prompts/\|load_system_prompt\|test_\|__pycache__\|ai_guides/" || true)"
+if [ -n "$INLINE_PROMPTS" ]; then
+    fail "Inline system prompt definitions found — must use prompts/*.md files:"
+    echo "$INLINE_PROMPTS" | head -5 | while read -r line; do echo "    $line"; done
+else
+    pass "All system prompts loaded from external files"
+fi
+
 # ── Cross-file duplication (common patterns) ─────────────────────────────────
 section "Cross-file duplication checks"
 

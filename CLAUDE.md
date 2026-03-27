@@ -8,6 +8,11 @@
 - Changes touch handlers, services, providers, factories, repositories, or pipeline steps
 - Method signatures or interfaces were altered
 
+**The architecture reviewer MUST check all of the following:**
+1. Standard findings: dead code, unused parameters, fail-fast violations, swallowed exceptions, interface violations
+2. **Pattern consistency**: does the new code follow the mandatory codebase patterns below? If a pattern exists for this type of work, the new code MUST use it — not reinvent it.
+3. **Prompt externalization**: are any AI prompt strings inline in Python? They must be in `src/pipeline/prompts/`
+
 **This is a hard blocker. Do not commit until:**
 1. The architecture-reviewer agent has completed
 2. All CRITICAL findings are resolved
@@ -33,6 +38,75 @@ This means:
 3. Did I replace an old module? → Remove the old module and its tests entirely
 
 If local dev exercises different code than production, bugs will only appear in deployment. This rule exists because that exact scenario happened.
+
+---
+
+## MANDATORY: Codebase Patterns
+
+Before writing new code, **search the codebase for how similar work is already done**. These patterns are mandatory — not suggestions. Using a different approach (even if it works) creates inconsistency that compounds over time.
+
+### Pipeline Work → `RequestStep` subclass
+
+All AI pipeline work MUST be a `signalfield_core.pipeline.step.RequestStep` subclass, wired into a pipeline factory. Never put AI calls in handlers, standalone scripts, or utility functions.
+
+```python
+# Wrong — AI call in a standalone utility function
+def validate_companies(companies, ai_factory):
+    with ThreadPoolExecutor() as pool:
+        results = pool.map(lambda c: ai_factory.get_client().query_structured(...), companies)
+
+# Right — proper pipeline step
+class ValidatePortfolioCompanies(RequestStep):
+    def __init__(self, ai_client_factory=None):
+        super().__init__()
+        self._ai_client_factory = ai_client_factory
+    def execute(self):
+        # Uses FutureManager, run_structured_ai_call, etc.
+```
+
+### Parallel AI Calls → `FutureManager` + `run_structured_ai_call`
+
+All parallel AI calls MUST use `signalfield_core.utilities.future_manager.FutureManager` (not `ThreadPoolExecutor`, `asyncio`, or `concurrent.futures` directly). Each individual call MUST go through `src.pipeline.pipeline_steps.ai_call.run_structured_ai_call`.
+
+```python
+# Wrong — raw ThreadPoolExecutor
+with ThreadPoolExecutor(max_workers=10) as pool:
+    futures = [pool.submit(client.query_structured, ...) for c in companies]
+
+# Right — FutureManager + shared AI call function
+with FutureManager(name="StepName", max_workers=10) as manager:
+    for i, company in enumerate(companies):
+        manager.submit_task(self._validate_one, prompt, schema, system_prompt, f"label_{i}")
+    results = manager.wait_for_all_and_collect_results()
+
+def _validate_one(self, prompt, schema, system_prompt, label):
+    return run_structured_ai_call(
+        ai_client_factory=self._ai_client_factory,
+        user_prompt=prompt, schema=schema, system_prompt=system_prompt,
+        label=label, step_name="StepName",
+    )
+```
+
+### AI Prompts → External Files
+
+All AI prompt text MUST be in `src/pipeline/prompts/` — never inline in Python code.
+
+| Content | Location | Loaded via |
+|---------|----------|-----------|
+| System prompts | `prompts/system/{name}.md` | `load_system_prompt(name)` |
+| User prompt templates | `prompts/templates/{name}.md` | `load_template(name)` |
+| Calibration guides | `prompts/guides/{name}.md` | `load_guide(name)` |
+| Output schemas | `prompts/schemas/{name}.json` | `load_schema(name)` |
+
+### Handler Functions → Focused Modules
+
+API handlers are standalone functions in focused modules (`auth_handlers.py`, `scan_handlers.py`, `analysis_handlers.py`, `document_handlers.py`). Each receives explicit dependencies — no class state. The main `api_gateway_handler.py` only does routing + dispatch.
+
+### Pipeline Factory Wiring
+
+New pipeline steps are wired through the factory chain: `FactoryManager` → `JanusFactoriesFactory` → `CompanyAnalysisFactory` (or `PortfolioScanFactory`) → step list. Never call pipeline steps directly from handlers.
+
+These patterns exist because inconsistency was the #1 source of bugs in this codebase. Every "quick shortcut" that bypassed these patterns eventually had to be rewritten.
 
 ---
 
