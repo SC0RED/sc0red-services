@@ -209,6 +209,7 @@ export default function SignupPage() {
                                 onChange={(e) => update('email', e.target.value)}
                                 required
                                 autoComplete="email"
+                                aria-describedby={error ? 'signup-error' : undefined}
                             />
                         </div>
 
