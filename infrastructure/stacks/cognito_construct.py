@@ -102,7 +102,7 @@ class CognitoConstruct(Construct):
                 email_subject="You've been invited to Janus",
                 email_body=(
                     "You've been invited to join Janus. "
-                    "Your temporary password is {####}. "
+                    "Your username is {username} and your temporary password is {####}. "
                     "Please log in and set a new password."
                 ),
             ),
