@@ -14,6 +14,7 @@ import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
+import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisData, DocumentInfo } from '@/lib/types/api'
 
@@ -174,6 +175,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     companyUrl={data.companyUrl}
                     industry={data.industry}
                     tier={tier}
+                    onExportCsv={() => exportAnalysisDetailCsv(data)}
                 />
 
                 {/* Score + Radar */}

@@ -7,6 +7,7 @@ import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
 import AnalysesToolbar from '@/components/AnalysesToolbar'
 import { SortableHeader, TableHeader } from '@/components/SortableHeader'
 import type { SortField, SortDirection } from '@/components/SortableHeader'
+import { exportAnalysesListCsv } from '@/lib/utils/csvExport'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
@@ -114,6 +115,32 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                 totalCount={analyses.length}
                 onClearAll={handleClearAll}
             />
+
+            {analyses.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+                    <button
+                        type="button"
+                        onClick={() => exportAnalysesListCsv(filtered)}
+                        className="btn btn-ghost btn-sm"
+                    >
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            )}
 
             {filtered.length === 0 ? (
                 <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
