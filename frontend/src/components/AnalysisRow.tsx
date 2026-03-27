@@ -86,9 +86,14 @@ export default function AnalysisRow({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
                     <Link
                         href={`/analysis/${analysis.id}`}
-                        className="btn btn-ghost btn-sm"
                         title="View analysis"
-                        style={{ padding: '0.25rem 0.5rem' }}
+                        style={{
+                            color: 'var(--text-primary)',
+                            padding: '0.375rem',
+                            borderRadius: 'var(--radius-sm)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                        }}
                     >
                         <svg
                             width="15"
