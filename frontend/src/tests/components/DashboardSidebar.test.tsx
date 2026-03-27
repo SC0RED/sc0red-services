@@ -73,4 +73,51 @@ describe('DashboardSidebar', () => {
         expect(screen.getByText('Janus')).toBeInTheDocument()
         expect(screen.getByText('AI Intelligence')).toBeInTheDocument()
     })
+
+    describe('mobile menu', () => {
+        it('renders hamburger button', () => {
+            render(<DashboardSidebar />)
+            expect(screen.getByLabelText('Open navigation menu')).toBeInTheDocument()
+        })
+
+        it('opens sidebar when hamburger is clicked', () => {
+            render(<DashboardSidebar />)
+            fireEvent.click(screen.getByLabelText('Open navigation menu'))
+
+            const sidebar = screen.getByRole('complementary')
+            expect(sidebar.classList.contains('sidebar-mobile-open')).toBe(true)
+        })
+
+        it('closes sidebar when close button is clicked', () => {
+            render(<DashboardSidebar />)
+            fireEvent.click(screen.getByLabelText('Open navigation menu'))
+            fireEvent.click(screen.getByLabelText('Close navigation menu'))
+
+            const sidebar = screen.getByRole('complementary')
+            expect(sidebar.classList.contains('sidebar-mobile-open')).toBe(false)
+        })
+
+        it('closes sidebar when Escape key is pressed', () => {
+            render(<DashboardSidebar />)
+            fireEvent.click(screen.getByLabelText('Open navigation menu'))
+
+            const sidebar = screen.getByRole('complementary')
+            expect(sidebar.classList.contains('sidebar-mobile-open')).toBe(true)
+
+            fireEvent.keyDown(document, { key: 'Escape' })
+            expect(sidebar.classList.contains('sidebar-mobile-open')).toBe(false)
+        })
+
+        it('closes sidebar when backdrop is clicked', () => {
+            render(<DashboardSidebar />)
+            fireEvent.click(screen.getByLabelText('Open navigation menu'))
+
+            const backdrop = document.querySelector('.mobile-backdrop')
+            expect(backdrop).not.toBeNull()
+            fireEvent.click(backdrop!)
+
+            const sidebar = screen.getByRole('complementary')
+            expect(sidebar.classList.contains('sidebar-mobile-open')).toBe(false)
+        })
+    })
 })
