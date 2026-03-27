@@ -154,6 +154,28 @@ else
     pass "All system prompts loaded from external files"
 fi
 
+# ── Accessibility: skip-link target ───────────────────────────────────────────
+section "Accessibility: pages with DashboardSidebar must have id=\"main\" on <main>"
+
+SIDEBAR_PAGES_MISSING_MAIN=""
+while IFS= read -r file; do
+    if grep -q "DashboardSidebar" "$file" && ! grep -q 'id="main"' "$file"; then
+        # Check if the file delegates to a client component that has id="main"
+        dir="$(dirname "$file")"
+        if ! grep -rq 'id="main"' "$dir"/*.tsx 2>/dev/null; then
+            SIDEBAR_PAGES_MISSING_MAIN="$SIDEBAR_PAGES_MISSING_MAIN $file"
+        fi
+    fi
+done < <(find frontend/src/app -name "*.tsx" -not -path "*/node_modules/*" -not -name "*.test.*")
+
+if [ -n "$SIDEBAR_PAGES_MISSING_MAIN" ]; then
+    for f in $SIDEBAR_PAGES_MISSING_MAIN; do
+        fail "$f uses DashboardSidebar but missing id=\"main\" on <main> (skip-link target)"
+    done
+else
+    pass "All pages with DashboardSidebar have id=\"main\" for skip-link"
+fi
+
 # ── Cross-file duplication (common patterns) ─────────────────────────────────
 section "Cross-file duplication checks"
 
