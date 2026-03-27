@@ -4,14 +4,12 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+import AnalysesToolbar from '@/components/AnalysesToolbar'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
 type SortField = 'companyName' | 'overallRiskScore' | 'analyzedAt'
 type SortDirection = 'asc' | 'desc'
-
-const TIER_OPTIONS = ['critical', 'high', 'moderate', 'low'] as const
-const TYPE_OPTIONS = ['portfolio', 'standalone'] as const
 
 interface AnalysesTableProps {
     analyses: AnalysisItem[]
@@ -31,6 +29,12 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
             setSortField(field)
             setSortDirection(field === 'companyName' ? 'asc' : 'desc')
         }
+    }
+
+    function handleClearAll() {
+        setSearch('')
+        setTierFilter(null)
+        setTypeFilter(null)
     }
 
     const filtered = useMemo(() => {
@@ -72,124 +76,18 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
 
     return (
         <div>
-            {/* Toolbar */}
-            <div
-                style={{
-                    display: 'flex',
-                    gap: '0.75rem',
-                    marginBottom: '1rem',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                }}
-            >
-                {/* Search */}
-                <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: '320px' }}>
-                    <svg
-                        width="15"
-                        height="15"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="var(--text-tertiary)"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{
-                            position: 'absolute',
-                            left: '0.75rem',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                        }}
-                    >
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.35-4.35" />
-                    </svg>
-                    <input
-                        type="text"
-                        className="input"
-                        placeholder="Search by company or industry..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        aria-label="Search analyses"
-                        style={{ paddingLeft: '2.5rem', fontSize: '0.8125rem' }}
-                    />
-                </div>
+            <AnalysesToolbar
+                search={search}
+                onSearchChange={setSearch}
+                tierFilter={tierFilter}
+                onTierFilterChange={setTierFilter}
+                typeFilter={typeFilter}
+                onTypeFilterChange={setTypeFilter}
+                filteredCount={filtered.length}
+                totalCount={analyses.length}
+                onClearAll={handleClearAll}
+            />
 
-                {/* Tier Filter Chips */}
-                <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
-                    {TIER_OPTIONS.map((tier) => (
-                        <button
-                            key={tier}
-                            type="button"
-                            className={`badge badge-${tier}`}
-                            onClick={() => setTierFilter(tierFilter === tier ? null : tier)}
-                            aria-pressed={tierFilter === tier}
-                            style={{
-                                cursor: 'pointer',
-                                opacity: tierFilter && tierFilter !== tier ? 0.4 : 1,
-                                border:
-                                    tierFilter === tier ? '2px solid currentColor' : '2px solid transparent',
-                            }}
-                        >
-                            {getRiskTierLabel(tier)}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Type Filter */}
-                <div style={{ display: 'flex', gap: '0.375rem' }}>
-                    {TYPE_OPTIONS.map((type) => (
-                        <button
-                            key={type}
-                            type="button"
-                            className={`badge badge-${type === 'portfolio' ? 'blue' : 'cyan'}`}
-                            onClick={() => setTypeFilter(typeFilter === type ? null : type)}
-                            aria-pressed={typeFilter === type}
-                            style={{
-                                cursor: 'pointer',
-                                fontSize: '0.7rem',
-                                opacity: typeFilter && typeFilter !== type ? 0.4 : 1,
-                                border:
-                                    typeFilter === type ? '2px solid currentColor' : '2px solid transparent',
-                            }}
-                        >
-                            {type === 'portfolio' ? 'Portfolio' : 'Standalone'}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Result count */}
-                <span
-                    style={{
-                        fontSize: '0.8125rem',
-                        color: 'var(--text-tertiary)',
-                        marginLeft: 'auto',
-                    }}
-                >
-                    {filtered.length === analyses.length
-                        ? `${analyses.length} analyses`
-                        : `${filtered.length} of ${analyses.length}`}
-                </span>
-            </div>
-
-            {/* Active Filters Clear */}
-            {(tierFilter || typeFilter || search) && (
-                <div style={{ marginBottom: '0.75rem' }}>
-                    <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                        onClick={() => {
-                            setSearch('')
-                            setTierFilter(null)
-                            setTypeFilter(null)
-                        }}
-                    >
-                        Clear all filters
-                    </button>
-                </div>
-            )}
-
-            {/* Table */}
             {filtered.length === 0 ? (
                 <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-secondary)' }}>
@@ -215,32 +113,8 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                     direction={sortDirection}
                                     onSort={handleSort}
                                 />
-                                <th
-                                    style={{
-                                        padding: '0.875rem 1.25rem',
-                                        textAlign: 'left',
-                                        fontSize: '0.8125rem',
-                                        fontWeight: 600,
-                                        color: 'var(--text-secondary)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.06em',
-                                    }}
-                                >
-                                    Industry
-                                </th>
-                                <th
-                                    style={{
-                                        padding: '0.875rem 1.25rem',
-                                        textAlign: 'left',
-                                        fontSize: '0.8125rem',
-                                        fontWeight: 600,
-                                        color: 'var(--text-secondary)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.06em',
-                                    }}
-                                >
-                                    Source
-                                </th>
+                                <TableHeader>Industry</TableHeader>
+                                <TableHeader>Source</TableHeader>
                                 <SortableHeader
                                     label="Risk Score"
                                     field="overallRiskScore"
@@ -248,19 +122,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                     direction={sortDirection}
                                     onSort={handleSort}
                                 />
-                                <th
-                                    style={{
-                                        padding: '0.875rem 1.25rem',
-                                        textAlign: 'left',
-                                        fontSize: '0.8125rem',
-                                        fontWeight: 600,
-                                        color: 'var(--text-secondary)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.06em',
-                                    }}
-                                >
-                                    Tier
-                                </th>
+                                <TableHeader>Tier</TableHeader>
                                 <SortableHeader
                                     label="Date"
                                     field="analyzedAt"
@@ -288,13 +150,11 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                             <div style={{ fontWeight: 500 }}>{a.companyName}</div>
                                             {a.companyUrl && (
                                                 <div
+                                                    className="truncate"
                                                     style={{
                                                         fontSize: '0.8125rem',
                                                         color: 'var(--text-tertiary)',
                                                         maxWidth: '200px',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap',
                                                     }}
                                                 >
                                                     {a.companyUrl}
@@ -373,6 +233,20 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
     )
 }
 
+const HEADER_STYLE = {
+    padding: '0.875rem 1.25rem',
+    textAlign: 'left' as const,
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+}
+
+function TableHeader({ children }: { children: React.ReactNode }) {
+    return <th style={HEADER_STYLE}>{children}</th>
+}
+
 function SortableHeader({
     label,
     field,
@@ -388,19 +262,7 @@ function SortableHeader({
 }) {
     const isActive = current === field
     return (
-        <th
-            style={{
-                padding: '0.875rem 1.25rem',
-                textAlign: 'left',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                cursor: 'pointer',
-                userSelect: 'none',
-            }}
-        >
+        <th style={{ ...HEADER_STYLE, cursor: 'pointer', userSelect: 'none' }}>
             <button
                 type="button"
                 onClick={() => onSort(field)}
