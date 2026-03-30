@@ -142,6 +142,14 @@ export default function LoginPage() {
                                 required
                                 autoComplete="current-password"
                             />
+                            <div style={{ textAlign: 'right', marginTop: '0.375rem' }}>
+                                <Link
+                                    href="/forgot-password"
+                                    style={{ color: 'var(--accent-blue)', fontSize: '0.8125rem' }}
+                                >
+                                    Forgot password?
+                                </Link>
+                            </div>
                         </div>
 
                         {error && (
