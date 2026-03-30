@@ -99,6 +99,11 @@ class APIGatewayHandler:
             handle_delete_document,
             handle_upload_url,
         )
+        from src.handlers.invitation_handlers import (
+            handle_invite_member,
+            handle_list_members,
+            handle_remove_member,
+        )
         from src.handlers.scan_handlers import (
             handle_delete_scan,
             handle_scan_confirm,
@@ -128,6 +133,27 @@ class APIGatewayHandler:
             "POST",
             "/api/auth/login",
             lambda event: handle_login(event, self._storage),
+        )
+
+        # Org member management
+        router.protected(
+            "POST",
+            "/api/org/invite",
+            lambda event, authentication: handle_invite_member(
+                event, authentication, self._storage
+            ),
+        )
+        router.protected(
+            "GET",
+            "/api/org/members",
+            lambda event, authentication: handle_list_members(event, authentication, self._storage),
+        )
+        router.protected(
+            "DELETE",
+            "/api/org/members/{user_id}",
+            lambda event, authentication, user_id: handle_remove_member(
+                event, authentication, self._storage, user_id
+            ),
         )
 
         router.protected(
