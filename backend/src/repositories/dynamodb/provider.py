@@ -7,6 +7,7 @@ from src.repositories.dynamodb.client import DynamoDBTable
 from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 from src.repositories.dynamodb.user_repository import (
+    DynamoDBInvitationRepository,
     DynamoDBOrganizationRepository,
     DynamoDBUserRepository,
 )
@@ -38,6 +39,10 @@ class DynamoDBStorageProvider:
     def create_user_repository(self) -> DynamoDBUserRepository:
         """Return a new DynamoDBUserRepository backed by the shared table."""
         return DynamoDBUserRepository(self._table)
+
+    def create_invitation_repository(self) -> DynamoDBInvitationRepository:
+        """Return a new DynamoDBInvitationRepository backed by the shared table."""
+        return DynamoDBInvitationRepository(self._table)
 
     def create_organization_repository(self) -> DynamoDBOrganizationRepository:
         """Return a new DynamoDBOrganizationRepository backed by the shared table."""
