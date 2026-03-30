@@ -22,7 +22,12 @@ const poolData = {
 const userPool = new CognitoUserPool(poolData)
 
 function getCognitoUser(email: string): CognitoUser {
-    return new CognitoUser({ Username: email, Pool: userPool })
+    const user = new CognitoUser({ Username: email, Pool: userPool })
+    // USER_PASSWORD_AUTH is required for the migration Lambda trigger.
+    // SRP auth (default) never sends the plaintext password to Cognito,
+    // so the migration Lambda can't validate bcrypt passwords.
+    user.setAuthenticationFlowType('USER_PASSWORD_AUTH')
+    return user
 }
 
 export interface CognitoSignInResult {
