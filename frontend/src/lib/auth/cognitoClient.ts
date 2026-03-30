@@ -14,15 +14,26 @@ import {
     CognitoUserSession,
 } from 'amazon-cognito-identity-js'
 
-const poolData = {
-    UserPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID || '',
-    ClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID || '',
+let _userPool: CognitoUserPool | null = null
+
+function getUserPool(): CognitoUserPool {
+    if (_userPool) return _userPool
+
+    const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID || ''
+    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID || ''
+
+    if (!userPoolId || !clientId) {
+        throw new Error(
+            'Cognito not configured: NEXT_PUBLIC_COGNITO_USER_POOL_ID and NEXT_PUBLIC_COGNITO_CLIENT_ID are required'
+        )
+    }
+
+    _userPool = new CognitoUserPool({ UserPoolId: userPoolId, ClientId: clientId })
+    return _userPool
 }
 
-const userPool = new CognitoUserPool(poolData)
-
 function getCognitoUser(email: string): CognitoUser {
-    return new CognitoUser({ Username: email, Pool: userPool })
+    return new CognitoUser({ Username: email, Pool: getUserPool() })
 }
 
 export interface CognitoSignInResult {
