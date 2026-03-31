@@ -11,6 +11,7 @@
 #   docker compose -f docker-compose.e2e.yml down -v
 
 x-shared-env: &shared-env
+  STAGE: e2e
   DYNAMODB_TABLE: janus-e2e
   DYNAMODB_ENDPOINT: http://localstack:4566
   AWS_REGION: us-east-1
