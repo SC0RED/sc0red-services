@@ -131,19 +131,12 @@ STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "Register" 200 "$STATUS"
 assert_json "Register success" "success" "True" "$BODY"
 
-# ── 2. Login ─────────────────────────────────────────────────────
-echo -e "\n${YELLOW}2. Login${NC}"
-RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
-BODY=$(echo "$RESP" | sed '$d')
-STATUS=$(echo "$RESP" | tail -n 1)
-assert_status "Login" 200 "$STATUS"
-assert_json "Login success" "success" "True" "$BODY"
-
-# Extract user info for JWT
+# ── 2. Extract user info from register response ─────────────────
+echo -e "\n${YELLOW}2. Extract user info${NC}"
 USER_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['id'])")
 ORG_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['orgId'])")
+echo -e "  ${GREEN}✓${NC} User ID: $USER_ID"
+echo -e "  ${GREEN}✓${NC} Org ID: $ORG_ID"
 
 # Create a JWT for authenticated requests
 TOKEN=$(python3 -c "

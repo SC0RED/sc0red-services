@@ -54,6 +54,54 @@ class TestValidateToken:
                     validate_token(f"Bearer {token}")
 
 
+class TestE2EBypass:
+    def test_hs256_accepted_in_e2e_mode(self):
+        import src.handlers.auth_middleware as module
+
+        module._jwks_client = None
+
+        secret = "test-secret-minimum-32-characters"
+        token = pyjwt.encode(
+            {"id": "user-1", "orgId": "org-1", "email": "a@b.com", "role": "admin"},
+            secret,
+            algorithm="HS256",
+        )
+        with patch.dict("os.environ", {
+            "STAGE": "e2e",
+            "NEXTAUTH_SECRET": secret,
+            "COGNITO_USER_POOL_ID": "",
+            "COGNITO_REGION": "",
+        }):
+            result = validate_token(f"Bearer {token}")
+
+        assert result.user_id == "user-1"
+        assert result.org_id == "org-1"
+
+    def test_hs256_rejected_in_staging(self):
+        import src.handlers.auth_middleware as module
+
+        module._jwks_client = None
+
+        secret = "test-secret-minimum-32-characters"
+        token = pyjwt.encode(
+            {"id": "user-1", "orgId": "org-1"},
+            secret,
+            algorithm="HS256",
+        )
+        with patch.dict("os.environ", {
+            "STAGE": "staging",
+            "NEXTAUTH_SECRET": secret,
+            "COGNITO_USER_POOL_ID": "us-east-1_FAKE",
+            "COGNITO_REGION": "us-east-1",
+            "COGNITO_CLIENT_ID": "fakeclient",
+        }):
+            mock_jwks = MagicMock()
+            mock_jwks.get_signing_key_from_jwt.side_effect = pyjwt.InvalidTokenError("bad")
+            with patch.object(module, "_get_jwks_client", return_value=mock_jwks):
+                with pytest.raises(ValueError, match="Invalid token"):
+                    validate_token(f"Bearer {token}")
+
+
 class TestRequireAuthentication:
     def test_extracts_from_headers(self):
         from src.handlers.auth_middleware import require_authentication

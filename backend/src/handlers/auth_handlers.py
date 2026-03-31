@@ -61,4 +61,9 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
         }
     )
 
-    return build_json_response({"success": True})
+    return build_json_response(
+        {
+            "success": True,
+            "user": {"id": user_id, "email": email, "name": name, "orgId": org_id, "role": "admin"},
+        }
+    )

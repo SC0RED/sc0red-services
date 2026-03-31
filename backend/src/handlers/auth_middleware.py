@@ -51,6 +51,9 @@ class AuthContext:
 def validate_token(authorization: str) -> AuthContext:
     """Validate a Cognito RS256 Bearer token and return the auth context.
 
+    In E2E test environments (STAGE=e2e), also accepts HS256 tokens signed
+    with NEXTAUTH_SECRET for test automation without real Cognito.
+
     Raises:
         ValueError: If the token is missing, invalid, or expired.
     """
@@ -59,6 +62,12 @@ def validate_token(authorization: str) -> AuthContext:
         raise ValueError(message)
 
     token = authorization[7:]
+
+    # E2E test bypass — accept HS256 tokens when running in test environment
+    if os.environ.get("STAGE") == "e2e":
+        result = _try_e2e_token(token)
+        if result is not None:
+            return result
 
     client_id = os.environ.get("COGNITO_CLIENT_ID", "")
     region = os.environ.get("COGNITO_REGION", "")
@@ -100,6 +109,34 @@ def validate_token(authorization: str) -> AuthContext:
         org_id=org_id,
         email=payload.get("email", ""),
         role=payload.get("custom:role", "analyst"),
+        name=payload.get("name", ""),
+    )
+
+
+def _try_e2e_token(token: str) -> AuthContext | None:
+    """Validate an HS256 token for E2E testing only.
+
+    Only active when STAGE=e2e. Never runs in staging/production.
+    """
+    secret = os.environ.get("NEXTAUTH_SECRET", "")
+    if not secret:
+        return None
+
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_exp": True})
+    except jwt.InvalidTokenError:
+        return None
+
+    user_id = payload.get("id") or payload.get("sub")
+    org_id = payload.get("orgId")
+    if not user_id or not org_id:
+        return None
+
+    return AuthContext(
+        user_id=user_id,
+        org_id=org_id,
+        email=payload.get("email", ""),
+        role=payload.get("role", "analyst"),
         name=payload.get("name", ""),
     )
 
