@@ -1,6 +1,5 @@
 """Tests for DynamoDBUserRepository and DynamoDBOrganizationRepository."""
 
-import bcrypt
 import pytest
 from moto import mock_aws
 
