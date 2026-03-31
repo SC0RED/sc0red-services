@@ -154,6 +154,15 @@ else
     pass "All system prompts loaded from external files"
 fi
 
+# No inline HTML templates in Python (must be in templates/ directory)
+INLINE_HTML="$(grep -rn '<!DOCTYPE html>\|<html>' backend/src/ --include="*.py" 2>/dev/null | grep -v "test_\|__pycache__" || true)"
+if [ -n "$INLINE_HTML" ]; then
+    fail "Inline HTML found in Python — must use external template files:"
+    echo "$INLINE_HTML" | head -5 | while read -r line; do echo "    $line"; done
+else
+    pass "No inline HTML in Python (templates loaded from external files)"
+fi
+
 # ── Accessibility: skip-link target ───────────────────────────────────────────
 section "Accessibility: pages with DashboardSidebar must have id=\"main\" on <main>"
 

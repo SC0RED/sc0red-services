@@ -208,8 +208,6 @@ ignore = [
 "**/tests/**/*.py" = ["FBT003"]
 # AI guide constants contain markdown tables with long lines and special chars
 "**/ai_guides/**/*.py" = ["E501", "RUF001"]
-# HTML email templates have long inline-style lines
-"**/cognito_custom_message.py" = ["E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
