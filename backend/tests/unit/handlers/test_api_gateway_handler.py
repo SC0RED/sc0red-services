@@ -111,7 +111,13 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 400
         assert "already registered" in json.loads(result["body"])["error"]
 
-    def test_register_success(self):
+    @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
+    @patch("src.handlers.auth_handlers.CognitoClient")
+    def test_register_success(self, mock_cognito_cls):
+        mock_cognito = MagicMock()
+        mock_cognito.create_user_with_password.return_value = "cognito-sub-123"
+        mock_cognito_cls.return_value = mock_cognito
+
         handler, storage = self._make_handler()
         user_repo = MagicMock()
         user_repo.has_email.return_value = False
@@ -137,6 +143,7 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["success"] is True
+        mock_cognito.create_user_with_password.assert_called_once()
         org_repo.create.assert_called_once()
         user_repo.create.assert_called_once()
 
@@ -751,80 +758,6 @@ class TestConfigEndpoint:
         )
         # Should fail without auth — 401
         assert result["statusCode"] == 401
-
-
-class TestLoginEndpoint:
-    def _make_handler(self):
-        storage = MagicMock()
-        return APIGatewayHandler(storage=storage), storage
-
-    def test_login_missing_fields(self):
-        handler, _ = self._make_handler()
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": json.dumps({"email": "test@example.com"}),
-            }
-        )
-        assert result["statusCode"] == 400
-        assert "required" in json.loads(result["body"])["error"].lower()
-
-    def test_login_invalid_credentials(self):
-        handler, storage = self._make_handler()
-        user_repo = MagicMock()
-        user_repo.verify_password.return_value = None
-        storage.create_user_repository.return_value = user_repo
-
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": json.dumps({"email": "test@example.com", "password": "wrong"}),
-            }
-        )
-        assert result["statusCode"] == 401
-        assert "Invalid credentials" in json.loads(result["body"])["error"]
-
-    def test_login_success(self):
-        handler, storage = self._make_handler()
-        user_repo = MagicMock()
-        user_repo.verify_password.return_value = {
-            "id": "user-1",
-            "email": "test@example.com",
-            "name": "Test User",
-            "orgId": "org-1",
-            "role": "admin",
-        }
-        storage.create_user_repository.return_value = user_repo
-
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": json.dumps({"email": "test@example.com", "password": "correct"}),
-            }
-        )
-        assert result["statusCode"] == 200
-        body = json.loads(result["body"])
-        assert body["success"] is True
-        assert body["user"]["email"] == "test@example.com"
-        assert body["user"]["orgId"] == "org-1"
-
-    def test_login_empty_body(self):
-        handler, _ = self._make_handler()
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": "{}",
-            }
-        )
-        assert result["statusCode"] == 400
 
 
 class TestDashboardEndpoint:

@@ -19,6 +19,8 @@ x-shared-env: &shared-env
   AWS_SECRET_ACCESS_KEY: local
   AWS_ENDPOINT_URL: http://localstack:4566
   NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}
+  COGNITO_JWKS_URL: http://ai-mock:8080/.well-known/jwks.json
+  COGNITO_CLIENT_ID: ""
   AI_PROVIDER: openai
   OPENAI_API_KEY: mock-key
   OPENAI_BASE_URL: http://ai-mock:8080/v1/

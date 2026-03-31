@@ -131,34 +131,41 @@ STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "Register" 200 "$STATUS"
 assert_json "Register success" "success" "True" "$BODY"
 
-# ── 2. Login ─────────────────────────────────────────────────────
-echo -e "\n${YELLOW}2. Login${NC}"
-RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
-BODY=$(echo "$RESP" | sed '$d')
-STATUS=$(echo "$RESP" | tail -n 1)
-assert_status "Login" 200 "$STATUS"
-assert_json "Login success" "success" "True" "$BODY"
-
-# Extract user info for JWT
+# ── 2. Extract user info from register response ─────────────────
+echo -e "\n${YELLOW}2. Extract user info${NC}"
 USER_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['id'])")
 ORG_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['orgId'])")
+echo -e "  ${GREEN}✓${NC} User ID: $USER_ID"
+echo -e "  ${GREEN}✓${NC} Org ID: $ORG_ID"
 
-# Create a JWT for authenticated requests
+# Create an RS256 JWT using the E2E test private key
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOKEN=$(python3 -c "
 import jwt, time
-payload = {'id':'$USER_ID','email':'$EMAIL','orgId':'$ORG_ID','role':'admin','name':'E2E User','exp':int(time.time())+300}
-print(jwt.encode(payload, '$NEXTAUTH_SECRET', algorithm='HS256'))
+with open('$SCRIPT_DIR/e2e-keys/private_key.pem') as f:
+    private_key = f.read()
+payload = {
+    'sub':'$USER_ID','email':'$EMAIL','orgId':'$ORG_ID',
+    'role':'admin','name':'E2E User',
+    'exp':int(time.time())+300,
+}
+print(jwt.encode(payload, private_key, algorithm='RS256', headers={'kid':'e2e-test-key'}))
 ")
 
 AUTH="Authorization: Bearer $TOKEN"
 
-# ── 3. Dashboard (empty) ────────────────────────────────────────
-echo -e "\n${YELLOW}3. Dashboard (empty)${NC}"
+# ── Diagnostic: test auth token ────────────────────────────────
+echo -e "\n${YELLOW}Testing auth token...${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard" -H "$AUTH")
 BODY=$(echo "$RESP" | sed '$d')
 STATUS=$(echo "$RESP" | tail -n 1)
+if [ "$STATUS" != "200" ]; then
+    echo -e "  ${RED}Auth diagnostic: HTTP $STATUS${NC}"
+    echo -e "  ${RED}Response: $BODY${NC}"
+fi
+
+# ── 3. Dashboard (empty) ────────────────────────────────────────
+echo -e "\n${YELLOW}3. Dashboard (empty)${NC}"
 assert_status "Dashboard" 200 "$STATUS"
 assert_json "No analyses" "totalAnalyses" "0" "$BODY"
 
@@ -168,15 +175,7 @@ RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analyses" -H "$AUTH")
 STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "List analyses" 200 "$STATUS"
 
-# ── 5. Login with wrong password ────────────────────────────────
-echo -e "\n${YELLOW}5. Login with wrong password${NC}"
-RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"wrong\"}")
-STATUS=$(echo "$RESP" | tail -n 1)
-assert_status "Bad credentials" 401 "$STATUS"
-
-# ── 6. Unauthenticated access ───────────────────────────────────
+# ── 5. Unauthenticated access ───────────────────────────────────
 echo -e "\n${YELLOW}6. Unauthenticated access${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard")
 STATUS=$(echo "$RESP" | tail -n 1)

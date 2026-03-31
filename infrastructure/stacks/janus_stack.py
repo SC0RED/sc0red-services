@@ -56,7 +56,7 @@ class JanusStack(Stack):
 
         bundling = self._build_bundling_options()
 
-        cognito = self._create_cognito(table, bundling)
+        cognito = self._create_cognito(bundling)
 
         common_environment = self._build_common_environment(
             table, queue, documents_bucket, cognito
@@ -169,10 +169,9 @@ class JanusStack(Stack):
 
     def _create_cognito(
         self,
-        table: dynamodb.Table,
         bundling: cdk.BundlingOptions,
     ) -> CognitoConstruct:
-        """Create the Cognito User Pool, App Client, and Migration Lambda."""
+        """Create the Cognito User Pool, App Client, and Custom Message Lambda."""
         frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
 
         return CognitoConstruct(
@@ -180,7 +179,6 @@ class JanusStack(Stack):
             "Cognito",
             environment=self._environment,
             removal_policy=self._config["removal_policy"],
-            table=table,
             bundling=bundling,
             lambda_architecture=self._lambda_architecture,
             frontend_domain=frontend_domain,
