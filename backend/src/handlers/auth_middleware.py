@@ -69,8 +69,7 @@ def validate_token(authorization: str) -> AuthContext:
     except jwt.ExpiredSignatureError:
         message = "Token expired"
         raise ValueError(message) from None
-    except Exception as error:
-        logger.warning("Token validation failed: %s", error)
+    except (jwt.PyJWKClientError, jwt.InvalidTokenError) as error:
         message = f"Invalid token: {error}"
         raise ValueError(message) from None
 
@@ -105,17 +104,22 @@ def _decode_rs256_token(token: str) -> dict[str, Any]:
     if region and pool_id:
         issuer = f"https://cognito-idp.{region}.amazonaws.com/{pool_id}"
 
-    # Decode options — verify audience and issuer only if configured
+    # When using custom JWKS URL (E2E), skip audience/issuer verification.
+    # In production (no COGNITO_JWKS_URL), all three must be configured.
+    using_custom_jwks = bool(os.environ.get("COGNITO_JWKS_URL"))
+
     decode_options: dict[str, Any] = {"verify_exp": True}
     decode_kwargs: dict[str, Any] = {"algorithms": ["RS256"]}
-    if client_id:
-        decode_kwargs["audience"] = client_id
-    else:
+
+    if using_custom_jwks:
         decode_options["verify_aud"] = False
-    if issuer:
-        decode_kwargs["issuer"] = issuer
-    else:
         decode_options["verify_iss"] = False
+    else:
+        if not client_id:
+            message = "COGNITO_CLIENT_ID must be configured"
+            raise ValueError(message)
+        decode_kwargs["audience"] = client_id
+        decode_kwargs["issuer"] = issuer
 
     jwks_client = _get_jwks_client()
     signing_key = jwks_client.get_signing_key_from_jwt(token)

@@ -26,9 +26,10 @@ class TestValidateToken:
         with patch.dict("os.environ", {
             "COGNITO_USER_POOL_ID": "",
             "COGNITO_REGION": "",
+            "COGNITO_CLIENT_ID": "",
             "COGNITO_JWKS_URL": "",
         }):
-            with pytest.raises(ValueError, match="COGNITO_REGION and COGNITO_USER_POOL_ID"):
+            with pytest.raises(ValueError, match="COGNITO_CLIENT_ID must be configured"):
                 validate_token(f"Bearer {token}")
 
     def test_jwks_url_override_used_when_set(self):
@@ -47,6 +48,39 @@ class TestValidateToken:
             assert client is not None
 
         # Reset for other tests
+        module._jwks_client = None
+
+    def test_missing_client_id_raises_in_production(self):
+        """Production (no COGNITO_JWKS_URL) requires COGNITO_CLIENT_ID."""
+        import src.handlers.auth_middleware as module
+
+        module._jwks_client = None
+
+        token = pyjwt.encode({"sub": "user-1"}, "secret", algorithm="HS256")
+        with patch.dict("os.environ", {
+            "COGNITO_USER_POOL_ID": "us-east-1_FAKE",
+            "COGNITO_REGION": "us-east-1",
+            "COGNITO_CLIENT_ID": "",
+            "COGNITO_JWKS_URL": "",
+        }):
+            with pytest.raises(ValueError, match="COGNITO_CLIENT_ID must be configured"):
+                validate_token(f"Bearer {token}")
+
+    def test_custom_jwks_url_skips_audience_check(self):
+        """With COGNITO_JWKS_URL set, audience/issuer verification is skipped."""
+        import src.handlers.auth_middleware as module
+
+        module._jwks_client = None
+
+        with patch.dict("os.environ", {
+            "COGNITO_JWKS_URL": "http://mock:8080/.well-known/jwks.json",
+            "COGNITO_CLIENT_ID": "",
+            "COGNITO_USER_POOL_ID": "",
+            "COGNITO_REGION": "",
+        }):
+            # Should not raise about missing client ID
+            client = module._get_jwks_client()
+            assert client is not None
         module._jwks_client = None
 
     def test_invalid_token_rejected(self):

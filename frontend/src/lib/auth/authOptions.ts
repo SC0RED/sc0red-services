@@ -62,7 +62,7 @@ export const authOptions: NextAuthOptions = {
                 session.user.orgId = token.orgId ?? ''
                 session.user.role = token.role ?? ''
                 session.user.id = token.id ?? ''
-                session.user.idToken = token.idToken
+                // idToken kept on JWT only (server-side) — not exposed to client useSession()
             }
             return session
         },

@@ -9,7 +9,7 @@ declare module 'next-auth' {
         idToken?: string
     }
     interface Session {
-        user: User & { email: string; name?: string | null; idToken?: string }
+        user: User & { email: string; name?: string | null }
     }
 }
 

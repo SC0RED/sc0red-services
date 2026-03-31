@@ -39,12 +39,9 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
     org_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
 
-    # Create org in DynamoDB
-    org_repo.create({"id": org_id, "name": org_name, "type": org_type})
-
-    # Create user in Cognito
+    # Create user in Cognito first (fail fast — no orphaned DynamoDB records)
     cognito_sub = ""
-    try:
+    if os.environ.get("COGNITO_USER_POOL_ID"):
         cognito_client = CognitoClient()
         cognito_sub = cognito_client.create_user_with_password(
             email=email,
@@ -54,13 +51,9 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
             role="admin",
             legacy_user_id=user_id,
         )
-    except Exception:
-        if os.environ.get("COGNITO_USER_POOL_ID"):
-            raise
-        # Cognito not configured (e.g. E2E test environment) — proceed without
-        logger.warning("Cognito not configured — skipping user creation in Cognito")
 
-    # Create user in DynamoDB (for org membership and internal references)
+    # Create org and user in DynamoDB
+    org_repo.create({"id": org_id, "name": org_name, "type": org_type})
     user_repo.create(
         {
             "id": user_id,

@@ -1,24 +1,34 @@
 /**
  * Server-side backend token utility.
  *
- * Extracts the Cognito ID token from the NextAuth session and passes it
- * directly to the Python backend. The backend validates the RS256 JWT
- * against the Cognito JWKS endpoint.
+ * Extracts the Cognito ID token from the NextAuth JWT (server-side only)
+ * and passes it to the Python backend for RS256 validation.
  */
 
-import { getServerSession } from 'next-auth'
+import { getToken } from 'next-auth/jwt'
+import { cookies, headers } from 'next/headers'
 
 import { BackendError } from '@/lib/api/errors'
-import { authOptions } from '@/lib/auth/authOptions'
 import { BACKEND_URL } from '@/lib/config'
 
 /**
- * Get the Cognito ID token from the current session.
+ * Get the Cognito ID token from the NextAuth JWT.
+ * Uses getToken() which reads the raw JWT — idToken is stored there
+ * but NOT exposed on the client-facing session.
  */
 export async function getBackendToken(): Promise<string | null> {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.idToken) return null
-    return session.user.idToken
+    // getToken() needs the request cookies — use next/headers
+    const cookieStore = await cookies()
+    const headerStore = await headers()
+    const token = await getToken({
+        req: {
+            cookies: Object.fromEntries(cookieStore.getAll().map((c) => [c.name, c.value])),
+            headers: Object.fromEntries(headerStore.entries()),
+        } as never,
+        secret: process.env.NEXTAUTH_SECRET,
+    })
+
+    return token?.idToken as string | null
 }
 
 /**
@@ -34,12 +44,12 @@ export async function backendFetch<T = unknown>(
 
     const { method = 'GET', body } = options
 
-    const headers: Record<string, string> = {
+    const fetchHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
     }
 
-    const fetchOptions: RequestInit = { method, headers }
+    const fetchOptions: RequestInit = { method, headers: fetchHeaders }
     if (body && method !== 'GET') {
         fetchOptions.body = JSON.stringify(body)
     }

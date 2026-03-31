@@ -111,6 +111,7 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 400
         assert "already registered" in json.loads(result["body"])["error"]
 
+    @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
     @patch("src.handlers.auth_handlers.CognitoClient")
     def test_register_success(self, mock_cognito_cls):
         mock_cognito = MagicMock()
