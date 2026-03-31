@@ -120,6 +120,17 @@ class PersistResults(RequestStep):
                 },
             )
 
+        # Persist value chain (only if we have a valid assessment to attach it to)
+        value_chain = company.value_chain
+        if value_chain and assessment_id:
+            self._assessment_repo.save_value_chain(
+                assessment_id,
+                {
+                    "steps": [step.model_dump() for step in value_chain.steps],
+                    "summary": value_chain.summary,
+                },
+            )
+
         # Persist EBITDA tree (only if we have a valid assessment to attach it to)
         ebitda_tree = company.ebitda_tree
         if ebitda_tree and assessment_id:

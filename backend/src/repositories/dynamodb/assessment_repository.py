@@ -207,6 +207,39 @@ class DynamoDBAssessmentRepository:
             "businessModelSummary": item["business_model_summary"],
         }
 
+    # ── Value Chain operations ────────────────────────────────────────
+
+    def save_value_chain(self, assessment_id: str, data: dict[str, Any]) -> None:
+        """Persist the value chain analysis for the given assessment."""
+        item = {
+            "pk": f"ASSESSMENT#{assessment_id}",
+            "sk": "VALUE_CHAIN",
+            "entity_type": "value_chain",
+            "assessment_id": assessment_id,
+            "steps": json.dumps(data["steps"]),
+            "summary": data["summary"],
+        }
+        self._table.put_item(item)
+
+    def get_value_chain(self, assessment_id: str) -> dict[str, Any] | None:
+        """Return the value chain for the given assessment, or None if not found."""
+        item = self._table.get_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="VALUE_CHAIN",
+        )
+        if not item:
+            return None
+
+        steps = item.get("steps", "[]")
+        if isinstance(steps, str):
+            with contextlib.suppress(json.JSONDecodeError):
+                steps = json.loads(steps)
+
+        return {
+            "steps": steps,
+            "summary": item.get("summary", ""),
+        }
+
     # ── Document operations ────────────────────────────────────────────
 
     def save_document(self, assessment_id: str, document: dict[str, Any]) -> None:

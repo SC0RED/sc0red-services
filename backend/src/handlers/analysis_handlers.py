@@ -41,6 +41,7 @@ def handle_get_analysis(
     analysis_summary = ""
     top_actions: list[str] = []
     ebitda_tree = None
+    value_chain = None
 
     documents: list[dict[str, Any]] = []
 
@@ -55,6 +56,7 @@ def handle_get_analysis(
         risk_scores = assessment_repo.get_risk_scores(assessment_id)
         opportunities = assessment_repo.get_opportunities(assessment_id)
         ebitda_tree = assessment_repo.get_ebitda_tree(assessment_id)
+        value_chain = assessment_repo.get_value_chain(assessment_id)
         documents = assessment_repo.get_documents(assessment_id)
 
     metadata_json = company.get("metadata_json", "")
@@ -76,6 +78,7 @@ def handle_get_analysis(
             "riskScores": risk_scores,
             "opportunities": opportunities,
             "ebitdaTree": ebitda_tree,
+            "valueChain": value_chain,
             "documents": documents,
             "pipelineProgress": company.get("pipeline_progress", 0),
             "pipelineLabel": company.get("pipeline_label", ""),

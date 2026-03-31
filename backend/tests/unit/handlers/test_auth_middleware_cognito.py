@@ -101,6 +101,23 @@ class TestValidateToken:
                     validate_token("Bearer some-invalid-token")
 
 
+    def test_expired_token_raises(self):
+        import src.handlers.auth_middleware as module
+
+        module._jwks_client = None
+
+        mock_jwks = MagicMock()
+        mock_jwks.get_signing_key_from_jwt.side_effect = pyjwt.ExpiredSignatureError("expired")
+        with patch.dict("os.environ", {
+            "COGNITO_JWKS_URL": "http://mock:8080/.well-known/jwks.json",
+            "COGNITO_CLIENT_ID": "",
+        }):
+            with patch.object(module, "_get_jwks_client", return_value=mock_jwks):
+                with pytest.raises(ValueError, match="Token expired"):
+                    validate_token("Bearer some-expired-token")
+        module._jwks_client = None
+
+
 class TestRequireAuthentication:
     def test_extracts_from_headers(self):
         from src.handlers.auth_middleware import require_authentication
