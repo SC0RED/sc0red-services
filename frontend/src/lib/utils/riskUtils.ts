@@ -61,6 +61,17 @@ export const STRATEGIC_CATEGORIES = [
 
 export type StrategicCategory = (typeof STRATEGIC_CATEGORIES)[number]
 
+export const RISK_CATEGORY_COLORS: Record<string, string> = {
+    competitive_displacement: '#ef4444',
+    technology_obsolescence: '#f59e0b',
+    talent_workforce: '#8b5cf6',
+    margin_compression: '#ec4899',
+    customer_behavior: '#06b6d4',
+    regulatory_compliance: '#10b981',
+    supply_chain: '#f97316',
+    data_ip: '#6366f1',
+}
+
 export const TIER_COLORS: Record<string, string> = {
     low: 'var(--risk-low)',
     moderate: 'var(--risk-moderate)',
