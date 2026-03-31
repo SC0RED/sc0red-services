@@ -30,6 +30,7 @@ class CognitoConstruct(Construct):
         table: dynamodb.Table,
         bundling: cdk.BundlingOptions,
         lambda_architecture: lambda_.Architecture,
+        frontend_domain: str = "",
     ) -> None:
         super().__init__(scope, construct_id)
 
@@ -38,7 +39,12 @@ class CognitoConstruct(Construct):
         migration_lambda = self._create_migration_lambda(
             table, bundling, lambda_architecture, removal_policy
         )
-        self._user_pool = self._create_user_pool(removal_policy, migration_lambda)
+        custom_message_lambda = self._create_custom_message_lambda(
+            bundling, lambda_architecture, removal_policy, frontend_domain
+        )
+        self._user_pool = self._create_user_pool(
+            removal_policy, migration_lambda, custom_message_lambda
+        )
         self._app_client = self._create_app_client()
         self._create_outputs()
 
@@ -97,10 +103,43 @@ class CognitoConstruct(Construct):
 
         return handler
 
+    def _create_custom_message_lambda(
+        self,
+        bundling: cdk.BundlingOptions,
+        architecture: lambda_.Architecture,
+        removal_policy: RemovalPolicy,
+        frontend_domain: str,
+    ) -> lambda_.Function:
+        """Create the Custom Message Lambda for branded invitation emails."""
+        log_group = logs.LogGroup(
+            self,
+            "CustomMessageLambdaLogs",
+            log_group_name=f"/aws/lambda/janus-cognito-custom-message-{self._environment}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=removal_policy,
+        )
+
+        return lambda_.Function(
+            self,
+            "CustomMessageLambda",
+            function_name=f"janus-cognito-custom-message-{self._environment}",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            architecture=architecture,
+            handler="src.handlers.cognito_custom_message.handle_custom_message",
+            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            timeout=Duration.seconds(5),
+            memory_size=128,
+            log_group=log_group,
+            environment={
+                "FRONTEND_DOMAIN": frontend_domain,
+            },
+        )
+
     def _create_user_pool(
         self,
         removal_policy: RemovalPolicy,
         migration_lambda: lambda_.Function,
+        custom_message_lambda: lambda_.Function,
     ) -> cognito.UserPool:
         """Create the Cognito User Pool with custom attributes."""
         pool = cognito.UserPool(
@@ -150,17 +189,12 @@ class CognitoConstruct(Construct):
                 email_body="Your Janus verification code is {####}",
                 email_style=cognito.VerificationEmailStyle.CODE,
             ),
-            user_invitation=cognito.UserInvitationConfig(
-                email_subject="You've been invited to Janus",
-                email_body=(
-                    "You've been invited to join Janus. "
-                    "Your username is {username} and your temporary password is {####}. "
-                    "Please log in and set a new password."
-                ),
-            ),
+            # Invitation email is handled by the CustomMessage Lambda trigger
+            # (cognito_custom_message.py) for branded HTML emails.
             removal_policy=removal_policy,
             lambda_triggers=cognito.UserPoolTriggers(
                 user_migration=migration_lambda,
+                custom_message=custom_message_lambda,
             ),
         )
 

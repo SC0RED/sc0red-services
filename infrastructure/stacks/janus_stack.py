@@ -173,6 +173,8 @@ class JanusStack(Stack):
         bundling: cdk.BundlingOptions,
     ) -> CognitoConstruct:
         """Create the Cognito User Pool, App Client, and Migration Lambda."""
+        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
+
         return CognitoConstruct(
             self,
             "Cognito",
@@ -181,6 +183,7 @@ class JanusStack(Stack):
             table=table,
             bundling=bundling,
             lambda_architecture=self._lambda_architecture,
+            frontend_domain=frontend_domain,
         )
 
     # ── Shared helpers ─────────────────────────────────────────────────────────
