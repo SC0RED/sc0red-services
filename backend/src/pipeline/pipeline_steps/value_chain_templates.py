@@ -317,7 +317,7 @@ FINANCIAL_SERVICES_TEMPLATE = [
         strategic_categories=["Operational Efficiency"],
     ),
     StepTemplate(
-        step_id="product_delivery",
+        step_id="advisory_delivery",
         label="Product Delivery / Advisory",
         description="Deliver financial products, advice, and portfolio management",
         category="primary",

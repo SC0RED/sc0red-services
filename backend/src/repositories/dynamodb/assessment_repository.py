@@ -11,7 +11,6 @@ Single-table keys:
 
 from __future__ import annotations
 
-import contextlib
 import json
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -166,8 +165,7 @@ class DynamoDBAssessmentRepository:
         for item in items:
             for field in ("implementation_steps", "related_services"):
                 if field in item and isinstance(item[field], str):
-                    with contextlib.suppress(json.JSONDecodeError):
-                        item[field] = json.loads(item[field])
+                    item[field] = json.loads(item[field])
         return items
 
     # ── EBITDA tree operations ────────────────────────────────────────
@@ -197,8 +195,7 @@ class DynamoDBAssessmentRepository:
 
         tree_data = item.get("tree_data", "[]")
         if isinstance(tree_data, str):
-            with contextlib.suppress(json.JSONDecodeError):
-                tree_data = json.loads(tree_data)
+            tree_data = json.loads(tree_data)
 
         return {
             "treeData": tree_data,
@@ -232,8 +229,7 @@ class DynamoDBAssessmentRepository:
 
         steps = item.get("steps", "[]")
         if isinstance(steps, str):
-            with contextlib.suppress(json.JSONDecodeError):
-                steps = json.loads(steps)
+            steps = json.loads(steps)
 
         return {
             "steps": steps,

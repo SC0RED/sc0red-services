@@ -38,25 +38,18 @@ def _resolve_template(business_model: str) -> tuple[str, list[StepTemplate]]:
 # ---------------------------------------------------------------------------
 # Opportunity linking
 # ---------------------------------------------------------------------------
-_STEP_TEMPLATE_CACHE: dict[str, StepTemplate] = {}
-
-
-def _get_step_template(step_id: str) -> StepTemplate | None:
-    """Look up a step template by ID across all templates."""
-    if not _STEP_TEMPLATE_CACHE:
-        for template_steps in TEMPLATES.values():
-            for step in template_steps:
-                _STEP_TEMPLATE_CACHE[step.id] = step
-    return _STEP_TEMPLATE_CACHE.get(step_id)
 
 
 def _link_opportunities(
     steps: list[ValueChainStep],
+    template_steps: list[StepTemplate],
     opportunities: list[Opportunity],
 ) -> None:
     """Link opportunities to value chain steps by strategic_category + value_lever."""
+    template_by_id = {t.id: t for t in template_steps}
+
     for step in steps:
-        template = _get_step_template(step.id)
+        template = template_by_id.get(step.id)
         if not template:
             continue
 
@@ -101,7 +94,7 @@ def build_programmatic_value_chain(
     ]
 
     if opportunities:
-        _link_opportunities(steps, opportunities)
+        _link_opportunities(steps, template_steps, opportunities)
 
     primary_count = sum(1 for s in steps if s.category == "primary")
     support_count = sum(1 for s in steps if s.category == "support")
