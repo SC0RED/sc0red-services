@@ -66,6 +66,7 @@ class JanusStack(Stack):
         worker_handler = self._create_worker_lambda(table, queue, bundling, common_environment)
 
         documents_bucket.grant_read_write(api_handler)
+        cognito.grant_admin_actions(api_handler)
 
         api = self._create_api(api_handler)
 

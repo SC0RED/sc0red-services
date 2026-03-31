@@ -195,6 +195,17 @@ class CognitoConstruct(Construct):
             .with_custom_attributes("org_id", "role"),
         )
 
+    def grant_admin_actions(self, handler: lambda_.Function) -> None:
+        """Grant a Lambda function permission to call Cognito admin APIs."""
+        self._user_pool.grant(
+            handler,
+            "cognito-idp:AdminCreateUser",
+            "cognito-idp:AdminDeleteUser",
+            "cognito-idp:AdminSetUserPassword",
+            "cognito-idp:AdminUpdateUserAttributes",
+            "cognito-idp:AdminGetUser",
+        )
+
     def _create_outputs(self) -> None:
         """Export User Pool and Client IDs as CloudFormation outputs."""
         CfnOutput(
