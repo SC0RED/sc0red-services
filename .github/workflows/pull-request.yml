@@ -44,7 +44,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install test dependencies
-        run: pip install boto3 PyJWT
+        run: pip install boto3 "PyJWT[crypto]"
 
       - name: Configure SSH for private deps
         run: |
