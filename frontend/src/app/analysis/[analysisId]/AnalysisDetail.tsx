@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
 
@@ -12,13 +11,13 @@ import RiskBreakdown, { CAT_LABELS } from '@/components/RiskBreakdown'
 import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
+import EbitdaSection from '@/components/analysis/EbitdaSection'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
+import ValueChainDiagram from '@/components/ValueChainDiagram'
 import type { AnalysisData, DocumentInfo } from '@/lib/types/api'
-
-const EbitdaTree = dynamic(() => import('@/components/EbitdaTree'), { ssr: false })
 
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
     const router = useRouter()
@@ -288,6 +287,14 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
 
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
 
+                {data.valueChain && data.valueChain.steps.length > 0 && (
+                    <ValueChainDiagram
+                        steps={data.valueChain.steps}
+                        opportunities={opportunities}
+                        summary={data.valueChain.summary}
+                    />
+                )}
+
                 {/* Re-analysis Progress */}
                 {reanalyzing && (
                     <div
@@ -335,48 +342,8 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     reanalyzing={reanalyzing}
                 />
 
-                {/* EBITDA Impact Model */}
                 {data.ebitdaTree && (
-                    <div style={{ marginBottom: '2rem' }}>
-                        <h2 className="section-header">EBITDA Impact Model</h2>
-
-                        <div
-                            style={{
-                                display: 'flex',
-                                gap: '0.5rem',
-                                flexWrap: 'wrap',
-                                marginBottom: '1rem',
-                            }}
-                        >
-                            {data.ebitdaTree.revenueEstimate && (
-                                <span className="badge badge-low">
-                                    Revenue: {data.ebitdaTree.revenueEstimate}
-                                </span>
-                            )}
-                            {data.ebitdaTree.ebitdaEstimate && (
-                                <span className="badge badge-blue">
-                                    EBITDA: {data.ebitdaTree.ebitdaEstimate}
-                                </span>
-                            )}
-                        </div>
-
-                        {data.ebitdaTree.businessModelSummary && (
-                            <p
-                                style={{
-                                    fontSize: '0.9rem',
-                                    lineHeight: 1.7,
-                                    color: 'var(--text-secondary)',
-                                    marginBottom: '1.25rem',
-                                }}
-                            >
-                                {data.ebitdaTree.businessModelSummary}
-                            </p>
-                        )}
-
-                        <div className="card" style={{ padding: '1rem' }}>
-                            <EbitdaTree treeData={data.ebitdaTree.treeData} opportunities={opportunities} />
-                        </div>
-                    </div>
+                    <EbitdaSection ebitdaTree={data.ebitdaTree} opportunities={opportunities} />
                 )}
             </main>
         </div>

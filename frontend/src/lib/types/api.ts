@@ -47,6 +47,20 @@ export interface EbitdaTree {
     businessModelSummary?: string
 }
 
+export interface ValueChainStep {
+    id: string
+    label: string
+    description: string
+    category: 'primary' | 'support'
+    risk_categories: string[]
+    opportunity_indices: number[]
+}
+
+export interface ValueChain {
+    steps: ValueChainStep[]
+    summary: string
+}
+
 export interface DocumentInfo {
     id: string
     filename: string
@@ -67,6 +81,7 @@ export interface AnalysisData {
     opportunities: Opportunity[]
     topActions?: string[]
     ebitdaTree?: EbitdaTree
+    valueChain?: ValueChain
     documents?: DocumentInfo[]
     analyzedAt?: string
     scanType?: string
