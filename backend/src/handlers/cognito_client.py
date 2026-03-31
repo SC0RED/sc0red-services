@@ -110,6 +110,16 @@ class CognitoClient:
         )
         return cognito_sub
 
+    def resend_invitation(self, email: str) -> None:
+        """Resend the invitation email with a new temporary password."""
+        self._client.admin_create_user(
+            UserPoolId=self._user_pool_id,
+            Username=email,
+            MessageAction="RESEND",
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+        logger.info("Resent invitation for: %s", email)
+
     def delete_user(self, email: str) -> None:
         """Delete a user from Cognito by email (username)."""
         self._client.admin_delete_user(

@@ -98,6 +98,14 @@ All AI prompt text MUST be in `src/pipeline/prompts/` — never inline in Python
 | Calibration guides | `prompts/guides/{name}.md` | `load_guide(name)` |
 | Output schemas | `prompts/schemas/{name}.json` | `load_schema(name)` |
 
+### HTML Templates → External Files
+
+HTML content (email templates, rendered pages) MUST be in external `.html` files — never inline as Python string constants. Load at module level via `Path.read_text()`.
+
+| Content | Location | Example |
+|---------|----------|---------|
+| Email templates | `src/handlers/templates/{name}.html` | `invitation_email.html` |
+
 ### Handler Functions → Focused Modules
 
 API handlers are standalone functions in focused modules (`auth_handlers.py`, `scan_handlers.py`, `analysis_handlers.py`, `document_handlers.py`). Each receives explicit dependencies — no class state. The main `api_gateway_handler.py` only does routing + dispatch.

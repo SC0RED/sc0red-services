@@ -8,6 +8,8 @@ from src.handlers.invitation_handlers import (
     handle_invite_member,
     handle_list_members,
     handle_remove_member,
+    handle_resend_invite,
+    handle_revoke_invite,
 )
 
 
@@ -89,6 +91,90 @@ class TestListMembers:
         assert body["members"][0]["email"] == "a@b.com"
         assert len(body["pendingInvitations"]) == 1
         assert body["pendingInvitations"][0]["email"] == "b@b.com"
+
+
+class TestResendInvite:
+    @patch("src.handlers.invitation_handlers.CognitoClient")
+    def test_successful_resend(self, mock_cognito_cls):
+        mock_cognito = MagicMock()
+        mock_cognito_cls.return_value = mock_cognito
+
+        storage = MagicMock()
+        event = _make_event({"email": "pending@test.com"})
+        result = handle_resend_invite(event, _make_auth(), storage)
+
+        assert result["statusCode"] == 200
+        mock_cognito.resend_invitation.assert_called_once_with("pending@test.com")
+
+    def test_non_admin_rejected(self):
+        storage = MagicMock()
+        event = _make_event({"email": "a@b.com"})
+        result = handle_resend_invite(event, _make_auth(role="analyst"), storage)
+        assert result["statusCode"] == 403
+
+    def test_missing_email_rejected(self):
+        storage = MagicMock()
+        event = _make_event({})
+        result = handle_resend_invite(event, _make_auth(), storage)
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.invitation_handlers.CognitoClient")
+    def test_user_not_found_returns_404(self, mock_cognito_cls):
+        from botocore.exceptions import ClientError
+
+        mock_cognito = MagicMock()
+        mock_cognito.resend_invitation.side_effect = ClientError(
+            {"Error": {"Code": "UserNotFoundException", "Message": "User not found"}},
+            "AdminCreateUser",
+        )
+        mock_cognito_cls.return_value = mock_cognito
+
+        storage = MagicMock()
+        event = _make_event({"email": "gone@test.com"})
+        result = handle_resend_invite(event, _make_auth(), storage)
+        assert result["statusCode"] == 404
+
+
+class TestRevokeInvite:
+    @patch("src.handlers.invitation_handlers.CognitoClient")
+    def test_successful_revoke(self, mock_cognito_cls):
+        mock_cognito = MagicMock()
+        mock_cognito_cls.return_value = mock_cognito
+
+        storage = MagicMock()
+        storage.create_invitation_repository.return_value.find_by_org.return_value = [
+            {"id": "inv-1", "email": "pending@test.com", "status": "pending"},
+        ]
+
+        result = handle_revoke_invite({}, _make_auth(), storage, "inv-1")
+
+        assert result["statusCode"] == 200
+        mock_cognito.delete_user.assert_called_once_with("pending@test.com")
+        storage.create_invitation_repository.return_value.update_status.assert_called_once_with(
+            "org-1", "inv-1", "revoked"
+        )
+
+    def test_non_admin_rejected(self):
+        storage = MagicMock()
+        result = handle_revoke_invite({}, _make_auth(role="analyst"), storage, "inv-1")
+        assert result["statusCode"] == 403
+
+    def test_invitation_not_found(self):
+        storage = MagicMock()
+        storage.create_invitation_repository.return_value.find_by_org.return_value = []
+
+        result = handle_revoke_invite({}, _make_auth(), storage, "nonexistent")
+        assert result["statusCode"] == 404
+
+    def test_already_accepted_invitation_rejected(self):
+        storage = MagicMock()
+        storage.create_invitation_repository.return_value.find_by_org.return_value = [
+            {"id": "inv-1", "email": "accepted@test.com", "status": "accepted"},
+        ]
+
+        result = handle_revoke_invite({}, _make_auth(), storage, "inv-1")
+        assert result["statusCode"] == 400
+        assert "pending" in json.loads(result["body"])["error"].lower()
 
 
 class TestRemoveMember:
