@@ -138,11 +138,18 @@ ORG_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)[
 echo -e "  ${GREEN}✓${NC} User ID: $USER_ID"
 echo -e "  ${GREEN}✓${NC} Org ID: $ORG_ID"
 
-# Create a JWT for authenticated requests
+# Create an RS256 JWT using the E2E test private key
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOKEN=$(python3 -c "
 import jwt, time
-payload = {'id':'$USER_ID','email':'$EMAIL','orgId':'$ORG_ID','role':'admin','name':'E2E User','exp':int(time.time())+300}
-print(jwt.encode(payload, '$NEXTAUTH_SECRET', algorithm='HS256'))
+with open('$SCRIPT_DIR/e2e-keys/private_key.pem') as f:
+    private_key = f.read()
+payload = {
+    'sub':'$USER_ID','email':'$EMAIL','orgId':'$ORG_ID',
+    'role':'admin','name':'E2E User',
+    'exp':int(time.time())+300,
+}
+print(jwt.encode(payload, private_key, algorithm='RS256', headers={'kid':'e2e-test-key'}))
 ")
 
 AUTH="Authorization: Bearer $TOKEN"

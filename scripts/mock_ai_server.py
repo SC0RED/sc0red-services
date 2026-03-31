@@ -12,6 +12,7 @@ No external dependencies — pure stdlib. Run with: python mock_ai_server.py
 from __future__ import annotations
 
 import json
+import os
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -389,14 +390,23 @@ def _anthropic_envelope(content: object) -> dict:
     }
 
 
+def _load_jwks() -> dict:
+    """Load the E2E test JWKS from the e2e-keys directory."""
+    jwks_path = os.path.join(os.path.dirname(__file__), "e2e-keys", "jwks.json")
+    with open(jwks_path) as f:
+        return json.load(f)
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:  # noqa: N802
         print(f"[mock-ai] {self.path} — {fmt % args}")
 
     def do_GET(self) -> None:  # noqa: N802
-        """Health probe + mock company website for E2E scraper."""
+        """Health probe + mock company website + JWKS for E2E auth."""
         if self.path.startswith("/company"):
             self._send_html(_MOCK_COMPANY_HTML, 200)
+        elif self.path.endswith("/.well-known/jwks.json"):
+            self._send_json(_load_jwks(), 200)
         else:
             self._send_json({"status": "ok"}, 200)
 

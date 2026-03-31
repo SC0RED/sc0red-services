@@ -1,4 +1,4 @@
-"""Tests for Cognito RS256 auth middleware (Phase 5 — HS256 removed)."""
+"""Tests for Cognito RS256 auth middleware."""
 
 from unittest.mock import MagicMock, patch
 
@@ -18,88 +18,53 @@ class TestValidateToken:
             validate_token("")
 
     def test_cognito_not_configured_raises(self):
-        """Without Cognito env vars, validation fails — no HS256 fallback."""
         import src.handlers.auth_middleware as module
 
         module._jwks_client = None
 
         token = pyjwt.encode({"sub": "user-1"}, "secret", algorithm="HS256")
-        with patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "", "COGNITO_REGION": ""}):
+        with patch.dict("os.environ", {
+            "COGNITO_USER_POOL_ID": "",
+            "COGNITO_REGION": "",
+            "COGNITO_JWKS_URL": "",
+        }):
             with pytest.raises(ValueError, match="COGNITO_REGION and COGNITO_USER_POOL_ID"):
                 validate_token(f"Bearer {token}")
 
-    def test_hs256_token_rejected_when_cognito_configured(self):
-        """HS256 tokens are no longer accepted — only RS256."""
+    def test_jwks_url_override_used_when_set(self):
+        """COGNITO_JWKS_URL takes precedence over region+pool_id."""
         import src.handlers.auth_middleware as module
 
         module._jwks_client = None
 
-        token = pyjwt.encode(
-            {"id": "user-1", "orgId": "org-1"},
-            "secret",
-            algorithm="HS256",
-        )
-        with patch.dict(
-            "os.environ",
-            {
-                "COGNITO_USER_POOL_ID": "us-east-1_FAKE",
-                "COGNITO_REGION": "us-east-1",
-                "COGNITO_CLIENT_ID": "fakeclientid",
-            },
-        ):
-            mock_jwks = MagicMock()
-            mock_jwks.get_signing_key_from_jwt.side_effect = pyjwt.InvalidTokenError("bad")
-            with patch.object(module, "_get_jwks_client", return_value=mock_jwks):
-                with pytest.raises(ValueError, match="Invalid token"):
-                    validate_token(f"Bearer {token}")
-
-
-class TestE2EBypass:
-    def test_hs256_accepted_in_e2e_mode(self):
-        import src.handlers.auth_middleware as module
-
-        module._jwks_client = None
-
-        secret = "test-secret-minimum-32-characters"
-        token = pyjwt.encode(
-            {"id": "user-1", "orgId": "org-1", "email": "a@b.com", "role": "admin"},
-            secret,
-            algorithm="HS256",
-        )
         with patch.dict("os.environ", {
-            "STAGE": "e2e",
-            "NEXTAUTH_SECRET": secret,
+            "COGNITO_JWKS_URL": "http://mock:8080/.well-known/jwks.json",
             "COGNITO_USER_POOL_ID": "",
             "COGNITO_REGION": "",
+            "COGNITO_CLIENT_ID": "",
         }):
-            result = validate_token(f"Bearer {token}")
+            client = module._get_jwks_client()
+            assert client is not None
 
-        assert result.user_id == "user-1"
-        assert result.org_id == "org-1"
+        # Reset for other tests
+        module._jwks_client = None
 
-    def test_hs256_rejected_in_staging(self):
+    def test_invalid_token_rejected(self):
         import src.handlers.auth_middleware as module
 
         module._jwks_client = None
 
-        secret = "test-secret-minimum-32-characters"
-        token = pyjwt.encode(
-            {"id": "user-1", "orgId": "org-1"},
-            secret,
-            algorithm="HS256",
-        )
         with patch.dict("os.environ", {
-            "STAGE": "staging",
-            "NEXTAUTH_SECRET": secret,
             "COGNITO_USER_POOL_ID": "us-east-1_FAKE",
             "COGNITO_REGION": "us-east-1",
             "COGNITO_CLIENT_ID": "fakeclient",
+            "COGNITO_JWKS_URL": "",
         }):
             mock_jwks = MagicMock()
             mock_jwks.get_signing_key_from_jwt.side_effect = pyjwt.InvalidTokenError("bad")
             with patch.object(module, "_get_jwks_client", return_value=mock_jwks):
                 with pytest.raises(ValueError, match="Invalid token"):
-                    validate_token(f"Bearer {token}")
+                    validate_token("Bearer some-invalid-token")
 
 
 class TestRequireAuthentication:

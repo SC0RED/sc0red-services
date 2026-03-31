@@ -1,6 +1,7 @@
 """Authentication middleware — Cognito RS256 JWT validation.
 
 Validates JWTs issued by the Cognito User Pool against its JWKS public keys.
+Supports COGNITO_JWKS_URL override for testing with mock JWKS endpoints.
 """
 
 from __future__ import annotations
@@ -26,13 +27,16 @@ def _get_jwks_client() -> PyJWKClient:
     if _jwks_client is not None:
         return _jwks_client
 
-    region = os.environ.get("COGNITO_REGION", "")
-    pool_id = os.environ.get("COGNITO_USER_POOL_ID", "")
-    if not region or not pool_id:
-        message = "COGNITO_REGION and COGNITO_USER_POOL_ID must be configured"
-        raise ValueError(message)
+    # Allow explicit JWKS URL override (for E2E testing with mock JWKS)
+    jwks_url = os.environ.get("COGNITO_JWKS_URL", "")
+    if not jwks_url:
+        region = os.environ.get("COGNITO_REGION", "")
+        pool_id = os.environ.get("COGNITO_USER_POOL_ID", "")
+        if not region or not pool_id:
+            message = "COGNITO_REGION and COGNITO_USER_POOL_ID must be configured"
+            raise ValueError(message)
+        jwks_url = f"https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/jwks.json"
 
-    jwks_url = f"https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/jwks.json"
     _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
     return _jwks_client
 
@@ -49,10 +53,7 @@ class AuthContext:
 
 
 def validate_token(authorization: str) -> AuthContext:
-    """Validate a Cognito RS256 Bearer token and return the auth context.
-
-    In E2E test environments (STAGE=e2e), also accepts HS256 tokens signed
-    with NEXTAUTH_SECRET for test automation without real Cognito.
+    """Validate an RS256 Bearer token and return the auth context.
 
     Raises:
         ValueError: If the token is missing, invalid, or expired.
@@ -63,16 +64,26 @@ def validate_token(authorization: str) -> AuthContext:
 
     token = authorization[7:]
 
-    # E2E test bypass — accept HS256 tokens when running in test environment
-    if os.environ.get("STAGE") == "e2e":
-        result = _try_e2e_token(token)
-        if result is not None:
-            return result
-
     client_id = os.environ.get("COGNITO_CLIENT_ID", "")
+
+    # Build issuer for verification (skip if using custom JWKS URL)
+    issuer = None
     region = os.environ.get("COGNITO_REGION", "")
     pool_id = os.environ.get("COGNITO_USER_POOL_ID", "")
-    issuer = f"https://cognito-idp.{region}.amazonaws.com/{pool_id}"
+    if region and pool_id:
+        issuer = f"https://cognito-idp.{region}.amazonaws.com/{pool_id}"
+
+    # Decode options — verify audience and issuer only if configured
+    decode_options: dict[str, Any] = {"verify_exp": True}
+    decode_kwargs: dict[str, Any] = {"algorithms": ["RS256"]}
+    if client_id:
+        decode_kwargs["audience"] = client_id
+    else:
+        decode_options["verify_aud"] = False
+    if issuer:
+        decode_kwargs["issuer"] = issuer
+    else:
+        decode_options["verify_iss"] = False
 
     try:
         jwks_client = _get_jwks_client()
@@ -81,10 +92,8 @@ def validate_token(authorization: str) -> AuthContext:
         payload: dict[str, Any] = jwt.decode(
             token,
             signing_key.key,
-            algorithms=["RS256"],
-            audience=client_id,
-            issuer=issuer,
-            options={"verify_exp": True},
+            options=decode_options,
+            **decode_kwargs,
         )
     except jwt.ExpiredSignatureError:
         message = "Token expired"
@@ -93,13 +102,13 @@ def validate_token(authorization: str) -> AuthContext:
         message = f"Invalid token: {error}"
         raise ValueError(message) from None
 
-    # Extract claims from Cognito ID token
-    org_id = payload.get("custom:org_id", "")
+    # Extract claims — support both Cognito custom attributes and plain claims
+    org_id = payload.get("custom:org_id") or payload.get("orgId", "")
     if not org_id:
-        message = "Token missing required custom:org_id claim"
+        message = "Token missing required org_id claim"
         raise ValueError(message)
 
-    user_id = payload.get("custom:legacy_user_id") or payload.get("sub", "")
+    user_id = payload.get("custom:legacy_user_id") or payload.get("sub") or payload.get("id", "")
     if not user_id:
         message = "Token missing user identifier"
         raise ValueError(message)
@@ -108,35 +117,7 @@ def validate_token(authorization: str) -> AuthContext:
         user_id=user_id,
         org_id=org_id,
         email=payload.get("email", ""),
-        role=payload.get("custom:role", "analyst"),
-        name=payload.get("name", ""),
-    )
-
-
-def _try_e2e_token(token: str) -> AuthContext | None:
-    """Validate an HS256 token for E2E testing only.
-
-    Only active when STAGE=e2e. Never runs in staging/production.
-    """
-    secret = os.environ.get("NEXTAUTH_SECRET", "")
-    if not secret:
-        return None
-
-    try:
-        payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_exp": True})
-    except jwt.InvalidTokenError:
-        return None
-
-    user_id = payload.get("id") or payload.get("sub")
-    org_id = payload.get("orgId")
-    if not user_id or not org_id:
-        return None
-
-    return AuthContext(
-        user_id=user_id,
-        org_id=org_id,
-        email=payload.get("email", ""),
-        role=payload.get("role", "analyst"),
+        role=payload.get("custom:role") or payload.get("role", "analyst"),
         name=payload.get("name", ""),
     )
 

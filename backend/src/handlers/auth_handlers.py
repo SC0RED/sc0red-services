@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import build_error, build_json_response
 from src.handlers.cognito_client import CognitoClient
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -39,9 +42,9 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
     # Create org in DynamoDB
     org_repo.create({"id": org_id, "name": org_name, "type": org_type})
 
-    # Create user in Cognito (skip in E2E — no real Cognito available)
+    # Create user in Cognito
     cognito_sub = ""
-    if os.environ.get("STAGE") != "e2e":
+    try:
         cognito_client = CognitoClient()
         cognito_sub = cognito_client.create_user_with_password(
             email=email,
@@ -51,6 +54,11 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
             role="admin",
             legacy_user_id=user_id,
         )
+    except Exception:
+        if os.environ.get("COGNITO_USER_POOL_ID"):
+            raise
+        # Cognito not configured (e.g. E2E test environment) — proceed without
+        logger.warning("Cognito not configured — skipping user creation in Cognito")
 
     # Create user in DynamoDB (for org membership and internal references)
     user_repo.create(
