@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         EbitdaTreeResult,
         OpportunityResult,
         RiskAssessment,
+        ValueChainResult,
     )
 
 
@@ -93,6 +94,10 @@ class CompanyAccessor:
     def set_ebitda_tree(self, result: EbitdaTreeResult) -> None:
         """Set the EBITDA decomposition tree."""
         self._company.ebitda_tree = result
+
+    def set_value_chain(self, result: ValueChainResult) -> None:
+        """Set the value chain analysis."""
+        self._company.value_chain = result
 
     def set_url(self, url: str) -> None:
         """Set the company URL."""

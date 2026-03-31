@@ -26,6 +26,7 @@ _PROGRESS_MAP: dict[str, tuple[int, str]] = {
     "ideate_opportunities": (55, "Generating opportunity ideas..."),
     "generate_opportunities": (80, "Gathering implementation details..."),
     "generate_ebitda_tree": (85, "Building EBITDA analysis..."),
+    "compute_value_chain": (90, "Mapping value chain..."),
     "persist_results": (95, "Saving results..."),
 }
 

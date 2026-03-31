@@ -11,7 +11,6 @@ Single-table keys:
 
 from __future__ import annotations
 
-import contextlib
 import json
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -166,8 +165,7 @@ class DynamoDBAssessmentRepository:
         for item in items:
             for field in ("implementation_steps", "related_services"):
                 if field in item and isinstance(item[field], str):
-                    with contextlib.suppress(json.JSONDecodeError):
-                        item[field] = json.loads(item[field])
+                    item[field] = json.loads(item[field])
         return items
 
     # ── EBITDA tree operations ────────────────────────────────────────
@@ -197,14 +195,45 @@ class DynamoDBAssessmentRepository:
 
         tree_data = item.get("tree_data", "[]")
         if isinstance(tree_data, str):
-            with contextlib.suppress(json.JSONDecodeError):
-                tree_data = json.loads(tree_data)
+            tree_data = json.loads(tree_data)
 
         return {
             "treeData": tree_data,
             "revenueEstimate": item["revenue_estimate"],
             "ebitdaEstimate": item["ebitda_estimate"],
             "businessModelSummary": item["business_model_summary"],
+        }
+
+    # ── Value Chain operations ────────────────────────────────────────
+
+    def save_value_chain(self, assessment_id: str, data: dict[str, Any]) -> None:
+        """Persist the value chain analysis for the given assessment."""
+        item = {
+            "pk": f"ASSESSMENT#{assessment_id}",
+            "sk": "VALUE_CHAIN",
+            "entity_type": "value_chain",
+            "assessment_id": assessment_id,
+            "steps": json.dumps(data["steps"]),
+            "summary": data["summary"],
+        }
+        self._table.put_item(item)
+
+    def get_value_chain(self, assessment_id: str) -> dict[str, Any] | None:
+        """Return the value chain for the given assessment, or None if not found."""
+        item = self._table.get_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="VALUE_CHAIN",
+        )
+        if not item:
+            return None
+
+        steps = item.get("steps", "[]")
+        if isinstance(steps, str):
+            steps = json.loads(steps)
+
+        return {
+            "steps": steps,
+            "summary": item.get("summary", ""),
         }
 
     # ── Document operations ────────────────────────────────────────────

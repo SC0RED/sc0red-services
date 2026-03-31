@@ -6,6 +6,7 @@ from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnalysisFactory
 from src.pipeline.pipeline_steps.compute_ebitda_tree import ComputeEbitdaTree
+from src.pipeline.pipeline_steps.compute_value_chain import ComputeValueChain
 from src.pipeline.pipeline_steps.detail_opportunities import DetailOpportunities
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
@@ -26,12 +27,13 @@ class TestCompanyAnalysisFactory:
     def test_get_pipeline_returns_five_steps(self):
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
-        assert len(pipeline) == 5
+        assert len(pipeline) == 6
         assert isinstance(pipeline[0], ScrapeAndResolveURL)
         assert isinstance(pipeline[1], ParallelProfileRiskAndIdeation)
         assert isinstance(pipeline[2], DetailOpportunities)
         assert isinstance(pipeline[3], ComputeEbitdaTree)
-        assert isinstance(pipeline[4], PersistResults)
+        assert isinstance(pipeline[4], ComputeValueChain)
+        assert isinstance(pipeline[5], PersistResults)
 
     def test_build_executor_wires_accessor(self):
         factory = self._make_factory()
@@ -41,7 +43,7 @@ class TestCompanyAnalysisFactory:
 
     def test_execute_pipeline_runs_all_steps(self):
         factory = self._make_factory()
-        mock_steps = [MagicMock() for _ in range(5)]
+        mock_steps = [MagicMock() for _ in range(6)]
         for i, step in enumerate(mock_steps):
             step.step_name.return_value = f"Step{i}"
         factory.get_pipeline = MagicMock(return_value=mock_steps)
@@ -62,5 +64,5 @@ class TestCompanyAnalysisFactory:
             assessment_repo=assessment_repo,
         )
         pipeline = factory.get_pipeline()
-        persist_step = pipeline[4]
+        persist_step = pipeline[5]
         assert isinstance(persist_step, PersistResults)

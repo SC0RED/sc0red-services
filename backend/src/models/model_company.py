@@ -91,6 +91,24 @@ class EbitdaTreeResult(BaseModel):
     nodes: list[EbitdaNode] = Field(default_factory=list)
 
 
+class ValueChainStep(BaseModel):
+    """Single step in a company's value chain."""
+
+    id: str
+    label: str
+    description: str = ""
+    category: Literal["primary", "support"] = "primary"
+    risk_categories: list[str] = Field(default_factory=list)
+    opportunity_indices: list[int] = Field(default_factory=list)
+
+
+class ValueChainResult(BaseModel):
+    """Value chain analysis mapping risks and opportunities to operational steps."""
+
+    steps: list[ValueChainStep] = Field(default_factory=list)
+    summary: str = ""
+
+
 class Company(BaseModel):
     """Full company entity combining profile, risk, and opportunities."""
 
@@ -106,6 +124,7 @@ class Company(BaseModel):
     risk_assessment: RiskAssessment | None = None
     opportunity_result: OpportunityResult | None = None
     ebitda_tree: EbitdaTreeResult | None = None
+    value_chain: ValueChainResult | None = None
     error: str | None = None
     analyzed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
