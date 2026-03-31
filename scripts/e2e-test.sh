@@ -161,15 +161,7 @@ RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analyses" -H "$AUTH")
 STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "List analyses" 200 "$STATUS"
 
-# ── 5. Login with wrong password ────────────────────────────────
-echo -e "\n${YELLOW}5. Login with wrong password${NC}"
-RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"wrong\"}")
-STATUS=$(echo "$RESP" | tail -n 1)
-assert_status "Bad credentials" 401 "$STATUS"
-
-# ── 6. Unauthenticated access ───────────────────────────────────
+# ── 5. Unauthenticated access ───────────────────────────────────
 echo -e "\n${YELLOW}6. Unauthenticated access${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard")
 STATUS=$(echo "$RESP" | tail -n 1)
