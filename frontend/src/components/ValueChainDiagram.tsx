@@ -4,22 +4,12 @@ import { useState } from 'react'
 
 import { CAT_LABELS } from '@/components/RiskBreakdown'
 import type { ValueChainStep, Opportunity } from '@/lib/types/api'
+import { RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
 
 interface ValueChainDiagramProps {
     steps: ValueChainStep[]
     opportunities: Opportunity[]
     summary: string
-}
-
-const CATEGORY_COLORS: Record<string, string> = {
-    competitive_displacement: '#ef4444',
-    technology_obsolescence: '#f59e0b',
-    talent_workforce: '#8b5cf6',
-    margin_compression: '#ec4899',
-    customer_behavior: '#06b6d4',
-    regulatory_compliance: '#10b981',
-    supply_chain: '#f97316',
-    data_ip: '#6366f1',
 }
 
 export default function ValueChainDiagram({ steps, opportunities, summary }: ValueChainDiagramProps) {
@@ -131,7 +121,9 @@ interface StepCardProps {
 }
 
 function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }: StepCardProps) {
-    const linkedOpportunities = step.opportunity_indices.map((i) => opportunities[i]).filter(Boolean)
+    const linkedOpportunities = step.opportunity_indices
+        .filter((i) => i >= 0 && i < opportunities.length)
+        .map((i) => ({ index: i, opportunity: opportunities[i] }))
     const isPrimary = variant === 'primary'
 
     return (
@@ -139,7 +131,7 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
             style={{
                 display: 'flex',
                 alignItems: 'stretch',
-                flex: isPrimary ? '1 1 0' : '1 1 0',
+                flex: '1 1 0',
                 minWidth: isPrimary ? '140px' : '160px',
             }}
         >
@@ -200,9 +192,9 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                                 fontWeight: 500,
                                 padding: '0.125rem 0.375rem',
                                 borderRadius: '9999px',
-                                background: `${CATEGORY_COLORS[category] ?? 'var(--text-tertiary)'}15`,
-                                color: CATEGORY_COLORS[category] ?? 'var(--text-tertiary)',
-                                border: `1px solid ${CATEGORY_COLORS[category] ?? 'var(--text-tertiary)'}30`,
+                                background: `${RISK_CATEGORY_COLORS[category] ?? 'var(--text-tertiary)'}15`,
+                                color: RISK_CATEGORY_COLORS[category] ?? 'var(--text-tertiary)',
+                                border: `1px solid ${RISK_CATEGORY_COLORS[category] ?? 'var(--text-tertiary)'}30`,
                                 whiteSpace: 'nowrap',
                             }}
                         >
@@ -246,9 +238,9 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                         >
                             Linked Opportunities
                         </div>
-                        {linkedOpportunities.map((opportunity) => (
+                        {linkedOpportunities.map(({ index, opportunity }) => (
                             <div
-                                key={opportunity.title}
+                                key={index}
                                 style={{
                                     fontSize: '0.75rem',
                                     color: 'var(--text-primary)',
