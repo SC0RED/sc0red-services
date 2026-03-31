@@ -6,7 +6,7 @@ import { signOut, useSession } from 'next-auth/react'
 
 import { useMobileMenu } from '@/lib/hooks/useMobileMenu'
 
-const navItems = [
+const navItems: { href: string; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
     {
         href: '/dashboard',
         label: 'Dashboard',
@@ -66,6 +66,28 @@ const navItems = [
                 <polyline points="14 2 14 8 20 8" />
                 <line x1="16" y1="13" x2="8" y2="13" />
                 <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+        ),
+    },
+    {
+        href: '/team',
+        label: 'Team',
+        adminOnly: true,
+        icon: (
+            <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
         ),
     },
@@ -185,35 +207,37 @@ export default function DashboardSidebar() {
                         gap: '2px',
                     }}
                 >
-                    {navItems.map((item) => {
-                        const active =
-                            pathname === item.href ||
-                            (item.href !== '/dashboard' && pathname.startsWith(item.href))
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.625rem',
-                                    padding: '0.625rem 0.75rem',
-                                    borderRadius: 'var(--radius-md)',
-                                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                    background: active ? 'rgba(59,123,246,0.1)' : 'transparent',
-                                    borderLeft: active
-                                        ? '2px solid var(--accent-blue)'
-                                        : '2px solid transparent',
-                                    fontSize: '0.875rem',
-                                    fontWeight: active ? 600 : 400,
-                                    transition: 'all var(--transition-fast)',
-                                }}
-                            >
-                                {item.icon}
-                                {item.label}
-                            </Link>
-                        )
-                    })}
+                    {navItems
+                        .filter((item) => !item.adminOnly || session?.user?.role === 'admin')
+                        .map((item) => {
+                            const active =
+                                pathname === item.href ||
+                                (item.href !== '/dashboard' && pathname.startsWith(item.href))
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.625rem',
+                                        padding: '0.625rem 0.75rem',
+                                        borderRadius: 'var(--radius-md)',
+                                        color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                        background: active ? 'rgba(59,123,246,0.1)' : 'transparent',
+                                        borderLeft: active
+                                            ? '2px solid var(--accent-blue)'
+                                            : '2px solid transparent',
+                                        fontSize: '0.875rem',
+                                        fontWeight: active ? 600 : 400,
+                                        transition: 'all var(--transition-fast)',
+                                    }}
+                                >
+                                    {item.icon}
+                                    {item.label}
+                                </Link>
+                            )
+                        })}
 
                     <div
                         style={{

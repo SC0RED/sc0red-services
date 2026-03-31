@@ -11,5 +11,6 @@ export const config = {
         '/analysis/:path*',
         '/portfolio/:path*',
         '/analyses/:path*',
+        '/team/:path*',
     ],
 }
