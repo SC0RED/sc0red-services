@@ -59,56 +59,6 @@ class TestUserRepository:
         assert repo.has_email("exists@test.com") is True
         assert repo.has_email("missing@test.com") is False
 
-    @mock_aws
-    def test_verify_password_valid(self, dynamodb_table):
-        repo = DynamoDBUserRepository(dynamodb_table)
-        password_hash = bcrypt.hashpw(b"correct-password", bcrypt.gensalt(10)).decode()
-        repo.create(
-            {
-                "email": "user@example.com",
-                "name": "User",
-                "org_id": "org-1",
-                "role": "admin",
-                "password_hash": password_hash,
-            }
-        )
-
-        result = repo.verify_password("user@example.com", "correct-password")
-        assert result is not None
-        assert result["email"] == "user@example.com"
-        assert result["orgId"] == "org-1"
-        assert result["role"] == "admin"
-
-    @mock_aws
-    def test_verify_password_invalid(self, dynamodb_table):
-        repo = DynamoDBUserRepository(dynamodb_table)
-        password_hash = bcrypt.hashpw(b"correct-password", bcrypt.gensalt(10)).decode()
-        repo.create(
-            {
-                "email": "user@example.com",
-                "password_hash": password_hash,
-                "org_id": "org-1",
-            }
-        )
-
-        result = repo.verify_password("user@example.com", "wrong-password")
-        assert result is None
-
-    @mock_aws
-    def test_verify_password_no_user(self, dynamodb_table):
-        repo = DynamoDBUserRepository(dynamodb_table)
-        result = repo.verify_password("nobody@example.com", "password")
-        assert result is None
-
-    @mock_aws
-    def test_verify_password_no_hash_raises(self, dynamodb_table):
-        repo = DynamoDBUserRepository(dynamodb_table)
-        repo.create({"email": "nohash@example.com", "org_id": "org-1"})
-
-        with pytest.raises(RuntimeError, match="missing password_hash"):
-            repo.verify_password("nohash@example.com", "password")
-
-
 class TestOrganizationRepository:
     @mock_aws
     def test_create_and_get(self, dynamodb_table):

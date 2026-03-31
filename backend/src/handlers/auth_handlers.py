@@ -1,4 +1,4 @@
-"""Authentication handlers — register and login."""
+"""Authentication handlers — registration with Cognito + DynamoDB."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import json
 import uuid
 from typing import TYPE_CHECKING, Any
 
-import bcrypt
-
 from src.handlers.api_gateway_handler import build_error, build_json_response
+from src.handlers.cognito_client import CognitoClient
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -16,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> LambdaResponse:
-    """Handle POST /api/auth/register."""
+    """Handle POST /api/auth/register — create org + user in DynamoDB and Cognito."""
     body = json.loads(event.get("body") or "{}")
     name = body.get("name", "")
     email = body.get("email", "")
@@ -35,35 +34,31 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
 
     org_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())
-    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(10)).decode()
 
+    # Create org in DynamoDB
     org_repo.create({"id": org_id, "name": org_name, "type": org_type})
+
+    # Create user in Cognito (with permanent password, CONFIRMED status)
+    cognito_client = CognitoClient()
+    cognito_sub = cognito_client.create_user_with_password(
+        email=email,
+        password=password,
+        name=name,
+        org_id=org_id,
+        role="admin",
+        legacy_user_id=user_id,
+    )
+
+    # Create user in DynamoDB (for org membership and internal references)
     user_repo.create(
         {
             "id": user_id,
             "org_id": org_id,
             "email": email,
-            "password_hash": password_hash,
             "name": name,
             "role": "admin",
+            "cognito_sub": cognito_sub,
         }
     )
 
     return build_json_response({"success": True})
-
-
-def handle_login(event: dict[str, Any], storage: DynamoDBStorageProvider) -> LambdaResponse:
-    """Handle POST /api/auth/login."""
-    body = json.loads(event.get("body") or "{}")
-    email = body.get("email", "")
-    password = body.get("password", "")
-
-    if not email or not password:
-        return build_error("Email and password required")
-
-    user_repo = storage.create_user_repository()
-    user_info = user_repo.verify_password(email, password)
-    if not user_info:
-        return build_error("Invalid credentials", 401)
-
-    return build_json_response({"success": True, "user": user_info})

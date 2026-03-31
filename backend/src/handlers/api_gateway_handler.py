@@ -93,7 +93,7 @@ class APIGatewayHandler:
             handle_list_analyses,
             handle_reanalyze,
         )
-        from src.handlers.auth_handlers import handle_login, handle_register
+        from src.handlers.auth_handlers import handle_register
         from src.handlers.document_handlers import (
             handle_create_document,
             handle_delete_document,
@@ -130,11 +130,6 @@ class APIGatewayHandler:
             "POST",
             "/api/auth/register",
             lambda event: handle_register(event, self._storage),
-        )
-        router.public(
-            "POST",
-            "/api/auth/login",
-            lambda event: handle_login(event, self._storage),
         )
 
         # Org member management
