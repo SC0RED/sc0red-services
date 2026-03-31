@@ -154,11 +154,18 @@ print(jwt.encode(payload, private_key, algorithm='RS256', headers={'kid':'e2e-te
 
 AUTH="Authorization: Bearer $TOKEN"
 
-# ── 3. Dashboard (empty) ────────────────────────────────────────
-echo -e "\n${YELLOW}3. Dashboard (empty)${NC}"
+# ── Diagnostic: test auth token ────────────────────────────────
+echo -e "\n${YELLOW}Testing auth token...${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard" -H "$AUTH")
 BODY=$(echo "$RESP" | sed '$d')
 STATUS=$(echo "$RESP" | tail -n 1)
+if [ "$STATUS" != "200" ]; then
+    echo -e "  ${RED}Auth diagnostic: HTTP $STATUS${NC}"
+    echo -e "  ${RED}Response: $BODY${NC}"
+fi
+
+# ── 3. Dashboard (empty) ────────────────────────────────────────
+echo -e "\n${YELLOW}3. Dashboard (empty)${NC}"
 assert_status "Dashboard" 200 "$STATUS"
 assert_json "No analyses" "totalAnalyses" "0" "$BODY"
 

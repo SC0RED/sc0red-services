@@ -64,6 +64,38 @@ def validate_token(authorization: str) -> AuthContext:
 
     token = authorization[7:]
 
+    try:
+        payload = _decode_rs256_token(token)
+    except jwt.ExpiredSignatureError:
+        message = "Token expired"
+        raise ValueError(message) from None
+    except Exception as error:
+        logger.warning("Token validation failed: %s", error)
+        message = f"Invalid token: {error}"
+        raise ValueError(message) from None
+
+    # Extract claims — support both Cognito custom attributes and plain claims
+    org_id = payload.get("custom:org_id") or payload.get("orgId", "")
+    if not org_id:
+        message = "Token missing required org_id claim"
+        raise ValueError(message)
+
+    user_id = payload.get("custom:legacy_user_id") or payload.get("sub") or payload.get("id", "")
+    if not user_id:
+        message = "Token missing user identifier"
+        raise ValueError(message)
+
+    return AuthContext(
+        user_id=user_id,
+        org_id=org_id,
+        email=payload.get("email", ""),
+        role=payload.get("custom:role") or payload.get("role", "analyst"),
+        name=payload.get("name", ""),
+    )
+
+
+def _decode_rs256_token(token: str) -> dict[str, Any]:
+    """Decode and verify an RS256 JWT against the JWKS endpoint."""
     client_id = os.environ.get("COGNITO_CLIENT_ID", "")
 
     # Build issuer for verification (skip if using custom JWKS URL)
@@ -85,40 +117,14 @@ def validate_token(authorization: str) -> AuthContext:
     else:
         decode_options["verify_iss"] = False
 
-    try:
-        jwks_client = _get_jwks_client()
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
+    jwks_client = _get_jwks_client()
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
 
-        payload: dict[str, Any] = jwt.decode(
-            token,
-            signing_key.key,
-            options=decode_options,
-            **decode_kwargs,
-        )
-    except jwt.ExpiredSignatureError:
-        message = "Token expired"
-        raise ValueError(message) from None
-    except (jwt.PyJWKClientError, jwt.InvalidTokenError) as error:
-        message = f"Invalid token: {error}"
-        raise ValueError(message) from None
-
-    # Extract claims — support both Cognito custom attributes and plain claims
-    org_id = payload.get("custom:org_id") or payload.get("orgId", "")
-    if not org_id:
-        message = "Token missing required org_id claim"
-        raise ValueError(message)
-
-    user_id = payload.get("custom:legacy_user_id") or payload.get("sub") or payload.get("id", "")
-    if not user_id:
-        message = "Token missing user identifier"
-        raise ValueError(message)
-
-    return AuthContext(
-        user_id=user_id,
-        org_id=org_id,
-        email=payload.get("email", ""),
-        role=payload.get("custom:role") or payload.get("role", "analyst"),
-        name=payload.get("name", ""),
+    return jwt.decode(
+        token,
+        signing_key.key,
+        options=decode_options,
+        **decode_kwargs,
     )
 
 
