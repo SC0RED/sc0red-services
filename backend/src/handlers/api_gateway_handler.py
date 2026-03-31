@@ -103,6 +103,8 @@ class APIGatewayHandler:
             handle_invite_member,
             handle_list_members,
             handle_remove_member,
+            handle_resend_invite,
+            handle_revoke_invite,
         )
         from src.handlers.scan_handlers import (
             handle_delete_scan,
@@ -141,6 +143,20 @@ class APIGatewayHandler:
             "/api/org/invite",
             lambda event, authentication: handle_invite_member(
                 event, authentication, self._storage
+            ),
+        )
+        router.protected(
+            "POST",
+            "/api/org/invite/resend",
+            lambda event, authentication: handle_resend_invite(
+                event, authentication, self._storage
+            ),
+        )
+        router.protected(
+            "DELETE",
+            "/api/org/invite/{invite_id}",
+            lambda event, authentication, invite_id: handle_revoke_invite(
+                event, authentication, self._storage, invite_id
             ),
         )
         router.protected(

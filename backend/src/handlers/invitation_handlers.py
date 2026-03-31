@@ -7,12 +7,15 @@ Invited users accept invitations by setting their Cognito password.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import build_error, build_json_response
 from src.handlers.cognito_client import CognitoClient
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -72,6 +75,67 @@ def handle_invite_member(
     invitation_repo.create(invitation)
 
     return build_json_response({"invitationId": invite_id, "email": email}, 201)
+
+
+def handle_resend_invite(
+    event: dict[str, Any],
+    authentication: AuthContext,
+    _storage: DynamoDBStorageProvider,
+) -> LambdaResponse:
+    """Handle POST /api/org/invite/resend — resend invitation email."""
+    if authentication.role != "admin":
+        return build_error("Only admins can resend invitations", 403)
+
+    body = json.loads(event.get("body") or "{}")
+    email = body.get("email", "").strip().lower()
+
+    if not email:
+        return build_error("Email is required")
+
+    cognito_client = CognitoClient()
+    try:
+        cognito_client.resend_invitation(email)
+    except Exception as error:
+        return build_error(f"Failed to resend invitation: {error}", 500)
+
+    return build_json_response({"resent": True, "email": email})
+
+
+def handle_revoke_invite(
+    _event: dict[str, Any],
+    authentication: AuthContext,
+    storage: DynamoDBStorageProvider,
+    invite_id: str,
+) -> LambdaResponse:
+    """Handle DELETE /api/org/invite/{invite_id} — revoke a pending invitation."""
+    if authentication.role != "admin":
+        return build_error("Only admins can revoke invitations", 403)
+
+    invitation_repo = storage.create_invitation_repository()
+    invitations = invitation_repo.find_by_org(authentication.org_id)
+
+    target = None
+    for invitation in invitations:
+        if invitation.get("id") == invite_id:
+            target = invitation
+            break
+
+    if not target:
+        return build_error("Invitation not found", 404)
+
+    # Delete from Cognito
+    email = target.get("email", "")
+    if email:
+        cognito_client = CognitoClient()
+        try:
+            cognito_client.delete_user(email)
+        except Exception:
+            logger.info("Cognito user %s not found during revoke", email)
+
+    # Update invitation status
+    invitation_repo.update_status(authentication.org_id, invite_id, "revoked")
+
+    return build_json_response({"revoked": True})
 
 
 def handle_list_members(
