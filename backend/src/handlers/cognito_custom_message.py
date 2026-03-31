@@ -31,7 +31,7 @@ def handle_custom_message(event: dict[str, Any], _context: Any) -> dict[str, Any
 def _build_invitation_email(event: dict[str, Any]) -> dict[str, Any]:
     """Build branded HTML invitation email."""
     email = event["request"]["usernameParameter"]
-    temp_password = event["request"]["codeParameter"]
+    temporary_password = event["request"]["codeParameter"]
     frontend_domain = os.environ.get("FRONTEND_DOMAIN", "https://app.janus.ai")
 
     accept_url = f"{frontend_domain}/accept-invite?email={email}"
@@ -39,7 +39,7 @@ def _build_invitation_email(event: dict[str, Any]) -> dict[str, Any]:
     event["response"]["emailSubject"] = "You've been invited to Janus"
     event["response"]["emailMessage"] = _INVITATION_HTML.format(
         email=email,
-        temp_password=temp_password,
+        temporary_password=temporary_password,
         accept_url=accept_url,
     )
 
@@ -95,7 +95,7 @@ Your credentials
 <td style="color:#8b949e; font-size:13px; padding:4px 0;">Temporary password</td>
 <td style="padding:4px 0; text-align:right;">
 <code style="background:#1c2128; color:#58a6ff; padding:2px 8px; border-radius:4px; font-size:13px; font-family:monospace;">
-{temp_password}
+{temporary_password}
 </code>
 </td>
 </tr>

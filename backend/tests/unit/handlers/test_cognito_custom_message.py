@@ -32,7 +32,7 @@ class TestCustomMessageAdminCreateUser:
         body = result["response"]["emailMessage"]
         assert "https://app.janus.ai/accept-invite?email=analyst@firm.com" in body
 
-    def test_email_contains_temp_password(self):
+    def test_email_contains_temporary_password(self):
         event = _make_event("CustomMessage_AdminCreateUser", code="TempPass1!")
         with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://app.janus.ai"}):
             result = handle_custom_message(event, None)
