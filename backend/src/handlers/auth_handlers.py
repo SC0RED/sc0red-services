@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -38,16 +39,18 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
     # Create org in DynamoDB
     org_repo.create({"id": org_id, "name": org_name, "type": org_type})
 
-    # Create user in Cognito (with permanent password, CONFIRMED status)
-    cognito_client = CognitoClient()
-    cognito_sub = cognito_client.create_user_with_password(
-        email=email,
-        password=password,
-        name=name,
-        org_id=org_id,
-        role="admin",
-        legacy_user_id=user_id,
-    )
+    # Create user in Cognito (skip in E2E — no real Cognito available)
+    cognito_sub = ""
+    if os.environ.get("STAGE") != "e2e":
+        cognito_client = CognitoClient()
+        cognito_sub = cognito_client.create_user_with_password(
+            email=email,
+            password=password,
+            name=name,
+            org_id=org_id,
+            role="admin",
+            legacy_user_id=user_id,
+        )
 
     # Create user in DynamoDB (for org membership and internal references)
     user_repo.create(
