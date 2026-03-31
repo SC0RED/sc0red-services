@@ -12,6 +12,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from botocore.exceptions import ClientError
+
 from src.handlers.api_gateway_handler import build_error, build_json_response
 from src.handlers.cognito_client import CognitoClient
 
@@ -95,8 +97,11 @@ def handle_resend_invite(
     cognito_client = CognitoClient()
     try:
         cognito_client.resend_invitation(email)
-    except Exception as error:
-        return build_error(f"Failed to resend invitation: {error}", 500)
+    except ClientError as error:
+        error_code = error.response["Error"]["Code"]
+        if error_code == "UserNotFoundException":
+            return build_error("Invitation not found in Cognito", 404)
+        return build_error(f"Failed to resend invitation: {error_code}", 500)
 
     return build_json_response({"resent": True, "email": email})
 
@@ -123,14 +128,17 @@ def handle_revoke_invite(
     if not target:
         return build_error("Invitation not found", 404)
 
-    # Delete from Cognito
-    email = target.get("email", "")
-    if email:
-        cognito_client = CognitoClient()
-        try:
-            cognito_client.delete_user(email)
-        except Exception:
-            logger.info("Cognito user %s not found during revoke", email)
+    if target.get("status") != "pending":
+        return build_error("Only pending invitations can be revoked", 400)
+
+    # Delete from Cognito — only catch "user not found" (already accepted)
+    email = target["email"]
+    cognito_client = CognitoClient()
+    try:
+        cognito_client.delete_user(email)
+    except ClientError as error:
+        if error.response["Error"]["Code"] != "UserNotFoundException":
+            raise
 
     # Update invitation status
     invitation_repo.update_status(authentication.org_id, invite_id, "revoked")

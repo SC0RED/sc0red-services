@@ -118,6 +118,22 @@ class TestResendInvite:
         result = handle_resend_invite(event, _make_auth(), storage)
         assert result["statusCode"] == 400
 
+    @patch("src.handlers.invitation_handlers.CognitoClient")
+    def test_user_not_found_returns_404(self, mock_cognito_cls):
+        from botocore.exceptions import ClientError
+
+        mock_cognito = MagicMock()
+        mock_cognito.resend_invitation.side_effect = ClientError(
+            {"Error": {"Code": "UserNotFoundException", "Message": "User not found"}},
+            "AdminCreateUser",
+        )
+        mock_cognito_cls.return_value = mock_cognito
+
+        storage = MagicMock()
+        event = _make_event({"email": "gone@test.com"})
+        result = handle_resend_invite(event, _make_auth(), storage)
+        assert result["statusCode"] == 404
+
 
 class TestRevokeInvite:
     @patch("src.handlers.invitation_handlers.CognitoClient")
@@ -149,6 +165,16 @@ class TestRevokeInvite:
 
         result = handle_revoke_invite({}, _make_auth(), storage, "nonexistent")
         assert result["statusCode"] == 404
+
+    def test_already_accepted_invitation_rejected(self):
+        storage = MagicMock()
+        storage.create_invitation_repository.return_value.find_by_org.return_value = [
+            {"id": "inv-1", "email": "accepted@test.com", "status": "accepted"},
+        ]
+
+        result = handle_revoke_invite({}, _make_auth(), storage, "inv-1")
+        assert result["statusCode"] == 400
+        assert "pending" in json.loads(result["body"])["error"].lower()
 
 
 class TestRemoveMember:

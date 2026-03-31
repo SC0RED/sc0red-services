@@ -32,7 +32,10 @@ def _build_invitation_email(event: dict[str, Any]) -> dict[str, Any]:
     """Build branded HTML invitation email."""
     email = event["request"]["usernameParameter"]
     temporary_password = event["request"]["codeParameter"]
-    frontend_domain = os.environ.get("FRONTEND_DOMAIN", "https://app.janus.ai")
+    frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
+    if not frontend_domain:
+        logger.warning("FRONTEND_DOMAIN not set — using placeholder in invitation link")
+        frontend_domain = "https://app.example.com"
 
     accept_url = f"{frontend_domain}/accept-invite?email={email}"
 
