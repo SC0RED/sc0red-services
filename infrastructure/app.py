@@ -63,7 +63,7 @@ environment_config: dict[str, object] = {
         "api_burst_limit": 200,
         "enable_amplify": True,
         "github_repository": "https://github.com/SC0RED/janus",
-        "amplify_branch": "main",
+        "amplify_branch": "production",
     },
 }
 

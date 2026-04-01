@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy Backend
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
     paths:
       - 'backend/**'
       - 'infrastructure/**'
-      - 'frontend/**'
       - '.github/workflows/deploy-backend.yml'
 
 jobs:
