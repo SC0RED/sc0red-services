@@ -120,7 +120,6 @@ class ObservabilityConstruct(Construct):
         alert_topic = sns.Topic(
             self,
             "AlertTopic",
-            topic_name=f"janus-alerts-{environment}",
             display_name=f"Janus Alerts — {environment}",
         )
 
@@ -134,7 +133,6 @@ class ObservabilityConstruct(Construct):
             threshold=0,
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
             evaluation_periods=1,
-            alarm_name=f"janus-dlq-messages-{environment}",
             alarm_description=(
                 f"Messages in DLQ for Janus {environment}. "
                 "Pipeline failures exceeded 3 retries."
