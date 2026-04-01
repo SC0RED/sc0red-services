@@ -4,22 +4,19 @@ import os
 from typing import Any
 
 import aws_cdk as cdk
-from aws_cdk import CfnOutput, Duration, Expiration, Stack
+from aws_cdk import CfnOutput, Duration, Stack
 from aws_cdk import aws_apigateway as apigw
-from aws_cdk import aws_appsync as appsync
-from aws_cdk import aws_cloudwatch as cloudwatch
-from aws_cdk import aws_cloudwatch_actions as cloudwatch_actions
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
-from aws_cdk import aws_sns as sns
-from aws_cdk import aws_sns_subscriptions as sns_subscriptions
 from aws_cdk import aws_sqs as sqs
 from constructs import Construct
 
+from stacks.amplify_construct import AmplifyConstruct
 from stacks.cognito_construct import CognitoConstruct
+from stacks.observability_construct import ObservabilityConstruct
 
 _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
     7: logs.RetentionDays.ONE_WEEK,
@@ -50,37 +47,66 @@ class JanusStack(Stack):
             lambda_.Architecture.ARM_64 if arch_value == "arm64" else lambda_.Architecture.X86_64
         )
 
+        # Phase 1: Create Amplify app early to get default_domain for CORS
+        amplify = self._create_amplify_app()
+        frontend_domain = self._resolve_frontend_domain(amplify)
+
         table = self._create_table()
         queue, dlq = self._create_queues()
-        documents_bucket = self._create_documents_bucket()
+        documents_bucket = self._create_documents_bucket(frontend_domain)
 
         bundling = self._build_bundling_options()
 
-        cognito = self._create_cognito(bundling)
+        cognito = self._create_cognito(bundling, frontend_domain)
 
         common_environment = self._build_common_environment(
             table, queue, documents_bucket, cognito
         )
 
-        api_handler = self._create_api_lambda(table, queue, bundling, common_environment)
-        worker_handler = self._create_worker_lambda(table, queue, bundling, common_environment)
+        api_handler = self._create_lambda(
+            "ApiHandler",
+            function_name=f"janus-api-{environment}",
+            handler="src.handlers.api_handler_entry.handle_api_event",
+            bundling=bundling, environment=common_environment,
+            timeout_seconds=30, memory_size=512,
+        )
+        worker_handler = self._create_lambda(
+            "WorkerHandler",
+            function_name=f"janus-worker-{environment}",
+            handler="src.handlers.worker_handler_entry.handle_worker_event",
+            bundling=bundling, environment=common_environment,
+            timeout_seconds=540, memory_size=1769, reserved_concurrency=5,
+        )
 
+        table.grant_read_write_data(api_handler)
+        queue.grant_send_messages(api_handler)
+        table.grant_read_write_data(worker_handler)
+        queue.grant_consume_messages(worker_handler)
         documents_bucket.grant_read_write(api_handler)
         cognito.grant_admin_actions(api_handler)
 
-        api = self._create_api(api_handler)
+        api = self._create_api(api_handler, frontend_domain)
+
+        # Phase 2: Create Amplify branch now that API URL exists
+        if amplify:
+            amplify.create_branch(
+                api_url=api.url,
+                cognito_user_pool_id=cognito.user_pool_id,
+                cognito_client_id=cognito.app_client_id,
+            )
 
         worker_handler.add_event_source(
             lambda_event_sources.SqsEventSource(queue, batch_size=1)
         )
 
-        appsync_url, appsync_api_key = self._create_appsync_api()
-        worker_handler.add_environment("APPSYNC_ENDPOINT", appsync_url)
-        worker_handler.add_environment("APPSYNC_API_KEY", appsync_api_key)
-        api_handler.add_environment("APPSYNC_ENDPOINT", appsync_url)
-        api_handler.add_environment("APPSYNC_API_KEY", appsync_api_key)
-
-        self._create_monitoring(dlq)
+        observability = ObservabilityConstruct(
+            self, "Observability",
+            environment=environment, config=config, dlq=dlq,
+        )
+        worker_handler.add_environment("APPSYNC_ENDPOINT", observability.appsync_url)
+        worker_handler.add_environment("APPSYNC_API_KEY", observability.appsync_api_key)
+        api_handler.add_environment("APPSYNC_ENDPOINT", observability.appsync_url)
+        api_handler.add_environment("APPSYNC_API_KEY", observability.appsync_api_key)
 
         CfnOutput(self, "ApiUrl", value=api.url, description=f"API Gateway URL — {environment}")
         CfnOutput(self, "TableName", value=table.table_name)
@@ -89,8 +115,36 @@ class JanusStack(Stack):
         CfnOutput(self, "BucketName", value=documents_bucket.bucket_name)
         CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
         CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)
-        CfnOutput(self, "AppSyncUrl", value=appsync_url, description="AppSync GraphQL URL")
-        CfnOutput(self, "AppSyncApiKey", value=appsync_api_key, description="AppSync API key")
+
+    # ── Amplify ─────────────────────────────────────────────────────────────────
+
+    def _create_amplify_app(self) -> AmplifyConstruct | None:
+        """Phase 1: create the Amplify app (if enabled) for the default domain."""
+        if not self._config.get("enable_amplify"):
+            return None
+
+        nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
+        github_token = os.environ.get("AMPLIFY_GITHUB_TOKEN", "")
+
+        if not github_token:
+            message = "AMPLIFY_GITHUB_TOKEN must be set when enable_amplify is True"
+            raise ValueError(message)
+
+        return AmplifyConstruct(
+            self,
+            "Amplify",
+            environment=self._environment,
+            nextauth_secret=nextauth_secret,
+            github_token=github_token,
+            repository=self._config["github_repository"],
+            branch_name=self._config["amplify_branch"],
+        )
+
+    def _resolve_frontend_domain(self, amplify: AmplifyConstruct | None) -> str:
+        """Resolve the frontend domain from Amplify or FRONTEND_DOMAIN env var."""
+        if amplify:
+            return amplify.branch_url
+        return os.environ.get("FRONTEND_DOMAIN", "")
 
     # ── DynamoDB ──────────────────────────────────────────────────────────────
 
@@ -142,8 +196,7 @@ class JanusStack(Stack):
 
     # ── S3 ───────────────────────────────────────────────────────────────────
 
-    def _create_documents_bucket(self) -> s3.Bucket:
-        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
+    def _create_documents_bucket(self, frontend_domain: str) -> s3.Bucket:
 
         bucket = s3.Bucket(
             self,
@@ -170,10 +223,9 @@ class JanusStack(Stack):
     def _create_cognito(
         self,
         bundling: cdk.BundlingOptions,
+        frontend_domain: str,
     ) -> CognitoConstruct:
         """Create the Cognito User Pool, App Client, and Custom Message Lambda."""
-        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
-
         return CognitoConstruct(
             self,
             "Cognito",
@@ -187,15 +239,7 @@ class JanusStack(Stack):
     # ── Shared helpers ─────────────────────────────────────────────────────────
 
     def _build_bundling_options(self) -> cdk.BundlingOptions:
-        """Build the Docker bundling config shared by both Lambdas.
-
-        TODO: Extract the inline bash command to infrastructure/scripts/bundle.sh
-        for readability and testability. The script should cd /asset-input before
-        running pip install, since CDK mounts the asset source there.
-        """
-        # Note: GH_TOKEN and DEPLOY_KEY_B64 are visible in Docker layer history.
-        # This is acceptable because the bundling container is ephemeral and the
-        # layers are never pushed to a registry — they exist only during cdk deploy.
+        """Build the Docker bundling config shared by both Lambdas."""
         gh_token = os.environ.get("GH_TOKEN", "")
         deploy_key_b64 = os.environ.get("DEPLOY_KEY_B64", "")
 
@@ -260,36 +304,42 @@ class JanusStack(Stack):
             "AI_PROVIDER": os.environ.get("AI_PROVIDER", "anthropic"),
         }
 
-    # ── Lambda (API) ───────────────────────────────────────────────────────────
+    # ── Lambdas ──────────────────────────────────────────────────────────────
 
-    def _create_api_lambda(
+    def _create_lambda(
         self,
-        table: dynamodb.Table,
-        queue: sqs.Queue,
+        construct_id: str,
+        *,
+        function_name: str,
+        handler: str,
         bundling: cdk.BundlingOptions,
         environment: dict[str, str],
+        timeout_seconds: int,
+        memory_size: int,
+        reserved_concurrency: int | None = None,
     ) -> lambda_.Function:
-        """Create the API Gateway-facing Lambda (fast reads/writes, 30s timeout)."""
+        """Create a Lambda function with log group and tracing."""
         log_group = logs.LogGroup(
             self,
-            "ApiHandlerLogs",
-            log_group_name=f"/aws/lambda/janus-api-{self._environment}",
+            f"{construct_id}Logs",
+            log_group_name=f"/aws/lambda/{function_name}",
             retention=_LOG_RETENTION_MAP.get(
                 self._config.get("log_retention_days", 7), logs.RetentionDays.ONE_WEEK
             ),
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
-        handler = lambda_.Function(
+        return lambda_.Function(
             self,
-            "ApiHandler",
-            function_name=f"janus-api-{self._environment}",
+            construct_id,
+            function_name=function_name,
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=self._lambda_architecture,
-            handler="src.handlers.api_handler_entry.handle_api_event",
+            handler=handler,
             code=lambda_.Code.from_asset("../backend", bundling=bundling),
-            timeout=Duration.seconds(30),
-            memory_size=512,
+            timeout=Duration.seconds(timeout_seconds),
+            memory_size=memory_size,
+            reserved_concurrent_executions=reserved_concurrency,
             log_group=log_group,
             environment=environment,
             tracing=(
@@ -298,61 +348,10 @@ class JanusStack(Stack):
                 else lambda_.Tracing.DISABLED
             ),
         )
-
-        table.grant_read_write_data(handler)
-        queue.grant_send_messages(handler)
-
-        return handler
-
-    # ── Lambda (Worker) ────────────────────────────────────────────────────────
-
-    def _create_worker_lambda(
-        self,
-        table: dynamodb.Table,
-        queue: sqs.Queue,
-        bundling: cdk.BundlingOptions,
-        environment: dict[str, str],
-    ) -> lambda_.Function:
-        """Create the SQS worker Lambda (long-running AI pipeline, 540s timeout)."""
-        log_group = logs.LogGroup(
-            self,
-            "WorkerHandlerLogs",
-            log_group_name=f"/aws/lambda/janus-worker-{self._environment}",
-            retention=_LOG_RETENTION_MAP.get(
-                self._config.get("log_retention_days", 7), logs.RetentionDays.ONE_WEEK
-            ),
-            removal_policy=cdk.RemovalPolicy.DESTROY,
-        )
-
-        handler = lambda_.Function(
-            self,
-            "WorkerHandler",
-            function_name=f"janus-worker-{self._environment}",
-            runtime=lambda_.Runtime.PYTHON_3_12,
-            architecture=self._lambda_architecture,
-            handler="src.handlers.worker_handler_entry.handle_worker_event",
-            code=lambda_.Code.from_asset("../backend", bundling=bundling),
-            timeout=Duration.seconds(540),
-            memory_size=1769,
-            reserved_concurrent_executions=5,
-            log_group=log_group,
-            environment=environment,
-            tracing=(
-                lambda_.Tracing.ACTIVE
-                if self._config.get("enable_monitoring")
-                else lambda_.Tracing.DISABLED
-            ),
-        )
-
-        table.grant_read_write_data(handler)
-        queue.grant_consume_messages(handler)
-
-        return handler
 
     # ── API Gateway ───────────────────────────────────────────────────────────
 
-    def _create_api(self, handler: lambda_.Function) -> apigw.LambdaRestApi:
-        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
+    def _create_api(self, handler: lambda_.Function, frontend_domain: str) -> apigw.LambdaRestApi:
 
         if frontend_domain:
             cors_origins = [frontend_domain]
@@ -392,100 +391,3 @@ class JanusStack(Stack):
 
         return api
 
-    # ── AppSync (real-time progress) ─────────────────────────────────────────
-
-    def _create_appsync_api(self) -> tuple[str, str]:
-        """Create an AppSync GraphQL API for real-time scan progress subscriptions.
-
-        Returns a tuple of (graphql_url, api_key_value) for use as Lambda env vars.
-        """
-        graphql_api = appsync.GraphqlApi(
-            self,
-            "ProgressApi",
-            name=f"janus-progress-{self._environment}",
-            definition=appsync.Definition.from_file(
-                os.path.join(os.path.dirname(__file__), "..", "schema.graphql")
-            ),
-            authorization_config=appsync.AuthorizationConfig(
-                default_authorization=appsync.AuthorizationMode(
-                    authorization_type=appsync.AuthorizationType.API_KEY,
-                    api_key_config=appsync.ApiKeyConfig(
-                        name="progress-key",
-                        expires=Expiration.after(Duration.days(365)),
-                    ),
-                )
-            ),
-            log_config=appsync.LogConfig(
-                field_log_level=appsync.FieldLogLevel.ERROR,
-            ),
-        )
-
-        none_datasource = graphql_api.add_none_data_source(
-            "NoneDataSource",
-            description="Pass-through data source for subscription mutations",
-        )
-
-        none_datasource.create_resolver(
-            "PublishProgressResolver",
-            type_name="Mutation",
-            field_name="publishProgress",
-            request_mapping_template=appsync.MappingTemplate.from_string(
-                '{"version": "2017-02-28", "payload": $util.toJson($context.arguments.input)}'
-            ),
-            response_mapping_template=appsync.MappingTemplate.from_string(
-                "$util.toJson($context.result)"
-            ),
-        )
-
-        api_key = graphql_api.api_key
-        if api_key is None:
-            raise RuntimeError("AppSync API key was not created — check authorization config")
-
-        return graphql_api.graphql_url, api_key
-
-    # ── Monitoring ───────────────────────────────────────────────────────────
-
-    def _create_monitoring(self, dlq: sqs.Queue) -> None:
-        """Create DLQ alarm and SNS alert topic (staging + production only)."""
-        if not self._config.get("enable_monitoring"):
-            return
-
-        alert_topic = sns.Topic(
-            self,
-            "AlertTopic",
-            topic_name=f"janus-alerts-{self._environment}",
-            display_name=f"Janus Alerts — {self._environment}",
-        )
-
-        dlq_alarm = cloudwatch.Alarm(
-            self,
-            "DlqAlarm",
-            metric=dlq.metric_approximate_number_of_messages_visible(
-                period=Duration.minutes(1),
-                statistic="Maximum",
-            ),
-            threshold=0,
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
-            evaluation_periods=1,
-            alarm_name=f"janus-dlq-messages-{self._environment}",
-            alarm_description=(
-                f"Messages in DLQ for Janus {self._environment}. "
-                "Pipeline failures exceeded 3 retries."
-            ),
-            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-        )
-        dlq_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alert_topic))
-        dlq_alarm.add_ok_action(cloudwatch_actions.SnsAction(alert_topic))
-
-        alert_email = os.environ.get("ALERT_EMAIL", "")
-        if alert_email:
-            alert_topic.add_subscription(
-                sns_subscriptions.EmailSubscription(alert_email)
-            )
-
-        CfnOutput(
-            self,
-            "AlertTopicArn",
-            value=alert_topic.topic_arn,
-            description="SNS topic for DLQ and operational alerts",
-        )

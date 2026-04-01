@@ -107,7 +107,7 @@ else
     fail "API rate limiting (throttling_rate_limit) not configured in CDK stack"
 fi
 
-if grep -q "DlqAlarm" infrastructure/stacks/janus_stack.py 2>/dev/null; then
+if grep -rq "DlqAlarm" infrastructure/stacks/ 2>/dev/null; then
     pass "DLQ alarm configured in CDK stack"
 else
     fail "DLQ alarm not configured in CDK stack"

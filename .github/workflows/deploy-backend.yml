@@ -80,6 +80,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
           AI_PROVIDER: openai
           FRONTEND_DOMAIN: ${{ secrets.FRONTEND_DOMAIN }}
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=staging \
