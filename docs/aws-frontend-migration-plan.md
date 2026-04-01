@@ -356,6 +356,83 @@ jobs:
 
 ---
 
+## Implementation Plan (Amplify — Chosen Approach)
+
+### Decision: Amplify Hosting via CDK L1 Constructs
+
+- Use `CfnApp` + `CfnBranch` (L1) — no extra dependencies, stable in CDK v2
+- GitHub PAT for repo access (passed at deploy time via `AMPLIFY_GITHUB_TOKEN`)
+- Two-phase construct to resolve circular dependency (Amplify needs API URL, API needs Amplify URL for CORS)
+
+### Circular Dependency Resolution
+
+Amplify needs `BACKEND_URL` (API Gateway URL) for branch env vars. API Gateway needs `FRONTEND_DOMAIN` (Amplify URL) for CORS. Solution: split Amplify construct into two phases:
+
+1. **Phase 1 — Create `CfnApp` early** (only needs GitHub token + repository). This gives us `attr_default_domain` as a CDK token.
+2. Use `branch_url` (`https://{branch}.{default_domain}`) as `FRONTEND_DOMAIN` for S3 CORS, Cognito, API Gateway.
+3. Create API Gateway (now has the Amplify URL for CORS).
+4. **Phase 2 — Create `CfnBranch`** with `BACKEND_URL` = API Gateway URL.
+
+### New File: `infrastructure/stacks/amplify_construct.py`
+
+```python
+class AmplifyConstruct(Construct):
+    def __init__(self, scope, id, *, environment, nextauth_secret,
+                 github_token, repository, branch_name):
+        # Creates CfnApp + IAM role immediately
+        # Exposes default_domain and branch_url properties
+
+    def create_branch(self, *, api_url, cognito_pool_id, cognito_client_id):
+        # Creates CfnBranch with BACKEND_URL and NEXT_PUBLIC_* vars
+        # Called after API Gateway is created
+```
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `infrastructure/stacks/janus_stack.py` | Reorder init (Amplify app → resources → Amplify branch), refactor 3x `FRONTEND_DOMAIN` reads into single resolution |
+| `infrastructure/app.py` | Add `enable_amplify`, `github_repository`, `amplify_branch` to env configs |
+| `frontend/next.config.js` | Add `output: 'standalone'` (required for Amplify SSR) |
+| `.github/workflows/deploy-backend.yml` | Add `AMPLIFY_GITHUB_TOKEN` secret, rename to `deploy.yml` |
+
+### Init Order in JanusStack (after refactor)
+
+```
+1. amplify_app (CfnApp only, if enabled)     ← NEW
+2. resolve frontend_domain                     ← NEW (single place)
+3. table, queues
+4. documents_bucket(frontend_domain)           ← parameter instead of os.environ
+5. bundling, cognito(frontend_domain)          ← parameter instead of os.environ
+6. lambdas
+7. api(frontend_domain)                        ← parameter instead of os.environ
+8. amplify_branch(api.url)                     ← NEW (Phase 2)
+9. appsync, monitoring, outputs
+```
+
+### Environment Variables on Amplify
+
+**App-level (shared across branches):**
+- `NEXTAUTH_SECRET` — from deploy-time env var
+- `_CUSTOM_IMAGE` = `amplify:al2023` — required for Next.js 14 SSR
+
+**Branch-level:**
+- `BACKEND_URL` — API Gateway URL (CDK token)
+- `NEXTAUTH_URL` — auto-detected by NextAuth from Host header
+- `NEXT_PUBLIC_COGNITO_USER_POOL_ID` — from Cognito construct
+- `NEXT_PUBLIC_COGNITO_CLIENT_ID` — from Cognito construct
+
+### What's NOT Changing
+
+- No auth rewrite (NextAuth + Cognito stays)
+- No PR preview deployments (add later)
+- No custom domain (Amplify-generated URL for now)
+- No docker-compose changes (local dev unchanged)
+- No E2E test changes
+- No frontend code changes (beyond next.config.js)
+
+---
+
 ## What to Remove After Migration
 
 | Item | Action |
