@@ -12,6 +12,8 @@ jobs:
   ci:
     name: CI
     uses: ./.github/workflows/_ci-checks.yml
+    secrets:
+      GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
 
   # ===========================================================================
   # Naming Convention Validation
@@ -19,6 +21,8 @@ jobs:
   naming:
     name: Naming
     uses: ./.github/workflows/_naming-validation.yml
+    secrets:
+      GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
 
   # ===========================================================================
   # E2E Integration Tests

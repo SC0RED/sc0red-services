@@ -13,6 +13,8 @@ jobs:
   ci:
     name: CI Checks
     uses: ./.github/workflows/_ci-checks.yml
+    secrets:
+      GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
 
   deploy:
     name: Deploy to Staging

@@ -5,6 +5,10 @@ inputs:
     description: 'Python version to use'
     required: false
     default: '3.12'
+  gh-token:
+    description: 'GitHub token for accessing private dependencies (signalfield-core)'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -12,6 +16,11 @@ runs:
     - uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
+
+    - name: Configure git for private dependencies
+      if: inputs.gh-token != ''
+      shell: bash
+      run: git config --global url."https://x-access-token:${{ inputs.gh-token }}@github.com/".insteadOf "https://github.com/"
 
     - name: Install dependencies
       shell: bash

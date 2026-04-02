@@ -2,6 +2,9 @@ name: Reusable CI Checks
 
 on:
   workflow_call:
+    secrets:
+      GH_TOKEN:
+        required: false
 
 jobs:
   lint:
@@ -10,6 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
+        with:
+          gh-token: ${{ secrets.GH_TOKEN }}
       - name: Run lint
         run: make lint
 
@@ -19,6 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
+        with:
+          gh-token: ${{ secrets.GH_TOKEN }}
       - name: Run tests
         run: make test
 
@@ -53,5 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
+        with:
+          gh-token: ${{ secrets.GH_TOKEN }}
       - name: Run security checks
         run: make security
