@@ -2,13 +2,6 @@ name: Reusable Naming Validation
 
 on:
   workflow_call:
-    secrets:
-      APP_ID:
-        required: false
-      APP_PRIVATE_KEY:
-        required: false
-      DEPLOY_KEY:
-        required: false
 
 jobs:
   validate-branch-name:
@@ -57,10 +50,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          deploy-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Run Ruff naming checks
         working-directory: backend

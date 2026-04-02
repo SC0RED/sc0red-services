@@ -241,26 +241,18 @@ class JanusStack(Stack):
     def _build_bundling_options(self) -> cdk.BundlingOptions:
         """Build the Docker bundling config shared by both Lambdas."""
         gh_token = os.environ.get("GH_TOKEN", "")
-        deploy_key_b64 = os.environ.get("DEPLOY_KEY_B64", "")
 
         return cdk.BundlingOptions(
             image=cdk.DockerImage.from_registry("python:3.12-slim"),
             user="root",
-            environment={"DEPLOY_KEY_B64": deploy_key_b64, "GH_TOKEN": gh_token},
+            environment={"GH_TOKEN": gh_token},
             command=[
                 "bash",
                 "-c",
                 " && ".join([
-                    "apt-get update -qq && apt-get install -y -qq git openssh-client",
+                    "apt-get update -qq && apt-get install -y -qq git",
                     (
-                        'if [ -n "$DEPLOY_KEY_B64" ]; then'
-                        " mkdir -p ~/.ssh"
-                        ' && echo "$DEPLOY_KEY_B64" | base64 -d | tr -d "\\r" > ~/.ssh/id_rsa'
-                        " && echo >> ~/.ssh/id_rsa"
-                        " && chmod 600 ~/.ssh/id_rsa"
-                        " && ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null"
-                        ' && git config --global url."git@github.com:".insteadOf "https://github.com/";'
-                        ' elif [ -n "$GH_TOKEN" ]; then'
+                        'if [ -n "$GH_TOKEN" ]; then'
                         ' git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/";'
                         " fi"
                     ),

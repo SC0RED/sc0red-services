@@ -2,15 +2,6 @@ name: Reusable CI Checks
 
 on:
   workflow_call:
-    secrets:
-      SONAR_TOKEN:
-        required: false
-      APP_ID:
-        required: false
-      APP_PRIVATE_KEY:
-        required: false
-      DEPLOY_KEY:
-        required: false
 
 jobs:
   lint:
@@ -19,10 +10,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          deploy-key: ${{ secrets.DEPLOY_KEY }}
       - name: Run lint
         run: make lint
 
@@ -32,10 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          deploy-key: ${{ secrets.DEPLOY_KEY }}
       - name: Run tests
         run: make test
 
@@ -70,9 +53,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          app-private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          deploy-key: ${{ secrets.DEPLOY_KEY }}
       - name: Run security checks
         run: make security
