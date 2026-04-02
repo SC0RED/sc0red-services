@@ -13,7 +13,7 @@ jobs:
     name: CI
     uses: ./.github/workflows/_ci-checks.yml
     secrets:
-      GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
+      DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   # ===========================================================================
   # Naming Convention Validation
@@ -22,7 +22,7 @@ jobs:
     name: Naming
     uses: ./.github/workflows/_naming-validation.yml
     secrets:
-      GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
+      DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   # ===========================================================================
   # E2E Integration Tests
@@ -41,10 +41,18 @@ jobs:
       - name: Install test dependencies
         run: pip install boto3 "PyJWT[crypto]"
 
+      - name: Configure SSH for private deps
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+
       - name: Build E2E stack
-        env:
-          GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
-        run: docker compose -f docker-compose.e2e.yml build
+        run: docker compose -f docker-compose.e2e.yml build --ssh default
 
       - name: Start E2E stack
         run: docker compose -f docker-compose.e2e.yml up -d

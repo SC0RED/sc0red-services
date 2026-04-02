@@ -5,8 +5,8 @@ inputs:
     description: 'Python version to use'
     required: false
     default: '3.12'
-  gh-token:
-    description: 'GitHub token for accessing private dependencies (signalfield-core)'
+  deploy-key:
+    description: 'SSH deploy key for accessing private GitHub dependencies'
     required: false
     default: ''
 
@@ -17,10 +17,17 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Configure git for private dependencies
-      if: inputs.gh-token != ''
+    - name: Configure SSH for private dependencies
+      if: inputs.deploy-key != ''
       shell: bash
-      run: git config --global url."https://x-access-token:${{ inputs.gh-token }}@github.com/".insteadOf "https://github.com/"
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ inputs.deploy-key }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+        printf 'Host github.com\n  IdentityFile ~/.ssh/deploy_key\n  StrictHostKeyChecking yes\n' >> ~/.ssh/config
+        chmod 600 ~/.ssh/config
+        git config --global url."git@github.com:".insteadOf "https://github.com/"
 
     - name: Install dependencies
       shell: bash

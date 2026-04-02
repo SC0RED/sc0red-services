@@ -14,7 +14,7 @@ jobs:
     name: CI Checks
     uses: ./.github/workflows/_ci-checks.yml
     secrets:
-      GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
+      DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   deploy:
     name: Deploy to Staging
@@ -56,10 +56,13 @@ jobs:
             cdk bootstrap "aws://${{ secrets.DEV_AWS_ACCOUNT_ID }}/${{ secrets.DEV_AWS_REGION }}" \
             --quiet 2>&1 | grep -v "^$" || true
 
+      - name: Encode deploy key for Docker bundling
+        run: echo "DEPLOY_KEY_B64=$(printf '%s' "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" | base64 -w 0)" >> $GITHUB_ENV
+
       - name: CDK Deploy
         env:
-          GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
-          AMPLIFY_GITHUB_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
+          DEPLOY_KEY_B64: ${{ env.DEPLOY_KEY_B64 }}
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
