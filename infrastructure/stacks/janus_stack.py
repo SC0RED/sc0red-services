@@ -14,6 +14,7 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_sqs as sqs
 from constructs import Construct
 
+from stacks.amplify_construct import AmplifyConstruct
 from stacks.cognito_construct import CognitoConstruct
 from stacks.observability_construct import ObservabilityConstruct
 
@@ -46,7 +47,9 @@ class JanusStack(Stack):
             lambda_.Architecture.ARM_64 if arch_value == "arm64" else lambda_.Architecture.X86_64
         )
 
-        frontend_domain = os.environ.get("FRONTEND_DOMAIN", "")
+        # Phase 1: Create Amplify app to get domain for CORS
+        amplify = self._create_amplify()
+        frontend_domain = amplify.branch_url if amplify else os.environ.get("FRONTEND_DOMAIN", "")
 
         table = self._create_table()
         queue, dlq = self._create_queues()
@@ -84,6 +87,14 @@ class JanusStack(Stack):
 
         api = self._create_api(api_handler, frontend_domain)
 
+        # Phase 2: Create Amplify branch now that API URL exists
+        if amplify:
+            amplify.create_branch(
+                api_url=api.url,
+                cognito_user_pool_id=cognito.user_pool_id,
+                cognito_client_id=cognito.app_client_id,
+            )
+
         worker_handler.add_event_source(
             lambda_event_sources.SqsEventSource(queue, batch_size=1)
         )
@@ -104,6 +115,31 @@ class JanusStack(Stack):
         CfnOutput(self, "BucketName", value=documents_bucket.bucket_name)
         CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
         CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)
+
+    # ── Amplify ─────────────────────────────────────────────────────────────────
+
+    def _create_amplify(self) -> AmplifyConstruct | None:
+        """Phase 1: create Amplify app (if configured) for the default domain."""
+        amplify_branch = self._config.get("amplify_branch")
+        if not amplify_branch:
+            return None
+
+        github_token = os.environ.get("AMPLIFY_GITHUB_TOKEN", "")
+        if not github_token:
+            message = "AMPLIFY_GITHUB_TOKEN must be set when amplify_branch is configured"
+            raise ValueError(message)
+
+        nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
+
+        return AmplifyConstruct(
+            self,
+            "Amplify",
+            environment=self._environment,
+            nextauth_secret=nextauth_secret,
+            github_token=github_token,
+            repository=self._config["github_repository"],
+            branch_name=amplify_branch,
+        )
 
     # ── DynamoDB ──────────────────────────────────────────────────────────────
 

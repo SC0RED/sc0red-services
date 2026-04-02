@@ -48,6 +48,19 @@ environment_config: dict[str, object] = {
         "lambda_architecture": "x86_64",
         "api_rate_limit": 50,
         "api_burst_limit": 100,
+        "github_repository": "https://github.com/SC0RED/janus",
+        "amplify_branch": "development",
+    },
+    "testing": {
+        "removal_policy": cdk.RemovalPolicy.SNAPSHOT,
+        "log_retention_days": 30,
+        "enable_monitoring": True,
+        "point_in_time_recovery": False,
+        "lambda_architecture": "x86_64",
+        "api_rate_limit": 50,
+        "api_burst_limit": 100,
+        "github_repository": "https://github.com/SC0RED/janus",
+        "amplify_branch": "testing",
     },
     "production": {
         "removal_policy": cdk.RemovalPolicy.RETAIN,
@@ -57,6 +70,8 @@ environment_config: dict[str, object] = {
         "lambda_architecture": "x86_64",
         "api_rate_limit": 100,
         "api_burst_limit": 200,
+        "github_repository": "https://github.com/SC0RED/janus",
+        "amplify_branch": "production",
     },
 }
 
