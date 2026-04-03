@@ -198,7 +198,6 @@ class JanusStack(Stack):
         bucket = s3.Bucket(
             self,
             "DocumentsBucket",
-            bucket_name=f"janus-documents-{self._environment}",
             removal_policy=self._config["removal_policy"],
             auto_delete_objects=self._environment == "development",
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
