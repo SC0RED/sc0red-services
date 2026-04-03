@@ -48,6 +48,9 @@ jobs:
           aws-region: ${{ secrets.TEST_AWS_REGION }}
 
       - name: CDK Bootstrap
+        env:
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=testing \
