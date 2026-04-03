@@ -116,7 +116,7 @@ fi
 # ── Hardcoded secrets ────────────────────────────────────────────────────────
 section "Hardcoded secrets check"
 
-SECRET_HITS=$(grep -rn "dev-secret-minimum-32" backend/src/ infrastructure/ 2>/dev/null | grep -v "pyc" | wc -l | tr -d ' ')
+SECRET_HITS=$(grep -rn "dev-secret-minimum-32" backend/src/ infrastructure/ 2>/dev/null | grep -v "pyc" | wc -l | tr -d ' ' || echo "0")
 if [ "$SECRET_HITS" -gt 0 ]; then
     warn "Dev secret string found in $SECRET_HITS location(s) — verify guards are in place"
 else
