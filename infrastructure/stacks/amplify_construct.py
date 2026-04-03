@@ -154,7 +154,10 @@ class AmplifyConstruct(Construct):
                                 "commands": ["npm ci --legacy-peer-deps"],
                             },
                             "build": {
-                                "commands": ["npm run build"],
+                                "commands": [
+                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_)' >> .env.production",
+                                    "npm run build",
+                                ],
                             },
                         },
                         "artifacts": {
