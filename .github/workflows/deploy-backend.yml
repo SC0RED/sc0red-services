@@ -40,6 +40,17 @@ jobs:
       - name: Install CDK Python dependencies
         run: cd infrastructure && uv sync --quiet
 
+      - name: Debug AWS secrets
+        run: |
+          KEY="${{ secrets.DEV_AWS_ACCESS_KEY_ID }}"
+          ACCT="${{ secrets.DEV_AWS_ACCOUNT_ID }}"
+          REGION="${{ secrets.DEV_AWS_REGION }}"
+          echo "ACCESS_KEY_ID: length=${#KEY}, last4=${KEY: -4}"
+          echo "ACCOUNT_ID: length=${#ACCT}, last4=${ACCT: -4}"
+          echo "REGION: value=${REGION}"
+          echo "AMPLIFY_DEPLOYMENT set: ${{ secrets.AMPLIFY_DEPLOYMENT != '' }}"
+          echo "NEXTAUTH_SECRET set: ${{ secrets.NEXTAUTH_SECRET != '' }}"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
