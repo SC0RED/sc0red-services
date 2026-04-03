@@ -58,6 +58,10 @@ class AmplifyConstruct(Construct):
                     name="_CUSTOM_IMAGE",
                     value="amplify:al2023",
                 ),
+                amplify.CfnApp.EnvironmentVariableProperty(
+                    name="AMPLIFY_MONOREPO_APP_ROOT",
+                    value="frontend",
+                ),
             ],
         )
 
