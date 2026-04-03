@@ -104,6 +104,10 @@ class AmplifyConstruct(Construct):
                     value=api_url,
                 ),
                 amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="NEXTAUTH_URL",
+                    value=self.branch_url,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
                     name="NEXT_PUBLIC_COGNITO_USER_POOL_ID",
                     value=cognito_user_pool_id,
                 ),
