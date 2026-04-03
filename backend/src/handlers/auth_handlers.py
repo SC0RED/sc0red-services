@@ -57,8 +57,7 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
             error_map: dict[str, str] = {
                 "UsernameExistsException": "An account with this email already exists",
                 "InvalidPasswordException": (
-                    "Password must be at least 8 characters with"
-                    " uppercase, lowercase, and numbers"
+                    "Password must be at least 8 characters with uppercase, lowercase, and numbers"
                 ),
                 "InvalidParameterException": "Invalid registration details",
             }
