@@ -147,6 +147,82 @@ class TestAPIGatewayHandler:
         org_repo.create.assert_called_once()
         user_repo.create.assert_called_once()
 
+    @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
+    @patch("src.handlers.auth_handlers.CognitoClient")
+    def test_register_cognito_password_error(self, mock_cognito_cls):
+        from botocore.exceptions import ClientError
+
+        mock_cognito = MagicMock()
+        mock_cognito.client_error = ClientError
+        mock_cognito.create_user_with_password.side_effect = ClientError(
+            {"Error": {"Code": "InvalidPasswordException", "Message": "bad password"}},
+            "AdminSetUserPassword",
+        )
+        mock_cognito_cls.return_value = mock_cognito
+
+        handler, storage = self._make_handler()
+        user_repo = MagicMock()
+        user_repo.has_email.return_value = False
+        storage.create_user_repository.return_value = user_repo
+        storage.create_organization_repository.return_value = MagicMock()
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/register",
+                "headers": {},
+                "body": json.dumps(
+                    {
+                        "name": "Test User",
+                        "email": "test@example.com",
+                        "password": "weak",
+                        "orgName": "Test Org",
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 400
+        body = json.loads(result["body"])
+        assert "password" in body["error"].lower()
+
+    @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
+    @patch("src.handlers.auth_handlers.CognitoClient")
+    def test_register_cognito_user_exists_error(self, mock_cognito_cls):
+        from botocore.exceptions import ClientError
+
+        mock_cognito = MagicMock()
+        mock_cognito.client_error = ClientError
+        mock_cognito.create_user_with_password.side_effect = ClientError(
+            {"Error": {"Code": "UsernameExistsException", "Message": "exists"}},
+            "AdminCreateUser",
+        )
+        mock_cognito_cls.return_value = mock_cognito
+
+        handler, storage = self._make_handler()
+        user_repo = MagicMock()
+        user_repo.has_email.return_value = False
+        storage.create_user_repository.return_value = user_repo
+        storage.create_organization_repository.return_value = MagicMock()
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/auth/register",
+                "headers": {},
+                "body": json.dumps(
+                    {
+                        "name": "Test User",
+                        "email": "test@example.com",
+                        "password": "Password123",
+                        "orgName": "Test Org",
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 400
+        body = json.loads(result["body"])
+        assert "already exists" in body["error"].lower()
+
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_start_missing_fields(self, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
