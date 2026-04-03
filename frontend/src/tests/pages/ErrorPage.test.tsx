@@ -5,6 +5,14 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: vi.fn() }),
 }))
 
+const mockSignOut = vi.fn()
+let mockSession: { data: unknown; status: string } = { data: null, status: 'unauthenticated' }
+
+vi.mock('next-auth/react', () => ({
+    useSession: () => mockSession,
+    signOut: (...args: unknown[]) => mockSignOut(...args),
+}))
+
 import GlobalError from '@/app/error'
 
 describe('GlobalError (error.tsx)', () => {
@@ -46,5 +54,22 @@ describe('GlobalError (error.tsx)', () => {
         render(<GlobalError error={error} reset={vi.fn()} />)
 
         expect(screen.getByText('An unexpected error occurred while loading this page.')).toBeInTheDocument()
+    })
+
+    it('auto-signs out when session exists', () => {
+        mockSignOut.mockClear()
+        mockSession = {
+            data: { user: { id: '1', orgId: 'org1', role: 'admin' }, expires: '' },
+            status: 'authenticated',
+        }
+
+        const error = new Error('Token expired')
+        render(<GlobalError error={error} reset={vi.fn()} />)
+
+        expect(screen.getByText('Session expired')).toBeInTheDocument()
+        expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: '/login' })
+
+        // Reset for other tests
+        mockSession = { data: null, status: 'unauthenticated' }
     })
 })
