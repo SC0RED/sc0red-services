@@ -23,13 +23,6 @@ jobs:
     uses: ./.github/workflows/_deploy.yml
     with:
       environment: production
+      aws_prefix: PROD
     secrets:
-      AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
-      AWS_ACCOUNT_ID: ${{ secrets.PROD_AWS_ACCOUNT_ID }}
-      AWS_REGION: ${{ secrets.PROD_AWS_REGION }}
       DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
-      AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
-      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}

@@ -7,25 +7,13 @@ on:
         required: true
         type: string
         description: "CDK environment name (staging, testing, production)"
+      aws_prefix:
+        required: true
+        type: string
+        description: "Secret name prefix for AWS creds (DEV, TEST, PROD)"
     secrets:
-      AWS_ACCESS_KEY_ID:
-        required: true
-      AWS_SECRET_ACCESS_KEY:
-        required: true
-      AWS_ACCOUNT_ID:
-        required: true
-      AWS_REGION:
-        required: true
       DEPLOY_KEY:
         required: true
-      AMPLIFY_GITHUB_TOKEN:
-        required: true
-      NEXTAUTH_SECRET:
-        required: true
-      ANTHROPIC_API_KEY:
-        required: false
-      OPENAI_API_KEY:
-        required: false
 
 jobs:
   deploy:
@@ -56,15 +44,15 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ secrets[format('{0}_AWS_ACCESS_KEY_ID', inputs.aws_prefix)] }}
+          aws-secret-access-key: ${{ secrets[format('{0}_AWS_SECRET_ACCESS_KEY', inputs.aws_prefix)] }}
+          aws-region: ${{ secrets[format('{0}_AWS_REGION', inputs.aws_prefix)] }}
 
       - name: CDK Bootstrap
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=${{ inputs.environment }} \
-            cdk bootstrap "aws://${{ secrets.AWS_ACCOUNT_ID }}/${{ secrets.AWS_REGION }}" \
+            cdk bootstrap "aws://${{ secrets[format('{0}_AWS_ACCOUNT_ID', inputs.aws_prefix)] }}/${{ secrets[format('{0}_AWS_REGION', inputs.aws_prefix)] }}" \
             --quiet 2>&1 | grep -v "^$" || true
 
       - name: Encode deploy key for Docker bundling
@@ -73,21 +61,21 @@ jobs:
       - name: CDK Deploy
         env:
           DEPLOY_KEY_B64: ${{ env.DEPLOY_KEY_B64 }}
-          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets[format('{0}_OPENAI_API_KEY', inputs.aws_prefix)] }}
           AI_PROVIDER: openai
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=${{ inputs.environment }} \
-          AWS_DEFAULT_REGION="${{ secrets.AWS_REGION }}" \
+          AWS_DEFAULT_REGION="${{ secrets[format('{0}_AWS_REGION', inputs.aws_prefix)] }}" \
             cdk deploy Janus-${{ inputs.environment }} \
               --require-approval never \
               --outputs-file /tmp/janus-outputs.json \
               --context "environment=${{ inputs.environment }}" \
-              --context "account=${{ secrets.AWS_ACCOUNT_ID }}" \
-              --context "region=${{ secrets.AWS_REGION }}"
+              --context "account=${{ secrets[format('{0}_AWS_ACCOUNT_ID', inputs.aws_prefix)] }}" \
+              --context "region=${{ secrets[format('{0}_AWS_REGION', inputs.aws_prefix)] }}"
 
       - name: Print deployment outputs
         run: |
