@@ -28,7 +28,6 @@ class AmplifyConstruct(Construct):
         construct_id: str,
         *,
         environment: str,
-        nextauth_secret: str,
         github_token: str,
         repository: str,
         branch_name: str,
@@ -50,10 +49,6 @@ class AmplifyConstruct(Construct):
             iam_service_role=role.role_arn,
             build_spec=self._build_spec(),
             environment_variables=[
-                amplify.CfnApp.EnvironmentVariableProperty(
-                    name="NEXTAUTH_SECRET",
-                    value=nextauth_secret,
-                ),
                 amplify.CfnApp.EnvironmentVariableProperty(
                     name="_CUSTOM_IMAGE",
                     value="amplify:al2023",
@@ -86,6 +81,7 @@ class AmplifyConstruct(Construct):
         self,
         *,
         api_url: str,
+        nextauth_secret: str,
         cognito_user_pool_id: str,
         cognito_client_id: str,
     ) -> None:
@@ -102,6 +98,10 @@ class AmplifyConstruct(Construct):
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="BACKEND_URL",
                     value=api_url,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="NEXTAUTH_SECRET",
+                    value=nextauth_secret,
                 ),
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="NEXTAUTH_URL",

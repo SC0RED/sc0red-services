@@ -91,6 +91,7 @@ class JanusStack(Stack):
         if amplify:
             amplify.create_branch(
                 api_url=api.url,
+                nextauth_secret=common_environment["NEXTAUTH_SECRET"],
                 cognito_user_pool_id=cognito.user_pool_id,
                 cognito_client_id=cognito.app_client_id,
             )
@@ -129,13 +130,10 @@ class JanusStack(Stack):
             message = "AMPLIFY_GITHUB_TOKEN must be set when amplify_branch is configured"
             raise ValueError(message)
 
-        nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
-
         return AmplifyConstruct(
             self,
             "Amplify",
             environment=self._environment,
-            nextauth_secret=nextauth_secret,
             github_token=github_token,
             repository=self._config["github_repository"],
             branch_name=amplify_branch,
