@@ -7,6 +7,7 @@
 
 import { getToken } from 'next-auth/jwt'
 import { cookies, headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 
 import { BackendError } from '@/lib/api/errors'
 import { BACKEND_URL } from '@/lib/config'
@@ -40,7 +41,7 @@ export async function backendFetch<T = unknown>(
     options: { method?: string; body?: unknown } = {}
 ): Promise<T> {
     const token = await getBackendToken()
-    if (!token) throw new BackendError('Not authenticated', 401)
+    if (!token) redirect('/login')
 
     const { method = 'GET', body } = options
 
@@ -55,6 +56,10 @@ export async function backendFetch<T = unknown>(
     }
 
     const response = await fetch(`${BACKEND_URL}${path}`, fetchOptions)
+
+    if (response.status === 401) {
+        redirect('/login')
+    }
 
     if (!response.ok) {
         let errorMessage = `Backend error: ${response.status}`
