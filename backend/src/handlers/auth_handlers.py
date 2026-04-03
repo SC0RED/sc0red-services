@@ -43,14 +43,27 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
     cognito_sub = ""
     if os.environ.get("COGNITO_USER_POOL_ID"):
         cognito_client = CognitoClient()
-        cognito_sub = cognito_client.create_user_with_password(
-            email=email,
-            password=password,
-            name=name,
-            org_id=org_id,
-            role="admin",
-            legacy_user_id=user_id,
-        )
+        try:
+            cognito_sub = cognito_client.create_user_with_password(
+                email=email,
+                password=password,
+                name=name,
+                org_id=org_id,
+                role="admin",
+                legacy_user_id=user_id,
+            )
+        except cognito_client.client_error as error:
+            error_code = error.response["Error"]["Code"]
+            error_map: dict[str, str] = {
+                "UsernameExistsException": "An account with this email already exists",
+                "InvalidPasswordException": (
+                    "Password must be at least 8 characters with uppercase, lowercase, and numbers"
+                ),
+                "InvalidParameterException": "Invalid registration details",
+            }
+            message = error_map.get(error_code, f"Registration failed: {error_code}")
+            logger.warning("Cognito registration error: %s — %s", error_code, email)
+            return build_error(message)
 
     # Create org and user in DynamoDB
     org_repo.create({"id": org_id, "name": org_name, "type": org_type})

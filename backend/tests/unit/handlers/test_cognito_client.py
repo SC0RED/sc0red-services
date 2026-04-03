@@ -48,6 +48,30 @@ class TestCognitoClient:
             Permanent=True,
         )
 
+    def test_create_user_rolls_back_on_password_failure(self):
+        from botocore.exceptions import ClientError
+
+        client, mock_cognito = self._make_client()
+        mock_cognito.admin_create_user.return_value = {
+            "User": {"Attributes": [{"Name": "sub", "Value": "sub-789"}]}
+        }
+        mock_cognito.admin_set_user_password.side_effect = ClientError(
+            {"Error": {"Code": "InvalidPasswordException", "Message": "bad"}},
+            "AdminSetUserPassword",
+        )
+
+        import pytest
+
+        with pytest.raises(ClientError):
+            client.create_user_with_password(
+                "user@test.com", "weak", "User", "org-1"
+            )
+
+        mock_cognito.admin_delete_user.assert_called_once_with(
+            UserPoolId="us-east-1_TEST",
+            Username="user@test.com",
+        )
+
     def test_delete_user(self):
         client, mock_cognito = self._make_client()
         client.delete_user("test@example.com")
