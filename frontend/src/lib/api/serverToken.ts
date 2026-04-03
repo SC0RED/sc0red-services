@@ -7,7 +7,6 @@
 
 import { getToken } from 'next-auth/jwt'
 import { cookies, headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 
 import { BackendError } from '@/lib/api/errors'
 import { BACKEND_URL } from '@/lib/config'
@@ -35,15 +34,17 @@ export async function getBackendToken(): Promise<string | null> {
 /**
  * Fetch from the Python backend with automatic auth.
  * Returns typed JSON or throws BackendError on failure.
- * Redirects to signout-expired route on 401/missing token, which clears
- * the session cookie and redirects to /login.
+ *
+ * On 401 (expired Cognito token), throws BackendError which is caught
+ * by the app-level error.tsx boundary. The error boundary handles
+ * client-side signOut to clear the session and redirect to login.
  */
 export async function backendFetch<T = unknown>(
     path: string,
     options: { method?: string; body?: unknown } = {}
 ): Promise<T> {
     const token = await getBackendToken()
-    if (!token) redirect('/api/auth/signout-expired')
+    if (!token) throw new BackendError('Not authenticated', 401)
 
     const { method = 'GET', body } = options
 
@@ -58,10 +59,6 @@ export async function backendFetch<T = unknown>(
     }
 
     const response = await fetch(`${BACKEND_URL}${path}`, fetchOptions)
-
-    if (response.status === 401) {
-        redirect('/api/auth/signout-expired')
-    }
 
     if (!response.ok) {
         let errorMessage = `Backend error: ${response.status}`

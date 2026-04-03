@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { signOut, useSession } from 'next-auth/react'
 
 export default function GlobalError({
     error,
@@ -9,6 +11,41 @@ export default function GlobalError({
     error: Error & { digest?: string }
     reset: () => void
 }) {
+    const { data: session } = useSession()
+    const [signingOut, setSigningOut] = useState(false)
+
+    // If the user has a session but the page errored, the most likely cause
+    // is an expired Cognito token. Auto-sign them out so they can re-auth.
+    useEffect(() => {
+        if (session && !signingOut) {
+            setSigningOut(true)
+            signOut({ callbackUrl: '/login' })
+        }
+    }, [session, signingOut])
+
+    if (signingOut) {
+        return (
+            <div
+                style={{
+                    display: 'flex',
+                    minHeight: '100vh',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2rem',
+                }}
+            >
+                <div className="card" style={{ padding: '3rem', textAlign: 'center', maxWidth: '480px' }}>
+                    <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                        Session expired
+                    </h1>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
+                        Redirecting to login...
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div
             style={{
