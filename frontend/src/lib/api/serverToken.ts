@@ -33,37 +33,17 @@ export async function getBackendToken(): Promise<string | null> {
 }
 
 /**
- * Clear the NextAuth session cookie and redirect to login.
- * Used when the Cognito token inside the session has expired —
- * the NextAuth session is still valid but the backend rejects it.
- * We must delete the cookie first to prevent a redirect loop
- * (middleware sees valid session → redirects back to dashboard).
- */
-async function clearSessionAndRedirect(): Promise<never> {
-    const cookieStore = await cookies()
-    const sessionCookieNames = cookieStore
-        .getAll()
-        .filter((c) => c.name.includes('next-auth'))
-        .map((c) => c.name)
-
-    for (const name of sessionCookieNames) {
-        cookieStore.delete(name)
-    }
-
-    redirect('/login')
-}
-
-/**
  * Fetch from the Python backend with automatic auth.
  * Returns typed JSON or throws BackendError on failure.
- * Redirects to login (with session cleared) on 401/missing token.
+ * Redirects to signout-expired route on 401/missing token, which clears
+ * the session cookie and redirects to /login.
  */
 export async function backendFetch<T = unknown>(
     path: string,
     options: { method?: string; body?: unknown } = {}
 ): Promise<T> {
     const token = await getBackendToken()
-    if (!token) await clearSessionAndRedirect()
+    if (!token) redirect('/api/auth/signout-expired')
 
     const { method = 'GET', body } = options
 
@@ -80,7 +60,7 @@ export async function backendFetch<T = unknown>(
     const response = await fetch(`${BACKEND_URL}${path}`, fetchOptions)
 
     if (response.status === 401) {
-        await clearSessionAndRedirect()
+        redirect('/api/auth/signout-expired')
     }
 
     if (!response.ok) {
