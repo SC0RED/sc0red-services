@@ -6,11 +6,11 @@
 #   ./scripts/deploy-aws.sh [staging|production]
 #
 # Required environment variables:
-#   NEXTAUTH_SECRET    — JWT secret shared with the frontend (≥32 chars)
+#   NEXTAUTH_SECRET       — JWT secret for NextAuth session signing (≥32 chars)
+#   AMPLIFY_GITHUB_TOKEN  — GitHub PAT for Amplify to clone the repo
 #
 # Optional environment variables:
 #   ANTHROPIC_API_KEY  — Anthropic API key (defaults to sk-placeholder)
-#   FRONTEND_DOMAIN    — Frontend origin for CORS (defaults to * — tighten after Vercel deploy)
 #   AWS_REGION         — Defaults to us-east-1
 #
 # Prerequisites:
@@ -93,8 +93,8 @@ echo ""
 CDK_ENVIRONMENT="$ENVIRONMENT" \
 AWS_DEFAULT_REGION="$REGION" \
 NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
+AMPLIFY_GITHUB_TOKEN="${AMPLIFY_GITHUB_TOKEN:-}" \
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-sk-placeholder}" \
-FRONTEND_DOMAIN="${FRONTEND_DOMAIN:-*}" \
     cdk deploy "$STACK_NAME" \
         --require-approval never \
         --outputs-file /tmp/janus-aws-outputs.json \
@@ -126,17 +126,8 @@ if [ -n "$API_URL" ]; then
     echo "  Backend API URL : $API_URL"
     echo "  Health check    : ${API_URL}api/health"
     echo ""
-    echo "Next steps:"
-    echo "  1. Deploy frontend to Vercel with:"
-    echo "       BACKEND_URL=$API_URL"
-    echo "       NEXTAUTH_SECRET=<same value>"
-    echo "       NEXTAUTH_URL=https://<your-vercel-domain>"
-    echo ""
-    echo "  2. Once you have the Vercel URL, tighten CORS:"
-    echo "       FRONTEND_DOMAIN=https://<your-vercel-domain> ./scripts/deploy-aws.sh $ENVIRONMENT"
-    echo ""
-    echo "  3. Once you have ANTHROPIC_API_KEY:"
-    echo "       ANTHROPIC_API_KEY=sk-ant-... ./scripts/deploy-aws.sh $ENVIRONMENT"
+    echo "Frontend is deployed via Amplify (auto-build on push)."
+    echo "CORS is configured to the Amplify domain automatically."
 else
     echo "  Check CloudFormation console for $STACK_NAME outputs (ApiUrl)"
 fi

@@ -89,9 +89,13 @@ class JanusStack(Stack):
 
         # Phase 2: Create Amplify branch now that API URL exists
         if amplify:
+            nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
+            if not nextauth_secret and self._environment != "development":
+                message = "NEXTAUTH_SECRET must be set for Amplify frontend"
+                raise ValueError(message)
             amplify.create_branch(
                 api_url=api.url,
-                nextauth_secret=common_environment["NEXTAUTH_SECRET"],
+                nextauth_secret=nextauth_secret,
                 cognito_user_pool_id=cognito.user_pool_id,
                 cognito_client_id=cognito.app_client_id,
             )
@@ -267,17 +271,6 @@ class JanusStack(Stack):
         cognito_construct: CognitoConstruct,
     ) -> dict[str, str]:
         """Build the environment variables shared by both Lambdas."""
-        nextauth_secret = os.environ.get("NEXTAUTH_SECRET", "")
-        if not nextauth_secret:
-            if self._environment == "development":
-                nextauth_secret = "dev-secret-minimum-32-characters-long"
-            else:
-                message = (
-                    f"NEXTAUTH_SECRET must be set for environment '{self._environment}'. "
-                    "A deployment with a default dev secret is a security risk."
-                )
-                raise ValueError(message)
-
         region = self.region or os.environ.get("AWS_REGION", "us-east-1")
 
         return {
@@ -285,7 +278,6 @@ class JanusStack(Stack):
             "ANALYSIS_QUEUE_URL": queue.queue_url,
             "DOCUMENTS_BUCKET": documents_bucket.bucket_name,
             "STAGE": self._environment,
-            "NEXTAUTH_SECRET": nextauth_secret,
             "COGNITO_USER_POOL_ID": cognito_construct.user_pool_id,
             "COGNITO_CLIENT_ID": cognito_construct.app_client_id,
             "COGNITO_REGION": region,
@@ -350,7 +342,7 @@ class JanusStack(Stack):
         else:
             message = (
                 f"FRONTEND_DOMAIN must be set for environment '{self._environment}'. "
-                "Example: https://janus.vercel.app"
+                "Example: https://development.d1234abcdef.amplifyapp.com"
             )
             raise ValueError(message)
 

@@ -155,7 +155,7 @@ class AmplifyConstruct(Construct):
                             },
                             "build": {
                                 "commands": [
-                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_)' >> .env.production",
+                                    "env | grep -E '^(BACKEND_URL|NEXT_PUBLIC_)' >> .env.production",
                                     "npm run build",
                                 ],
                             },
