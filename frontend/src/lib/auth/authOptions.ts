@@ -70,6 +70,6 @@ export const authOptions: NextAuthOptions = {
     pages: { signIn: '/login' },
     secret: process.env.NEXTAUTH_SECRET,
     jwt: {
-        maxAge: 60 * 60, // 1 hour (matches Cognito token validity)
+        maxAge: 8 * 60 * 60, // 8 hours
     },
 }
