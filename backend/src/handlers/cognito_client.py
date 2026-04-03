@@ -10,12 +10,15 @@ import logging
 import os
 
 import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
 
 class CognitoClient:
     """Wrapper around boto3 cognito-idp for admin operations."""
+
+    client_error = ClientError
 
     def __init__(self) -> None:
         self._client = boto3.client("cognito-idp")
@@ -94,13 +97,21 @@ class CognitoClient:
                 cognito_sub = attr["Value"]
                 break
 
-        # Set permanent password (skip force-change)
-        self._client.admin_set_user_password(
-            UserPoolId=self._user_pool_id,
-            Username=email,
-            Password=password,
-            Permanent=True,
-        )
+        # Set permanent password — rollback Cognito user on failure
+        try:
+            self._client.admin_set_user_password(
+                UserPoolId=self._user_pool_id,
+                Username=email,
+                Password=password,
+                Permanent=True,
+            )
+        except Exception:
+            logger.warning("Password set failed, rolling back Cognito user: %s", email)
+            self._client.admin_delete_user(
+                UserPoolId=self._user_pool_id,
+                Username=email,
+            )
+            raise
 
         logger.info(
             "Created Cognito user with password: email=%s org_id=%s sub=%s",
