@@ -31,8 +31,8 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 # ── Validate environment ────────────────────────────────────────────────────────
 
-if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
-    err "Environment must be 'staging' or 'production', got: $ENVIRONMENT"
+if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "testing" && "$ENVIRONMENT" != "production" ]]; then
+    err "Environment must be 'staging', 'testing', or 'production', got: $ENVIRONMENT"
 fi
 
 # ── Prerequisites ───────────────────────────────────────────────────────────────
