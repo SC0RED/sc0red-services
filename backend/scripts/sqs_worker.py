@@ -21,7 +21,10 @@ import time
 
 import boto3
 
-# Ensure src is importable when run directly
+# In Docker the package is installed via `pip install .`, making `src` importable
+# directly. However, when running locally with `python scripts/sqs_worker.py`
+# from the backend directory without installing the package, the parent directory
+# must be on sys.path so that `from src.…` resolves correctly.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.handlers.sqs_handler import SQSHandler  # noqa: E402

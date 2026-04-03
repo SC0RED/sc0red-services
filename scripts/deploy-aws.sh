@@ -6,11 +6,11 @@
 #   ./scripts/deploy-aws.sh [staging|production]
 #
 # Required environment variables:
-#   NEXTAUTH_SECRET    — JWT secret shared with the frontend (≥32 chars)
+#   NEXTAUTH_SECRET       — JWT secret for NextAuth session signing (≥32 chars)
+#   AMPLIFY_GITHUB_TOKEN  — GitHub PAT for Amplify to clone the repo
 #
 # Optional environment variables:
 #   ANTHROPIC_API_KEY  — Anthropic API key (defaults to sk-placeholder)
-#   FRONTEND_DOMAIN    — Frontend origin for CORS (defaults to * — tighten after Vercel deploy)
 #   AWS_REGION         — Defaults to us-east-1
 #
 # Prerequisites:
@@ -23,21 +23,16 @@
 set -euo pipefail
 
 ENVIRONMENT="${1:-staging}"
-CDK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../infrastructure" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CDK_DIR="$(cd "$SCRIPT_DIR/../infrastructure" && pwd)"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-log() { echo -e "${YELLOW}▶ $*${NC}"; }
-ok()  { echo -e "${GREEN}✓ $*${NC}"; }
-err() { echo -e "${RED}✗ $*${NC}" >&2; exit 1; }
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
 # ── Validate environment ────────────────────────────────────────────────────────
 
-if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "production" ]]; then
-    err "Environment must be 'staging' or 'production', got: $ENVIRONMENT"
+if [[ "$ENVIRONMENT" != "staging" && "$ENVIRONMENT" != "testing" && "$ENVIRONMENT" != "production" ]]; then
+    err "Environment must be 'staging', 'testing', or 'production', got: $ENVIRONMENT"
 fi
 
 # ── Prerequisites ───────────────────────────────────────────────────────────────
@@ -58,15 +53,7 @@ REGION="${AWS_REGION:-us-east-1}"
 ok "AWS account: $ACCOUNT, region: $REGION"
 
 # GH_TOKEN
-if [ -z "${GH_TOKEN:-}" ]; then
-    if command -v gh >/dev/null 2>&1; then
-        export GH_TOKEN
-        GH_TOKEN=$(gh auth token)
-        ok "GH_TOKEN obtained from gh CLI"
-    else
-        err "GH_TOKEN not set and gh CLI not available — needed to bundle signalfield-core"
-    fi
-fi
+require_gh_token
 
 # NEXTAUTH_SECRET
 if [ -z "${NEXTAUTH_SECRET:-}" ]; then
@@ -106,8 +93,8 @@ echo ""
 CDK_ENVIRONMENT="$ENVIRONMENT" \
 AWS_DEFAULT_REGION="$REGION" \
 NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
+AMPLIFY_GITHUB_TOKEN="${AMPLIFY_GITHUB_TOKEN:-}" \
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-sk-placeholder}" \
-FRONTEND_DOMAIN="${FRONTEND_DOMAIN:-*}" \
     cdk deploy "$STACK_NAME" \
         --require-approval never \
         --outputs-file /tmp/janus-aws-outputs.json \
@@ -139,17 +126,8 @@ if [ -n "$API_URL" ]; then
     echo "  Backend API URL : $API_URL"
     echo "  Health check    : ${API_URL}api/health"
     echo ""
-    echo "Next steps:"
-    echo "  1. Deploy frontend to Vercel with:"
-    echo "       BACKEND_URL=$API_URL"
-    echo "       NEXTAUTH_SECRET=<same value>"
-    echo "       NEXTAUTH_URL=https://<your-vercel-domain>"
-    echo ""
-    echo "  2. Once you have the Vercel URL, tighten CORS:"
-    echo "       FRONTEND_DOMAIN=https://<your-vercel-domain> ./scripts/deploy-aws.sh $ENVIRONMENT"
-    echo ""
-    echo "  3. Once you have ANTHROPIC_API_KEY:"
-    echo "       ANTHROPIC_API_KEY=sk-ant-... ./scripts/deploy-aws.sh $ENVIRONMENT"
+    echo "Frontend is deployed via Amplify (auto-build on push)."
+    echo "CORS is configured to the Amplify domain automatically."
 else
     echo "  Check CloudFormation console for $STACK_NAME outputs (ApiUrl)"
 fi

@@ -113,6 +113,17 @@ class TestDynamoDBTable:
         assert len(results) == 2
 
     @mock_aws
+    def test_batch_write(self, dynamodb_table):
+        """batch_write() writes multiple items in a single batch."""
+        items = [{"pk": "BATCH#1", "sk": f"ITEM#{i:04d}", "value": f"val-{i}"} for i in range(5)]
+        dynamodb_table.batch_write(items)
+
+        results = dynamodb_table.query(pk="BATCH#1")
+        assert len(results) == 5
+        values = {r["value"] for r in results}
+        assert values == {"val-0", "val-1", "val-2", "val-3", "val-4"}
+
+    @mock_aws
     def test_update_item_empty_updates(self, dynamodb_table):
         """update_item() with empty updates dict returns early, no DynamoDB call."""
         dynamodb_table.put_item({"pk": "UPD#1", "sk": "META", "val": "original"})

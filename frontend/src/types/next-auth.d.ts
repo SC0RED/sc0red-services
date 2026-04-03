@@ -6,6 +6,7 @@ declare module 'next-auth' {
         id: string
         orgId: string
         role: string
+        idToken?: string
     }
     interface Session {
         user: User & { email: string; name?: string | null }
@@ -17,5 +18,6 @@ declare module 'next-auth/jwt' {
         id?: string
         orgId?: string
         role?: string
+        idToken?: string
     }
 }

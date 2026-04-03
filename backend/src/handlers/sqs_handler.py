@@ -10,7 +10,10 @@ import json
 import logging
 from typing import Any
 
+from signalfield_core.exceptions.base import EngineError
+
 from src.handlers.factory_manager import FactoryManager
+from src.pipeline.appsync_notifier import notify_progress
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logger = logging.getLogger(__name__)
@@ -41,7 +44,14 @@ class SQSHandler:
         return {"batchItemFailures": batch_item_failures}
 
     def _process_message(self, message: dict[str, Any]) -> None:
-        """Process a single SQS message and run the company analysis pipeline."""
+        """Process a single SQS message — either new analysis or re-analysis."""
+        if message.get("reanalyze"):
+            self._process_reanalysis(message)
+        else:
+            self._process_new_analysis(message)
+
+    def _process_new_analysis(self, message: dict[str, Any]) -> None:
+        """Run the company analysis pipeline for a new scan."""
         url = message["url"]
         org_id = message["org_id"]
         user_id = message["user_id"]
@@ -60,7 +70,7 @@ class SQSHandler:
                 company_name=company_name,
                 request_id=request_id,
             )
-        except Exception as error:
+        except (EngineError, ValueError, RuntimeError) as error:
             logger.exception(
                 "Pipeline failed for %s (scan=%s, request=%s)",
                 company_name or url,
@@ -69,8 +79,59 @@ class SQSHandler:
             )
             self._record_failure(scan_id, request_id, str(error))
             return
+        # Programming errors (AttributeError, KeyError, TypeError) propagate
+        # to the outer SQS handler, triggering retry via batchItemFailures.
 
         self._update_scan_progress(scan_id)
+
+    def _process_reanalysis(self, message: dict[str, Any]) -> None:
+        """Re-run the pipeline with supplementary document text.
+
+        Ordering: fetch doc text → run pipeline → delete old results.
+        Old results are kept until the pipeline succeeds so that a failure
+        does not leave the user with no analysis data.
+        """
+        analysis_id = message["analysis_id"]
+        url = message["url"]
+        org_id = message["org_id"]
+        user_id = message["user_id"]
+        # scan_id is always present but may be "" for standalone (non-portfolio) re-analyses
+        scan_id = message["scan_id"]
+
+        logger.info("Re-analyzing %s with documents", analysis_id)
+
+        # Fetch combined document text from DynamoDB
+        assessment_repo = self._storage.create_assessment_repository()
+        assessments = assessment_repo.find_by_company(analysis_id)
+        document_text = ""
+        old_assessment_id = ""
+        if assessments:
+            old_assessment_id = assessments[0]["id"]
+            document_text = assessment_repo.get_combined_document_text(old_assessment_id)
+
+        try:
+            self._factory_manager.run_company_analysis(
+                url=url,
+                org_id=org_id,
+                user_id=user_id,
+                scan_id=scan_id,
+                request_id=analysis_id,
+                document_text=document_text or None,
+            )
+        except (EngineError, ValueError, RuntimeError) as error:
+            logger.exception("Re-analysis pipeline failed for %s", analysis_id)
+            company_repo = self._storage.create_company_repository()
+            company_repo.update(analysis_id, {"error": str(error)})
+            if scan_id:
+                self._update_scan_progress(scan_id)
+            return
+
+        # Delete old results only after pipeline succeeds — preserves data on failure
+        if old_assessment_id:
+            assessment_repo.delete_analysis_results(old_assessment_id)
+
+        if scan_id:
+            self._update_scan_progress(scan_id)
 
     def _record_failure(self, scan_id: str, request_id: str, error_message: str) -> None:
         """Record a pipeline failure on the company and update scan progress.
@@ -104,9 +165,18 @@ class SQSHandler:
         )
 
         if total_companies and resolved >= total_companies:
-            scan_repo.update(scan_id, {"status": "complete", "progress": 100})
+            scan_repo.update(
+                scan_id,
+                {"status": "complete", "progress": 100, "completed_count": resolved},
+            )
+            notify_progress(
+                scan_id=scan_id,
+                progress=100,
+                label="Analysis complete!",
+                status="complete",
+            )
         else:
             progress = (
                 min(10 + round((resolved / total_companies) * 85), 95) if total_companies else 50
             )
-            scan_repo.update(scan_id, {"progress": progress})
+            scan_repo.update(scan_id, {"progress": progress, "completed_count": resolved})

@@ -6,6 +6,7 @@ import type { Metadata } from 'next'
 import { backendFetch } from '@/lib/api/serverToken'
 import { authOptions } from '@/lib/auth/authOptions'
 import type { DashboardData } from '@/lib/types/api'
+import { TIER_COLORS, TIER_BG_COLORS } from '@/lib/utils/riskUtils'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import DeleteScanButton from '@/components/DeleteScanButton'
 
@@ -33,39 +34,18 @@ export default async function DashboardPage() {
         { label: 'Total Scans', value: data.scanCount, color: 'var(--text-secondary)' },
     ]
 
-    const tierColors: Record<string, string> = {
-        low: 'var(--risk-low)',
-        moderate: 'var(--risk-moderate)',
-        high: 'var(--risk-high)',
-        critical: 'var(--risk-critical)',
-    }
-
-    const tierBgColors: Record<string, string> = {
-        low: 'var(--risk-low-bg)',
-        moderate: 'var(--risk-moderate-bg)',
-        high: 'var(--risk-high-bg)',
-        critical: 'var(--risk-critical-bg)',
-    }
-
     return (
         <>
+            {/* DashboardSidebar is position:fixed; no flex wrapper needed */}
             <DashboardSidebar />
-            <main
-                style={{
-                    flex: 1,
-                    marginLeft: 'var(--sidebar-width)',
-                    padding: '2rem',
-                    maxWidth: '1100px',
-                }}
-            >
+            <main id="main" tabIndex={-1} className="page-content">
                 <div style={{ marginBottom: '2rem' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                    <h1 className="page-title">
                         Good{' '}
-                        {new Date().getHours() < 12
-                            ? 'morning'
-                            : new Date().getHours() < 17
-                              ? 'afternoon'
-                              : 'evening'}
+                        {(() => {
+                            const hour = new Date().getHours()
+                            return hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+                        })()}
                         , {userName} 👋
                     </h1>
                     <p style={{ color: 'var(--text-secondary)' }}>
@@ -231,7 +211,7 @@ export default async function DashboardPage() {
                                                                 fontSize: '1.125rem',
                                                                 fontWeight: 700,
                                                                 color:
-                                                                    tierColors[analysisTier] ||
+                                                                    TIER_COLORS[analysisTier] ||
                                                                     'var(--text-primary)',
                                                             }}
                                                         >
@@ -248,10 +228,10 @@ export default async function DashboardPage() {
                                                                 fontWeight: 600,
                                                                 textTransform: 'capitalize',
                                                                 background:
-                                                                    tierBgColors[analysisTier] ||
+                                                                    TIER_BG_COLORS[analysisTier] ||
                                                                     'var(--bg-surface-2)',
                                                                 color:
-                                                                    tierColors[analysisTier] ||
+                                                                    TIER_COLORS[analysisTier] ||
                                                                     'var(--text-primary)',
                                                             }}
                                                         >

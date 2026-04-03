@@ -1,0 +1,34 @@
+type ScanProgress {
+    scanId: String!
+    companyId: String
+    progress: Int!
+    progressLabel: String!
+    status: String!
+}
+
+type Mutation {
+    publishProgress(input: ScanProgressInput!): ScanProgress
+}
+
+type Subscription {
+    onScanProgress(scanId: String!): ScanProgress
+        @aws_subscribe(mutations: ["publishProgress"])
+}
+
+input ScanProgressInput {
+    scanId: String!
+    companyId: String
+    progress: Int!
+    progressLabel: String!
+    status: String!
+}
+
+type Query {
+    _placeholder: String
+}
+
+schema {
+    query: Query
+    mutation: Mutation
+    subscription: Subscription
+}

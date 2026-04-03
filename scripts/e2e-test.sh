@@ -85,35 +85,7 @@ done
 
 # ── Create DynamoDB table ────────────────────────────────────────
 echo -e "\n${YELLOW}Ensuring DynamoDB table exists ...${NC}"
-python3 -c "
-import boto3, os
-endpoint = os.environ.get('DYNAMODB_ENDPOINT', 'http://localhost:8000')
-table = os.environ.get('DYNAMODB_TABLE', 'janus-dev')
-ddb = boto3.client('dynamodb', endpoint_url=endpoint, region_name='us-east-1',
-    aws_access_key_id='local', aws_secret_access_key='local')
-try:
-    ddb.create_table(
-        TableName=table,
-        KeySchema=[{'AttributeName':'pk','KeyType':'HASH'},{'AttributeName':'sk','KeyType':'RANGE'}],
-        AttributeDefinitions=[
-            {'AttributeName':'pk','AttributeType':'S'},{'AttributeName':'sk','AttributeType':'S'},
-            {'AttributeName':'GSI1PK','AttributeType':'S'},{'AttributeName':'GSI1SK','AttributeType':'S'},
-            {'AttributeName':'GSI2PK','AttributeType':'S'},{'AttributeName':'GSI2SK','AttributeType':'S'},
-            {'AttributeName':'GSI3PK','AttributeType':'S'},{'AttributeName':'GSI3SK','AttributeType':'S'},
-            {'AttributeName':'GSI4PK','AttributeType':'S'},{'AttributeName':'GSI4SK','AttributeType':'S'},
-        ],
-        GlobalSecondaryIndexes=[
-            {'IndexName':'GSI1','KeySchema':[{'AttributeName':'GSI1PK','KeyType':'HASH'},{'AttributeName':'GSI1SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-            {'IndexName':'GSI2','KeySchema':[{'AttributeName':'GSI2PK','KeyType':'HASH'},{'AttributeName':'GSI2SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-            {'IndexName':'GSI3','KeySchema':[{'AttributeName':'GSI3PK','KeyType':'HASH'},{'AttributeName':'GSI3SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-            {'IndexName':'GSI4','KeySchema':[{'AttributeName':'GSI4PK','KeyType':'HASH'},{'AttributeName':'GSI4SK','KeyType':'RANGE'}],'Projection':{'ProjectionType':'ALL'}},
-        ],
-        BillingMode='PAY_PER_REQUEST',
-    )
-    print(f'Table {table} created')
-except ddb.exceptions.ResourceInUseException:
-    print(f'Table {table} already exists')
-" 2>&1
+python3 scripts/setup_dynamodb.py --table "$DYNAMODB_TABLE" --endpoint "$DYNAMODB_ENDPOINT"
 
 # ── Create SQS queue (E2E mode only) ─────────────────────────────
 if [ "$E2E_MODE" = "full" ]; then
@@ -125,6 +97,24 @@ sqs = boto3.client('sqs', endpoint_url=endpoint, region_name='us-east-1',
     aws_access_key_id='local', aws_secret_access_key='local')
 response = sqs.create_queue(QueueName='janus-analysis-e2e')
 print('Queue URL:', response['QueueUrl'])
+" 2>&1
+
+    echo -e "\n${YELLOW}Ensuring S3 bucket exists ...${NC}"
+    python3 -c "
+import boto3, os
+from botocore.exceptions import ClientError
+endpoint = os.environ.get('AWS_ENDPOINT_URL', 'http://localhost:4566')
+s3 = boto3.client('s3', endpoint_url=endpoint, region_name='us-east-1',
+    aws_access_key_id='local', aws_secret_access_key='local')
+try:
+    s3.create_bucket(Bucket='janus-documents-e2e')
+    print('Bucket janus-documents-e2e created')
+except ClientError as e:
+    code = e.response['Error']['Code']
+    if code in ('BucketAlreadyOwnedByYou', 'BucketAlreadyExists'):
+        print('Bucket janus-documents-e2e already exists')
+    else:
+        raise
 " 2>&1
 fi
 
@@ -141,34 +131,41 @@ STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "Register" 200 "$STATUS"
 assert_json "Register success" "success" "True" "$BODY"
 
-# ── 2. Login ─────────────────────────────────────────────────────
-echo -e "\n${YELLOW}2. Login${NC}"
-RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
-BODY=$(echo "$RESP" | sed '$d')
-STATUS=$(echo "$RESP" | tail -n 1)
-assert_status "Login" 200 "$STATUS"
-assert_json "Login success" "success" "True" "$BODY"
-
-# Extract user info for JWT
+# ── 2. Extract user info from register response ─────────────────
+echo -e "\n${YELLOW}2. Extract user info${NC}"
 USER_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['id'])")
 ORG_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['orgId'])")
+echo -e "  ${GREEN}✓${NC} User ID: $USER_ID"
+echo -e "  ${GREEN}✓${NC} Org ID: $ORG_ID"
 
-# Create a JWT for authenticated requests
+# Create an RS256 JWT using the E2E test private key
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOKEN=$(python3 -c "
 import jwt, time
-payload = {'id':'$USER_ID','email':'$EMAIL','orgId':'$ORG_ID','role':'admin','name':'E2E User','exp':int(time.time())+300}
-print(jwt.encode(payload, '$NEXTAUTH_SECRET', algorithm='HS256'))
+with open('$SCRIPT_DIR/e2e-keys/private_key.pem') as f:
+    private_key = f.read()
+payload = {
+    'sub':'$USER_ID','email':'$EMAIL','orgId':'$ORG_ID',
+    'role':'admin','name':'E2E User',
+    'exp':int(time.time())+300,
+}
+print(jwt.encode(payload, private_key, algorithm='RS256', headers={'kid':'e2e-test-key'}))
 ")
 
 AUTH="Authorization: Bearer $TOKEN"
 
-# ── 3. Dashboard (empty) ────────────────────────────────────────
-echo -e "\n${YELLOW}3. Dashboard (empty)${NC}"
+# ── Diagnostic: test auth token ────────────────────────────────
+echo -e "\n${YELLOW}Testing auth token...${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard" -H "$AUTH")
 BODY=$(echo "$RESP" | sed '$d')
 STATUS=$(echo "$RESP" | tail -n 1)
+if [ "$STATUS" != "200" ]; then
+    echo -e "  ${RED}Auth diagnostic: HTTP $STATUS${NC}"
+    echo -e "  ${RED}Response: $BODY${NC}"
+fi
+
+# ── 3. Dashboard (empty) ────────────────────────────────────────
+echo -e "\n${YELLOW}3. Dashboard (empty)${NC}"
 assert_status "Dashboard" 200 "$STATUS"
 assert_json "No analyses" "totalAnalyses" "0" "$BODY"
 
@@ -178,15 +175,7 @@ RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analyses" -H "$AUTH")
 STATUS=$(echo "$RESP" | tail -n 1)
 assert_status "List analyses" 200 "$STATUS"
 
-# ── 5. Login with wrong password ────────────────────────────────
-echo -e "\n${YELLOW}5. Login with wrong password${NC}"
-RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/auth/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"wrong\"}")
-STATUS=$(echo "$RESP" | tail -n 1)
-assert_status "Bad credentials" 401 "$STATUS"
-
-# ── 6. Unauthenticated access ───────────────────────────────────
+# ── 5. Unauthenticated access ───────────────────────────────────
 echo -e "\n${YELLOW}6. Unauthenticated access${NC}"
 RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/dashboard")
 STATUS=$(echo "$RESP" | tail -n 1)
@@ -240,6 +229,166 @@ if [ "$E2E_MODE" = "full" ]; then
     assert_status "Get analysis" 200 "$STATUS"
     assert_json_nonempty "Analysis has companyName" "companyName" "$BODY"
     assert_json_nonempty "Analysis has overallRiskScore" "overallRiskScore" "$BODY"
+
+    # ── 8b. Verify EBITDA tree in analysis ──────────────────────
+    echo -e "\n${YELLOW}8b. Verify EBITDA tree in analysis${NC}"
+    HAS_EBITDA=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+tree = data.get('ebitdaTree')
+if not tree:
+    print('MISSING')
+elif not tree.get('treeData'):
+    print('EMPTY_TREE')
+elif not tree.get('revenueEstimate'):
+    print('NO_REVENUE')
+elif not tree.get('ebitdaEstimate'):
+    print('NO_EBITDA')
+else:
+    print('OK')
+" 2>/dev/null || echo "ERROR")
+    if [ "$HAS_EBITDA" = "OK" ]; then
+        echo -e "  ${GREEN}✓${NC} Analysis has ebitdaTree with treeData, revenueEstimate, ebitdaEstimate"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} EBITDA tree validation failed: $HAS_EBITDA"
+        fail=$((fail + 1))
+    fi
+
+    EBITDA_NODE_COUNT=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+tree = data.get('ebitdaTree', {})
+nodes = tree.get('treeData', [])
+print(len(nodes))
+" 2>/dev/null || echo "0")
+    if [ "$EBITDA_NODE_COUNT" -ge 2 ]; then
+        echo -e "  ${GREEN}✓${NC} EBITDA tree has $EBITDA_NODE_COUNT top-level nodes"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Expected ≥2 EBITDA nodes, got $EBITDA_NODE_COUNT"
+        fail=$((fail + 1))
+    fi
+
+    # ── 8c. Verify value_lever on opportunities ─────────────────
+    echo -e "\n${YELLOW}8c. Verify value_lever on opportunities${NC}"
+    HAS_LEVER=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+opps = data.get('opportunities', [])
+if not opps:
+    print('NO_OPPS')
+elif any(o.get('value_lever') for o in opps):
+    print('OK')
+else:
+    print('NO_LEVER')
+" 2>/dev/null || echo "ERROR")
+    if [ "$HAS_LEVER" = "OK" ]; then
+        echo -e "  ${GREEN}✓${NC} Opportunities have value_lever set"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} value_lever validation failed: $HAS_LEVER"
+        fail=$((fail + 1))
+    fi
+
+    # ── 8d. Upload document via presigned URL ───────────────────
+    echo -e "\n${YELLOW}8d. Upload document via presigned URL${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/analysis/$ANALYSIS_ID/upload-url" \
+        -H "Content-Type: application/json" \
+        -H "$AUTH" \
+        -d '{"filename":"test-doc.txt","fileType":"txt"}')
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Get upload URL" 200 "$STATUS"
+    assert_json_nonempty "Got uploadUrl" "uploadUrl" "$BODY"
+    assert_json_nonempty "Got documentKey" "documentKey" "$BODY"
+    UPLOAD_URL=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['uploadUrl'])")
+    DOC_KEY=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['documentKey'])")
+
+    # Rewrite presigned URL: backend returns internal hostname (localstack:4566),
+    # but E2E tests run on the host where LocalStack is at localhost:4566
+    UPLOAD_URL=$(echo "$UPLOAD_URL" | sed 's|http://localstack:4566|http://localhost:4566|g' | sed 's|http://[^/]*\.localhost\.localstack\.cloud:4566|http://localhost:4566|g')
+
+    # Upload file content to presigned URL
+    echo -e "\n${YELLOW}8d-2. PUT file to presigned URL${NC}"
+    PUT_STATUS=$(curl -sw "%{http_code}" -o /dev/null -X PUT "$UPLOAD_URL" \
+        -H "Content-Type: application/octet-stream" \
+        -d "This is a test document for E2E testing.")
+    assert_status "PUT to presigned URL" 200 "$PUT_STATUS"
+
+    # Register document with S3 key
+    echo -e "\n${YELLOW}8d-3. Register document with S3 key${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/analysis/$ANALYSIS_ID/documents" \
+        -H "Content-Type: application/json" \
+        -H "$AUTH" \
+        -d "{\"filename\":\"test-doc.txt\",\"fileType\":\"txt\",\"documentKey\":\"$DOC_KEY\"}")
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Register document" 201 "$STATUS"
+    assert_json_nonempty "Got document id" "id" "$BODY"
+    DOC_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+    # Verify document appears in analysis
+    echo -e "\n${YELLOW}8d-4. Verify document in analysis${NC}"
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    DOC_COUNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('documents',[])))" 2>/dev/null || echo "0")
+    if [ "$DOC_COUNT" -ge 1 ]; then
+        echo -e "  ${GREEN}✓${NC} Analysis has $DOC_COUNT document(s)"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Expected ≥1 documents, got $DOC_COUNT"
+        fail=$((fail + 1))
+    fi
+
+    # ── 8e. Re-analyze with documents ────────────────────────────
+    echo -e "\n${YELLOW}8e. Re-analyze with documents${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/analysis/$ANALYSIS_ID/reanalyze" \
+        -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Reanalyze queued" 202 "$STATUS"
+    assert_json "Reanalyze status" "status" "queued" "$BODY"
+
+    # Wait for re-analysis to complete (poll the scan)
+    echo -e "\n${YELLOW}8e-2. Wait for re-analysis to complete (max 120s)${NC}"
+    REANALYZE_DONE=false
+    for i in $(seq 1 40); do
+        RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$SINGLE_SCAN_ID" -H "$AUTH")
+        SCAN_STATUS=$(echo "$RESP" | sed '$d' | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+        echo -e "    Poll $i: status=$SCAN_STATUS"
+        if [ "$SCAN_STATUS" = "complete" ]; then
+            REANALYZE_DONE=true
+            break
+        fi
+        sleep 3
+    done
+    if [ "$REANALYZE_DONE" = "true" ]; then
+        echo -e "  ${GREEN}✓${NC} Re-analysis completed"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Re-analysis did not complete within 120s"
+        fail=$((fail + 1))
+    fi
+
+    # ── 8f. Delete document ──────────────────────────────────────
+    echo -e "\n${YELLOW}8f. Delete document${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X DELETE "$BACKEND_URL/api/analysis/$ANALYSIS_ID/documents/$DOC_ID" \
+        -H "$AUTH")
+    STATUS=$(echo "$RESP" | tail -n 1)
+    assert_status "Delete document" 200 "$STATUS"
+
+    # Verify document is gone
+    RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/analysis/$ANALYSIS_ID" -H "$AUTH")
+    BODY=$(echo "$RESP" | sed '$d')
+    DOC_COUNT=$(echo "$BODY" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('documents',[])))" 2>/dev/null || echo "0")
+    if [ "$DOC_COUNT" -eq 0 ]; then
+        echo -e "  ${GREEN}✓${NC} Document deleted successfully"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Expected 0 documents after delete, got $DOC_COUNT"
+        fail=$((fail + 1))
+    fi
 
     # ── 9. Async confirm → SQS → worker path ─────────────────────
     # Start a second scan for the portfolio confirm flow

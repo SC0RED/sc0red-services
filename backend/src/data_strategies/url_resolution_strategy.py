@@ -30,7 +30,7 @@ _SYSTEM_PROMPT = (
     "company."
 )
 
-_URL_RESOLUTION_SCHEMA: dict = {
+_URL_RESOLUTION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "actual_url": {"type": "string", "description": "The actual company website URL"},
@@ -69,8 +69,8 @@ class URLResolutionStrategy(DataStrategyExecutor):
         user_prompt = (
             f"Provided URL: {url}\n"
             f"Page Title: {scraped_title}\n\n"
-            f"Text Preview:\n{scraped_text[:3000]}\n\n"
-            f"Links found on page:\n{json.dumps(scraped_links[:100])}\n\n"
+            f"Text Preview:\n{scraped_text[:1000]}\n\n"
+            f"Links found on page:\n{json.dumps(scraped_links[:20])}\n\n"
             "Return the actual company website URL."
         )
 
@@ -81,11 +81,11 @@ class URLResolutionStrategy(DataStrategyExecutor):
             verbosity=Verbosity.LOW,
             reasoning_effort=ReasoningEffort.LOW,
             precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
         )
-        prompt = f"{_SYSTEM_PROMPT}\n\n{user_prompt}"
         try:
             response = client.query_structured(
-                input_text=prompt, json_schema=_URL_RESOLUTION_SCHEMA
+                input_text=user_prompt, json_schema=_URL_RESOLUTION_SCHEMA
             )
             actual_url = response.content["actual_url"]
 

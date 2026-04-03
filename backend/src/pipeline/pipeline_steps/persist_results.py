@@ -1,4 +1,4 @@
-"""Stage 4: Persist analysis results to DynamoDB.
+"""Stage 6: Persist analysis results to DynamoDB.
 
 Ports the DB write logic from pe-scan/src/app/api/scan/start/route.ts.
 """
@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
+
+from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
     from src.facades.company_accessor import CompanyAccessor
@@ -34,6 +36,7 @@ class PersistResults(RequestStep):
 
     def execute(self) -> None:
         """Persist company, assessment, risk scores, and opportunities to DynamoDB."""
+        timer = StepTimer("PersistResults")
         accessor = cast("CompanyAccessor", self.entity_accessor)
         company = accessor.company
 
@@ -57,7 +60,8 @@ class PersistResults(RequestStep):
             "org_id": company.org_id,
             "analyzed_at": datetime.now(UTC).isoformat(),
         }
-        self._company_repo.save_company(company_id, company_doc)
+        company_doc["id"] = company_id
+        self._company_repo.save(company_doc)
 
         # Persist assessment with risk scores
         assessment_id = ""
@@ -69,30 +73,31 @@ class PersistResults(RequestStep):
                 "tier": risk_assessment.tier,
                 "top_risks": risk_assessment.top_risks,
                 "analysis_summary": risk_assessment.analysis_summary,
+                "created_at": datetime.now(UTC).isoformat(),
             }
-            self._assessment_repo.save_assessment(assessment_id, assessment_doc)
+            assessment_doc["id"] = assessment_id
+            self._assessment_repo.save(assessment_doc)
 
-            # Persist individual risk scores
-            for rs in risk_assessment.risk_scores:
-                self._assessment_repo.save_risk_score(
-                    assessment_id,
-                    rs.category,
+            # Persist risk scores in batch
+            self._assessment_repo.batch_save_risk_scores(
+                assessment_id,
+                [
                     {
+                        "category": rs.category,
                         "score": rs.score,
-                        "explanation": rs.explanation,
-                        "evidence": rs.evidence,
-                    },
-                )
+                        "rationale": rs.rationale,
+                    }
+                    for rs in risk_assessment.risk_scores
+                ],
+            )
 
-        # Persist opportunities (only if we have a valid assessment to attach them to)
+        # Persist opportunities in batch (only if we have a valid assessment)
         if opportunity_result and risk_assessment:
-            for i, opp in enumerate(opportunity_result.opportunities):
-                self._assessment_repo.save_opportunity(
-                    assessment_id,
-                    i,
+            self._assessment_repo.batch_save_opportunities(
+                assessment_id,
+                [
                     {
                         "title": opp.title,
-                        "risk_mitigated": opp.risk_mitigated,
                         "impact_rating": opp.impact_rating,
                         "strategic_category": opp.strategic_category,
                         "description": opp.description,
@@ -101,8 +106,11 @@ class PersistResults(RequestStep):
                         "investment_range": opp.investment_range,
                         "roi_estimate": opp.roi_estimate,
                         "related_services": opp.related_services,
-                    },
-                )
+                        "value_lever": opp.value_lever,
+                    }
+                    for opp in opportunity_result.opportunities
+                ],
+            )
 
             # Save top actions as part of company metadata
             self._company_repo.update_company_metadata(
@@ -112,4 +120,29 @@ class PersistResults(RequestStep):
                 },
             )
 
+        # Persist value chain (only if we have a valid assessment to attach it to)
+        value_chain = company.value_chain
+        if value_chain and assessment_id:
+            self._assessment_repo.save_value_chain(
+                assessment_id,
+                {
+                    "steps": [step.model_dump() for step in value_chain.steps],
+                    "summary": value_chain.summary,
+                },
+            )
+
+        # Persist EBITDA tree (only if we have a valid assessment to attach it to)
+        ebitda_tree = company.ebitda_tree
+        if ebitda_tree and assessment_id:
+            self._assessment_repo.save_ebitda_tree(
+                assessment_id,
+                {
+                    "tree_data": [node.model_dump() for node in ebitda_tree.nodes],
+                    "revenue_estimate": ebitda_tree.revenue_estimate,
+                    "ebitda_estimate": ebitda_tree.ebitda_estimate,
+                    "business_model_summary": ebitda_tree.summary,
+                },
+            )
+
+        self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("persist_results")

@@ -5,6 +5,8 @@ Mirrors the engine's event model pattern for pipeline invocations.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -19,4 +21,4 @@ class JanusEvent(BaseModel):
     user_id: str = ""
     scan_id: str = ""
     company_name: str = ""
-    extra: dict = Field(default_factory=dict)
+    extra: dict[str, Any] = Field(default_factory=dict)

@@ -109,7 +109,7 @@ Authenticate a user and return their profile. Public — no auth required.
 
 #### `POST /api/scan/start`
 
-Start a new scan. For portfolio URLs, returns a list of discovered companies for confirmation. For standalone URLs, runs the full pipeline immediately and returns the analysis ID.
+Start a new scan. For portfolio URLs, discovers companies and returns them for confirmation. For standalone URLs, queues a single company analysis via SQS.
 
 **Request**
 ```json
@@ -136,11 +136,11 @@ Start a new scan. For portfolio URLs, returns a list of discovered companies for
 }
 ```
 
-**Response 200 — Standalone** (analysis runs synchronously)
+**Response 200 — Standalone** (analysis queued via SQS, poll for progress)
 ```json
 {
     "scanId": "550e8400-e29b-41d4-a716-446655440000",
-    "status": "complete",
+    "status": "running",
     "analysisId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
 }
 ```
@@ -154,13 +154,14 @@ Start a new scan. For portfolio URLs, returns a list of discovered companies for
 
 #### `GET /api/scan/{scanId}`
 
-Retrieve the current state of a scan, including all linked company analyses.
+Retrieve the current state of a scan, including progress and all linked company analyses. Progress is computed from per-company pipeline progress for real-time updates.
 
 **Response 200**
 ```json
 {
-    "status": "complete",
-    "progress": 100,
+    "status": "running",
+    "progress": 45,
+    "progressLabel": "Running AI risk assessment...",
     "type": "portfolio",
     "portfolioCompanies": [
         { "name": "Company A", "url": "https://company-a.com" }
@@ -174,7 +175,9 @@ Retrieve the current state of a scan, including all linked company analyses.
             "overallRiskScore": 7.2,
             "riskTier": "high",
             "error": null,
-            "analyzedAt": "2026-03-08T10:00:00Z"
+            "analyzedAt": "2026-03-08T10:00:00Z",
+            "pipelineProgress": 100,
+            "pipelineLabel": ""
         }
     ]
 }
@@ -183,19 +186,21 @@ Retrieve the current state of a scan, including all linked company analyses.
 | Field | Values |
 |---|---|
 | `status` | `running`, `awaiting_confirmation`, `complete`, `failed` |
-| `progress` | 0–100 integer |
+| `progress` | 0–100 integer (computed from per-company pipeline progress) |
+| `progressLabel` | Current pipeline stage label (e.g. "Running AI risk assessment...") |
+| `pipelineProgress` | Per-company pipeline progress (0–100), 0 if not started |
 | `riskTier` | `low`, `moderate`, `high`, `critical` |
 
 **Response 404**
 ```json
-{ "error": "Scan not found" }
+{ "error": "Not found" }
 ```
 
 ---
 
 #### `POST /api/scan/{scanId}/confirm`
 
-Confirm the list of portfolio companies to analyse. Triggers the AI pipeline for each company sequentially. Progress updates are stored in DynamoDB as each company completes.
+Confirm the list of portfolio companies to analyse. Queues each company as a separate SQS message for parallel processing by worker Lambdas.
 
 **Request**
 ```json
@@ -207,28 +212,20 @@ Confirm the list of portfolio companies to analyse. Triggers the AI pipeline for
 }
 ```
 
-**Response 200**
+**Response 202**
 ```json
 {
     "ok": true,
-    "results": [
-        {
-            "name": "Company A",
-            "status": "complete",
-            "analysisId": "550e8400-e29b-41d4-a716-446655440000"
-        },
-        {
-            "name": "Company B",
-            "status": "failed",
-            "error": "Could not scrape website"
-        }
+    "queued": [
+        { "name": "Company A", "analysisId": "550e8400-e29b-41d4-a716-446655440000" },
+        { "name": "Company B", "analysisId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" }
     ]
 }
 ```
 
-**Response 403**
+**Response 404**
 ```json
-{ "error": "Scan does not belong to your organisation" }
+{ "error": "Scan not found" }
 ```
 
 ---
@@ -247,86 +244,98 @@ Retrieve the full AI risk report for a single company.
     "industry": "B2B SaaS — Sales Intelligence",
     "overallRiskScore": 7.2,
     "riskTier": "high",
-    "analysisSummary": "Acme faces significant AI disruption risk, particularly from next-generation AI-native competitors entering their core market...",
+    "analysisSummary": "Acme Corp faces high AI disruption risk (overall: 7.2/10). Highest risk areas: competitive_displacement (8/10), technology_obsolescence (7/10), talent_workforce (7/10).",
     "topActions": [
-        "Invest in AI-powered product features to retain competitive position",
-        "Upskill sales and engineering teams on AI capabilities",
-        "Evaluate strategic acquisitions in the AI tooling space"
+        "Deploy AI-powered competitive intelligence platform",
+        "Modernise analytics engine with LLM integration",
+        "AI-driven customer success automation"
     ],
     "riskScores": [
         {
             "category": "competitive_displacement",
             "score": 8,
-            "explanation": "Multiple AI-native competitors (Outreach AI, Gong 2.0) are capturing market share with 10x lower CAC..."
-        },
-        {
-            "category": "talent_retention",
-            "score": 6,
-            "explanation": "Engineers are being poached by AI-first startups offering equity..."
-        },
-        {
-            "category": "operational_efficiency",
-            "score": 5,
-            "explanation": "Current ops stack has partial AI adoption but key workflows remain manual..."
-        },
-        {
-            "category": "market_dynamics",
-            "score": 7,
-            "explanation": "ICP is shifting toward smaller teams using AI-powered self-serve tools..."
-        },
-        {
-            "category": "regulatory_change",
-            "score": 3,
-            "explanation": "EU AI Act compliance is manageable; no immediate regulatory headwinds..."
-        },
-        {
-            "category": "supply_chain",
-            "score": 4,
-            "explanation": "Vendor concentration risk is moderate; primary API dependencies have alternatives..."
-        },
-        {
-            "category": "customer_consolidation",
-            "score": 6,
-            "explanation": "Mid-market customers are consolidating vendors; risk of churn to all-in-one platforms..."
+            "rationale": "AI-native competitors with demonstrably superior products visible in market..."
         },
         {
             "category": "technology_obsolescence",
             "score": 7,
-            "explanation": "Core NLP models will be commoditised by open-source alternatives within 18 months..."
+            "rationale": "Some components at risk but company shows modernisation signals..."
+        },
+        {
+            "category": "customer_behavior",
+            "score": 5,
+            "rationale": "Some customer segments exploring alternatives but core base appears stable..."
+        },
+        {
+            "category": "margin_compression",
+            "score": 6,
+            "rationale": "Some pricing pressure but company maintains premium positioning..."
+        },
+        {
+            "category": "talent_workforce",
+            "score": 7,
+            "rationale": "Core workforce functions partially automatable by current AI..."
+        },
+        {
+            "category": "regulatory_compliance",
+            "score": 3,
+            "rationale": "Minimal regulatory exposure to AI-specific rules..."
+        },
+        {
+            "category": "supply_chain",
+            "score": 3,
+            "rationale": "Minimal supply chain complexity, software-only model..."
+        },
+        {
+            "category": "data_ip",
+            "score": 5,
+            "rationale": "Some data assets at risk but company has unique data sources..."
         }
     ],
     "opportunities": [
         {
-            "title": "AI-Powered Prospecting Engine",
-            "description": "Integrate LLM-based signal detection into the prospecting workflow to surface intent signals 3x faster than rule-based systems.",
+            "title": "Deploy AI-powered competitive intelligence platform",
+            "description": "Deploy real-time AI monitoring of competitor moves to stay ahead of AI-native entrants.",
             "impact_rating": "High",
-            "timeline": "3–6 months",
-            "investment_range": "$500K–$1M",
-            "roi_estimate": "40–60% reduction in time-to-qualified-lead",
+            "strategic_category": "Competitive Moat",
+            "value_lever": "Revenue Side",
+            "timeline": "Medium-term (3-9 months)",
+            "investment_range": "$100K-$500K",
+            "roi_estimate": "30% improvement in competitive win rate within 12 months",
             "implementation_steps": [
-                "Audit current prospecting data pipeline",
-                "Select LLM provider and evaluate fine-tuning requirements",
-                "Build signal classification layer on top of existing CRM data",
-                "Run A/B test against current rule-based system",
-                "Roll out to full sales team"
+                "Audit current competitor tracking workflows",
+                "Deploy LLM-based monitoring on competitor product pages and job postings",
+                "Integrate alerts into existing sales and strategy dashboards"
             ],
             "related_services": [
-                {
-                    "service_type": "LLM Provider",
-                    "vendors": [
-                        { "name": "Anthropic", "url": "https://anthropic.com" },
-                        { "name": "OpenAI", "url": "https://openai.com" }
-                    ]
-                },
-                {
-                    "service_type": "Implementation Partner",
-                    "vendors": [
-                        { "name": "Accenture AI", "url": "https://accenture.com/ai" }
-                    ]
-                }
+                "Crayon - Competitive Intelligence",
+                "Klue - Win-Loss Analysis",
+                "Anthropic - LLM Provider"
             ]
         }
-    ]
+    ],
+    "ebitdaTree": {
+        "summary": "Acme Corp operates a SaaS business model with estimated annual revenue of $30M-$400M.",
+        "revenueEstimate": "$30M-$400M",
+        "ebitdaEstimate": "$4M-$140M (15-35% margin)",
+        "nodes": [
+            {
+                "id": "revenue",
+                "label": "Total Revenue",
+                "type": "revenue",
+                "valueRange": "$30M-$400M",
+                "children": [
+                    {
+                        "id": "subscriptions",
+                        "label": "Subscriptions",
+                        "type": "revenue",
+                        "valueRange": "$24M-$320M",
+                        "percentageOfParent": 80
+                    }
+                ]
+            }
+        ]
+    }
 }
 ```
 
@@ -334,23 +343,23 @@ Retrieve the full AI risk report for a single company.
 
 | Category | Description |
 |---|---|
-| `competitive_displacement` | AI-native competitors eating market share |
-| `talent_retention` | Ability to hire/retain engineers in an AI-first market |
-| `operational_efficiency` | AI adoption in internal operations |
-| `market_dynamics` | ICP and buyer behaviour shifts driven by AI |
-| `regulatory_change` | AI regulation exposure (EU AI Act, GDPR, etc.) |
-| `supply_chain` | API/vendor dependency and concentration risk |
-| `customer_consolidation` | Customer consolidation onto AI-first platforms |
-| `technology_obsolescence` | Core technology being commoditised by AI |
+| `competitive_displacement` | Risk of AI-native competitors capturing market share |
+| `technology_obsolescence` | Risk that core products/services become obsolete due to AI |
+| `customer_behavior` | Risk that customers adopt AI-powered alternatives |
+| `margin_compression` | Risk that AI enables competitors to operate at dramatically lower costs |
+| `talent_workforce` | Risk that AI automates key workforce functions |
+| `regulatory_compliance` | Risk from emerging AI regulations |
+| `supply_chain` | Risk that key suppliers are disrupted by AI |
+| `data_ip` | Risk that proprietary data or IP loses value |
 
 **Risk Tiers**
 
 | Tier | Score Range |
 |---|---|
-| `low` | 1.0–3.9 |
-| `moderate` | 4.0–5.9 |
-| `high` | 6.0–7.9 |
-| `critical` | 8.0–10.0 |
+| `critical` | 8.5–10.0 |
+| `high` | 6.5–8.4 |
+| `moderate` | 3.5–6.4 |
+| `low` | 1.0–3.4 |
 
 **Response 404**
 ```json

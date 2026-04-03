@@ -5,16 +5,8 @@ inputs:
     description: 'Python version to use'
     required: false
     default: '3.12'
-  app-id:
-    description: 'GitHub App ID for generating installation token (reserved for future use)'
-    required: false
-    default: ''
-  app-private-key:
-    description: 'GitHub App private key (reserved for future use)'
-    required: false
-    default: ''
   deploy-key:
-    description: 'SSH private key for accessing private GitHub dependencies'
+    description: 'SSH deploy key for accessing private GitHub dependencies'
     required: false
     default: ''
 
@@ -25,19 +17,15 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Configure git via SSH deploy key
+    - name: Configure SSH for private dependencies
       if: inputs.deploy-key != ''
       shell: bash
       run: |
         mkdir -p ~/.ssh
-        echo "${{ inputs.deploy-key }}" > ~/.ssh/janus_deploy_key
-        chmod 600 ~/.ssh/janus_deploy_key
+        echo "${{ inputs.deploy-key }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
-        cat >> ~/.ssh/config << 'EOF'
-        Host github.com
-          IdentityFile ~/.ssh/janus_deploy_key
-          StrictHostKeyChecking yes
-        EOF
+        printf 'Host github.com\n  IdentityFile ~/.ssh/deploy_key\n  StrictHostKeyChecking yes\n' >> ~/.ssh/config
         chmod 600 ~/.ssh/config
         git config --global url."git@github.com:".insteadOf "https://github.com/"
 

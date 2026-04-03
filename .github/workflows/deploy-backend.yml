@@ -1,4 +1,4 @@
-name: Deploy Backend
+name: Deploy Development
 
 on:
   push:
@@ -27,16 +27,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure SSH for private dependencies
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" > ~/.ssh/janus_deploy_key
-          chmod 600 ~/.ssh/janus_deploy_key
-          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
-          printf 'Host github.com\n  IdentityFile ~/.ssh/janus_deploy_key\n  StrictHostKeyChecking yes\n' >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
-          git config --global url."git@github.com:".insteadOf "https://github.com/"
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -48,9 +38,7 @@ jobs:
         run: npm install -g aws-cdk --silent
 
       - name: Install CDK Python dependencies
-        run: |
-          cd infrastructure
-          uv sync --quiet
+        run: cd infrastructure && uv sync --quiet
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -60,6 +48,9 @@ jobs:
           aws-region: ${{ secrets.DEV_AWS_REGION }}
 
       - name: CDK Bootstrap
+        env:
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=staging \
@@ -67,14 +58,12 @@ jobs:
             --quiet 2>&1 | grep -v "^$" || true
 
       - name: Encode deploy key for Docker bundling
-        env:
-          DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
-        run: echo "DEPLOY_KEY_B64=$(printf '%s' "$DEPLOY_KEY" | base64 -w 0)" >> $GITHUB_ENV
+        run: echo "DEPLOY_KEY_B64=$(printf '%s' "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" | base64 -w 0)" >> $GITHUB_ENV
 
       - name: CDK Deploy
         env:
           DEPLOY_KEY_B64: ${{ env.DEPLOY_KEY_B64 }}
-          GH_TOKEN: ${{ secrets.SIGNALFIELD_CORE_READ_TOKEN }}
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
@@ -101,7 +90,8 @@ jobs:
               for key, val in stack.items():
                   if 'ApiUrl' in key:
                       print(f'Backend API URL: {val}')
-                      break
+                  if 'AmplifyBranchUrl' in key:
+                      print(f'Frontend URL: {val}')
           except Exception as e:
               print(f'Could not read outputs: {e}', file=sys.stderr)
           "

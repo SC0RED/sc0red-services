@@ -8,6 +8,8 @@ from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import (
     Company,
     CompanyProfile,
+    EbitdaNode,
+    EbitdaTreeResult,
     Opportunity,
     OpportunityResult,
     RiskAssessment,
@@ -39,7 +41,7 @@ class TestPersistResults:
             ),
             opportunity_result=OpportunityResult(
                 opportunities=[
-                    Opportunity(title="Deploy AI", risk_mitigated="competitive_displacement"),
+                    Opportunity(title="Deploy AI", value_lever="Revenue Side"),
                 ],
                 top_three_immediate_actions=["Action 1"],
             ),
@@ -51,7 +53,6 @@ class TestPersistResults:
 
         mock_company_repo = MagicMock()
         mock_assessment_repo = MagicMock()
-        mock_assessment_repo.save_assessment.return_value = "assess-new"
 
         step = PersistResults(
             company_repo=mock_company_repo,
@@ -62,10 +63,20 @@ class TestPersistResults:
 
         step.execute()
 
-        mock_company_repo.save_company.assert_called_once()
-        mock_assessment_repo.save_assessment.assert_called_once()
-        assert mock_assessment_repo.save_risk_score.call_count == 2
-        assert mock_assessment_repo.save_opportunity.call_count == 1
+        mock_company_repo.save.assert_called_once()
+        mock_assessment_repo.save.assert_called_once()
+        mock_assessment_repo.batch_save_risk_scores.assert_called_once()
+        mock_assessment_repo.batch_save_opportunities.assert_called_once()
+
+        # Verify risk scores batch call content
+        risk_call_args = mock_assessment_repo.batch_save_risk_scores.call_args[0]
+        assert len(risk_call_args[1]) == 2  # 2 risk scores
+
+        # Verify opportunities batch call content
+        opp_call_args = mock_assessment_repo.batch_save_opportunities.call_args[0]
+        assert len(opp_call_args[1]) == 1  # 1 opportunity
+        assert opp_call_args[1][0]["value_lever"] == "Revenue Side"
+
         step._request_executor.mark_question_complete.assert_called_with("persist_results")
 
     def test_persist_company_id_none_raises(self):
@@ -85,6 +96,62 @@ class TestPersistResults:
 
         with pytest.raises(RuntimeError, match="Company ID must be set"):
             step.execute()
+
+    def test_persist_with_ebitda_tree(self):
+        company = self._make_full_company()
+        company.ebitda_tree = EbitdaTreeResult(
+            summary="SaaS economics overview",
+            revenue_estimate="$10M-$50M",
+            ebitda_estimate="$2M-$8M",
+            nodes=[
+                EbitdaNode(
+                    id="revenue",
+                    label="Total Revenue",
+                    type="revenue",
+                    description="All revenue",
+                    linked_opportunity_indices=[0],
+                ),
+            ],
+        )
+        accessor = CompanyAccessor(company)
+
+        mock_company_repo = MagicMock()
+        mock_assessment_repo = MagicMock()
+
+        step = PersistResults(
+            company_repo=mock_company_repo,
+            assessment_repo=mock_assessment_repo,
+        )
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        mock_assessment_repo.save_ebitda_tree.assert_called_once()
+        call_args = mock_assessment_repo.save_ebitda_tree.call_args[0]
+        ebitda_data = call_args[1]
+        assert ebitda_data["revenue_estimate"] == "$10M-$50M"
+        assert ebitda_data["ebitda_estimate"] == "$2M-$8M"
+        assert ebitda_data["business_model_summary"] == "SaaS economics overview"
+        assert len(ebitda_data["tree_data"]) == 1
+
+    def test_persist_without_ebitda_tree_skips(self):
+        company = self._make_full_company()
+        accessor = CompanyAccessor(company)
+
+        mock_company_repo = MagicMock()
+        mock_assessment_repo = MagicMock()
+
+        step = PersistResults(
+            company_repo=mock_company_repo,
+            assessment_repo=mock_assessment_repo,
+        )
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        mock_assessment_repo.save_ebitda_tree.assert_not_called()
 
     def test_persist_without_risk_assessment_skips_opportunities(self):
         company = Company(
@@ -110,5 +177,5 @@ class TestPersistResults:
 
         step.execute()
 
-        mock_assessment_repo.save_assessment.assert_not_called()
-        mock_assessment_repo.save_opportunity.assert_not_called()
+        mock_assessment_repo.save.assert_not_called()
+        mock_assessment_repo.batch_save_opportunities.assert_not_called()

@@ -33,6 +33,7 @@ class FactoryManager:
         scan_id: str,
         company_name: str = "",
         request_id: str | None = None,
+        document_text: str | None = None,
     ) -> dict[str, Any]:
         """Run a single company analysis pipeline."""
         if request_id is None:
@@ -49,7 +50,7 @@ class FactoryManager:
             tenant_id=org_id,
         )
 
-        executor = self._factories_factory.create_and_execute(event)
+        executor = self._factories_factory.create_and_execute(event, document_text=document_text)
 
         return {
             "request_id": request_id,

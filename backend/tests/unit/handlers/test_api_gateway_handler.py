@@ -1,38 +1,39 @@
 """Tests for APIGatewayHandler."""
 
+import base64
 import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.handlers.api_gateway_handler import APIGatewayHandler, _error, _json_response
+from src.handlers.api_gateway_handler import APIGatewayHandler, build_error, build_json_response
 
 
 class TestHelperFunctions:
-    def test_json_response_default_status(self):
-        result = _json_response({"key": "value"})
+    def test_build_json_response_default_status(self):
+        result = build_json_response({"key": "value"})
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["key"] == "value"
         assert "Content-Type" in result["headers"]
 
-    def test_json_response_custom_status(self):
-        result = _json_response({"ok": True}, 201)
+    def test_build_json_response_custom_status(self):
+        result = build_json_response({"ok": True}, 201)
         assert result["statusCode"] == 201
 
-    def test_json_response_cors_headers(self):
-        result = _json_response({})
+    def test_build_json_response_cors_headers(self):
+        result = build_json_response({})
         assert result["headers"]["Access-Control-Allow-Origin"] == "*"
         assert "Authorization" in result["headers"]["Access-Control-Allow-Headers"]
 
-    def test_error_response(self):
-        result = _error("bad request")
+    def test_build_error_response(self):
+        result = build_error("bad request")
         assert result["statusCode"] == 400
         body = json.loads(result["body"])
         assert body["error"] == "bad request"
 
-    def test_error_custom_status(self):
-        result = _error("not found", 404)
+    def test_build_error_custom_status(self):
+        result = build_error("not found", 404)
         assert result["statusCode"] == 404
 
 
@@ -110,7 +111,13 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 400
         assert "already registered" in json.loads(result["body"])["error"]
 
-    def test_register_success(self):
+    @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
+    @patch("src.handlers.auth_handlers.CognitoClient")
+    def test_register_success(self, mock_cognito_cls):
+        mock_cognito = MagicMock()
+        mock_cognito.create_user_with_password.return_value = "cognito-sub-123"
+        mock_cognito_cls.return_value = mock_cognito
+
         handler, storage = self._make_handler()
         user_repo = MagicMock()
         user_repo.has_email.return_value = False
@@ -136,6 +143,7 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
         assert body["success"] is True
+        mock_cognito.create_user_with_password.assert_called_once()
         org_repo.create.assert_called_once()
         user_repo.create.assert_called_once()
 
@@ -155,7 +163,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_start_single_company_enqueues_to_sqs(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         mock_sqs = MagicMock()
@@ -279,11 +289,13 @@ class TestAPIGatewayHandler:
         }
         scan_repo.get_scan_companies.return_value = [{"company_id": "c-1"}]
         company_repo = MagicMock()
-        company_repo.get_by_id.return_value = {
-            "id": "c-1",
-            "company_name": "Test",
-            "company_url": "https://test.com",
-        }
+        company_repo.get_by_ids.return_value = [
+            {
+                "id": "c-1",
+                "company_name": "Test",
+                "company_url": "https://test.com",
+            }
+        ]
         storage.create_scan_repository.return_value = scan_repo
         storage.create_company_repository.return_value = company_repo
 
@@ -334,7 +346,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_confirm_success(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         mock_sqs = MagicMock()
@@ -367,7 +381,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_confirm_partial_failure(self, mock_boto3, mock_authentication):
         """Companies without a URL are skipped; valid ones are still queued."""
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
@@ -401,7 +417,9 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch.dict("os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"})
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
     def test_scan_confirm_missing_url_in_company(self, mock_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         mock_sqs = MagicMock()
@@ -684,78 +702,62 @@ class TestAPIGatewayHandler:
         assert body["analyses"][0]["companyName"] == "Test"
 
 
-class TestLoginEndpoint:
+class TestConfigEndpoint:
     def _make_handler(self):
         storage = MagicMock()
         return APIGatewayHandler(storage=storage), storage
 
-    def test_login_missing_fields(self):
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch.dict("os.environ", {"APPSYNC_ENDPOINT": "https://appsync.example.com/graphql", "APPSYNC_API_KEY": "da2-fakekey123"})
+    def test_returns_appsync_config_from_env(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, _ = self._make_handler()
         result = handler.handle(
             {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": json.dumps({"email": "test@example.com"}),
-            }
-        )
-        assert result["statusCode"] == 400
-        assert "required" in json.loads(result["body"])["error"].lower()
-
-    def test_login_invalid_credentials(self):
-        handler, storage = self._make_handler()
-        user_repo = MagicMock()
-        user_repo.verify_password.return_value = None
-        storage.create_user_repository.return_value = user_repo
-
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": json.dumps({"email": "test@example.com", "password": "wrong"}),
-            }
-        )
-        assert result["statusCode"] == 401
-        assert "Invalid credentials" in json.loads(result["body"])["error"]
-
-    def test_login_success(self):
-        handler, storage = self._make_handler()
-        user_repo = MagicMock()
-        user_repo.verify_password.return_value = {
-            "id": "user-1",
-            "email": "test@example.com",
-            "name": "Test User",
-            "orgId": "org-1",
-            "role": "admin",
-        }
-        storage.create_user_repository.return_value = user_repo
-
-        result = handler.handle(
-            {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": json.dumps({"email": "test@example.com", "password": "correct"}),
+                "httpMethod": "GET",
+                "path": "/api/config",
+                "headers": {"Authorization": "Bearer valid-token"},
             }
         )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
-        assert body["success"] is True
-        assert body["user"]["email"] == "test@example.com"
-        assert body["user"]["orgId"] == "org-1"
+        assert body["appsyncEndpoint"] == "https://appsync.example.com/graphql"
+        assert body["appsyncApiKey"] == "da2-fakekey123"
 
-    def test_login_empty_body(self):
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch.dict("os.environ", {}, clear=False)
+    def test_returns_empty_strings_when_env_vars_not_set(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        # Remove the env vars if they exist
+        import os
+        os.environ.pop("APPSYNC_ENDPOINT", None)
+        os.environ.pop("APPSYNC_API_KEY", None)
+
         handler, _ = self._make_handler()
         result = handler.handle(
             {
-                "httpMethod": "POST",
-                "path": "/api/auth/login",
-                "headers": {},
-                "body": "{}",
+                "httpMethod": "GET",
+                "path": "/api/config",
+                "headers": {"Authorization": "Bearer valid-token"},
             }
         )
-        assert result["statusCode"] == 400
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["appsyncEndpoint"] == ""
+        assert body["appsyncApiKey"] == ""
+
+    def test_config_endpoint_requires_auth(self):
+        handler, _ = self._make_handler()
+        # No Authorization header at all
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/config",
+                "headers": {},
+            }
+        )
+        # Should fail without auth — 401
+        assert result["statusCode"] == 401
 
 
 class TestDashboardEndpoint:
@@ -829,6 +831,7 @@ class TestDashboardEndpoint:
                 "type": "portfolio",
                 "status": "complete",
                 "progress": 100,
+                "completed_count": 2,
                 "created_at": "2026-03-01",
             },
             {
@@ -863,3 +866,610 @@ class TestDashboardEndpoint:
         assert body["recentAnalyses"][0]["scanType"] == "portfolio"
         assert len(body["recentScans"]) == 2
         assert body["recentScans"][0]["completedCount"] == 2
+
+
+class TestDocumentEndpoints:
+    def _make_handler(self):
+        storage = MagicMock()
+        return APIGatewayHandler(storage=storage), storage
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_with_base64_content(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        file_content = base64.b64encode(b"Hello document text").decode()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "fileContent": file_content,
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 201
+        body = json.loads(result["body"])
+        assert body["filename"] == "test.txt"
+        assert body["fileType"] == "txt"
+        assert body["charCount"] == len("Hello document text")
+        assessment_repo.save_document.assert_called_once()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = None
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {"filename": "test.txt", "fileType": "txt", "fileContent": "aGVsbG8="}
+                ),
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_missing_fields(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, _ = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.txt"}),
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_unsupported_type(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.pptx",
+                        "fileType": "pptx",
+                        "fileContent": base64.b64encode(b"data").decode(),
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "Unsupported" in json.loads(result["body"])["error"]
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_no_assessment(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "fileContent": base64.b64encode(b"content").decode(),
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 404
+        assert "assessment" in json.loads(result["body"])["error"].lower()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_document_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/analysis/a-1/documents/doc-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        assessment_repo.delete_document.assert_called_once_with("assess-1", "doc-1")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_delete_document_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = None
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "DELETE",
+                "path": "/api/analysis/a-1/documents/doc-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_success(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_url": "https://test.com",
+            "scan_id": "scan-1",
+        }
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 202
+        body = json.loads(result["body"])
+        assert body["status"] == "queued"
+        mock_sqs.send_message.assert_called_once()
+        message_body = json.loads(mock_sqs.send_message.call_args[1]["MessageBody"])
+        assert message_body["reanalyze"] is True
+        assert message_body["analysis_id"] == "a-1"
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_no_company_url(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1", "company_url": ""}
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_reanalyze_not_found(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = None
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_upload_url_success(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_s3 = MagicMock()
+        mock_s3.generate_presigned_url.return_value = "https://s3.amazonaws.com/presigned"
+        mock_boto3.client.side_effect = lambda service, **kw: mock_s3
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/upload-url",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.pdf", "fileType": "pdf"}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["uploadUrl"] == "https://s3.amazonaws.com/presigned"
+        assert "documentKey" in body
+        assert body["documentKey"].startswith("uploads/a-1/")
+        mock_s3.generate_presigned_url.assert_called_once()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_upload_url_s3_not_configured(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, _ = self._make_handler()
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/upload-url",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.pdf", "fileType": "pdf"}),
+            }
+        )
+        assert result["statusCode"] == 501
+        assert "not configured" in json.loads(result["body"])["error"].lower()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_upload_url_missing_fields(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, _ = self._make_handler()
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/upload-url",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.pdf"}),
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_upload_url_rejects_unsupported_file_type(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, _ = self._make_handler()
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/upload-url",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.exe", "fileType": "exe"}),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "Unsupported" in json.loads(result["body"])["error"]
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_upload_url_rejects_path_traversal(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, _ = self._make_handler()
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/upload-url",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test", "fileType": "../../../etc/passwd"}),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "Unsupported" in json.loads(result["body"])["error"]
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_upload_url_analysis_not_found(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = None
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/upload-url",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.pdf", "fileType": "pdf"}),
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_create_document_with_s3_document_key(self, mock_boto3, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_s3 = MagicMock()
+        mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: b"Hello from S3")}
+        mock_boto3.client.side_effect = lambda service, **kw: mock_s3
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "documentKey": "uploads/a-1/abc.txt",
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 201
+        body = json.loads(result["body"])
+        assert body["filename"] == "test.txt"
+        assert body["charCount"] == len("Hello from S3")
+        mock_s3.get_object.assert_called_once_with(
+            Bucket="janus-documents-test", Key="uploads/a-1/abc.txt"
+        )
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_create_document_rejects_invalid_document_key_prefix(
+        self, mock_boto3, mock_authentication
+    ):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "documentKey": "uploads/OTHER-ANALYSIS/abc.txt",
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "Invalid documentKey" in json.loads(result["body"])["error"]
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "DOCUMENTS_BUCKET": "janus-documents-test",
+        },
+    )
+    def test_create_document_s3_key_not_found(self, mock_boto3, mock_authentication):
+        from botocore.exceptions import ClientError
+
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_s3 = MagicMock()
+        mock_s3.get_object.side_effect = ClientError(
+            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}, "GetObject"
+        )
+        mock_boto3.client.side_effect = lambda service, **kw: mock_s3
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "documentKey": "uploads/a-1/abc.txt",
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 404
+        assert "not found" in json.loads(result["body"])["error"].lower()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_s3_not_configured_with_document_key(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "filename": "test.txt",
+                        "fileType": "txt",
+                        "documentKey": "uploads/a-1/abc.txt",
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 500
+        assert "S3 not configured" in json.loads(result["body"])["error"]
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_create_document_no_content_or_key(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {"org_id": "org-1"}
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/documents",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"filename": "test.txt", "fileType": "txt"}),
+            }
+        )
+        assert result["statusCode"] == 400
+        assert "documentKey or fileContent required" in json.loads(result["body"])["error"]
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_includes_documents(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_name": "Test",
+            "metadata_json": "",
+        }
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_risk_scores.return_value = []
+        assessment_repo.get_opportunities.return_value = []
+        assessment_repo.get_ebitda_tree.return_value = None
+        assessment_repo.get_documents.return_value = [
+            {
+                "id": "doc-1",
+                "filename": "report.pdf",
+                "fileType": "pdf",
+                "charCount": 5000,
+                "uploadedAt": "2026-03-13T00:00:00",
+            }
+        ]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert len(body["documents"]) == 1
+        assert body["documents"][0]["filename"] == "report.pdf"

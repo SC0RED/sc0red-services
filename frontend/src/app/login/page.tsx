@@ -124,6 +124,7 @@ export default function LoginPage() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 autoComplete="email"
+                                aria-describedby={error ? 'login-error' : undefined}
                             />
                         </div>
 
@@ -141,19 +142,18 @@ export default function LoginPage() {
                                 required
                                 autoComplete="current-password"
                             />
+                            <div style={{ textAlign: 'right', marginTop: '0.375rem' }}>
+                                <Link
+                                    href="/forgot-password"
+                                    style={{ color: 'var(--accent-blue)', fontSize: '0.8125rem' }}
+                                >
+                                    Forgot password?
+                                </Link>
+                            </div>
                         </div>
 
                         {error && (
-                            <div
-                                style={{
-                                    padding: '0.75rem 1rem',
-                                    background: 'var(--risk-critical-bg)',
-                                    border: '1px solid rgba(239,68,68,0.3)',
-                                    borderRadius: 'var(--radius-md)',
-                                    color: 'var(--risk-critical)',
-                                    fontSize: '0.875rem',
-                                }}
-                            >
+                            <div id="login-error" role="alert" className="alert-error">
                                 {error}
                             </div>
                         )}
@@ -194,8 +194,6 @@ export default function LoginPage() {
                     </p>
                 </div>
             </div>
-
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
     )
 }

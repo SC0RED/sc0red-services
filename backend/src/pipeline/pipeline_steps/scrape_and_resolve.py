@@ -13,6 +13,7 @@ from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
 from src.data_strategies.web_scraper_strategy import WebScraperStrategy, scrape_url
+from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
@@ -39,10 +40,12 @@ class ScrapeAndResolveURL(RequestStep):
         """Scrape the initial URL and resolve the actual company website."""
         accessor = cast("CompanyAccessor", self.entity_accessor)
         url = accessor.company.url
+        timer = StepTimer("ScrapeAndResolveURL")
 
         # Stage 0: Scrape initial URL
-        scraper = WebScraperStrategy({"url": url})
-        text, metadata = scraper.execute()
+        with timer.measure("initial_scrape"):
+            scraper = WebScraperStrategy({"url": url})
+            text, metadata = scraper.execute()
 
         if not text or len(text.strip()) < _MIN_CONTENT_LENGTH:
             message = f"Insufficient content scraped from {url}"
@@ -53,31 +56,34 @@ class ScrapeAndResolveURL(RequestStep):
         accessor.set_scraped_title(metadata.get("title", ""))
 
         # Stage 1: Resolve actual URL
-        resolver = URLResolutionStrategy(
-            {
-                "url": url,
-                "scraped_text": text,
-                "scraped_title": metadata.get("title", ""),
-                "scraped_links": metadata.get("links", []),
-                "ai_client_factory": self._ai_client_factory,
-            }
-        )
-        actual_url, resolve_meta = resolver.execute()
+        with timer.measure("url_resolution"):
+            resolver = URLResolutionStrategy(
+                {
+                    "url": url,
+                    "scraped_text": text,
+                    "scraped_title": metadata.get("title", ""),
+                    "scraped_links": metadata.get("links", []),
+                    "ai_client_factory": self._ai_client_factory,
+                }
+            )
+            actual_url, resolve_meta = resolver.execute()
         accessor.set_actual_url(actual_url)
 
         # If resolved to a different URL, scrape it and combine content
         if resolve_meta.get("resolved"):
-            try:
-                actual_result = scrape_url(actual_url)
-                actual_text = actual_result.get("text", "")
-                if actual_text and len(actual_text.strip()) >= _MIN_CONTENT_LENGTH:
-                    combined = (
-                        f"[Context from portfolio listing ({url}):\n{text[:2000]}]\n\n"
-                        f"[Content from actual company website ({actual_url}):\n{actual_text}]"
-                    )
-                    accessor.set_scraped_text(combined)
-            except (httpx.RequestError, httpx.HTTPStatusError):
-                logger.warning("Failed to scrape resolved URL %s, using original", actual_url)
-                accessor.set_actual_url(url)
+            with timer.measure("resolved_url_scrape"):
+                try:
+                    actual_result = scrape_url(actual_url)
+                    actual_text = actual_result.get("text", "")
+                    if actual_text and len(actual_text.strip()) >= _MIN_CONTENT_LENGTH:
+                        combined = (
+                            f"[Context from portfolio listing ({url}):\n{text[:2000]}]\n\n"
+                            f"[Content from actual company website ({actual_url}):\n{actual_text}]"
+                        )
+                        accessor.set_scraped_text(combined)
+                except (httpx.RequestError, httpx.HTTPStatusError):
+                    logger.warning("Failed to scrape resolved URL %s, using original", actual_url)
+                    accessor.set_actual_url(url)
 
+        self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("scrape_and_resolve")

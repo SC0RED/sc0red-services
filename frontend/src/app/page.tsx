@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth/authOptions'
+import { TIER_COLORS } from '@/lib/utils/riskUtils'
 
 export default async function LandingPage() {
     const session = await getServerSession(authOptions)
@@ -84,13 +85,6 @@ export default async function LandingPage() {
         { name: 'Regulatory Risk', score: 3.1, tier: 'low' },
     ]
 
-    const tierColors: Record<string, string> = {
-        low: 'var(--risk-low)',
-        moderate: 'var(--risk-moderate)',
-        high: 'var(--risk-high)',
-        critical: 'var(--risk-critical)',
-    }
-
     return (
         <div style={{ minHeight: '100vh' }}>
             {/* Nav */}
@@ -145,8 +139,6 @@ export default async function LandingPage() {
             {/* Hero */}
             <section
                 style={{
-                    paddingTop: '140px',
-                    paddingBottom: '100px',
                     textAlign: 'center',
                     padding: '140px 2rem 100px',
                     position: 'relative',
@@ -354,7 +346,7 @@ export default async function LandingPage() {
                                                 style={{
                                                     height: '100%',
                                                     width: `${(r.score / 10) * 100}%`,
-                                                    background: tierColors[r.tier],
+                                                    background: TIER_COLORS[r.tier],
                                                     borderRadius: '3px',
                                                 }}
                                             />
@@ -364,7 +356,7 @@ export default async function LandingPage() {
                                                 width: '32px',
                                                 fontSize: '0.8rem',
                                                 fontWeight: 700,
-                                                color: tierColors[r.tier],
+                                                color: TIER_COLORS[r.tier],
                                                 textAlign: 'right',
                                             }}
                                         >

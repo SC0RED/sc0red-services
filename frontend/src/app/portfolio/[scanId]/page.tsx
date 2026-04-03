@@ -1,51 +1,33 @@
 import { getServerSession } from 'next-auth'
+import { notFound, redirect } from 'next/navigation'
 
 import { authOptions } from '@/lib/auth/authOptions'
 import { backendFetch } from '@/lib/api/serverToken'
+import { BackendError } from '@/lib/api/errors'
+import type { ScanData } from '@/lib/types/api'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import PortfolioView from './PortfolioView'
-
-interface ScanAnalysis {
-    id: string
-    companyName: string
-    companyUrl: string
-    industry: string
-    overallRiskScore: number | null
-    riskTier: string | null
-    error: string | null
-    analyzedAt: string | null
-}
-
-interface ScanData {
-    status: string
-    progress: number
-    type: string
-    portfolioCompanies: Array<{ name: string; url: string }>
-    analyses: ScanAnalysis[]
-}
 
 export default async function PortfolioPage({ params }: { params: { scanId: string } }) {
     const session = await getServerSession(authOptions)
     const orgId = session?.user?.orgId
 
     if (!session || !orgId) {
-        const { redirect } = await import('next/navigation')
         redirect('/login')
     }
 
     let scan: ScanData
     try {
         scan = await backendFetch<ScanData>(`/api/scan/${params.scanId}`)
-    } catch {
-        return <div style={{ padding: '2rem', color: 'var(--risk-critical)' }}>Scan not found</div>
+    } catch (error: unknown) {
+        if (error instanceof BackendError && error.status === 404) notFound()
+        throw error
     }
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh' }}>
+        <div className="page-layout">
             <DashboardSidebar />
-            <main
-                style={{ flex: 1, marginLeft: 'var(--sidebar-width)', padding: '2rem', maxWidth: '1200px' }}
-            >
+            <main id="main" tabIndex={-1} className="page-content-wide">
                 <PortfolioView scanId={params.scanId} initialScan={scan} />
             </main>
         </div>

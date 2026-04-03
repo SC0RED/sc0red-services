@@ -8,6 +8,11 @@
 - Changes touch handlers, services, providers, factories, repositories, or pipeline steps
 - Method signatures or interfaces were altered
 
+**The architecture reviewer MUST check all of the following:**
+1. Standard findings: dead code, unused parameters, fail-fast violations, swallowed exceptions, interface violations
+2. **Pattern consistency**: does the new code follow the mandatory codebase patterns below? If a pattern exists for this type of work, the new code MUST use it — not reinvent it.
+3. **Prompt externalization**: are any AI prompt strings inline in Python? They must be in `src/pipeline/prompts/`
+
 **This is a hard blocker. Do not commit until:**
 1. The architecture-reviewer agent has completed
 2. All CRITICAL findings are resolved
@@ -33,6 +38,83 @@ This means:
 3. Did I replace an old module? → Remove the old module and its tests entirely
 
 If local dev exercises different code than production, bugs will only appear in deployment. This rule exists because that exact scenario happened.
+
+---
+
+## MANDATORY: Codebase Patterns
+
+Before writing new code, **search the codebase for how similar work is already done**. These patterns are mandatory — not suggestions. Using a different approach (even if it works) creates inconsistency that compounds over time.
+
+### Pipeline Work → `RequestStep` subclass
+
+All AI pipeline work MUST be a `signalfield_core.pipeline.step.RequestStep` subclass, wired into a pipeline factory. Never put AI calls in handlers, standalone scripts, or utility functions.
+
+```python
+# Wrong — AI call in a standalone utility function
+def validate_companies(companies, ai_factory):
+    with ThreadPoolExecutor() as pool:
+        results = pool.map(lambda c: ai_factory.get_client().query_structured(...), companies)
+
+# Right — proper pipeline step
+class ValidatePortfolioCompanies(RequestStep):
+    def __init__(self, ai_client_factory=None):
+        super().__init__()
+        self._ai_client_factory = ai_client_factory
+    def execute(self):
+        # Uses FutureManager, run_structured_ai_call, etc.
+```
+
+### Parallel AI Calls → `FutureManager` + `run_structured_ai_call`
+
+All parallel AI calls MUST use `signalfield_core.utilities.future_manager.FutureManager` (not `ThreadPoolExecutor`, `asyncio`, or `concurrent.futures` directly). Each individual call MUST go through `src.pipeline.pipeline_steps.ai_call.run_structured_ai_call`.
+
+```python
+# Wrong — raw ThreadPoolExecutor
+with ThreadPoolExecutor(max_workers=10) as pool:
+    futures = [pool.submit(client.query_structured, ...) for c in companies]
+
+# Right — FutureManager + shared AI call function
+with FutureManager(name="StepName", max_workers=10) as manager:
+    for i, company in enumerate(companies):
+        manager.submit_task(self._validate_one, prompt, schema, system_prompt, f"label_{i}")
+    results = manager.wait_for_all_and_collect_results()
+
+def _validate_one(self, prompt, schema, system_prompt, label):
+    return run_structured_ai_call(
+        ai_client_factory=self._ai_client_factory,
+        user_prompt=prompt, schema=schema, system_prompt=system_prompt,
+        label=label, step_name="StepName",
+    )
+```
+
+### AI Prompts → External Files
+
+All AI prompt text MUST be in `src/pipeline/prompts/` — never inline in Python code.
+
+| Content | Location | Loaded via |
+|---------|----------|-----------|
+| System prompts | `prompts/system/{name}.md` | `load_system_prompt(name)` |
+| User prompt templates | `prompts/templates/{name}.md` | `load_template(name)` |
+| Calibration guides | `prompts/guides/{name}.md` | `load_guide(name)` |
+| Output schemas | `prompts/schemas/{name}.json` | `load_schema(name)` |
+
+### HTML Templates → External Files
+
+HTML content (email templates, rendered pages) MUST be in external `.html` files — never inline as Python string constants. Load at module level via `Path.read_text()`.
+
+| Content | Location | Example |
+|---------|----------|---------|
+| Email templates | `src/handlers/templates/{name}.html` | `invitation_email.html` |
+
+### Handler Functions → Focused Modules
+
+API handlers are standalone functions in focused modules (`auth_handlers.py`, `scan_handlers.py`, `analysis_handlers.py`, `document_handlers.py`). Each receives explicit dependencies — no class state. The main `api_gateway_handler.py` only does routing + dispatch.
+
+### Pipeline Factory Wiring
+
+New pipeline steps are wired through the factory chain: `FactoryManager` → `JanusFactoriesFactory` → `CompanyAnalysisFactory` (or `PortfolioScanFactory`) → step list. Never call pipeline steps directly from handlers.
+
+These patterns exist because inconsistency was the #1 source of bugs in this codebase. Every "quick shortcut" that bypassed these patterns eventually had to be rewritten.
 
 ---
 
@@ -85,6 +167,88 @@ try:
 except PipelineError as e:
     return {"status": "failed", "error": str(e)}
 ```
+
+---
+
+## File Size Limits
+
+- **Backend**: No Python file over 400 lines. Split into focused modules at natural boundaries.
+- **Frontend**: No component over 360 lines. Extract sub-components.
+- If a file exceeds these limits, **split it before adding more code**.
+- Enforced by ruff `max-lines=400` for Python. Frontend is a manual check.
+
+These limits exist because two God objects (APIGatewayHandler at 806 lines, AnalysisDetail at 1,065 lines) accumulated incrementally — no single PR was the problem, but no gate flagged the growth.
+
+---
+
+## DynamoDB Patterns (Non-Negotiable)
+
+- Every `query()` call MUST handle pagination via `LastEvaluatedKey` — DynamoDB silently truncates results at 1MB.
+- Never call `get_by_id()` in a loop — use `batch_get_item()` for multiple reads. The `DynamoDBTable.batch_get()` and `CompanyRepository.get_by_ids()` methods exist for this.
+- Store computed counts on the record at write time (e.g., `completed_count` on scan records) rather than re-counting with queries at read time.
+
+These rules exist because silent pagination bugs and N+1 query patterns were found in production code that passed all tests (tests used small data).
+
+---
+
+## Exception Handling in Workers
+
+SQS/Lambda worker handlers must catch ONLY domain-specific exceptions (`EngineError`, `ValueError`, `RuntimeError`), not bare `Exception`. Programming errors (`AttributeError`, `KeyError`, `TypeError`) must propagate to:
+1. Trigger SQS retry via `batchItemFailures`
+2. Surface in CloudWatch as stack traces, not silent "analysis failed" messages
+
+```python
+# Wrong — hides bugs as user-visible errors
+except Exception as error:
+    record_failure(str(error))
+
+# Right — only catch expected domain errors
+except (EngineError, ValueError, RuntimeError) as error:
+    record_failure(str(error))
+# Programming errors propagate to SQS retry + CloudWatch
+```
+
+---
+
+## Cross-File Duplication
+
+Before defining a constant, color map, interface, or utility function, **search the codebase for existing definitions**. Common shared locations:
+
+| Area | Shared Location |
+|------|----------------|
+| Backend models/literals | `src/models/model_literals.py` |
+| Backend utilities | `src/utilities/` |
+| Frontend types | `src/lib/types/api.ts` |
+| Frontend risk utilities | `src/lib/utils/riskUtils.ts` |
+| Frontend lever colors | `src/lib/utils/leverColors.ts` |
+| Frontend API errors | `src/lib/api/routeError.ts` |
+| SQS message schemas | `src/handlers/sqs_messages.py` |
+| DynamoDB table setup | `scripts/setup_dynamodb.py` |
+| Deploy script helpers | `scripts/lib/common.sh` |
+
+If it exists, import it. If it doesn't, put it in the shared location — not inline.
+
+---
+
+## Infrastructure Defaults
+
+Non-development deployments MUST NOT use fallback default values for:
+- **CORS origins**: must specify exact `FRONTEND_DOMAIN` (CDK synth fails without it)
+- **NEXTAUTH_SECRET**: must be a unique production secret (CDK synth fails without it)
+- **PITR**: enabled for production DynamoDB table
+
+These guards are enforced in `infrastructure/stacks/janus_stack.py`. If adding new infrastructure that has security-relevant defaults, add the same pattern: fail-fast at synth for non-development environments.
+
+---
+
+## Codebase Audit
+
+Run `make audit` periodically (or use `/audit` in Claude Code) to check for:
+- Files exceeding size limits
+- Infrastructure configuration drift
+- Common anti-patterns (bare exceptions, .get() on required fields, hardcoded secrets)
+
+The audit also runs automatically in CI on every PR via the `audit` job.
 
 ---
 

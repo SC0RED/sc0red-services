@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 export default function DeleteAnalysisButton({
     analysisId,
-    companyName: _companyName,
+    companyName,
     variant = 'icon',
     redirectTo,
 }: {
@@ -17,18 +17,24 @@ export default function DeleteAnalysisButton({
     const router = useRouter()
     const [confirming, setConfirming] = useState(false)
     const [deleting, setDeleting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
     async function handleDelete() {
+        setError(null)
         setDeleting(true)
         try {
             const res = await fetch(`/api/analysis/${analysisId}`, { method: 'DELETE' })
-            if (res.ok) {
-                if (redirectTo) {
-                    router.push(redirectTo)
-                } else {
-                    router.refresh()
-                }
+            if (!res.ok) {
+                setError('Delete failed. Please try again.')
+                return
             }
+            if (redirectTo) {
+                router.push(redirectTo)
+            } else {
+                router.refresh()
+            }
+        } catch {
+            setError('Network error. Please try again.')
         } finally {
             setDeleting(false)
             setConfirming(false)
@@ -54,7 +60,7 @@ export default function DeleteAnalysisButton({
                         maxWidth: '120px',
                     }}
                 >
-                    Delete?
+                    Delete {companyName}?
                 </span>
                 <button
                     onClick={handleDelete}
@@ -79,6 +85,7 @@ export default function DeleteAnalysisButton({
                 >
                     No
                 </button>
+                {error && <span style={{ fontSize: '0.75rem', color: 'var(--risk-critical)' }}>{error}</span>}
             </div>
         )
     }
@@ -98,9 +105,17 @@ export default function DeleteAnalysisButton({
     return (
         <button
             onClick={() => setConfirming(true)}
-            className="btn btn-ghost btn-sm"
             title="Delete analysis"
-            style={{ color: 'var(--text-tertiary)', padding: '0.25rem 0.5rem' }}
+            style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-primary)',
+                padding: '0.375rem',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+            }}
         >
             <svg
                 width="14"

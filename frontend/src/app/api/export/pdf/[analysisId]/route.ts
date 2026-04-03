@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { BackendError } from '@/lib/api/errors'
 import { backendFetch } from '@/lib/api/serverToken'
 import type { AnalysisData, Opportunity, RiskScore } from '@/lib/types/api'
+import { TIER_COLORS_HEX } from '@/lib/utils/riskUtils'
 
 function escapeHtml(text: string | null | undefined): string {
     if (!text) return ''
@@ -18,13 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
     try {
         const analysis = await backendFetch<AnalysisData>(`/api/analysis/${params.analysisId}`)
 
-        const tierColors: Record<string, string> = {
-            low: '#22C55E',
-            moderate: '#F59E0B',
-            high: '#F97316',
-            critical: '#EF4444',
-        }
-        const tierColor = (analysis.riskTier && tierColors[analysis.riskTier]) || '#8B9AC4'
+        const tierColor = (analysis.riskTier && TIER_COLORS_HEX[analysis.riskTier]) || '#8B9AC4'
 
         const riskScores: RiskScore[] = analysis.riskScores || []
         const opportunities: Opportunity[] = analysis.opportunities || []
@@ -111,7 +106,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
         <div class="bar"><div class="bar-fill" style="width:${(rs.score / 10) * 100}%;background:${sc};"></div></div>
         <div style="width:30px;font-weight:700;color:${sc};text-align:right;">${rs.score}</div>
       </div>
-      ${rs.explanation ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${escapeHtml(rs.explanation)}</p>` : ''}
+      ${rs.rationale ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${escapeHtml(rs.rationale)}</p>` : ''}
     </div>`
       })
       .join('')}
@@ -126,6 +121,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
     <div style="margin-bottom:0.875rem;">
       <span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);margin-right:0.5rem;">${escapeHtml(opp.impact_rating)} Impact</span>
       <span class="badge" style="background:rgba(139,154,196,0.08);color:#8B9AC4;border:1px solid rgba(139,154,196,0.15);">${escapeHtml(opp.timeline)}</span>
+      ${opp.value_lever ? `<span class="badge" style="background:rgba(${opp.value_lever === 'Revenue Side' ? '34,197,94' : opp.value_lever === 'Cost Side' ? '167,139,250' : '6,182,212'},0.1);color:${opp.value_lever === 'Revenue Side' ? '#22C55E' : opp.value_lever === 'Cost Side' ? '#A78BFA' : '#06B6D4'};border:1px solid rgba(${opp.value_lever === 'Revenue Side' ? '34,197,94' : opp.value_lever === 'Cost Side' ? '167,139,250' : '6,182,212'},0.2);margin-left:0.5rem;">${escapeHtml(opp.value_lever)}</span>` : ''}
     </div>
     <p>${escapeHtml(opp.description)}</p>
     ${
@@ -157,6 +153,21 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
   </div>`
       )
       .join('')}
+
+  <!-- EBITDA Impact Model -->
+  ${
+      analysis.ebitdaTree
+          ? `
+  <h2 style="margin-top:3rem;">EBITDA Impact Model</h2>
+  <div style="margin-bottom:1rem;">
+    ${analysis.ebitdaTree.revenueEstimate ? `<span class="badge" style="background:rgba(34,197,94,0.1);color:#22C55E;border:1px solid rgba(34,197,94,0.2);margin-right:0.5rem;">Revenue: ${escapeHtml(analysis.ebitdaTree.revenueEstimate)}</span>` : ''}
+    ${analysis.ebitdaTree.ebitdaEstimate ? `<span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);">EBITDA: ${escapeHtml(analysis.ebitdaTree.ebitdaEstimate)}</span>` : ''}
+  </div>
+  ${analysis.ebitdaTree.businessModelSummary ? `<p>${escapeHtml(analysis.ebitdaTree.businessModelSummary)}</p>` : ''}
+  <p class="meta" style="font-style:italic;">Interactive EBITDA tree visualisation available in the web application.</p>
+  `
+          : ''
+  }
 </div>
 </body>
 </html>`

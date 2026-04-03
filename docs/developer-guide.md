@@ -221,7 +221,7 @@ backend/tests/
 ### Coverage requirements
 
 - **Floor**: 95% (enforced by `--cov-fail-under=95` in CI)
-- **Current**: 98.50%
+- **Current**: ~98%
 - Coverage report: `htmlcov/index.html` after running with `--cov-report=html`
 
 ### Mocking strategy
@@ -377,7 +377,7 @@ pre-commit run --all-files
 |---|---|
 | **Branch name** | Must follow `type/TICKET-description` format |
 | **pip-audit** | Python dependency vulnerability scan |
-| **Frontend tests** | `npm run test` — all 56 tests must pass |
+| **Frontend tests** | `npm run test` — all tests must pass |
 
 ### Running individual checks manually
 
@@ -513,54 +513,72 @@ Janus uses a single-table design with 4 GSIs. All entities share the same table 
 
 ## AI Pipeline Deep Dive
 
-The pipeline is implemented as a `signalfield_core.PipelineExecutor` and executes 5 steps sequentially for each company.
+The pipeline is implemented as a `signalfield_core.PipelineExecutor` and executes 5 steps sequentially for each company. Steps 1–2 run multiple AI calls in parallel internally.
 
 ```
 URL
  │
  ▼
-Step 0–1: ScrapeAndResolveURL
+Step 1: ScrapeAndResolveURL                     [1 AI call]
   ├─ Scrape the provided URL (BeautifulSoup + httpx)
   ├─ If portfolio page: AI resolves the actual company URL
   └─ Scrape the resolved URL if different
  │
  ▼
-Step 2: ExtractProfile
-  ├─ Input: scraped content
-  └─ AI extracts: company_name, industry, description, employees, revenue_estimate, ...
+Step 2: ParallelProfileRiskAndIdeation          [11 AI calls in parallel]
+  ├─ 1 profile extraction (company_name, industry, business_model, ...)
+  ├─ 2 risk assessment batches (4 categories each, split by theme)
+  │   Batch A: competitive_displacement, technology_obsolescence,
+  │            customer_behavior, margin_compression
+  │   Batch B: talent_workforce, regulatory_compliance,
+  │            supply_chain, data_ip
+  ├─ 8 opportunity ideation calls (one per risk category)
+  ├─ Risk aggregates computed programmatically (mean score → tier)
+  ├─ Quality gate: filters Low-impact ideations from low-risk categories
+  └─ Deduplication + ranking → top N ideations for detail phase
  │
  ▼
-Step 3: AssessRisk
-  ├─ Input: scraped content + company profile
-  └─ AI scores 8 risk categories (1–10) + overall score + tier
+Step 3: DetailOpportunities                     [N AI calls in parallel]
+  ├─ One detail call per ranked ideation (typically 3–5)
+  └─ Adds: 3 implementation steps, timeline, investment range,
+     ROI estimate, vendor recommendations
  │
  ▼
-Step 4: GenerateOpportunities
-  ├─ Input: risk assessment + company profile
-  └─ AI generates 3–5 strategic investment opportunities with ROI, timeline, vendors
+Step 4: ComputeEbitdaTree                       [0 AI calls — programmatic]
+  ├─ Builds P&L tree from company profile using industry templates
+  ├─ 5 business model templates (SaaS, Services, E-commerce,
+  │   Manufacturing, Financial Services)
+  └─ Links opportunities to EBITDA nodes by value_lever
  │
  ▼
-Step 5: PersistResults
-  ├─ Updates company record with risk score, tier, industry, analyzed_at
-  ├─ Saves risk scores to DynamoDB (one item per category)
-  ├─ Saves opportunities to DynamoDB
-  └─ Marks scan progress → 100%
+Step 5: PersistResults                          [0 AI calls]
+  ├─ Saves company record (risk score, tier, industry, analyzed_at)
+  ├─ Saves risk scores (one DynamoDB item per category)
+  ├─ Saves opportunities
+  ├─ Saves EBITDA tree
+  └─ Pipeline progress updates written to company record throughout
 ```
+
+Total AI calls per analysis: **~15** (1 URL + 1 profile + 2 risk + 8 ideation + ~3 detail)
+
+### AI calibration guides
+
+Two guides are appended to system prompts to improve consistency:
+- `risk_scoring_guide.py` → appended to risk assessment calls (score range anchors, category-specific calibration, anti-patterns)
+- `ideation_guide.py` → appended to ideation calls (specificity standards, quality gate, observable proxy patterns)
 
 ### Adding a new pipeline step
 
-1. Create `backend/src/pipeline/pipeline_steps/my_step.py` implementing the `PipelineStep` protocol
-2. Add it to `backend/src/pipeline/pipeline_factories/company_analysis_factory.py`
-3. Update `backend/src/pipeline/request_executor.py` to call the new step
-4. Write tests in `backend/tests/unit/pipeline_steps/test_my_step.py` with a mocked AI client
+1. Create `backend/src/pipeline/pipeline_steps/my_step.py` extending `signalfield_core.pipeline.step.RequestStep`
+2. Add it to `backend/src/pipeline/pipeline_factories/company_analysis_factory.py` in `get_pipeline()`
+3. Add a progress entry in `backend/src/pipeline/request_executor.py` `_PROGRESS_MAP`
+4. Write tests in `backend/tests/unit/pipeline/test_my_step.py` with a mocked AI client
 
 ### AI client configuration
 
-The pipeline uses `signalfield_core.AIClientFactory`. Per-step configuration:
+The pipeline uses `signalfield_core.AIClientFactory`. All AI calls use:
 
-| Step | Verbosity | Reasoning | Precision | Notes |
-|---|---|---|---|---|
-| URLResolution | LOW | MINIMAL | STANDARD | Short output (just a URL) |
-| ExtractProfile | MEDIUM | LOW | STANDARD | Structured extraction |
-| AssessRisk | MEDIUM | MEDIUM | STANDARD | Scoring requires reasoning |
-| GenerateOpportunities | HIGH | MEDIUM | STANDARD | Long output (5 opportunities) |
+| Step | Verbosity | Reasoning | Precision |
+|---|---|---|---|
+| URL Resolution | LOW | LOW | STANDARD |
+| Profile / Risk / Ideation / Detail | MEDIUM | LOW | STANDARD |

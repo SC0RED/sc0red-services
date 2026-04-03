@@ -20,12 +20,12 @@ _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
-_HEADERS = {
+SCRAPER_HEADERS = {
     "User-Agent": _USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
-_TIMEOUT = 15.0
+SCRAPER_TIMEOUT = 15.0
 _MAX_TEXT_LENGTH = 20_000
 
 
@@ -45,8 +45,8 @@ def scrape_url(url: str) -> dict[str, Any]:
     """
     normalized = normalize_url(url)
 
-    with httpx.Client(follow_redirects=True, timeout=_TIMEOUT) as client:
-        response = client.get(normalized, headers=_HEADERS)
+    with httpx.Client(follow_redirects=True, timeout=SCRAPER_TIMEOUT) as client:
+        response = client.get(normalized, headers=SCRAPER_HEADERS)
         response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")

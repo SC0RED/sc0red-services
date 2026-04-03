@@ -1,4 +1,4 @@
-.PHONY: help install lint lint-quick test check check-all format security naming setup-db dev backend frontend clean docker-up docker-down e2e
+.PHONY: help install lint lint-quick test check format security naming setup-db dev backend frontend clean docker-up docker-down e2e
 
 # Colors for output
 BLUE := \033[0;34m
@@ -43,7 +43,7 @@ test: ## Run backend tests with 95% coverage requirement
 
 security: ## Run security checks (bandit + pip-audit)
 	cd backend && bandit -r src/
-	cd backend && pip-audit
+	cd backend && pip-audit --ignore-vuln CVE-2026-4539  # pygments — no fix available yet
 
 naming: ## Check naming conventions, abbreviations, imports, and skip comments
 	@echo "$(BLUE)Checking naming conventions...$(NC)"
@@ -58,11 +58,11 @@ naming: ## Check naming conventions, abbreviations, imports, and skip comments
 # COMBINED CHECKS
 # =============================================================================
 
-check: lint test security naming ## Run ALL checks (lint + test + security + naming)
-	@echo "$(GREEN)All local checks passed$(NC)"
+audit: ## Run codebase audit (file sizes, anti-patterns, infra guards)
+	@./scripts/audit.sh
 
-check-all: check ## Run all checks (same as check)
-	@echo "$(GREEN)Completed all checks$(NC)"
+check: lint test security naming audit ## Run ALL checks (lint + test + security + naming + audit)
+	@echo "$(GREEN)All local checks passed$(NC)"
 
 # =============================================================================
 # FORMATTING
@@ -78,44 +78,15 @@ format: ## Auto-fix lint issues and format code
 # =============================================================================
 
 setup-db: ## Create DynamoDB table with GSIs (for local dev)
-	cd backend && python -c "\
-	import boto3; \
-	ddb = boto3.client('dynamodb', endpoint_url='http://localhost:8000', region_name='us-east-1'); \
-	try: \
-	    ddb.create_table( \
-	        TableName='janus-dev', \
-	        KeySchema=[{'AttributeName': 'pk', 'KeyType': 'HASH'}, {'AttributeName': 'sk', 'KeyType': 'RANGE'}], \
-	        AttributeDefinitions=[ \
-	            {'AttributeName': 'pk', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'sk', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI1PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI1SK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI2PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI2SK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI3PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI3SK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI4PK', 'AttributeType': 'S'}, \
-	            {'AttributeName': 'GSI4SK', 'AttributeType': 'S'}, \
-	        ], \
-	        GlobalSecondaryIndexes=[ \
-	            {'IndexName': 'GSI1', 'KeySchema': [{'AttributeName': 'GSI1PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI1SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	            {'IndexName': 'GSI2', 'KeySchema': [{'AttributeName': 'GSI2PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI2SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	            {'IndexName': 'GSI3', 'KeySchema': [{'AttributeName': 'GSI3PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI3SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	            {'IndexName': 'GSI4', 'KeySchema': [{'AttributeName': 'GSI4PK', 'KeyType': 'HASH'}, {'AttributeName': 'GSI4SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}, \
-	        ], \
-	        BillingMode='PAY_PER_REQUEST', \
-	    ); \
-	    print('Table created') \
-	except ddb.exceptions.ResourceInUseException: \
-	    print('Table already exists') \
-	"
+	python3 scripts/setup_dynamodb.py --table janus-dev --endpoint http://localhost:8000
 
 dev: lint-quick ## Start all services (lint must pass first)
 	@echo ""
 	@echo "$(GREEN)All checks passed - Starting services...$(NC)"
 	@echo "Starting DynamoDB Local..."
 	docker compose up -d dynamodb-local
-	@sleep 2
+	@echo "Waiting for DynamoDB..."
+	@until curl -sf http://localhost:8000 -o /dev/null 2>&1; do sleep 1; done
 	$(MAKE) setup-db
 	@echo "Starting backend on :8001..."
 	cd backend && uvicorn src.local_server:app --port 8001 --reload &
@@ -132,7 +103,8 @@ frontend: ## Start frontend only
 dev-unsafe: ## Start dev without lint checks (debugging only)
 	@echo "$(RED)WARNING: Running WITHOUT lint checks!$(NC)"
 	docker compose up -d dynamodb-local
-	@sleep 2
+	@echo "Waiting for DynamoDB..."
+	@until curl -sf http://localhost:8000 -o /dev/null 2>&1; do sleep 1; done
 	$(MAKE) setup-db
 	cd backend && uvicorn src.local_server:app --port 8001 --reload &
 	cd frontend && npm run dev
