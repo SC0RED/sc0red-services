@@ -5,15 +5,12 @@ Run with: uvicorn src.local_server:app --port 8001 --reload
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from fastapi import FastAPI, Response
-
-if TYPE_CHECKING:
-    from fastapi import Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.handlers.handler import handler
+from src.handlers.api_handler_entry import handle_api_event
 
 app = FastAPI(title="Janus Backend (Local Dev)")
 
@@ -43,7 +40,7 @@ async def _lambda_proxy(request: Request, method: str) -> Response:
         "requestContext": {"stage": "local"},
     }
 
-    result = handler(event, None)
+    result = handle_api_event(event, None)
 
     return Response(
         content=result.get("body", ""),
@@ -53,7 +50,13 @@ async def _lambda_proxy(request: Request, method: str) -> Response:
     )
 
 
+@app.get("/api/health")
+async def get_health() -> dict[str, str]:
+    """Return a simple health check response."""
+    return {"status": "ok"}
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def catch_all(request: Request) -> Response:
+async def handle_catch_all(request: Request) -> Response:
     """Route all HTTP methods to the Lambda handler proxy."""
     return await _lambda_proxy(request, request.method)

@@ -5,9 +5,9 @@ from __future__ import annotations
 from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
 from src.repositories.dynamodb.client import DynamoDBTable
 from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
-from src.repositories.dynamodb.request_repository import DynamoDBRequestRepository
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 from src.repositories.dynamodb.user_repository import (
+    DynamoDBInvitationRepository,
     DynamoDBOrganizationRepository,
     DynamoDBUserRepository,
 )
@@ -32,10 +32,6 @@ class DynamoDBStorageProvider:
         """Return a new DynamoDBAssessmentRepository backed by the shared table."""
         return DynamoDBAssessmentRepository(self._table)
 
-    def create_request_repository(self) -> DynamoDBRequestRepository:
-        """Return a new DynamoDBRequestRepository backed by the shared table."""
-        return DynamoDBRequestRepository(self._table)
-
     def create_scan_repository(self) -> DynamoDBScanRepository:
         """Return a new DynamoDBScanRepository backed by the shared table."""
         return DynamoDBScanRepository(self._table)
@@ -43,6 +39,10 @@ class DynamoDBStorageProvider:
     def create_user_repository(self) -> DynamoDBUserRepository:
         """Return a new DynamoDBUserRepository backed by the shared table."""
         return DynamoDBUserRepository(self._table)
+
+    def create_invitation_repository(self) -> DynamoDBInvitationRepository:
+        """Return a new DynamoDBInvitationRepository backed by the shared table."""
+        return DynamoDBInvitationRepository(self._table)
 
     def create_organization_repository(self) -> DynamoDBOrganizationRepository:
         """Return a new DynamoDBOrganizationRepository backed by the shared table."""

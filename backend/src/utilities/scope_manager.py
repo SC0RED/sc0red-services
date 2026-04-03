@@ -125,11 +125,16 @@ class RiskScopeManager:
         },
     }
 
+    @classmethod
+    def get_scope_names(cls) -> list[str]:
+        """Return sorted list of available risk scope names."""
+        return sorted(cls._SCOPE_CONFIG.keys())
+
     def __init__(self, scope: str) -> None:
         if scope not in self._SCOPE_CONFIG:
             valid = sorted(self._SCOPE_CONFIG.keys())
-            msg = f"Unknown risk scope: {scope}. Valid scopes: {valid}"
-            raise ValueError(msg)
+            message = f"Unknown risk scope: {scope}. Valid scopes: {valid}"
+            raise ValueError(message)
         self._scope = scope
         self._config = self._SCOPE_CONFIG[scope]
 

@@ -1,6 +1,7 @@
 """Tests for JanusRequestExecutor."""
 
-from unittest.mock import MagicMock
+import contextlib
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -69,19 +70,17 @@ class TestRequestExecutor:
 
         executor = JanusRequestExecutor("t", "r", [step])
 
-        try:
+        with contextlib.suppress(ValueError):
             executor.execute_all()
-        except ValueError:
-            pass
 
         assert len(executor.exceptions) == 1
 
-    def test_step_exists(self):
+    def test_has_step(self):
         step = _make_mock_step("ExtractProfile")
 
         executor = JanusRequestExecutor("t", "r", [step])
-        assert executor.step_exists("ExtractProfile") is True
-        assert executor.step_exists("NonExistent") is False
+        assert executor.has_step("ExtractProfile") is True
+        assert executor.has_step("NonExistent") is False
 
     def test_add_step_after(self):
         step1 = _make_mock_step("Step1")
@@ -91,7 +90,7 @@ class TestRequestExecutor:
         executor = JanusRequestExecutor("t", "r", [step1, step2])
         executor.add_step_after("Step1", new_step)
 
-        assert executor.step_exists("NewStep") is True
+        assert executor.has_step("NewStep") is True
 
     def test_add_step_before(self):
         step1 = _make_mock_step("Step1")
@@ -101,7 +100,7 @@ class TestRequestExecutor:
         executor = JanusRequestExecutor("t", "r", [step1, step2])
         executor.add_step_before("Step2", new_step)
 
-        assert executor.step_exists("NewStep") is True
+        assert executor.has_step("NewStep") is True
 
     def test_add_step_after_not_found_raises(self):
         step1 = _make_mock_step("Step1")
@@ -151,3 +150,58 @@ class TestRequestExecutor:
 
         assert step1.entity_accessor == mock_accessor
         assert step2.entity_accessor == mock_accessor
+
+
+class TestRequestExecutorAppSyncIntegration:
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_calls_notify_progress(self, mock_notify: MagicMock) -> None:
+        """When mark_question_complete is called with a known key, notify_progress fires."""
+        company_repo = MagicMock()
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            company_repo=company_repo,
+            scan_id="scan-1",
+        )
+
+        executor.mark_question_complete("extract_profile")
+
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=30,
+            label="Extracting company profile...",
+            company_id="company-1",
+        )
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_skips_notify_for_unknown_key(self, mock_notify: MagicMock) -> None:
+        """Unknown question keys should not trigger notify_progress."""
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            scan_id="scan-1",
+        )
+
+        executor.mark_question_complete("unknown_step")
+
+        mock_notify.assert_not_called()
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_skips_notify_without_scan_id(self, mock_notify: MagicMock) -> None:
+        """When scan_id is empty, notify_progress should not be called."""
+        company_repo = MagicMock()
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            company_repo=company_repo,
+            scan_id="",
+        )
+
+        executor.mark_question_complete("extract_profile")
+
+        mock_notify.assert_not_called()
+        # But company repo should still be updated
+        company_repo.update.assert_called_once()

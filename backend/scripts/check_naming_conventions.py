@@ -119,6 +119,8 @@ class NamingChecker(ast.NodeVisitor):
         "dispatch",
         "enqueue",
         "route",
+        "require",
+        "normalize",
     }
 
     # Common verb endings that catch 15% more cases
@@ -161,7 +163,7 @@ class NamingChecker(ast.NodeVisitor):
 
         return False
 
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:  # noqa: N802
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
         """Check class naming conventions."""
         self.in_class_depth += 1
 
@@ -183,7 +185,7 @@ class NamingChecker(ast.NodeVisitor):
 
         self.in_class_depth -= 1
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:  # noqa: N802
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Check function/method naming conventions."""
         name = node.name
 
@@ -210,11 +212,8 @@ class NamingChecker(ast.NodeVisitor):
 
         if node.returns:
             returns_bool = False
-            if (
-                isinstance(node.returns, ast.Name)
-                and node.returns.id == "bool"
-                or isinstance(node.returns, ast.Constant)
-                and node.returns.value is bool
+            if (isinstance(node.returns, ast.Name) and node.returns.id == "bool") or (
+                isinstance(node.returns, ast.Constant) and node.returns.value is bool
             ):
                 returns_bool = True
 
@@ -230,18 +229,18 @@ class NamingChecker(ast.NodeVisitor):
 
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """Check async function naming (same rules as regular functions)."""
         self.visit_FunctionDef(node)  # type: ignore
 
-    def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
+    def visit_Assign(self, node: ast.Assign) -> None:
         """Check variable and constant naming."""
         for target in node.targets:
             if isinstance(target, ast.Name):
                 self._check_variable_name(target.id, node)
         self.generic_visit(node)
 
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         """Check annotated assignments."""
         if isinstance(node.target, ast.Name):
             if self.in_class_depth > 0:
@@ -265,8 +264,7 @@ class NamingChecker(ast.NodeVisitor):
             if name in ["MAX", "MIN", "TIMEOUT", "LIMIT", "SIZE", "COUNT"]:
                 self.add_violation(
                     node,
-                    f"Constant '{name}' needs more context "
-                    f"(e.g., MAX_RETRIES, TIMEOUT_SECONDS)",
+                    f"Constant '{name}' needs more context (e.g., MAX_RETRIES, TIMEOUT_SECONDS)",
                 )
         elif not re.match(r"^[a-z][a-z0-9_]*$", name):
             self.add_violation(node, f"Variable '{name}' must be snake_case")

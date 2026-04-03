@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from src.facades.company_accessor import CompanyAccessor
@@ -30,13 +31,14 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://example.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
         step.execute()
 
-        assert accessor.company.scraped_text == "Sufficient content about the company for analysis purposes here"
+        expected = "Sufficient content about the company for analysis purposes here"
+        assert accessor.company.scraped_text == expected
         assert accessor.company.actual_url == "https://example.com"
         step._request_executor.mark_question_complete.assert_called_with("scrape_and_resolve")
 
@@ -65,7 +67,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://portfolio.com/company")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -85,7 +87,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://example.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -95,7 +97,12 @@ class TestScrapeAndResolveURL:
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.URLResolutionStrategy")
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
-    def test_execute_resolution_scrape_failure_fallback(self, mock_scraper_cls, mock_resolver_cls, mock_scrape_url):
+    def test_execute_resolution_scrape_failure_fallback(
+        self,
+        mock_scraper_cls,
+        mock_resolver_cls,
+        mock_scrape_url,
+    ):
         mock_scraper = MagicMock()
         mock_scraper.execute.return_value = (
             "Original content that is long enough for the validation check here",
@@ -110,12 +117,12 @@ class TestScrapeAndResolveURL:
         )
         mock_resolver_cls.return_value = mock_resolver
 
-        mock_scrape_url.side_effect = RuntimeError("Connection error")
+        mock_scrape_url.side_effect = httpx.RequestError("Connection error")
 
         company = Company(url="https://original.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
@@ -127,7 +134,12 @@ class TestScrapeAndResolveURL:
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.URLResolutionStrategy")
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
-    def test_execute_resolved_content_too_short(self, mock_scraper_cls, mock_resolver_cls, mock_scrape_url):
+    def test_execute_resolved_content_too_short(
+        self,
+        mock_scraper_cls,
+        mock_resolver_cls,
+        mock_scrape_url,
+    ):
         mock_scraper = MagicMock()
         mock_scraper.execute.return_value = (
             "Original content that is long enough for the validation check here",
@@ -147,7 +159,7 @@ class TestScrapeAndResolveURL:
         company = Company(url="https://original.com")
         accessor = CompanyAccessor(company)
 
-        step = ScrapeAndResolveURL(openai_api_key="test-key")
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 

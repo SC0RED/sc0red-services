@@ -8,6 +8,12 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from signalfield_core.models.enums import AIProviderType
+from signalfield_core.services.ai_client_factory import AIClientFactory
+from signalfield_core.services.resources.anthropic_resource import AnthropicResource
+from signalfield_core.services.resources.openai_resource import OpenAIResource
+from signalfield_core.services.service_ops import CompositeServiceOps
+
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnalysisFactory
@@ -20,6 +26,27 @@ if TYPE_CHECKING:
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 
 
+def _initialize_ai_client_factory() -> AIClientFactory:
+    """Initialize the AI provider resource and return a shared AIClientFactory."""
+    ai_provider = os.environ.get("AI_PROVIDER", AIProviderType.ANTHROPIC.value)
+
+    if ai_provider == AIProviderType.OPENAI.value:
+        openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY must be set when AI_PROVIDER=openai")
+        if not OpenAIResource.is_initialized():
+            OpenAIResource.initialize({"openai_api_key": openai_api_key})
+    else:
+        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY must be set when AI_PROVIDER=anthropic")
+        if not AnthropicResource.is_initialized():
+            AnthropicResource.initialize({"anthropic_api_key": anthropic_api_key})
+
+    composite_service_ops = CompositeServiceOps()
+    return AIClientFactory(composite_service_ops, provider_type=ai_provider)
+
+
 class JanusFactoriesFactory:
     """Creates the correct pipeline factory for a given event."""
 
@@ -30,10 +57,13 @@ class JanusFactoriesFactory:
     ) -> None:
         self._company_repo = company_repo
         self._assessment_repo = assessment_repo
-        self._openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        self._model = os.environ.get("AI_MODEL", "gpt-4o")
+        self._ai_client_factory = _initialize_ai_client_factory()
 
-    def create_and_execute(self, event: JanusEvent) -> JanusRequestExecutor:
+    def create_and_execute(
+        self,
+        event: JanusEvent,
+        document_text: str | None = None,
+    ) -> JanusRequestExecutor:
         """Create the appropriate pipeline, execute it, and return the executor."""
         company = Company(
             id=event.request_id,
@@ -41,24 +71,26 @@ class JanusFactoriesFactory:
             scan_id=event.scan_id,
             org_id=event.org_id,
             company_name=event.company_name,
+            document_text=document_text,
         )
         accessor = CompanyAccessor(company)
 
         if event.request_type == "portfolio_scan":
             factory = PortfolioScanFactory(
                 entity_accessor=accessor,
+                ai_client_factory=self._ai_client_factory,
                 tenant_id=event.tenant_id,
                 request_id=event.request_id,
             )
         else:
             factory = CompanyAnalysisFactory(
                 entity_accessor=accessor,
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+                ai_client_factory=self._ai_client_factory,
                 tenant_id=event.tenant_id,
                 request_id=event.request_id,
                 company_repo=self._company_repo,
                 assessment_repo=self._assessment_repo,
+                scan_id=event.scan_id,
             )
 
         return factory.execute_pipeline()

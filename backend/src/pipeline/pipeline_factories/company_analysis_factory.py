@@ -1,7 +1,8 @@
 """Company analysis pipeline factory.
 
 Wires the 5-step single company analysis pipeline:
-ScrapeAndResolve → ExtractProfile → AssessRisk → GenerateOpportunities → PersistResults
+ScrapeAndResolve → ParallelProfileRiskAndIdeation →
+DetailOpportunities → ComputeEbitdaTree → PersistResults
 """
 
 from __future__ import annotations
@@ -10,15 +11,17 @@ from typing import TYPE_CHECKING
 
 from signalfield_core.pipeline.factory import PipelineFactory
 
-from src.pipeline.pipeline_steps.assess_risk import AssessRisk
-from src.pipeline.pipeline_steps.extract_profile import ExtractProfile
-from src.pipeline.pipeline_steps.generate_opportunities import GenerateOpportunities
+from src.pipeline.pipeline_steps.compute_ebitda_tree import ComputeEbitdaTree
+from src.pipeline.pipeline_steps.compute_value_chain import ComputeValueChain
+from src.pipeline.pipeline_steps.detail_opportunities import DetailOpportunities
+from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
 from src.pipeline.request_executor import JanusRequestExecutor
 
 if TYPE_CHECKING:
     from signalfield_core.pipeline.step import RequestStep
+    from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
@@ -31,40 +34,35 @@ class CompanyAnalysisFactory(PipelineFactory):
     def __init__(
         self,
         entity_accessor: CompanyAccessor,
-        openai_api_key: str,
-        model: str = "gpt-4o",
+        ai_client_factory: AIClientFactory,
         tenant_id: str | None = None,
         request_id: str = "",
         company_repo: DynamoDBCompanyRepository | None = None,
         assessment_repo: DynamoDBAssessmentRepository | None = None,
+        scan_id: str = "",
     ) -> None:
         self._entity_accessor = entity_accessor
-        self._openai_api_key = openai_api_key
-        self._model = model
+        self._ai_client_factory = ai_client_factory
         self._tenant_id = tenant_id
         self._request_id = request_id
         self._company_repo = company_repo
         self._assessment_repo = assessment_repo
+        self._scan_id = scan_id
 
     def get_pipeline(self) -> list[RequestStep]:
         """Return the ordered list of pipeline steps for company analysis."""
         return [
             ScrapeAndResolveURL(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+                ai_client_factory=self._ai_client_factory,
             ),
-            ExtractProfile(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+            ParallelProfileRiskAndIdeation(
+                ai_client_factory=self._ai_client_factory,
             ),
-            AssessRisk(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
+            DetailOpportunities(
+                ai_client_factory=self._ai_client_factory,
             ),
-            GenerateOpportunities(
-                openai_api_key=self._openai_api_key,
-                model=self._model,
-            ),
+            ComputeEbitdaTree(),
+            ComputeValueChain(),
             PersistResults(
                 company_repo=self._company_repo,
                 assessment_repo=self._assessment_repo,
@@ -78,8 +76,9 @@ class CompanyAnalysisFactory(PipelineFactory):
             tenant_id=self._tenant_id,
             request_id=self._request_id,
             pipeline=pipeline,
+            company_repo=self._company_repo,
+            scan_id=self._scan_id,
         )
-        # Wire entity accessor and executor into all steps
         for step in pipeline:
             step.request_executor = executor
             step.entity_accessor = self._entity_accessor

@@ -3,10 +3,8 @@ from src.models.model_company import (
     CompanyProfile,
     Opportunity,
     OpportunityResult,
-    RelatedService,
     RiskAssessment,
     RiskScore,
-    Vendor,
 )
 from src.models.model_event import JanusEvent
 from src.models.model_literals import (
@@ -24,10 +22,8 @@ __all__ = [
     "JanusEvent",
     "Opportunity",
     "OpportunityResult",
-    "RelatedService",
     "RiskAssessment",
     "RiskScopeLiterals",
     "RiskScore",
     "StrategicCategoryLiterals",
-    "Vendor",
 ]

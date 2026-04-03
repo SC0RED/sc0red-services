@@ -45,12 +45,82 @@ class DynamoDBUserRepository:
             "GSI4SK": f"USER#{user_id}",
             **{k: v for k, v in user.items() if k != "id"},
         }
+        # GSI1 for org-level user queries
+        org_id = user.get("org_id")
+        if org_id:
+            item["GSI1PK"] = f"ORG#{org_id}"
+            item["GSI1SK"] = f"USER#{user_id}"
         self._table.put_item(item)
         return user_id
 
-    def email_exists(self, email: str) -> bool:
+    def find_by_org(self, org_id: str) -> list[dict[str, Any]]:
+        """Return all users belonging to the given organisation."""
+        return self._table.query_gsi(
+            index_name="GSI1",
+            pk_attr="GSI1PK",
+            pk_value=f"ORG#{org_id}",
+            sk_attr="GSI1SK",
+            sk_prefix="USER#",
+        )
+
+    def delete(self, user_id: str) -> None:
+        """Delete a user by ID."""
+        self._table.delete_item(pk=f"USER#{user_id}", sk="USER#METADATA")
+
+    def has_email(self, email: str) -> bool:
         """Return True if a user with the given email address exists."""
         return self.find_by_email(email) is not None
+
+
+class DynamoDBInvitationRepository:
+    """Repository for org invitation records in DynamoDB.
+
+    Single-table keys:
+      pk = ORG#{org_id}  sk = INVITE#{id}
+      GSI4: pk = EMAIL#{email}  sk = INVITE#{id}
+    """
+
+    def __init__(self, table: DynamoDBTable) -> None:
+        self._table = table
+
+    def create(self, invitation: dict[str, Any]) -> str:
+        """Persist a new invitation and return its ID."""
+        invite_id = invitation.get("id") or str(uuid.uuid4())
+        org_id = invitation["org_id"]
+        email = invitation.get("email", "")
+        item = {
+            "pk": f"ORG#{org_id}",
+            "sk": f"INVITE#{invite_id}",
+            "id": invite_id,
+            "entity_type": "invitation",
+            "GSI4PK": f"EMAIL#{email}",
+            "GSI4SK": f"INVITE#{invite_id}",
+            **{k: v for k, v in invitation.items() if k not in ("id",)},
+        }
+        self._table.put_item(item)
+        return invite_id
+
+    def find_by_org(self, org_id: str) -> list[dict[str, Any]]:
+        """Return all invitations for the given organisation."""
+        return self._table.query(pk=f"ORG#{org_id}", sk_prefix="INVITE#")
+
+    def find_by_email(self, email: str) -> list[dict[str, Any]]:
+        """Return all invitations for the given email address."""
+        return self._table.query_gsi(
+            index_name="GSI4",
+            pk_attr="GSI4PK",
+            pk_value=f"EMAIL#{email}",
+            sk_attr="GSI4SK",
+            sk_prefix="INVITE#",
+        )
+
+    def update_status(self, org_id: str, invite_id: str, status: str) -> None:
+        """Update the status of an invitation."""
+        self._table.update_item(
+            pk=f"ORG#{org_id}",
+            sk=f"INVITE#{invite_id}",
+            updates={"status": status},
+        )
 
 
 class DynamoDBOrganizationRepository:

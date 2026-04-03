@@ -6,6 +6,7 @@ from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_factories.portfolio_scan_factory import PortfolioScanFactory
 from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
+from src.pipeline.pipeline_steps.validate_portfolio import ValidatePortfolioCompanies
 
 
 class TestPortfolioScanFactory:
@@ -17,11 +18,12 @@ class TestPortfolioScanFactory:
             request_id="r-1",
         )
 
-    def test_get_pipeline_returns_single_step(self):
+    def test_get_pipeline_returns_discover_and_validate_steps(self):
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
-        assert len(pipeline) == 1
+        assert len(pipeline) == 2
         assert isinstance(pipeline[0], DiscoverPortfolio)
+        assert isinstance(pipeline[1], ValidatePortfolioCompanies)
 
     def test_build_executor(self):
         factory = self._make_factory()
@@ -35,5 +37,5 @@ class TestPortfolioScanFactory:
         mock_step.step_name.return_value = "DiscoverPortfolio"
         factory.get_pipeline = MagicMock(return_value=[mock_step])
 
-        executor = factory.execute_pipeline()
+        _executor = factory.execute_pipeline()
         mock_step.execute.assert_called_once()

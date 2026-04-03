@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from moto import mock_aws
 
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
@@ -11,11 +12,13 @@ class TestScanRepository:
     @mock_aws
     def test_create_and_get(self, dynamodb_table):
         repo = DynamoDBScanRepository(dynamodb_table)
-        scan_id = repo.create({
-            "url": "https://pe-firm.com",
-            "status": "pending",
-            "org_id": "org-1",
-        })
+        scan_id = repo.create(
+            {
+                "url": "https://pe-firm.com",
+                "status": "pending",
+                "org_id": "org-1",
+            }
+        )
 
         assert scan_id is not None
 
@@ -32,16 +35,6 @@ class TestScanRepository:
 
         result = repo.get_by_id(scan_id)
         assert result["status"] == "complete"
-
-    @mock_aws
-    def test_find_by_org(self, dynamodb_table):
-        repo = DynamoDBScanRepository(dynamodb_table)
-        repo.create({"org_id": "org-A", "status": "done"})
-        repo.create({"org_id": "org-A", "status": "done"})
-        repo.create({"org_id": "org-B", "status": "done"})
-
-        results = repo.find_by_org("org-A")
-        assert len(results) == 2
 
     @mock_aws
     def test_link_and_get_companies(self, dynamodb_table):
@@ -70,11 +63,13 @@ class TestScanRepository:
         """portfolio_companies list is JSON-serialized on create."""
         repo = DynamoDBScanRepository(dynamodb_table)
         companies = [{"name": "Acme", "url": "https://acme.com"}]
-        scan_id = repo.create({
-            "status": "pending",
-            "org_id": "org-1",
-            "portfolio_companies": companies,
-        })
+        scan_id = repo.create(
+            {
+                "status": "pending",
+                "org_id": "org-1",
+                "portfolio_companies": companies,
+            }
+        )
 
         # Read raw item to verify serialization
         raw = dynamodb_table.get_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
@@ -102,11 +97,14 @@ class TestScanRepository:
         repo = DynamoDBScanRepository(dynamodb_table)
         scan_id = repo.create({"status": "pending", "org_id": "org-1"})
 
-        repo.update(scan_id, {
-            "status": "complete",
-            "portfolio_companies": [{"name": "X"}],
-            "metadata": {"key": "value"},
-        })
+        repo.update(
+            scan_id,
+            {
+                "status": "complete",
+                "portfolio_companies": [{"name": "X"}],
+                "metadata": {"key": "value"},
+            },
+        )
 
         raw = dynamodb_table.get_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
         assert raw["status"] == "complete"
@@ -116,19 +114,79 @@ class TestScanRepository:
         assert json.loads(raw["metadata"]) == {"key": "value"}
 
     @mock_aws
-    def test_deserialize_invalid_json_fallback(self, dynamodb_table):
-        """Invalid JSON in portfolio_companies falls back to []."""
+    def test_deserialize_invalid_json_raises(self, dynamodb_table):
+        """Invalid JSON in portfolio_companies raises JSONDecodeError — corrupt data must not be silently swallowed."""
         repo = DynamoDBScanRepository(dynamodb_table)
         scan_id = "test-invalid"
 
         # Write a raw item with invalid JSON directly
-        dynamodb_table.put_item({
-            "pk": f"SCAN#{scan_id}",
-            "sk": "SCAN#METADATA",
-            "id": scan_id,
-            "entity_type": "scan",
-            "portfolio_companies": "not-valid-json{{{",
-        })
+        dynamodb_table.put_item(
+            {
+                "pk": f"SCAN#{scan_id}",
+                "sk": "SCAN#METADATA",
+                "id": scan_id,
+                "entity_type": "scan",
+                "portfolio_companies": "not-valid-json{{{",
+            }
+        )
 
-        result = repo.get_by_id(scan_id)
-        assert result["portfolio_companies"] == []
+        with pytest.raises(json.JSONDecodeError):
+            repo.get_by_id(scan_id)
+
+    @mock_aws
+    def test_find_recent_by_org(self, dynamodb_table):
+        """Return scans sorted by created_at descending, respecting limit."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        repo.create({"org_id": "org-A", "status": "done", "created_at": "2026-01-01"})
+        repo.create({"org_id": "org-A", "status": "done", "created_at": "2026-03-01"})
+        repo.create({"org_id": "org-A", "status": "done", "created_at": "2026-02-01"})
+        repo.create({"org_id": "org-B", "status": "done", "created_at": "2026-01-01"})
+
+        # With limit
+        results = repo.find_recent_by_org("org-A", limit=2)
+        assert len(results) == 2
+        assert results[0]["created_at"] == "2026-03-01"
+
+        # Without limit (all scans)
+        all_results = repo.find_recent_by_org("org-A", limit=None)
+        assert len(all_results) == 3
+
+    @mock_aws
+    def test_unlink_company(self, dynamodb_table):
+        """unlink_company removes a single scan→company link item."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "running"})
+        repo.link_company(scan_id, "c-1", "Company One")
+        repo.link_company(scan_id, "c-2", "Company Two")
+
+        repo.unlink_company(scan_id, "c-1")
+
+        companies = repo.get_scan_companies(scan_id)
+        assert len(companies) == 1
+        assert companies[0]["company_id"] == "c-2"
+
+    @mock_aws
+    def test_delete_all_company_links(self, dynamodb_table):
+        """delete_all_company_links removes all scan→company link items."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "running"})
+        repo.link_company(scan_id, "c-1", "Company One")
+        repo.link_company(scan_id, "c-2", "Company Two")
+        repo.link_company(scan_id, "c-3", "Company Three")
+
+        repo.delete_all_company_links(scan_id)
+
+        companies = repo.get_scan_companies(scan_id)
+        assert len(companies) == 0
+        # Scan metadata should still exist
+        assert repo.get_by_id(scan_id) is not None
+
+    @mock_aws
+    def test_delete_all_company_links_no_links(self, dynamodb_table):
+        """delete_all_company_links is a no-op when no links exist."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "running"})
+
+        repo.delete_all_company_links(scan_id)
+
+        assert repo.get_scan_companies(scan_id) == []

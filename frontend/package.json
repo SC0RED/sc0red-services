@@ -1,31 +1,68 @@
 {
-  "name": "pe-scan",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
-    "db:init": "node scripts/init-db.js"
-  },
-  "dependencies": {
-    "@libsql/client": "^0.17.0",
-    "bcryptjs": "^2.4.3",
-    "cheerio": "^1.0.0",
-    "lucide-react": "^0.475.0",
-    "next": "14.2.29",
-    "next-auth": "^4.24.11",
-    "openai": "^6.25.0",
-    "puppeteer": "^24.3.1",
-    "react": "^18",
-    "react-dom": "^18",
-    "recharts": "^2.15.1"
-  },
-  "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "typescript": "^5"
-  }
+    "name": "janus-frontend",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start -p ${PORT:-3000}",
+        "lint": "eslint src/ --max-warnings=0",
+        "lint:fix": "eslint src/ --fix",
+        "format": "prettier --write src/",
+        "format:check": "prettier --check src/",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "prepare": "cd .. && husky install frontend/.husky"
+    },
+    "dependencies": {
+        "@dagrejs/dagre": "^2.0.4",
+        "@xyflow/react": "^12.10.1",
+        "amazon-cognito-identity-js": "^6.3.16",
+        "lucide-react": "^0.475.0",
+        "next": "14.2.29",
+        "next-auth": "^4.24.11",
+        "react": "^18",
+        "react-dom": "^18",
+        "recharts": "^2.15.1"
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^19.0.0",
+        "@commitlint/config-conventional": "^19.0.0",
+        "@testing-library/dom": "^10.4.1",
+        "@testing-library/jest-dom": "^6.4.0",
+        "@testing-library/react": "^16.0.0",
+        "@testing-library/user-event": "^14.5.0",
+        "@types/dagre": "^0.7.54",
+        "@types/node": "^20",
+        "@types/react": "^18",
+        "@types/react-dom": "^18",
+        "@typescript-eslint/eslint-plugin": "^8.0.0",
+        "@typescript-eslint/parser": "^8.0.0",
+        "@vitejs/plugin-react": "^4.3.0",
+        "@vitest/coverage-v8": "^2.0.0",
+        "eslint": "^8.57.0",
+        "eslint-config-next": "14.2.29",
+        "eslint-config-prettier": "^9.1.0",
+        "eslint-plugin-import": "^2.29.0",
+        "eslint-plugin-jsx-a11y": "^6.8.0",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "husky": "^8.0.0",
+        "jsdom": "^25.0.0",
+        "lint-staged": "^15.0.0",
+        "msw": "^2.3.0",
+        "prettier": "^3.3.0",
+        "typescript": "^5",
+        "vitest": "^2.0.0"
+    },
+    "lint-staged": {
+        "*.{ts,tsx}": [
+            "eslint --fix --max-warnings=0",
+            "prettier --write"
+        ],
+        "*.{json,md,yaml,yml}": [
+            "prettier --write"
+        ]
+    }
 }

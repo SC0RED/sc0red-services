@@ -17,15 +17,15 @@ from boto3.dynamodb.conditions import Key
 logger = logging.getLogger(__name__)
 
 
-def _convert_floats(obj: Any) -> Any:
+def _convert_floats(value: Any) -> Any:
     """Recursively convert float values to Decimal for DynamoDB compatibility."""
-    if isinstance(obj, float):
-        return Decimal(str(obj))
-    if isinstance(obj, dict):
-        return {k: _convert_floats(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_convert_floats(v) for v in obj]
-    return obj
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _convert_floats(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_convert_floats(v) for v in value]
+    return value
 
 
 class DynamoDBTable:
@@ -40,8 +40,8 @@ class DynamoDBTable:
             kwargs["endpoint_url"] = self._endpoint_url
             kwargs["region_name"] = os.environ.get("AWS_REGION", "us-east-1")
 
-        dynamodb = boto3.resource("dynamodb", **kwargs)
-        self._table = dynamodb.Table(self._table_name)
+        self._dynamodb = boto3.resource("dynamodb", **kwargs)
+        self._table = self._dynamodb.Table(self._table_name)
 
     @property
     def table_name(self) -> str:
@@ -67,9 +67,13 @@ class DynamoDBTable:
         sk_prefix: str | None = None,
         index_name: str | None = None,
         limit: int | None = None,
-        scan_forward: bool = True,  # noqa: FBT001, FBT002
+        scan_forward: bool = True,
     ) -> list[dict[str, Any]]:
-        """Query items by partition key, with optional sort-key prefix and pagination."""
+        """Query items by partition key, with optional sort-key prefix.
+
+        Automatically paginates through all results using LastEvaluatedKey.
+        If limit is specified, returns at most that many items.
+        """
         kwargs: dict[str, Any] = {}
         if index_name:
             kwargs["IndexName"] = index_name
@@ -81,11 +85,19 @@ class DynamoDBTable:
         kwargs["KeyConditionExpression"] = key_condition
         kwargs["ScanIndexForward"] = scan_forward
 
-        if limit:
-            kwargs["Limit"] = limit
+        items: list[dict[str, Any]] = []
+        while True:
+            response = self._table.query(**kwargs)
+            items.extend(response.get("Items", []))
 
-        response = self._table.query(**kwargs)
-        return response.get("Items", [])
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            if limit and len(items) >= limit:
+                break
+            kwargs["ExclusiveStartKey"] = last_key
+
+        return items[:limit] if limit else items
 
     def query_gsi(
         self,
@@ -95,16 +107,45 @@ class DynamoDBTable:
         sk_attr: str | None = None,
         sk_prefix: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Query a Global Secondary Index by partition key with optional sort-key prefix."""
+        """Query a Global Secondary Index by partition key with optional sort-key prefix.
+
+        Automatically paginates through all results using LastEvaluatedKey.
+        """
         key_condition = Key(pk_attr).eq(pk_value)
         if sk_attr and sk_prefix:
             key_condition = key_condition & Key(sk_attr).begins_with(sk_prefix)
 
-        response = self._table.query(
-            IndexName=index_name,
-            KeyConditionExpression=key_condition,
+        kwargs: dict[str, Any] = {
+            "IndexName": index_name,
+            "KeyConditionExpression": key_condition,
+        }
+
+        items: list[dict[str, Any]] = []
+        while True:
+            response = self._table.query(**kwargs)
+            items.extend(response.get("Items", []))
+
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            kwargs["ExclusiveStartKey"] = last_key
+
+        return items
+
+    def batch_get(self, keys: list[dict[str, str]]) -> list[dict[str, Any]]:
+        """Fetch multiple items in a single BatchGetItem call (max 100 keys).
+
+        Uses the DynamoDB resource API so items are auto-deserialized,
+        consistent with get_item() and query().
+        """
+        if not keys:
+            return []
+        response = self._dynamodb.batch_get_item(
+            RequestItems={
+                self._table_name: {"Keys": [{"pk": k["pk"], "sk": k["sk"]} for k in keys]}
+            }
         )
-        return response.get("Items", [])
+        return response.get("Responses", {}).get(self._table_name, [])
 
     def update_item(
         self,
@@ -133,6 +174,12 @@ class DynamoDBTable:
             ExpressionAttributeNames=names,
             ExpressionAttributeValues=values,
         )
+
+    def batch_write(self, items: list[dict[str, Any]]) -> None:
+        """Write multiple items using a batch writer (max 25 per request, auto-batched)."""
+        with self._table.batch_writer() as batch:
+            for item in items:
+                batch.put_item(Item=_convert_floats(item))
 
     def batch_delete(self, keys: list[dict[str, str]]) -> None:
         """Delete multiple items by their primary keys using a batch writer."""

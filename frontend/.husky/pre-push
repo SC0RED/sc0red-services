@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run frontend unit tests before every push.
+# Catches regressions before they reach CI or a PR.
+echo "Running frontend unit tests..."
+cd frontend && npm test -- --run

@@ -1,0 +1,22 @@
+{
+    "extends": ["next/core-web-vitals", "plugin:@typescript-eslint/recommended", "prettier"],
+    "parser": "@typescript-eslint/parser",
+    "plugins": ["@typescript-eslint", "import", "jsx-a11y", "react-hooks"],
+    "settings": {
+        "import/internal-regex": "^@/"
+    },
+    "rules": {
+        "@typescript-eslint/no-explicit-any": "error",
+        "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+        "no-console": "error",
+        "react-hooks/exhaustive-deps": "error",
+        "jsx-a11y/alt-text": "error",
+        "import/order": [
+            "error",
+            {
+                "groups": ["builtin", "external", "internal", "parent", "sibling", "index"]
+            }
+        ],
+        "@next/next/no-img-element": "off"
+    }
+}

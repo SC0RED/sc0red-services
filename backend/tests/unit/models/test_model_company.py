@@ -5,10 +5,8 @@ from src.models.model_company import (
     CompanyProfile,
     Opportunity,
     OpportunityResult,
-    RelatedService,
     RiskAssessment,
     RiskScore,
-    Vendor,
 )
 
 
@@ -49,12 +47,11 @@ class TestRiskScore:
         score = RiskScore(
             category="competitive_displacement",
             score=7,
-            explanation="High risk",
-            evidence="competitor raised Series C",
+            rationale="High risk — competitor raised Series C",
         )
         assert score.category == "competitive_displacement"
         assert score.score == 7
-        assert score.evidence == "competitor raised Series C"
+        assert score.rationale == "High risk — competitor raised Series C"
 
     def test_score_constraints(self):
         # Score must be >= 1 and <= 10
@@ -86,12 +83,9 @@ class TestRiskAssessment:
 
 
 class TestOpportunity:
-    def test_create_with_vendors(self):
-        vendor = Vendor(name="DataRobot", url="https://datarobot.com", specialty="AutoML")
-        service = RelatedService(service_type="ML Platform", vendors=[vendor])
+    def test_create_with_related_services(self):
         opportunity = Opportunity(
             title="Deploy AI Churn Prediction",
-            risk_mitigated="customer_behavior",
             impact_rating="High",
             strategic_category="Revenue Capture",
             description="Implement churn prediction model",
@@ -99,11 +93,10 @@ class TestOpportunity:
             timeline="Medium-term (3-9 months)",
             investment_range="$100K-$500K",
             roi_estimate="20% reduction in churn",
-            related_services=[service],
+            related_services=["DataRobot - AutoML", "Snowflake - Data Platform"],
         )
         assert opportunity.title == "Deploy AI Churn Prediction"
-        assert len(opportunity.related_services) == 1
-        assert opportunity.related_services[0].vendors[0].name == "DataRobot"
+        assert opportunity.related_services == ["DataRobot - AutoML", "Snowflake - Data Platform"]
 
 
 class TestOpportunityResult:

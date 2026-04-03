@@ -72,7 +72,7 @@ class TestDynamoDBTable:
             mock_boto3.resource.return_value = mock_resource
             mock_resource.Table.return_value = MagicMock()
 
-            table = DynamoDBTable(table_name="janus-test", endpoint_url="http://localhost:8000")
+            DynamoDBTable(table_name="janus-test", endpoint_url="http://localhost:8000")
 
             mock_boto3.resource.assert_called_once()
             call_kwargs = mock_boto3.resource.call_args
@@ -102,13 +102,26 @@ class TestDynamoDBTable:
     def test_query_with_limit(self, dynamodb_table):
         """query() respects limit parameter."""
         for i in range(5):
-            dynamodb_table.put_item({
-                "pk": "BATCH#1",
-                "sk": f"ITEM#{i:04d}",
-            })
+            dynamodb_table.put_item(
+                {
+                    "pk": "BATCH#1",
+                    "sk": f"ITEM#{i:04d}",
+                }
+            )
 
         results = dynamodb_table.query(pk="BATCH#1", limit=2)
         assert len(results) == 2
+
+    @mock_aws
+    def test_batch_write(self, dynamodb_table):
+        """batch_write() writes multiple items in a single batch."""
+        items = [{"pk": "BATCH#1", "sk": f"ITEM#{i:04d}", "value": f"val-{i}"} for i in range(5)]
+        dynamodb_table.batch_write(items)
+
+        results = dynamodb_table.query(pk="BATCH#1")
+        assert len(results) == 5
+        values = {r["value"] for r in results}
+        assert values == {"val-0", "val-1", "val-2", "val-3", "val-4"}
 
     @mock_aws
     def test_update_item_empty_updates(self, dynamodb_table):

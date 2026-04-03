@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import openai
 from signalfield_core.data.strategy import DataStrategyExecutor
+from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
+
+if TYPE_CHECKING:
+    from signalfield_core.services.ai_client_factory import AIClientFactory
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +27,17 @@ _SYSTEM_PROMPT = (
     "(not a private equity firm's portfolio listing), return that same URL.\n"
     "If the provided URL is a portfolio listing or directory, look at the "
     "provided text and links to find the actual external website of the "
-    "company.\n"
-    'Respond with ONLY a JSON object containing "actual_url" (string).'
+    "company."
 )
+
+_URL_RESOLUTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "actual_url": {"type": "string", "description": "The actual company website URL"},
+    },
+    "required": ["actual_url"],
+    "additionalProperties": False,
+}
 
 
 class URLResolutionStrategy(DataStrategyExecutor):
@@ -37,8 +48,7 @@ class URLResolutionStrategy(DataStrategyExecutor):
         scraped_text (str): Text content from the scraped page.
         scraped_title (str): Page title.
         scraped_links (list[dict]): Links found on the page.
-        openai_api_key (str): OpenAI API key.
-        model (str): Model to use (default: gpt-4o).
+        ai_client_factory (AIClientFactory): Factory for creating AI clients.
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
@@ -51,40 +61,40 @@ class URLResolutionStrategy(DataStrategyExecutor):
         scraped_text = self._config.get("scraped_text", "")
         scraped_title = self._config.get("scraped_title", "")
         scraped_links = self._config.get("scraped_links", [])
-        api_key = self._config.get("openai_api_key", "")
-        model = self._config.get("model", "gpt-4o")
+        ai_client_factory: AIClientFactory | None = self._config.get("ai_client_factory")
 
         if not url:
-            return url, {"resolved": False, "reason": "No URL provided"}
+            raise ValueError("URL is required for resolution")
 
         user_prompt = (
             f"Provided URL: {url}\n"
             f"Page Title: {scraped_title}\n\n"
-            f"Text Preview:\n{scraped_text[:3000]}\n\n"
-            f"Links found on page:\n{json.dumps(scraped_links[:100])}\n\n"
-            'Return JSON with "actual_url".'
+            f"Text Preview:\n{scraped_text[:1000]}\n\n"
+            f"Links found on page:\n{json.dumps(scraped_links[:20])}\n\n"
+            "Return the actual company website URL."
         )
 
+        if not ai_client_factory:
+            raise RuntimeError("AI client factory not configured for URL resolution")
+
+        client = ai_client_factory.get_client(
+            verbosity=Verbosity.LOW,
+            reasoning_effort=ReasoningEffort.LOW,
+            precision=Precision.STANDARD,
+            instructions=_SYSTEM_PROMPT,
+        )
         try:
-            client = openai.OpenAI(api_key=api_key)
-            response = client.chat.completions.create(
-                model=model,
-                temperature=0.3,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
+            response = client.query_structured(
+                input_text=user_prompt, json_schema=_URL_RESOLUTION_SCHEMA
             )
-            content = response.choices[0].message.content or ""
-            parsed = json.loads(content)
-            actual_url = parsed.get("actual_url", url)
+            actual_url = response.content["actual_url"]
 
             if actual_url and actual_url.startswith("http"):
                 resolved = actual_url.rstrip("/") != url.rstrip("/")
                 return actual_url, {"resolved": resolved, "original_url": url}
 
-        except Exception:  # noqa: BLE001
+            logger.warning("AI returned non-HTTP URL %r for %s, using original", actual_url, url)
+        except Exception:
             logger.warning("URL resolution failed for %s, using original", url, exc_info=True)
 
         return url, {"resolved": False, "original_url": url}

@@ -36,7 +36,7 @@ class PERiskAssessmentPlugin:
 
     def get_scope_names(self) -> list[str]:
         """Return sorted list of available risk scope names."""
-        return sorted(RiskScopeManager._SCOPE_CONFIG.keys())  # noqa: SLF001
+        return RiskScopeManager.get_scope_names()
 
     def get_scope_configuration(self, scope: str) -> ScopeConfiguration:
         """Return the ScopeConfiguration instance for the given scope name."""
@@ -51,13 +51,13 @@ class PERiskAssessmentPlugin:
 
     def register_data_strategies(self, registry: DataStrategyRegistry) -> None:
         """Register all PE-domain data strategies with the provided registry."""
-        from src.data_strategies.portfolio_discovery_strategy import (  # noqa: PLC0415
+        from src.data_strategies.portfolio_discovery_strategy import (  # noqa: IMPORT001
             PortfolioDiscoveryStrategy,
         )
-        from src.data_strategies.url_resolution_strategy import (  # noqa: PLC0415
+        from src.data_strategies.url_resolution_strategy import (  # noqa: IMPORT001
             URLResolutionStrategy,
         )
-        from src.data_strategies.web_scraper_strategy import (  # noqa: PLC0415
+        from src.data_strategies.web_scraper_strategy import (  # noqa: IMPORT001
             WebScraperStrategy,
         )
 

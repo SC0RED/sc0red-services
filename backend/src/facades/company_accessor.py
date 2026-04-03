@@ -13,8 +13,10 @@ from src.models.model_company import Company
 if TYPE_CHECKING:
     from src.models.model_company import (
         CompanyProfile,
+        EbitdaTreeResult,
         OpportunityResult,
         RiskAssessment,
+        ValueChainResult,
     )
 
 
@@ -69,7 +71,7 @@ class CompanyAccessor:
             return [rs.model_dump() for rs in self._company.risk_assessment.risk_scores]
         return []
 
-    def get_dealbreaker_triggered(self) -> bool:
+    def has_dealbreaker_triggered(self) -> bool:
         """Returns True if risk tier is 'critical'."""
         if self._company.risk_assessment:
             return self._company.risk_assessment.tier == "critical"
@@ -88,6 +90,14 @@ class CompanyAccessor:
     def set_opportunities(self, result: OpportunityResult) -> None:
         """Set the company opportunity result."""
         self._company.opportunity_result = result
+
+    def set_ebitda_tree(self, result: EbitdaTreeResult) -> None:
+        """Set the EBITDA decomposition tree."""
+        self._company.ebitda_tree = result
+
+    def set_value_chain(self, result: ValueChainResult) -> None:
+        """Set the value chain analysis."""
+        self._company.value_chain = result
 
     def set_url(self, url: str) -> None:
         """Set the company URL."""
@@ -136,3 +146,19 @@ class CompanyAccessor:
     def get_scraped_title(self) -> str:
         """Return the scraped page title."""
         return self._company.scraped_title
+
+    def set_document_text(self, text: str) -> None:
+        """Set supplementary document text for enriched analysis."""
+        self._company.document_text = text
+
+    def get_document_text(self) -> str | None:
+        """Return supplementary document text, or None if no documents uploaded."""
+        return self._company.document_text
+
+    def set_ranked_ideations(self, ideations: list[dict[str, Any]]) -> None:
+        """Set the ranked opportunity ideations for the detail phase."""
+        self._company.ranked_ideations = ideations
+
+    def get_ranked_ideations(self) -> list[dict[str, Any]]:
+        """Return the ranked opportunity ideations."""
+        return self._company.ranked_ideations

@@ -3,7 +3,7 @@ name: Reusable CI Checks
 on:
   workflow_call:
     secrets:
-      SONAR_TOKEN:
+      DEPLOY_KEY:
         required: false
 
 jobs:
@@ -13,6 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
+        with:
+          deploy-key: ${{ secrets.DEPLOY_KEY }}
       - name: Run lint
         run: make lint
 
@@ -22,8 +24,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
+        with:
+          deploy-key: ${{ secrets.DEPLOY_KEY }}
       - name: Run tests
         run: make test
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    name: Frontend Test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+      - name: Run tests
+        run: cd frontend && npm test
+      - name: Run coverage
+        run: cd frontend && npx vitest run --coverage
+
+  audit:
+    runs-on: ubuntu-latest
+    name: Audit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run codebase audit
+        run: ./scripts/audit.sh
 
   security:
     runs-on: ubuntu-latest
@@ -31,5 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python
+        with:
+          deploy-key: ${{ secrets.DEPLOY_KEY }}
       - name: Run security checks
         run: make security

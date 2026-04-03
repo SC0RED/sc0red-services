@@ -25,16 +25,17 @@
 
 ---
 
-## The 4-Stage AI Analysis Pipeline
+## The 5-Step AI Analysis Pipeline
 
-Each company goes through 4 sequential GPT-4o calls (temperature 0.3, JSON mode):
+Each company goes through 5 sequential pipeline steps using Anthropic Claude via `signalfield_core.AIClientFactory`:
 
 | Stage | Name | Purpose |
 |---|---|---|
-| 0 | URL Resolution | If the URL is a PE portfolio listing page, identifies the actual company website URL and scrapes it |
-| 1 | Company Profile Extraction | Extracts structured profile (industry, business model, products, AI maturity, etc.) from up to 12,000 chars of scraped text |
-| 2 | Risk Assessment | Scores 8 risk categories (1–10) with explanations, evidence, and an overall risk tier |
-| 3 | Opportunity Generation | Produces 4–6 actionable opportunity cards with implementation steps, timelines, ROI estimates, and vendor recommendations |
+| 0 | ScrapeAndResolveURL | Scrapes the provided URL; if it's a PE portfolio listing page, uses AI to identify the actual company website URL and scrapes that too |
+| 1 | ExtractProfile | Extracts structured profile (industry, business model, products, AI maturity, etc.) from scraped content |
+| 2 | AssessRisk | Scores 8 risk categories (1–10) with explanations, evidence, and an overall risk tier |
+| 3 | GenerateOpportunities | Produces 3–5 actionable opportunity cards with implementation steps, timelines, ROI estimates, and vendor recommendations |
+| 4 | PersistResults | Saves company record, risk scores, and opportunities to DynamoDB |
 
 ### Risk Tiers
 
@@ -53,11 +54,11 @@ Each company goes through 4 sequential GPT-4o calls (temperature 0.3, JSON mode)
 |---|---|---|
 | Competitive Displacement | `competitive_displacement` | AI-native competitors capturing market share |
 | Technology Obsolescence | `technology_obsolescence` | Core products becoming obsolete due to AI |
-| Talent & Workforce | `talent_workforce` | AI automating key workforce functions |
-| Margin Compression | `margin_compression` | Competitors using AI to operate at lower cost |
-| Customer Behavior | `customer_behavior` | Customers adopting AI-powered alternatives |
-| Regulatory Compliance | `regulatory_compliance` | AI regulations creating compliance burden |
-| Supply Chain | `supply_chain` | Key suppliers being disrupted by AI |
+| Talent Retention | `talent_retention` | Ability to hire/retain engineers in an AI-first market |
+| Operational Efficiency | `operational_efficiency` | AI adoption in internal operations |
+| Market Dynamics | `market_dynamics` | ICP and buyer behaviour shifts driven by AI |
+| Regulatory Change | `regulatory_change` | AI regulation exposure (EU AI Act, GDPR, etc.) |
+| Supply Chain | `supply_chain` | API/vendor dependency and concentration risk |
 | Data & IP | `data_ip` | Proprietary data/IP losing value to AI models |
 
 Risk scoring is industry-aware — for example, financial services weights regulatory and competitive risks higher, while SaaS weights tech obsolescence and competitive displacement higher.
@@ -73,146 +74,79 @@ Risk scoring is industry-aware — for example, financial services weights regul
 | Charts | Recharts (radar/spider charts for risk visualization) |
 | Icons | Lucide React |
 | Auth | NextAuth.js v4 with CredentialsProvider (email + password), JWT sessions |
-| Database | libSQL/Turso (SQLite-compatible) — file-based locally, Turso cloud in production |
-| LLM | OpenAI SDK calling GPT-4o |
-| Web Scraping | Cheerio (HTML parsing) + native `fetch` |
+| Backend | Python 3.12, FastAPI (local) / AWS Lambda (cloud) |
+| Database | DynamoDB — single-table design with 4 GSIs |
+| AI | Anthropic Claude via `signalfield_core.AIClientFactory` |
+| Web Scraping | BeautifulSoup + httpx |
 | PDF Export | Server-rendered HTML (print-to-PDF from browser) |
-| Deployment | Vercel (primary), Render (secondary) |
+| Infrastructure | AWS CDK — Lambda, API Gateway, DynamoDB, SQS |
+| Deployment | Vercel (frontend), AWS Lambda (backend) |
 
 ---
 
 ## Project Structure
 
 ```
-pe-scan/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx                              # Landing page (public)
-│   │   ├── layout.tsx                            # Root layout with SessionWrapper
-│   │   ├── globals.css                           # Full design system (CSS vars, components)
-│   │   ├── login/page.tsx                        # Login form
-│   │   ├── signup/page.tsx                       # Registration form
-│   │   ├── dashboard/
-│   │   │   ├── layout.tsx + providers.tsx         # Dashboard layout with SessionProvider
-│   │   │   └── page.tsx                          # Main dashboard (server component)
-│   │   ├── scan/new/page.tsx                     # New scan wizard (client component)
-│   │   ├── analysis/[analysisId]/page.tsx        # Individual company report
-│   │   ├── portfolio/[scanId]/page.tsx           # Portfolio view
-│   │   ├── analyses/page.tsx                     # All analyses list
-│   │   └── api/
-│   │       ├── auth/[...nextauth]/route.ts       # NextAuth handler
-│   │       ├── auth/register/route.ts            # User registration
-│   │       ├── scan/start/route.ts               # Start scan (main analysis trigger)
-│   │       ├── scan/[scanId]/route.ts            # Get scan status
-│   │       ├── scan/[scanId]/confirm/route.ts    # Confirm and run portfolio analysis
-│   │       ├── analysis/[analysisId]/route.ts    # GET/DELETE analysis
-│   │       └── export/pdf/[analysisId]/route.ts  # PDF/HTML export
-│   ├── components/
-│   │   ├── DashboardSidebar.tsx                  # Fixed sidebar nav
-│   │   ├── DeleteAnalysisButton.tsx              # Delete with confirm UI
-│   │   └── SessionWrapper.tsx                    # SessionProvider wrapper
-│   └── lib/
-│       ├── ai/
-│       │   ├── analyzeCompany.ts                 # 4-stage LLM analysis pipeline
-│       │   └── prompts.ts                        # All LLM prompts + TypeScript interfaces
-│       ├── auth/authOptions.ts                   # NextAuth config
-│       ├── db/client.ts                          # libSQL client + schema initialization
-│       ├── scraper/index.ts                      # Web scraping + portfolio discovery
-│       └── utils/riskUtils.ts                    # Risk category definitions, scoring helpers
-├── scripts/e2e-flow.mjs                          # Puppeteer E2E test
-├── public/janus-logo.png                         # Brand logo
-├── PE scan PRD.md                                # Product requirements document
-├── render.yaml                                   # Render.com deployment config
-├── vercel.json                                   # Vercel config
-├── fix-env.js                                    # Utility to push .env.local vars to Vercel
-└── next.config.js                                # Next.js config
+janus/
+├── backend/                  # Python 3.12 backend
+│   ├── src/
+│   │   ├── handlers/         # Lambda entry point, API routing, auth middleware
+│   │   ├── pipeline/         # 5-step AI analysis pipeline
+│   │   ├── repositories/     # DynamoDB data access (single-table)
+│   │   ├── models/           # Pydantic domain models
+│   │   ├── data_strategies/  # Web scraping, URL resolution
+│   │   └── local_server.py   # FastAPI app for local development
+│   └── tests/                # 296 tests, ~99% coverage
+│
+├── frontend/                 # Next.js 14 TypeScript frontend
+│   ├── src/
+│   │   ├── app/              # App Router pages and Next.js API proxy routes
+│   │   ├── components/       # Shared React components
+│   │   ├── lib/              # Auth, API client, types, utilities
+│   │   └── tests/            # 56 Vitest unit tests
+│   └── public/               # Static assets
+│
+├── infrastructure/           # AWS CDK Python stack
+│   ├── app.py                # CDK entry point (dev / staging / production)
+│   └── stacks/janus_stack.py # DynamoDB + SQS + Lambda + API Gateway
+│
+├── scripts/
+│   ├── deploy-local.sh       # One-command LocalStack CDK deployment
+│   └── e2e-test.sh           # End-to-end integration tests
+│
+├── docs/
+│   ├── api.md                # REST API reference
+│   └── developer-guide.md    # Developer guide
+│
+└── docker-compose.yml        # Local full-stack environment
 ```
 
 ---
 
 ## Database Schema
 
-Six tables, all auto-initialized on first connection:
+DynamoDB single-table design (`janus-{environment}`). All entities share one table with 4 GSIs.
 
-### `organizations`
+### Primary key pattern
 
-| Column | Type | Description |
+| Entity | pk | sk |
 |---|---|---|
-| id | TEXT (UUID) | Primary key |
-| name | TEXT | Organization name |
-| type | TEXT | `pe_firm` or `company` |
-| url | TEXT | Organization URL |
-| created_at | DATETIME | Creation timestamp |
+| User | `USER#{user_id}` | `USER#{user_id}` |
+| Organisation | `ORG#{org_id}` | `ORG#{org_id}` |
+| Scan | `SCAN#{scan_id}` | `SCAN#METADATA` |
+| Company | `COMPANY#{company_id}` | `COMPANY#{company_id}` |
+| Assessment | `COMPANY#{company_id}` | `ASSESSMENT#{assessment_id}` |
+| Risk Score | `COMPANY#{company_id}` | `RISK#{category}` |
+| Opportunity | `COMPANY#{company_id}` | `OPP#{opportunity_id}` |
 
-### `users`
+### GSI usage
 
-| Column | Type | Description |
-|---|---|---|
-| id | TEXT (UUID) | Primary key |
-| org_id | TEXT | FK → organizations |
-| email | TEXT (UNIQUE) | User email |
-| password_hash | TEXT | bcrypt-hashed password |
-| name | TEXT | Display name |
-| role | TEXT | `admin`, `analyst`, or `viewer` |
-| created_at | DATETIME | Creation timestamp |
-
-### `scans`
-
-| Column | Type | Description |
-|---|---|---|
-| id | TEXT (UUID) | Primary key |
-| org_id | TEXT | FK → organizations |
-| created_by | TEXT | FK → users |
-| type | TEXT | `portfolio` or `standalone` |
-| source_url | TEXT | URL that was scanned |
-| status | TEXT | Scan status (e.g., `complete`, `awaiting_confirmation`) |
-| progress | INTEGER | Progress percentage (0–100) |
-| portfolio_companies | TEXT | JSON array of discovered companies |
-| created_at | DATETIME | Creation timestamp |
-
-### `company_analyses`
-
-| Column | Type | Description |
-|---|---|---|
-| id | TEXT (UUID) | Primary key |
-| scan_id | TEXT | FK → scans |
-| company_name | TEXT | Analyzed company name |
-| company_url | TEXT | Analyzed company URL |
-| industry | TEXT | Detected industry |
-| description | TEXT | JSON blob: `{summary, topActions, shortDescription}` |
-| overall_risk_score | REAL | Aggregate risk score (1–10) |
-| risk_tier | TEXT | `low`, `moderate`, `high`, or `critical` |
-| error | TEXT | Error message if analysis failed |
-| analyzed_at | DATETIME | Analysis timestamp |
-
-### `risk_scores`
-
-| Column | Type | Description |
-|---|---|---|
-| id | TEXT (UUID) | Primary key |
-| analysis_id | TEXT | FK → company_analyses |
-| category | TEXT | One of the 8 risk categories |
-| score | REAL | Score (1–10) |
-| explanation | TEXT | Explanation of the score |
-| evidence | TEXT | Supporting evidence |
-
-### `opportunities`
-
-| Column | Type | Description |
-|---|---|---|
-| id | TEXT (UUID) | Primary key |
-| analysis_id | TEXT | FK → company_analyses |
-| title | TEXT | Opportunity title |
-| risk_mitigated | TEXT | Which risk this addresses |
-| impact_rating | TEXT | Impact level |
-| strategic_category | TEXT | Strategy category |
-| description | TEXT | Detailed description |
-| implementation_steps | TEXT | JSON array of 5 steps |
-| timeline | TEXT | Estimated timeline |
-| investment_range | TEXT | Cost estimate |
-| roi_estimate | TEXT | Expected ROI |
-| related_services | TEXT | JSON array of vendor recommendations |
-| sort_order | INTEGER | Display order |
+| GSI | GSI{i}PK | GSI{i}SK | Used for |
+|---|---|---|---|
+| GSI1 | `ORG#{org_id}` | `USER#{user_id}` | List users in org |
+| GSI2 | `ORG#{org_id}` | `COMPANY#{created_at}` | List analyses by org |
+| GSI3 | `ORG#{org_id}` | `SCAN#{created_at}` | List scans by org |
+| GSI4 | `SCAN#{scan_id}` | `COMPANY#{company_id}` | List companies in scan |
 
 ---
 
@@ -220,14 +154,17 @@ Six tables, all auto-initialized on first connection:
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/auth/register` | Register new user + organization |
-| GET/POST | `/api/auth/[...nextauth]` | NextAuth sign-in/sign-out/session |
+| POST | `/api/auth/register` | Register new user + organisation |
+| POST | `/api/auth/login` | Authenticate user, returns JWT-ready user profile |
 | POST | `/api/scan/start` | Start a new scan (standalone or portfolio) |
-| GET | `/api/scan/[scanId]` | Get scan status and progress |
-| POST | `/api/scan/[scanId]/confirm` | Confirm portfolio companies and run analysis |
-| GET | `/api/analysis/[analysisId]` | Get full analysis with risk scores and opportunities |
-| DELETE | `/api/analysis/[analysisId]` | Delete analysis (cascading cleanup) |
-| GET | `/api/export/pdf/[analysisId]` | Export analysis as printable HTML |
+| GET | `/api/scan/{scanId}` | Get scan status and progress |
+| POST | `/api/scan/{scanId}/confirm` | Confirm portfolio companies and run analysis |
+| GET | `/api/analysis/{analysisId}` | Get full analysis with risk scores and opportunities |
+| DELETE | `/api/analysis/{analysisId}` | Delete analysis (cascading cleanup) |
+| GET | `/api/analyses` | List all analyses for the authenticated organisation |
+| GET | `/api/dashboard` | Aggregated stats and recent activity |
+
+See [docs/api.md](docs/api.md) for full request/response schemas.
 
 ---
 
@@ -254,15 +191,15 @@ Six tables, all auto-initialized on first connection:
 
 ## Environment Variables
 
-| Variable | Purpose |
-|---|---|
-| `OPENAI_API_KEY` | GPT-4o API calls for the analysis pipeline |
-| `NEXTAUTH_SECRET` | JWT signing secret for authentication |
-| `NEXTAUTH_URL` | NextAuth callback URL |
-| `TURSO_DATABASE_URL` | Turso cloud database URL (production) |
-| `TURSO_AUTH_TOKEN` | Turso authentication token (production) |
-
-For local development, the database defaults to `file:./data/pescan.db` (local SQLite file).
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes (for AI) | Anthropic Claude API key |
+| `NEXTAUTH_SECRET` | Yes | JWT signing secret (≥32 chars) |
+| `GH_TOKEN` | Build-time | GitHub token to pull `signalfield-core` |
+| `BACKEND_URL` | Frontend only | Backend base URL (server-side, default `http://backend:8001`) |
+| `NEXTAUTH_URL` | Frontend only | NextAuth callback URL (default `http://localhost:3000`) |
+| `DYNAMODB_TABLE` | Backend only | DynamoDB table name (default `janus-dev`) |
+| `DYNAMODB_ENDPOINT` | Local only | DynamoDB Local endpoint |
 
 ---
 
@@ -280,19 +217,20 @@ For local development, the database defaults to `file:./data/pescan.db` (local S
 
 ## Deployment
 
-### Vercel (Primary)
+### Frontend — Vercel
 
 - Configured via `vercel.json`
-- Function timeouts: 120s for standalone scans, 300s for portfolio scans
-- Use `fix-env.js` to push local env vars to Vercel
+- Connects to the Python backend via `BACKEND_URL`
 
-### Render (Secondary)
+### Backend — AWS Lambda (CDK)
 
-- Configured via `render.yaml`
-- Runs as a Node.js web service
+- Infrastructure defined in `infrastructure/stacks/janus_stack.py`
+- Lambda + API Gateway + SQS + DynamoDB provisioned via AWS CDK
+- Local testing via LocalStack: `./scripts/deploy-local.sh`
+- See [docs/developer-guide.md](docs/developer-guide.md) for full CDK deployment instructions
 
 ---
 
-## Known Discrepancy
+## AI Provider
 
-The PRD (`PE scan PRD.md`) specifies **Claude Sonnet** as the LLM and references `ANTHROPIC_API_KEY`, but the actual implementation uses **OpenAI GPT-4o** via the `openai` npm package with `OPENAI_API_KEY`.
+The backend uses **Anthropic Claude** via the signalfield-core AI abstraction layer (`AIClientFactory` / `AIClient`). The `ANTHROPIC_API_KEY` environment variable is required for the analysis pipeline.
