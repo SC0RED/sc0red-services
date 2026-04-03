@@ -1,13 +1,13 @@
-name: Deploy Development
+name: Deploy Testing
 
 on:
   push:
     branches:
-      - development
+      - testing
     paths:
       - 'backend/**'
       - 'infrastructure/**'
-      - '.github/workflows/deploy-backend.yml'
+      - '.github/workflows/deploy-testing.yml'
       - '.github/workflows/_deploy.yml'
 
 jobs:
@@ -18,18 +18,18 @@ jobs:
       DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
 
   deploy:
-    name: Staging
+    name: Testing
     needs: ci
     uses: ./.github/workflows/_deploy.yml
     with:
-      environment: staging
+      environment: testing
     secrets:
-      AWS_ACCESS_KEY_ID: ${{ secrets.DEV_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.DEV_AWS_SECRET_ACCESS_KEY }}
-      AWS_ACCOUNT_ID: ${{ secrets.DEV_AWS_ACCOUNT_ID }}
-      AWS_REGION: ${{ secrets.DEV_AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TEST_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TEST_AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCOUNT_ID: ${{ secrets.TEST_AWS_ACCOUNT_ID }}
+      AWS_REGION: ${{ secrets.TEST_AWS_REGION }}
       DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
       AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
       NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
