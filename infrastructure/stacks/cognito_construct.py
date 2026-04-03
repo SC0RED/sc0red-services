@@ -164,8 +164,8 @@ class CognitoConstruct(Construct):
                 user_srp=True,
                 custom=True,
             ),
-            id_token_validity=Duration.hours(1),
-            access_token_validity=Duration.hours(1),
+            id_token_validity=Duration.hours(8),
+            access_token_validity=Duration.hours(8),
             refresh_token_validity=Duration.days(30),
             prevent_user_existence_errors=True,
             read_attributes=cognito.ClientAttributes()
