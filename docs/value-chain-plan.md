@@ -31,10 +31,9 @@ After:
 class ValueChainStep(BaseModel):
     id: str                          # e.g. "lead_generation"
     label: str                       # e.g. "Lead Generation"
-    description: str                 # 1-sentence description
-    category: str                    # "primary" | "support"
+    description: str = ""            # 1-sentence description
+    category: Literal["primary", "support"] = "primary"
     risk_categories: list[str]       # linked risk category IDs
-    risk_scores: list[RiskScore]     # populated from existing risk assessment
     opportunity_indices: list[int]   # indices into opportunity_result.opportunities
 ```
 
@@ -126,7 +125,6 @@ Primary:
 
 Support:
 7. Technology / Platform
-8. Supply Chain Management
 ```
 
 ### Manufacturing Template
@@ -134,16 +132,14 @@ Support:
 ```
 Primary:
 1. Raw Material Procurement
-2. Inbound Logistics
-3. Production / Assembly
-4. Quality Control
-5. Outbound Logistics / Distribution
-6. Sales & Marketing
-7. After-Sales Service
+2. Production / Assembly
+3. Quality Control
+4. Distribution & Logistics
+5. Sales & Marketing
+6. After-Sales Service
 
 Support:
-8. R&D / Product Design
-9. Supply Chain Planning
+7. R&D / Product Design
 ```
 
 ### Financial Services Template
@@ -152,15 +148,16 @@ Support:
 Primary:
 1. Client Acquisition
 2. Onboarding & KYC
-3. Product Delivery / Advisory
+3. Product Delivery / Advisory (id: advisory_delivery)
 4. Risk Management
 5. Client Servicing
-6. Reporting & Compliance
 
 Support:
+6. Reporting & Compliance
 7. Technology / Infrastructure
-8. Regulatory Affairs
 ```
+
+Note: Financial Services uses `advisory_delivery` as step ID (not `product_delivery`) to avoid collision with SaaS template's `product_delivery`.
 
 ---
 
@@ -188,31 +185,34 @@ The final mapping is the intersection of strategic_category match AND value_leve
 
 ---
 
-## Files to Create
+## Files Created
 
 | File | Purpose |
 |---|---|
-| `backend/src/pipeline/pipeline_steps/build_value_chain.py` | Templates + `build_programmatic_value_chain(profile, risk_assessment, opportunities)` |
+| `backend/src/pipeline/pipeline_steps/build_value_chain.py` | Builder logic + `build_programmatic_value_chain(profile, opportunities)` |
+| `backend/src/pipeline/pipeline_steps/value_chain_templates.py` | Business model templates (extracted for 400-line limit) |
 | `backend/src/pipeline/pipeline_steps/compute_value_chain.py` | `ComputeValueChain(RequestStep)` — pipeline step wrapper |
-| `backend/src/models/model_company.py` | Add `ValueChainStep`, `ValueChainResult`, `value_chain` field on `Company` |
-| `backend/src/facades/company_accessor.py` | Add `set_value_chain()` / `get_value_chain()` |
-| `frontend/src/components/ValueChainDiagram.tsx` | Horizontal flow visualization |
-| `backend/tests/unit/pipeline/test_build_value_chain.py` | Template tests |
+| `frontend/src/components/ValueChainDiagram.tsx` | Porter-style horizontal flow with expand/collapse |
+| `frontend/src/components/analysis/EbitdaSection.tsx` | Extracted from AnalysisDetail (file size limit) |
+| `backend/tests/unit/pipeline/test_build_value_chain.py` | Template + linking tests |
 | `backend/tests/unit/pipeline/test_compute_value_chain.py` | Pipeline step tests |
-| `frontend/src/tests/components/ValueChainDiagram.test.tsx` | Frontend tests |
+| `frontend/src/tests/components/ValueChainDiagram.test.tsx` | 13 frontend tests |
+| `frontend/src/tests/components/analysis/EbitdaSection.test.tsx` | 6 frontend tests |
 
-## Files to Modify
+## Files Modified
 
 | File | Change |
 |---|---|
-| `backend/src/pipeline/pipeline_factories/company_analysis_factory.py` | Add `ComputeValueChain` step after `ComputeEbitdaTree` |
-| `backend/src/pipeline/request_executor.py` | Add `compute_value_chain` to progress map |
-| `backend/src/pipeline/pipeline_steps/persist_results.py` | Persist value chain to assessment |
-| `backend/src/repositories/dynamodb/assessment_repository.py` | Add `save_value_chain()` / `get_value_chain()` |
-| `backend/src/handlers/analysis_handlers.py` | Include value chain in analysis response |
-| `frontend/src/app/analysis/[analysisId]/AnalysisDetail.tsx` | Render `ValueChainDiagram` below EBITDA tree |
-| `frontend/src/lib/types/api.ts` | Add `ValueChainStep` type |
-| `scripts/mock_ai_server.py` | No change (no AI call) |
+| `backend/src/models/model_company.py` | Added `ValueChainStep`, `ValueChainResult`, `value_chain` field on `Company` |
+| `backend/src/facades/company_accessor.py` | Added `set_value_chain()` |
+| `backend/src/pipeline/pipeline_factories/company_analysis_factory.py` | Added `ComputeValueChain` step after `ComputeEbitdaTree` |
+| `backend/src/pipeline/request_executor.py` | Added `compute_value_chain` to progress map |
+| `backend/src/pipeline/pipeline_steps/persist_results.py` | Persists value chain to assessment |
+| `backend/src/repositories/dynamodb/assessment_repository.py` | Added `save_value_chain()` / `get_value_chain()` |
+| `backend/src/handlers/analysis_handlers.py` | Includes value chain in analysis response as `valueChain` |
+| `frontend/src/app/analysis/[analysisId]/AnalysisDetail.tsx` | Renders `ValueChainDiagram` between opportunities and EBITDA |
+| `frontend/src/lib/types/api.ts` | Added `ValueChain`, `ValueChainStep` types |
+| `frontend/src/lib/utils/riskUtils.ts` | Added shared `RISK_CATEGORY_COLORS` map |
 
 ---
 
@@ -249,19 +249,9 @@ Support activities shown as a compact row below the primary flow.
 
 ---
 
-## Implementation Order
+## Implementation Status: COMPLETE
 
-| Step | Files | Effort |
-|---|---|---|
-| 1 | Data model: `ValueChainStep`, `ValueChainResult` on `Company` | Small |
-| 2 | `build_value_chain.py` — templates + linking logic | Medium |
-| 3 | `compute_value_chain.py` — pipeline step | Small |
-| 4 | Wire into factory + progress map | Small |
-| 5 | Persist + include in analysis response | Small |
-| 6 | Frontend `ValueChainDiagram` component | Medium |
-| 7 | Tests (backend + frontend) | Medium |
-
-Estimated total: 1-2 days of focused work.
+Implemented across PRs #101 (backend) and #102 (frontend).
 
 ---
 
