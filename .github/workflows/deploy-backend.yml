@@ -23,11 +23,5 @@ jobs:
     uses: ./.github/workflows/_deploy.yml
     with:
       environment: staging
-    secrets:
-      AWS_ACCESS_KEY_ID: ${{ secrets.DEV_AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.DEV_AWS_SECRET_ACCESS_KEY }}
-      AWS_ACCOUNT_ID: ${{ secrets.DEV_AWS_ACCOUNT_ID }}
-      AWS_REGION: ${{ secrets.DEV_AWS_REGION }}
-      DEPLOY_KEY: ${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}
-      AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
-      OPENAI_API_KEY: ${{ secrets.DEV_OPENAI_API_KEY }}
+      aws_prefix: DEV
+    secrets: inherit

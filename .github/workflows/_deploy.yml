@@ -7,21 +7,10 @@ on:
         required: true
         type: string
         description: "CDK environment name (staging, testing, production)"
-    secrets:
-      AWS_ACCESS_KEY_ID:
+      aws_prefix:
         required: true
-      AWS_SECRET_ACCESS_KEY:
-        required: true
-      AWS_ACCOUNT_ID:
-        required: true
-      AWS_REGION:
-        required: true
-      DEPLOY_KEY:
-        required: true
-      AMPLIFY_GITHUB_TOKEN:
-        required: true
-      OPENAI_API_KEY:
-        required: false
+        type: string
+        description: "Secret name prefix for AWS creds (DEV, TEST, PROD)"
 
 jobs:
   deploy:
@@ -49,41 +38,56 @@ jobs:
           cd infrastructure
           uv sync --quiet
 
+      - name: Resolve AWS secrets
+        env:
+          PREFIX: ${{ inputs.aws_prefix }}
+          KEY_ID: ${{ secrets[format('{0}_AWS_ACCESS_KEY_ID', inputs.aws_prefix)] }}
+          SECRET_KEY: ${{ secrets[format('{0}_AWS_SECRET_ACCESS_KEY', inputs.aws_prefix)] }}
+          ACCOUNT: ${{ secrets[format('{0}_AWS_ACCOUNT_ID', inputs.aws_prefix)] }}
+          REGION: ${{ secrets[format('{0}_AWS_REGION', inputs.aws_prefix)] }}
+          OPENAI: ${{ secrets[format('{0}_OPENAI_API_KEY', inputs.aws_prefix)] }}
+        run: |
+          echo "RESOLVED_AWS_ACCESS_KEY_ID=${KEY_ID}" >> $GITHUB_ENV
+          echo "RESOLVED_AWS_SECRET_ACCESS_KEY=${SECRET_KEY}" >> $GITHUB_ENV
+          echo "RESOLVED_AWS_ACCOUNT_ID=${ACCOUNT}" >> $GITHUB_ENV
+          echo "RESOLVED_AWS_REGION=${REGION}" >> $GITHUB_ENV
+          echo "RESOLVED_OPENAI_API_KEY=${OPENAI}" >> $GITHUB_ENV
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ env.RESOLVED_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.RESOLVED_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.RESOLVED_AWS_REGION }}
 
       - name: CDK Bootstrap
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=${{ inputs.environment }} \
-            cdk bootstrap "aws://${{ secrets.AWS_ACCOUNT_ID }}/${{ secrets.AWS_REGION }}" \
+            cdk bootstrap "aws://${RESOLVED_AWS_ACCOUNT_ID}/${RESOLVED_AWS_REGION}" \
             --quiet 2>&1 | grep -v "^$" || true
 
       - name: Encode deploy key for Docker bundling
-        run: echo "DEPLOY_KEY_B64=$(printf '%s' "${{ secrets.DEPLOY_KEY }}" | base64 -w 0)" >> $GITHUB_ENV
+        run: echo "DEPLOY_KEY_B64=$(printf '%s' "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" | base64 -w 0)" >> $GITHUB_ENV
 
       - name: CDK Deploy
         env:
           DEPLOY_KEY_B64: ${{ env.DEPLOY_KEY_B64 }}
-          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ env.RESOLVED_OPENAI_API_KEY }}
           AI_PROVIDER: openai
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=${{ inputs.environment }} \
-          AWS_DEFAULT_REGION="${{ secrets.AWS_REGION }}" \
+          AWS_DEFAULT_REGION="${RESOLVED_AWS_REGION}" \
             cdk deploy Janus-${{ inputs.environment }} \
               --require-approval never \
               --outputs-file /tmp/janus-outputs.json \
               --context "environment=${{ inputs.environment }}" \
-              --context "account=${{ secrets.AWS_ACCOUNT_ID }}" \
-              --context "region=${{ secrets.AWS_REGION }}"
+              --context "account=${RESOLVED_AWS_ACCOUNT_ID}" \
+              --context "region=${RESOLVED_AWS_REGION}"
 
       - name: Print deployment outputs
         run: |
