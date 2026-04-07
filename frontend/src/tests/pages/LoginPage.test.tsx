@@ -33,17 +33,11 @@ describe('LoginPage', () => {
         expect(screen.getByText('Sign In')).toBeInTheDocument()
     })
 
-    it('redirects to dashboard when already authenticated', () => {
+    it('always renders form even with active session (middleware handles auth redirect)', () => {
         mockStatus = 'authenticated'
-        const { container } = render(<LoginPage />)
-        expect(mockReplace).toHaveBeenCalledWith('/dashboard')
-        expect(container.innerHTML).toBe('')
-    })
-
-    it('renders nothing while loading session', () => {
-        mockStatus = 'loading'
         render(<LoginPage />)
         expect(screen.getByLabelText('Email')).toBeInTheDocument()
+        expect(screen.getByText('Sign In')).toBeInTheDocument()
     })
 
     it('shows error on invalid credentials', async () => {

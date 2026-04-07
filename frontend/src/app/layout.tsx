@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import SessionWrapper from '@/components/SessionWrapper'
+import WebVitals from '@/components/WebVitals'
 
 export const metadata: Metadata = {
     title: 'Janus — AI Risk & Opportunity Platform',
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <a href="#main" className="skip-to-content">
                     Skip to main content
                 </a>
+                <WebVitals />
                 <SessionWrapper>{children}</SessionWrapper>
             </body>
         </html>
