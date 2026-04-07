@@ -36,11 +36,11 @@ describe('SignupPage', () => {
         expect(screen.getByText('Create Account & Start')).toBeInTheDocument()
     })
 
-    it('redirects to dashboard when already authenticated', () => {
+    it('always renders form even with active session (middleware handles auth redirect)', () => {
         mockStatus = 'authenticated'
-        const { container } = render(<SignupPage />)
-        expect(mockReplace).toHaveBeenCalledWith('/dashboard')
-        expect(container.innerHTML).toBe('')
+        render(<SignupPage />)
+        expect(screen.getByLabelText('Work email')).toBeInTheDocument()
+        expect(screen.getByText('Create Account & Start')).toBeInTheDocument()
     })
 
     it('shows error when registration fails', async () => {
