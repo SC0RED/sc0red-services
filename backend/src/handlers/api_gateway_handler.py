@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from decimal import Decimal
 from typing import Any
 
@@ -261,6 +262,7 @@ class APIGatewayHandler:
 
     def handle(self, event: dict[str, Any]) -> LambdaResponse:
         """Route an API Gateway event to the appropriate handler."""
+        start_time = time.monotonic()
         method = event.get("httpMethod", "GET")
         path = event.get("path", "")
         headers = event.get("headers") or {}
@@ -274,11 +276,23 @@ class APIGatewayHandler:
 
         handler, path_params, authenticated = result
         if not authenticated:
-            return handler(event, **path_params)
+            response = handler(event, **path_params)
+            self._log_request(method, path, response, start_time)
+            return response
 
         try:
             authentication = require_authentication(headers)
         except ValueError as e:
             return build_error(str(e), 401)
 
-        return handler(event, authentication, **path_params)
+        response = handler(event, authentication, **path_params)
+        self._log_request(method, path, response, start_time)
+        return response
+
+    @staticmethod
+    def _log_request(
+        method: str, path: str, response: LambdaResponse, start_time: float
+    ) -> None:
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        status = response.get("statusCode", 0)
+        logger.info("%s %s → %d (%dms)", method, path, status, duration_ms)
