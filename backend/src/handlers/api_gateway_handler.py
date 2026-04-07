@@ -290,9 +290,7 @@ class APIGatewayHandler:
         return response
 
     @staticmethod
-    def _log_request(
-        method: str, path: str, response: LambdaResponse, start_time: float
-    ) -> None:
+    def _log_request(method: str, path: str, response: LambdaResponse, start_time: float) -> None:
         duration_ms = int((time.monotonic() - start_time) * 1000)
         status = response.get("statusCode", 0)
         logger.info("%s %s → %d (%dms)", method, path, status, duration_ms)
