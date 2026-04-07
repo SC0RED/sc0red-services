@@ -1,27 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { signIn, useSession } from 'next-auth/react'
+import { useState } from 'react'
+import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function LoginPage() {
     const router = useRouter()
-    const { status } = useSession()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
-
-    useEffect(() => {
-        if (status === 'authenticated') {
-            router.replace('/dashboard')
-        }
-    }, [status, router])
-
-    if (status === 'authenticated') {
-        return null
-    }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
