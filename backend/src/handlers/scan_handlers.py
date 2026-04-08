@@ -9,9 +9,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import (
+    NOT_FOUND,
+    VALIDATION_ERROR,
     build_company_summary,
     build_error,
     build_json_response,
+    check_org_access,
 )
 from src.handlers.sqs_messages import build_analysis_message
 
@@ -39,7 +42,7 @@ def handle_scan_start(
     scan_type = body.get("type", "")
 
     if not url or not scan_type:
-        return build_error("url and type required")
+        return build_error("url and type required", code=VALIDATION_ERROR)
 
     scan_repo = storage.create_scan_repository()
     scan_id = _create_scan_record(scan_repo, url, scan_type, authentication)
@@ -177,8 +180,8 @@ def handle_scan_status(
     """Handle GET /api/scan/{scan_id}."""
     scan_repo = storage.create_scan_repository()
     scan = scan_repo.get_by_id(scan_id)
-    if not scan or scan.get("org_id") != authentication.org_id:
-        return build_error("Not found", 404)
+    if error := check_org_access(scan, authentication):
+        return error
 
     company_repo = storage.create_company_repository()
     scan_companies = scan_repo.get_scan_companies(scan_id)
@@ -235,16 +238,16 @@ def handle_scan_confirm(
     body = json.loads(event.get("body") or "{}")
     companies = body.get("companies", [])
     if not companies:
-        return build_error("No companies provided")
+        return build_error("No companies provided", code=VALIDATION_ERROR)
 
     scan_repo = storage.create_scan_repository()
     scan = scan_repo.get_by_id(scan_id)
     if not scan or scan.get("org_id") != authentication.org_id:
-        return build_error("Scan not found", 404)
+        return build_error("Scan not found", 404, NOT_FOUND)
 
     valid_companies = [c for c in companies if c.get("url", "").startswith(("http://", "https://"))]
     if not valid_companies:
-        return build_error("At least one company with a url is required")
+        return build_error("At least one company with a url is required", code=VALIDATION_ERROR)
 
     scan_repo.update(
         scan_id,
@@ -283,8 +286,8 @@ def handle_delete_scan(
     """Handle DELETE /api/scan/{scan_id}."""
     scan_repo = storage.create_scan_repository()
     scan = scan_repo.get_by_id(scan_id)
-    if not scan or scan.get("org_id") != authentication.org_id:
-        return build_error("Not found", 404)
+    if error := check_org_access(scan, authentication):
+        return error
 
     company_repo = storage.create_company_repository()
     assessment_repo = storage.create_assessment_repository()
