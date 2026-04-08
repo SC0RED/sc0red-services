@@ -30,4 +30,4 @@
 - [x] Migrate login page to use FormField, Button, Card, Input
 - [x] Migrate signup page to use FormField, Button, Card, Input
 - [x] Delete buttons already use inline confirm UI (no browser confirm() found)
-- [ ] Migrate dashboard to use Card, Badge, EmptyState, Skeleton (deferred — SSR page, more complex)
+- [x] Migrate dashboard empty state to use EmptyState component

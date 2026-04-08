@@ -791,6 +791,31 @@ class TestAPIGatewayHandler:
         assert len(body["analyses"]) == 1
         assert body["analyses"][0]["companyName"] == "Test"
 
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_list_analyses_with_limit(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.find_by_org.return_value = (
+            [{"id": "c-1", "company_name": "Test"}],
+            {"pk": "next-key"},
+        )
+        storage.create_company_repository.return_value = company_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analyses",
+                "headers": {"Authorization": "Bearer token"},
+                "queryStringParameters": {"limit": "1"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert len(body["analyses"]) == 1
+        assert "cursor" in body
+        company_repo.find_by_org.assert_called_once_with("org-1", limit=1, cursor=None)
+
 
 class TestConfigEndpoint:
     def _make_handler(self):
