@@ -36,27 +36,13 @@ export default function LoginPage() {
 
     return (
         <div
-            style={{
-                minHeight: '100vh',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '1.5rem',
-            }}
-            className="grid-bg"
+            className="grid-bg flex-col justify-center items-center"
+            style={{ minHeight: '100vh', padding: '1.5rem' }}
         >
-            <div style={{ width: '100%', maxWidth: '420px' }}>
+            <div className="w-full max-w-sm">
                 {/* Logo */}
-                <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-                    <div
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.625rem',
-                            marginBottom: '0.75rem',
-                        }}
-                    >
+                <div className="text-center mb-xl">
+                    <div className="inline-flex gap-sm mb-sm">
                         <div
                             style={{
                                 width: '56px',
@@ -81,29 +67,18 @@ export default function LoginPage() {
                             Janus
                         </span>
                     </div>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
+                    <p className="text-secondary" style={{ fontSize: '0.9375rem' }}>
                         AI Risk & Opportunity Intelligence
                     </p>
                 </div>
 
                 <Card padding="lg">
-                    <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.375rem' }}>
+                    <h1 className="font-bold mb-xs" style={{ fontSize: '1.25rem' }}>
                         Welcome back
                     </h1>
-                    <p
-                        style={{
-                            color: 'var(--text-secondary)',
-                            fontSize: '0.875rem',
-                            marginBottom: '1.75rem',
-                        }}
-                    >
-                        Sign in to your account
-                    </p>
+                    <p className="text-secondary text-sm mb-lg">Sign in to your account</p>
 
-                    <form
-                        onSubmit={handleSubmit}
-                        style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}
-                    >
+                    <form onSubmit={handleSubmit} className="flex-col gap-lg">
                         <FormField label="Email" htmlFor="email">
                             <Input
                                 id="email"
@@ -153,7 +128,7 @@ export default function LoginPage() {
                     </form>
 
                     <div className="divider" style={{ margin: '1.5rem 0' }} />
-                    <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                    <p className="text-center text-secondary text-sm">
                         Don&apos;t have an account?{' '}
                         <Link href="/signup" style={{ color: 'var(--accent-blue)', fontWeight: 500 }}>
                             Create one
