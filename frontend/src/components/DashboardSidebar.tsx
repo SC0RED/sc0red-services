@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
@@ -20,6 +21,7 @@ const navItems: { href: string; label: string; icon: React.ReactNode; adminOnly?
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
             >
                 <rect x="3" y="3" width="7" height="7" />
                 <rect x="14" y="3" width="7" height="7" />
@@ -41,6 +43,7 @@ const navItems: { href: string; label: string; icon: React.ReactNode; adminOnly?
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
             >
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.35-4.35" />
@@ -61,6 +64,7 @@ const navItems: { href: string; label: string; icon: React.ReactNode; adminOnly?
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
             >
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
@@ -83,6 +87,7 @@ const navItems: { href: string; label: string; icon: React.ReactNode; adminOnly?
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
             >
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
@@ -176,10 +181,12 @@ export default function DashboardSidebar() {
                                 justifyContent: 'center',
                             }}
                         >
-                            <img
+                            <Image
                                 src="/janus-logo.png"
                                 alt="Janus"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                width={36}
+                                height={36}
+                                style={{ objectFit: 'cover' }}
                             />
                         </div>
                         <div>

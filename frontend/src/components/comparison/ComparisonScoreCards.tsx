@@ -13,7 +13,7 @@ export default function ComparisonScoreCards({ analyses }: ComparisonScoreCardsP
         <div
             style={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${analyses.length}, 1fr)`,
+                gridTemplateColumns: `repeat(auto-fit, minmax(280px, 1fr))`,
                 gap: '1.25rem',
                 marginBottom: '1.5rem',
             }}

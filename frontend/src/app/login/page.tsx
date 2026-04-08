@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import Link from 'next/link'
 
 import { Button, Card, FormField, Input } from '@/components/ui'
@@ -68,10 +69,12 @@ export default function LoginPage() {
                                 flexShrink: 0,
                             }}
                         >
-                            <img
+                            <Image
                                 src="/janus-logo.png"
                                 alt="Janus"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                width={56}
+                                height={56}
+                                style={{ objectFit: 'cover' }}
                             />
                         </div>
                         <span style={{ fontSize: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
