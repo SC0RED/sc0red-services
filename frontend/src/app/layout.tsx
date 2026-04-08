@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import SessionWrapper from '@/components/SessionWrapper'
+import RouteProgress from '@/components/ui/RouteProgress'
 import WebVitals from '@/components/WebVitals'
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <a href="#main" className="skip-to-content">
                     Skip to main content
                 </a>
+                <RouteProgress />
                 <WebVitals />
                 <SessionWrapper>{children}</SessionWrapper>
             </body>
