@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth/authOptions'
 import type { AnalysisItem } from '@/lib/types/api'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import AnalysesTable from '@/components/AnalysesTable'
+import { Breadcrumbs } from '@/components/ui'
 
 export default async function AnalysesPage() {
     const session = await getServerSession(authOptions)
@@ -21,6 +22,7 @@ export default async function AnalysesPage() {
         <div className="page-layout">
             <DashboardSidebar />
             <main id="main" tabIndex={-1} className="page-content">
+                <Breadcrumbs />
                 <div style={{ marginBottom: '2rem' }}>
                     <h1 className="page-title">All Analyses</h1>
                     <p style={{ color: 'var(--text-secondary)' }}>

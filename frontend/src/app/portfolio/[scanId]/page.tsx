@@ -6,6 +6,7 @@ import { backendFetch } from '@/lib/api/serverToken'
 import { BackendError } from '@/lib/api/errors'
 import type { ScanData } from '@/lib/types/api'
 import DashboardSidebar from '@/components/DashboardSidebar'
+import { Breadcrumbs } from '@/components/ui'
 import PortfolioView from './PortfolioView'
 
 export default async function PortfolioPage({ params }: { params: { scanId: string } }) {
@@ -28,6 +29,7 @@ export default async function PortfolioPage({ params }: { params: { scanId: stri
         <div className="page-layout">
             <DashboardSidebar />
             <main id="main" tabIndex={-1} className="page-content-wide">
+                <Breadcrumbs />
                 <PortfolioView scanId={params.scanId} initialScan={scan} />
             </main>
         </div>

@@ -14,7 +14,7 @@ import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
-import { LoadingSpinner } from '@/components/ui'
+import { Breadcrumbs, LoadingSpinner } from '@/components/ui'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
@@ -178,6 +178,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 className="page-content"
                 style={{ margin: '0 auto 0 var(--sidebar-width)' }}
             >
+                <Breadcrumbs />
                 <AnalysisHeader
                     analysisId={analysisId}
                     companyName={data.companyName}
