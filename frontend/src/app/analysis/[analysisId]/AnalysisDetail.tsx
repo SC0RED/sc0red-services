@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
 
@@ -13,11 +14,20 @@ import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
+import { LoadingSpinner } from '@/components/ui'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
-import ValueChainDiagram from '@/components/ValueChainDiagram'
 import type { AnalysisData, DocumentInfo } from '@/lib/types/api'
+
+const ValueChainDiagram = dynamic(() => import('@/components/ValueChainDiagram'), {
+    loading: () => (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+            <LoadingSpinner />
+        </div>
+    ),
+    ssr: false,
+})
 
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
     const router = useRouter()

@@ -1,12 +1,22 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 
 import DashboardSidebar from '@/components/DashboardSidebar'
 import ComparisonScoreCards from '@/components/comparison/ComparisonScoreCards'
-import ComparisonRadar from '@/components/comparison/ComparisonRadar'
 import ComparisonRiskTable from '@/components/comparison/ComparisonRiskTable'
+import { LoadingSpinner } from '@/components/ui'
 import type { AnalysisData } from '@/lib/types/api'
+
+const ComparisonRadar = dynamic(() => import('@/components/comparison/ComparisonRadar'), {
+    loading: () => (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+            <LoadingSpinner />
+        </div>
+    ),
+    ssr: false,
+})
 
 interface ComparisonViewProps {
     analyses: AnalysisData[]
