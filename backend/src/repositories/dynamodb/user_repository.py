@@ -26,7 +26,7 @@ class DynamoDBUserRepository:
 
     def find_by_email(self, email: str) -> dict[str, Any] | None:
         """Return the user item matching the given email address, or None if not found."""
-        items = self._table.query_gsi(
+        items, _cursor = self._table.query_gsi(
             index_name="GSI4",
             pk_attr="GSI4PK",
             pk_value=f"EMAIL#{email}",
@@ -55,13 +55,14 @@ class DynamoDBUserRepository:
 
     def find_by_org(self, org_id: str) -> list[dict[str, Any]]:
         """Return all users belonging to the given organisation."""
-        return self._table.query_gsi(
+        items, _cursor = self._table.query_gsi(
             index_name="GSI1",
             pk_attr="GSI1PK",
             pk_value=f"ORG#{org_id}",
             sk_attr="GSI1SK",
             sk_prefix="USER#",
         )
+        return items
 
     def delete(self, user_id: str) -> None:
         """Delete a user by ID."""
@@ -106,13 +107,14 @@ class DynamoDBInvitationRepository:
 
     def find_by_email(self, email: str) -> list[dict[str, Any]]:
         """Return all invitations for the given email address."""
-        return self._table.query_gsi(
+        items, _cursor = self._table.query_gsi(
             index_name="GSI4",
             pk_attr="GSI4PK",
             pk_value=f"EMAIL#{email}",
             sk_attr="GSI4SK",
             sk_prefix="INVITE#",
         )
+        return items
 
     def update_status(self, org_id: str, invite_id: str, status: str) -> None:
         """Update the status of an invitation."""

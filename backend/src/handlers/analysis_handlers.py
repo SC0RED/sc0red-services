@@ -128,7 +128,7 @@ def handle_list_analyses(
     """Handle GET /api/analyses."""
     company_repo = storage.create_company_repository()
     scan_repo = storage.create_scan_repository()
-    companies = company_repo.find_by_org(authentication.org_id)
+    companies, _cursor = company_repo.find_by_org(authentication.org_id)
 
     all_scans = scan_repo.find_recent_by_org(authentication.org_id, limit=None)
     scan_type_map = {s["id"]: s.get("type", "") for s in all_scans}
@@ -151,7 +151,7 @@ def handle_dashboard(
     company_repo = storage.create_company_repository()
     scan_repo = storage.create_scan_repository()
 
-    companies = company_repo.find_by_org(authentication.org_id)
+    companies, _cursor = company_repo.find_by_org(authentication.org_id)
     analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
 
     total_analyses = len(analyzed)

@@ -106,10 +106,13 @@ class DynamoDBTable:
         pk_value: str,
         sk_attr: str | None = None,
         sk_prefix: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """Query a Global Secondary Index by partition key with optional sort-key prefix.
+        limit: int | None = None,
+        cursor: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+        """Query a GSI with optional pagination.
 
-        Automatically paginates through all results using LastEvaluatedKey.
+        Returns (items, last_evaluated_key). If last_evaluated_key is None,
+        there are no more results. Pass it as cursor to fetch the next page.
         """
         key_condition = Key(pk_attr).eq(pk_value)
         if sk_attr and sk_prefix:
@@ -119,8 +122,14 @@ class DynamoDBTable:
             "IndexName": index_name,
             "KeyConditionExpression": key_condition,
         }
+        if cursor:
+            kwargs["ExclusiveStartKey"] = cursor
+        if limit:
+            kwargs["Limit"] = limit
 
         items: list[dict[str, Any]] = []
+        last_key: dict[str, Any] | None = None
+
         while True:
             response = self._table.query(**kwargs)
             items.extend(response.get("Items", []))
@@ -128,9 +137,13 @@ class DynamoDBTable:
             last_key = response.get("LastEvaluatedKey")
             if not last_key:
                 break
+            if limit and len(items) >= limit:
+                break
             kwargs["ExclusiveStartKey"] = last_key
 
-        return items
+        if limit:
+            return items[:limit], last_key
+        return items, None
 
     def batch_get(self, keys: list[dict[str, str]]) -> list[dict[str, Any]]:
         """Fetch multiple items in a single BatchGetItem call (max 100 keys).
