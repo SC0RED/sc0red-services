@@ -5,6 +5,8 @@ import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+import { Button, Card, FormField, Input } from '@/components/ui'
+
 export default function LoginPage() {
     const router = useRouter()
     const [email, setEmail] = useState('')
@@ -81,8 +83,7 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                {/* Card */}
-                <div className="card" style={{ padding: '2rem' }}>
+                <Card padding="lg">
                     <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.375rem' }}>
                         Welcome back
                     </h1>
@@ -100,31 +101,22 @@ export default function LoginPage() {
                         onSubmit={handleSubmit}
                         style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}
                     >
-                        <div className="input-group">
-                            <label className="label" htmlFor="email">
-                                Email
-                            </label>
-                            <input
+                        <FormField label="Email" htmlFor="email">
+                            <Input
                                 id="email"
                                 type="email"
-                                className="input"
                                 placeholder="you@firm.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 autoComplete="email"
-                                aria-describedby={error ? 'login-error' : undefined}
                             />
-                        </div>
+                        </FormField>
 
-                        <div className="input-group">
-                            <label className="label" htmlFor="password">
-                                Password
-                            </label>
-                            <input
+                        <FormField label="Password" htmlFor="password">
+                            <Input
                                 id="password"
                                 type="password"
-                                className="input"
                                 placeholder="••••••••"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -139,7 +131,7 @@ export default function LoginPage() {
                                     Forgot password?
                                 </Link>
                             </div>
-                        </div>
+                        </FormField>
 
                         {error && (
                             <div id="login-error" role="alert" className="alert-error">
@@ -147,31 +139,14 @@ export default function LoginPage() {
                             </div>
                         )}
 
-                        <button
+                        <Button
                             type="submit"
-                            className="btn btn-primary w-full"
+                            loading={loading}
+                            className="w-full"
                             style={{ justifyContent: 'center', marginTop: '0.25rem' }}
-                            disabled={loading}
                         >
-                            {loading ? (
-                                <>
-                                    <svg
-                                        style={{ animation: 'spin 1s linear infinite' }}
-                                        width="16"
-                                        height="16"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                    >
-                                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                                    </svg>
-                                    Signing in...
-                                </>
-                            ) : (
-                                'Sign In'
-                            )}
-                        </button>
+                            {loading ? 'Signing in...' : 'Sign In'}
+                        </Button>
                     </form>
 
                     <div className="divider" style={{ margin: '1.5rem 0' }} />
@@ -181,7 +156,7 @@ export default function LoginPage() {
                             Create one
                         </Link>
                     </p>
-                </div>
+                </Card>
             </div>
         </div>
     )

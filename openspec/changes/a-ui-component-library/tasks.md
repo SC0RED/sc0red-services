@@ -27,9 +27,7 @@
 
 ## PR 2: Migrate existing pages
 
-- [ ] Migrate login page to use FormField, Button
-- [ ] Migrate signup page to use FormField, Button, Select
-- [ ] Migrate dashboard to use Card, Badge, EmptyState, Skeleton
-- [ ] Replace browser confirm() with ConfirmDialog in DeleteAnalysisButton
-- [ ] Replace browser confirm() with ConfirmDialog in DeleteScanButton
-- [ ] Replace browser confirm() in invitation handlers (remove member, revoke invite)
+- [x] Migrate login page to use FormField, Button, Card, Input
+- [x] Migrate signup page to use FormField, Button, Card, Input
+- [x] Delete buttons already use inline confirm UI (no browser confirm() found)
+- [ ] Migrate dashboard to use Card, Badge, EmptyState, Skeleton (deferred — SSR page, more complex)

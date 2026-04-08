@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 
+import { Button, Card, FormField, Input } from '@/components/ui'
+
 export default function SignupPage() {
     const router = useRouter()
     const [form, setForm] = useState({
@@ -93,7 +95,7 @@ export default function SignupPage() {
                     </p>
                 </div>
 
-                <div className="card" style={{ padding: '2rem' }}>
+                <Card padding="lg">
                     <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.375rem' }}>
                         Create your account
                     </h1>
@@ -155,68 +157,58 @@ export default function SignupPage() {
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
-                            <div className="input-group">
-                                <label className="label" htmlFor="name">
-                                    Your name
-                                </label>
-                                <input
+                            <FormField label="Your name" htmlFor="name">
+                                <Input
                                     id="name"
                                     type="text"
-                                    className="input"
                                     placeholder="Alex Johnson"
                                     value={form.name}
                                     onChange={(e) => update('name', e.target.value)}
                                     required
                                 />
-                            </div>
-                            <div className="input-group">
-                                <label className="label" htmlFor="orgName">
-                                    {form.orgType === 'pe_firm' ? 'Firm name' : 'Company name'}
-                                </label>
-                                <input
+                            </FormField>
+                            <FormField
+                                label={form.orgType === 'pe_firm' ? 'Firm name' : 'Company name'}
+                                htmlFor="orgName"
+                            >
+                                <Input
                                     id="orgName"
                                     type="text"
-                                    className="input"
                                     placeholder={form.orgType === 'pe_firm' ? 'Accel Partners' : 'Acme Corp'}
                                     value={form.orgName}
                                     onChange={(e) => update('orgName', e.target.value)}
                                     required
                                 />
-                            </div>
+                            </FormField>
                         </div>
 
-                        <div className="input-group">
-                            <label className="label" htmlFor="signup-email">
-                                Work email
-                            </label>
-                            <input
+                        <FormField label="Work email" htmlFor="signup-email">
+                            <Input
                                 id="signup-email"
                                 type="email"
-                                className="input"
                                 placeholder="you@firm.com"
                                 value={form.email}
                                 onChange={(e) => update('email', e.target.value)}
                                 required
                                 autoComplete="email"
-                                aria-describedby={error ? 'signup-error' : undefined}
                             />
-                        </div>
+                        </FormField>
 
-                        <div className="input-group">
-                            <label className="label" htmlFor="signup-password">
-                                Password
-                            </label>
-                            <input
+                        <FormField
+                            label="Password"
+                            htmlFor="signup-password"
+                            helperText="Min. 8 characters with uppercase, lowercase, and numbers"
+                        >
+                            <Input
                                 id="signup-password"
                                 type="password"
-                                className="input"
-                                placeholder="Min. 8 characters"
+                                placeholder="••••••••"
                                 value={form.password}
                                 onChange={(e) => update('password', e.target.value)}
                                 required
                                 autoComplete="new-password"
                             />
-                        </div>
+                        </FormField>
 
                         {error && (
                             <div id="signup-error" role="alert" className="alert-error">
@@ -224,14 +216,14 @@ export default function SignupPage() {
                             </div>
                         )}
 
-                        <button
+                        <Button
                             type="submit"
-                            className="btn btn-primary w-full"
+                            loading={loading}
+                            className="w-full"
                             style={{ justifyContent: 'center', marginTop: '0.375rem' }}
-                            disabled={loading}
                         >
                             {loading ? 'Creating account...' : 'Create Account & Start'}
-                        </button>
+                        </Button>
                     </form>
 
                     <div className="divider" style={{ margin: '1.5rem 0' }} />
@@ -241,7 +233,7 @@ export default function SignupPage() {
                             Sign in
                         </Link>
                     </p>
-                </div>
+                </Card>
             </div>
         </div>
     )
