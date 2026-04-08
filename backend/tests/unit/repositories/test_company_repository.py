@@ -64,11 +64,24 @@ class TestCompanyRepository:
         repo.save({"id": "c2", "company_name": "Company 2", "org_id": "org-A"})
         repo.save({"id": "c3", "company_name": "Company 3", "org_id": "org-B"})
 
-        results = repo.find_by_org("org-A")
+        results, cursor = repo.find_by_org("org-A")
         assert len(results) == 2
+        assert cursor is None
 
-        results_b = repo.find_by_org("org-B")
+        results_b, cursor_b = repo.find_by_org("org-B")
         assert len(results_b) == 1
+        assert cursor_b is None
+
+    @mock_aws
+    def test_find_by_org_with_limit(self, dynamodb_table):
+        repo = DynamoDBCompanyRepository(dynamodb_table)
+        repo.save({"id": "c1", "company_name": "Company 1", "org_id": "org-A"})
+        repo.save({"id": "c2", "company_name": "Company 2", "org_id": "org-A"})
+        repo.save({"id": "c3", "company_name": "Company 3", "org_id": "org-A"})
+
+        results, cursor = repo.find_by_org("org-A", limit=2)
+        assert len(results) == 2
+        # Cursor may or may not be set depending on DynamoDB page boundaries
 
     @mock_aws
     def test_save_with_explicit_id(self, dynamodb_table):

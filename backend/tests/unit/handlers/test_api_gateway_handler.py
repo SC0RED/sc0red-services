@@ -773,9 +773,10 @@ class TestAPIGatewayHandler:
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
-        company_repo.find_by_org.return_value = [
-            {"id": "c-1", "company_name": "Test", "risk_tier": "low"},
-        ]
+        company_repo.find_by_org.return_value = (
+            [{"id": "c-1", "company_name": "Test", "risk_tier": "low"}],
+            None,
+        )
         storage.create_company_repository.return_value = company_repo
 
         result = handler.handle(
@@ -859,7 +860,7 @@ class TestDashboardEndpoint:
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
-        company_repo.find_by_org.return_value = []
+        company_repo.find_by_org.return_value = ([], None)
         scan_repo = MagicMock()
         scan_repo.find_recent_by_org.return_value = []
         storage.create_company_repository.return_value = company_repo
@@ -886,32 +887,35 @@ class TestDashboardEndpoint:
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
         company_repo = MagicMock()
-        company_repo.find_by_org.return_value = [
-            {
-                "id": "c-1",
-                "company_name": "Company A",
-                "company_url": "https://a.com",
-                "overall_risk_score": 7.5,
-                "risk_tier": "high",
-                "analyzed_at": "2026-03-01T00:00:00",
-                "scan_id": "s-1",
-            },
-            {
-                "id": "c-2",
-                "company_name": "Company B",
-                "company_url": "https://b.com",
-                "overall_risk_score": 9.2,
-                "risk_tier": "critical",
-                "analyzed_at": "2026-03-02T00:00:00",
-                "scan_id": "s-1",
-            },
-            {
-                "id": "c-3",
-                "company_name": "Pending",
-                "overall_risk_score": None,
-                "scan_id": "s-2",
-            },
-        ]
+        company_repo.find_by_org.return_value = (
+            [
+                {
+                    "id": "c-1",
+                    "company_name": "Company A",
+                    "company_url": "https://a.com",
+                    "overall_risk_score": 7.5,
+                    "risk_tier": "high",
+                    "analyzed_at": "2026-03-01T00:00:00",
+                    "scan_id": "s-1",
+                },
+                {
+                    "id": "c-2",
+                    "company_name": "Company B",
+                    "company_url": "https://b.com",
+                    "overall_risk_score": 9.2,
+                    "risk_tier": "critical",
+                    "analyzed_at": "2026-03-02T00:00:00",
+                    "scan_id": "s-1",
+                },
+                {
+                    "id": "c-3",
+                    "company_name": "Pending",
+                    "overall_risk_score": None,
+                    "scan_id": "s-2",
+                },
+            ],
+            None,
+        )
         scan_repo = MagicMock()
         all_scans = [
             {
