@@ -799,6 +799,20 @@ select {
     }
 }
 
+@media (max-width: 480px) {
+    .page-content,
+    .page-content-narrow,
+    .page-content-wide {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    /* Stack two-column form grids on small phones */
+    .responsive-grid-2 {
+        grid-template-columns: 1fr !important;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

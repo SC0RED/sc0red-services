@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 
@@ -80,10 +81,12 @@ export default function SignupPage() {
                                 flexShrink: 0,
                             }}
                         >
-                            <img
+                            <Image
                                 src="/janus-logo.png"
                                 alt="Janus"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                width={56}
+                                height={56}
+                                style={{ objectFit: 'cover' }}
                             />
                         </div>
                         <span style={{ fontSize: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
@@ -116,7 +119,10 @@ export default function SignupPage() {
                         {/* Org Type Toggle */}
                         <div className="input-group">
                             <label className="label">Account type</label>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                            <div
+                                className="responsive-grid-2"
+                                style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}
+                            >
                                 {[
                                     { value: 'pe_firm', label: 'PE Firm', desc: 'Analyze portfolio' },
                                     { value: 'company', label: 'Company', desc: 'Standalone scan' },
@@ -156,7 +162,10 @@ export default function SignupPage() {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+                        <div
+                            className="responsive-grid-2"
+                            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}
+                        >
                             <FormField label="Your name" htmlFor="name">
                                 <Input
                                     id="name"

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 
@@ -118,10 +119,12 @@ export default async function LandingPage() {
                             flexShrink: 0,
                         }}
                     >
-                        <img
+                        <Image
                             src="/janus-logo.png"
                             alt="Janus"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            width={40}
+                            height={40}
+                            style={{ objectFit: 'cover' }}
                         />
                     </div>
                     <span style={{ fontWeight: 700, fontSize: '1rem' }}>Janus</span>

@@ -8,7 +8,12 @@ interface ScanProgressPhaseProps {
 
 export default function ScanProgressPhase({ phase, progress, progressLabel }: ScanProgressPhaseProps) {
     return (
-        <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
+        <div
+            className="card"
+            style={{ padding: '3rem', textAlign: 'center' }}
+            aria-live="polite"
+            role="status"
+        >
             <div
                 style={{
                     width: '72px',

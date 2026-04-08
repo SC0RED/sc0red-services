@@ -74,7 +74,7 @@ export default function ComparisonView({ analyses }: ComparisonViewProps) {
                     <div
                         style={{
                             display: 'grid',
-                            gridTemplateColumns: `repeat(${analyses.length}, 1fr)`,
+                            gridTemplateColumns: `repeat(auto-fit, minmax(250px, 1fr))`,
                             gap: '1rem',
                         }}
                     >

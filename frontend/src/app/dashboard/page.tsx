@@ -57,7 +57,7 @@ export default async function DashboardPage() {
                 <div
                     style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                         gap: '1rem',
                         marginBottom: '2.5rem',
                     }}
@@ -149,8 +149,10 @@ export default async function DashboardPage() {
                                     </Link>
                                 </div>
                             </div>
-                            <div className="card" style={{ overflow: 'hidden' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <div className="card" style={{ overflowX: 'auto' }}>
+                                <table
+                                    style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}
+                                >
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                             {['Company', 'Risk Score', 'Tier', 'Source', 'Date', ''].map(
@@ -287,8 +289,10 @@ export default async function DashboardPage() {
                             >
                                 <h2 style={{ fontWeight: 700, fontSize: '1.125rem' }}>Recent Scans</h2>
                             </div>
-                            <div className="card" style={{ overflow: 'hidden' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <div className="card" style={{ overflowX: 'auto' }}>
+                                <table
+                                    style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}
+                                >
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                             {['Source', 'Type', 'Status', 'Companies', 'Date', ''].map(
