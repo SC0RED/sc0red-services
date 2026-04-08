@@ -36,6 +36,17 @@ class TestHelperFunctions:
         result = build_error("not found", 404)
         assert result["statusCode"] == 404
 
+    def test_build_error_with_code(self):
+        result = build_error("not found", 404, "NOT_FOUND")
+        body = json.loads(result["body"])
+        assert body["error"] == "not found"
+        assert body["code"] == "NOT_FOUND"
+
+    def test_build_error_without_code_omits_field(self):
+        result = build_error("bad request")
+        body = json.loads(result["body"])
+        assert "code" not in body
+
 
 class TestAPIGatewayHandler:
     def _make_handler(self):
@@ -84,7 +95,9 @@ class TestAPIGatewayHandler:
             }
         )
         assert result["statusCode"] == 400
-        assert "required" in json.loads(result["body"])["error"].lower()
+        body = json.loads(result["body"])
+        assert "required" in body["error"].lower()
+        assert body["code"] == "VALIDATION_ERROR"
 
     def test_register_duplicate_email(self):
         handler, storage = self._make_handler()

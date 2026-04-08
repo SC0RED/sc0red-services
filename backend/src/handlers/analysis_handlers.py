@@ -7,9 +7,11 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import (
+    VALIDATION_ERROR,
     build_company_summary,
     build_error,
     build_json_response,
+    check_org_access,
 )
 from src.handlers.sqs_messages import build_reanalysis_message
 
@@ -30,8 +32,8 @@ def handle_get_analysis(
     """Handle GET /api/analysis/{analysis_id}."""
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
-    if not company or company.get("org_id") != authentication.org_id:
-        return build_error("Not found", 404)
+    if error := check_org_access(company, authentication):
+        return error
 
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
@@ -97,8 +99,8 @@ def handle_delete_analysis(
     """Handle DELETE /api/analysis/{analysis_id}."""
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
-    if not company or company.get("org_id") != authentication.org_id:
-        return build_error("Not found", 404)
+    if error := check_org_access(company, authentication):
+        return error
 
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
@@ -226,12 +228,12 @@ def handle_reanalyze(
     """Handle POST /api/analysis/{analysis_id}/reanalyze."""
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
-    if not company or company.get("org_id") != authentication.org_id:
-        return build_error("Not found", 404)
+    if error := check_org_access(company, authentication):
+        return error
 
     company_url = company.get("company_url", "")
     if not company_url:
-        return build_error("Analysis has no company URL — cannot re-analyze")
+        return build_error("Analysis has no company URL — cannot re-analyze", code=VALIDATION_ERROR)
 
     scan_id = company.get("scan_id", "")
 
