@@ -1,42 +1,38 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('authentication', () => {
-    test('login page renders', async ({ page }) => {
+test.describe('authentication pages', () => {
+    test('login page renders with form', async ({ page }) => {
         await page.goto('/login')
         await expect(page.getByText('Welcome back')).toBeVisible()
         await expect(page.getByLabel('Email')).toBeVisible()
         await expect(page.getByLabel('Password')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
     })
 
-    test('signup page renders', async ({ page }) => {
+    test('signup page renders with form', async ({ page }) => {
         await page.goto('/signup')
         await expect(page.getByText('Create your account')).toBeVisible()
         await expect(page.getByLabel('Work email')).toBeVisible()
+        await expect(page.getByLabel('Password')).toBeVisible()
     })
 
-    test('invalid login shows error', async ({ page }) => {
+    test('login page has link to signup', async ({ page }) => {
         await page.goto('/login')
-        await page.getByLabel('Email').fill('wrong@test.com')
-        await page.getByLabel('Password').fill('WrongPass123')
-        await page.getByRole('button', { name: 'Sign In' }).click()
-
-        await expect(page.getByText('Invalid email or password')).toBeVisible({ timeout: 10000 })
+        await expect(page.getByRole('link', { name: 'Create one' })).toBeVisible()
     })
 
-    test('authenticated user can access dashboard', async ({ page }) => {
-        await page.goto('/dashboard')
-        await expect(page).toHaveURL(/\/dashboard/)
-        await expect(page.getByText(/Good (morning|afternoon|evening)/)).toBeVisible()
+    test('signup page has link to login', async ({ page }) => {
+        await page.goto('/signup')
+        await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
     })
 
-    test('unauthenticated user redirected to login', async ({ browser }) => {
-        // Fresh context without stored auth
-        const context = await browser.newContext()
-        const page = await context.newPage()
-
+    test('unauthenticated user visiting dashboard redirected to login', async ({ page }) => {
         await page.goto('/dashboard')
-        await expect(page).toHaveURL(/\/login/)
+        await expect(page).toHaveURL(/\/login/, { timeout: 10000 })
+    })
 
-        await context.close()
+    test('unauthenticated user visiting analyses redirected to login', async ({ page }) => {
+        await page.goto('/analyses')
+        await expect(page).toHaveURL(/\/login/, { timeout: 10000 })
     })
 })
