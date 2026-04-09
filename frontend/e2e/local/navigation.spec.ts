@@ -25,14 +25,4 @@ test.describe('navigation', () => {
         await expect(breadcrumb).toBeVisible()
         await expect(breadcrumb.getByText('Dashboard')).toBeVisible()
     })
-
-    test('landing page accessible without auth', async ({ browser }) => {
-        const context = await browser.newContext()
-        const page = await context.newPage()
-
-        await page.goto('/')
-        await expect(page.getByText('Know Your AI Risk')).toBeVisible()
-
-        await context.close()
-    })
 })

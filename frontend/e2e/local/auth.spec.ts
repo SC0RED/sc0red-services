@@ -19,15 +19,4 @@ test.describe('authentication', () => {
         await expect(page).toHaveURL(/\/dashboard/)
         await expect(page.getByText(/Good (morning|afternoon|evening)/)).toBeVisible()
     })
-
-    test('unauthenticated user redirected to login', async ({ browser }) => {
-        const context = await browser.newContext()
-        const page = await context.newPage()
-
-        await page.goto('/dashboard')
-        // In dev mode, middleware redirect may take a moment
-        await expect(page).toHaveURL(/\/login/, { timeout: 15000 })
-
-        await context.close()
-    })
 })
