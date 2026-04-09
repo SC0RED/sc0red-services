@@ -6,10 +6,12 @@ test.describe('authentication', () => {
         await expect(page.getByText(/Good (morning|afternoon|evening)/)).toBeVisible({ timeout: 15000 })
     })
 
-    test('dashboard shows stats cards', async ({ page }) => {
+    test('dashboard shows empty state or stats', async ({ page }) => {
         await page.goto('/dashboard')
-        await expect(page.getByText('Total Analyses')).toBeVisible({ timeout: 15000 })
-        await expect(page.getByText('Average Risk')).toBeVisible()
+        // New user sees empty state; returning user sees stats cards
+        await expect(page.getByText(/Run your first analysis|Companies Analyzed/)).toBeVisible({
+            timeout: 15000,
+        })
     })
 
     test('user name appears in sidebar', async ({ page }) => {
