@@ -148,6 +148,22 @@ jobs:
             sleep 5
           done
 
+      - name: Set up DynamoDB table
+        run: |
+          python3 scripts/setup_dynamodb.py \
+            --table janus-e2e \
+            --endpoint http://localhost:4566
+
+      - name: Create SQS queue
+        run: |
+          aws --endpoint-url=http://localhost:4566 sqs create-queue \
+            --queue-name janus-analysis-e2e \
+            --region us-east-1 2>/dev/null || true
+        env:
+          AWS_ACCESS_KEY_ID: local
+          AWS_SECRET_ACCESS_KEY: local
+          AWS_DEFAULT_REGION: us-east-1
+
       - name: Start frontend dev server
         env:
           BACKEND_URL: http://localhost:8001
@@ -168,6 +184,13 @@ jobs:
 
       - name: Run Playwright tests
         run: cd frontend && npx playwright test --project=local
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.e2e.yml logs backend
+          docker compose -f docker-compose.e2e.yml logs worker
+          docker compose -f docker-compose.e2e.yml logs ai-mock
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
