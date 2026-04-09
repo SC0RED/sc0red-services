@@ -25,7 +25,8 @@ test.describe('authentication', () => {
         const page = await context.newPage()
 
         await page.goto('/dashboard')
-        await expect(page).toHaveURL(/\/login/, { timeout: 10000 })
+        // In dev mode, middleware redirect may take a moment
+        await expect(page).toHaveURL(/\/login/, { timeout: 15000 })
 
         await context.close()
     })
