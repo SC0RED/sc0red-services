@@ -10,9 +10,9 @@ test.describe('portfolio scan', () => {
     test('can switch to single company mode', async ({ page }) => {
         await page.goto('/scan/new')
 
-        const singleLink = page.getByRole('link', { name: /Single Company/i }).first()
-        await expect(singleLink).toBeVisible({ timeout: 10000 })
-        await singleLink.click()
+        const singleButton = page.getByRole('button', { name: /Single Company/i }).first()
+        await expect(singleButton).toBeVisible({ timeout: 10000 })
+        await singleButton.click()
 
         await expect(page.getByLabel('Company Website URL')).toBeVisible()
     })
