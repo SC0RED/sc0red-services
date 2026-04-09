@@ -67,7 +67,28 @@ export default defineConfig({
         {
             name: 'deployed',
             testDir: './e2e/deployed',
+            testIgnore: ['analysis-detail.spec.ts', 'cleanup.spec.ts'],
             dependencies: ['deployed-setup'],
+            use: {
+                baseURL: DEPLOYED_BASE_URL,
+                storageState: './playwright/.auth/deployed.json',
+            },
+        },
+        {
+            name: 'deployed-post-scan',
+            testDir: './e2e/deployed',
+            testMatch: 'analysis-detail.spec.ts',
+            dependencies: ['deployed'],
+            use: {
+                baseURL: DEPLOYED_BASE_URL,
+                storageState: './playwright/.auth/deployed.json',
+            },
+        },
+        {
+            name: 'deployed-cleanup',
+            testDir: './e2e/deployed',
+            testMatch: 'cleanup.spec.ts',
+            dependencies: ['deployed-post-scan'],
             use: {
                 baseURL: DEPLOYED_BASE_URL,
                 storageState: './playwright/.auth/deployed.json',
