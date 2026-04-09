@@ -94,12 +94,122 @@ jobs:
         run: docker compose -f docker-compose.e2e.yml down -v
 
   # ===========================================================================
+  # Playwright E2E Tests (browser-based)
+  # ===========================================================================
+  playwright:
+    name: Playwright
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend test dependencies
+        run: pip install boto3 "PyJWT[crypto]"
+
+      - name: Configure SSH for private deps
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SIGNALFIELD_CORE_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+
+      - name: Build and start E2E stack
+        run: |
+          docker compose -f docker-compose.e2e.yml build --ssh default
+          docker compose -f docker-compose.e2e.yml up -d
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8001/api/health > /dev/null 2>&1; then
+              echo "Backend ready"
+              break
+            fi
+            [ "$i" -eq 30 ] && echo "Backend timeout" && docker compose -f docker-compose.e2e.yml logs backend && exit 1
+            sleep 5
+          done
+
+      - name: Set up DynamoDB table
+        run: |
+          python3 scripts/setup_dynamodb.py \
+            --table janus-e2e \
+            --endpoint http://localhost:4566
+
+      - name: Create SQS queue
+        run: |
+          aws --endpoint-url=http://localhost:4566 sqs create-queue \
+            --queue-name janus-analysis-e2e \
+            --region us-east-1 2>/dev/null || true
+        env:
+          AWS_ACCESS_KEY_ID: local
+          AWS_SECRET_ACCESS_KEY: local
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Start frontend dev server
+        env:
+          BACKEND_URL: http://localhost:8001
+          NEXTAUTH_SECRET: dev-secret-minimum-32-characters-long
+          NEXTAUTH_URL: http://localhost:3000
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID: us-east-1_TESTPOOL1
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: test-client-id-placeholder
+        run: |
+          cd frontend && npm run dev &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Frontend ready"
+              break
+            fi
+            [ "$i" -eq 30 ] && echo "Frontend timeout" && exit 1
+            sleep 3
+          done
+
+      - name: Run Playwright tests
+        run: cd frontend && npx playwright test --project=local --project=local-post-scan
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.e2e.yml logs backend
+          docker compose -f docker-compose.e2e.yml logs worker
+          docker compose -f docker-compose.e2e.yml logs ai-mock
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
+  # ===========================================================================
   # Summary Job
   # ===========================================================================
   summary:
     runs-on: ubuntu-latest
     name: PR Summary
-    needs: [ci, naming, e2e]
+    needs: [ci, naming, e2e, playwright]
     if: always()
     steps:
       - name: Generate PR Summary
@@ -131,9 +241,18 @@ jobs:
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Playwright E2E Tests" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.playwright.result }}" == "success" ]; then
+            echo "- Playwright (browser E2E): **Passed**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Playwright (browser E2E): **Failed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.ci.result }}" != "success" ] || \
              [ "${{ needs.naming.result }}" != "success" ] || \
-             [ "${{ needs.e2e.result }}" != "success" ]; then
+             [ "${{ needs.e2e.result }}" != "success" ] || \
+             [ "${{ needs.playwright.result }}" != "success" ]; then
             echo "**Some checks failed. Please review the individual job results above.**" >> $GITHUB_STEP_SUMMARY
           else
             echo "**All checks passed! Ready for review.**" >> $GITHUB_STEP_SUMMARY
