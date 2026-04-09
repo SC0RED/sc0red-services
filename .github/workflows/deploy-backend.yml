@@ -8,6 +8,9 @@ on:
     paths:
       - 'backend/**'
       - 'infrastructure/**'
+      - 'frontend/e2e/**'
+      - 'frontend/playwright.config.ts'
+      - 'scripts/e2e-cleanup.py'
       - '.github/workflows/deploy-backend.yml'
 
 jobs:
