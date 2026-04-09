@@ -19,7 +19,10 @@ setup('register and create authenticated session', async ({ page, context }) => 
         },
     })
 
-    expect(registerResponse.ok()).toBeTruthy()
+    if (!registerResponse.ok()) {
+        const body = await registerResponse.text()
+        throw new Error(`Register failed (${registerResponse.status()}): ${body}`)
+    }
     const { user } = await registerResponse.json()
 
     // 2. Create an RS256 ID token (same as backend E2E script)
