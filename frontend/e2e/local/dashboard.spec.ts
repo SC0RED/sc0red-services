@@ -18,18 +18,19 @@ test.describe('dashboard', () => {
         const hasEmptyState = await emptyState.isVisible().catch(() => false)
 
         if (hasEmptyState) {
-            await expect(page.getByText('Scan PE Portfolio')).toBeVisible()
-            await expect(page.getByText('Single Company')).toBeVisible()
+            await expect(page.getByRole('link', { name: 'Scan PE Portfolio' })).toBeVisible()
+            await expect(page.getByRole('link', { name: 'Single Company' })).toBeVisible()
         }
     })
 
     test('sidebar navigation works', async ({ page }) => {
         await page.goto('/dashboard')
 
-        await page.getByRole('link', { name: 'Analyses' }).click()
+        const sidebar = page.getByRole('complementary')
+        await sidebar.getByRole('link', { name: 'Analyses' }).click()
         await expect(page).toHaveURL(/\/analyses/)
 
-        await page.getByRole('link', { name: 'Dashboard' }).click()
+        await sidebar.getByRole('link', { name: 'Dashboard' }).click()
         await expect(page).toHaveURL(/\/dashboard/)
     })
 })

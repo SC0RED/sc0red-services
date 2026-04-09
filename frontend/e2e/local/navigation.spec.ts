@@ -3,17 +3,18 @@ import { test, expect } from '@playwright/test'
 test.describe('navigation', () => {
     test('sidebar links navigate correctly', async ({ page }) => {
         await page.goto('/dashboard')
+        const sidebar = page.getByRole('complementary')
 
-        await page.getByRole('link', { name: 'New Scan' }).click()
+        await sidebar.getByRole('link', { name: 'New Scan' }).click()
         await expect(page).toHaveURL(/\/scan\/new/)
 
-        await page.getByRole('link', { name: 'Analyses' }).click()
+        await sidebar.getByRole('link', { name: 'Analyses' }).click()
         await expect(page).toHaveURL(/\/analyses/)
 
-        await page.getByRole('link', { name: 'Team' }).click()
+        await sidebar.getByRole('link', { name: 'Team' }).click()
         await expect(page).toHaveURL(/\/team/)
 
-        await page.getByRole('link', { name: 'Dashboard' }).click()
+        await sidebar.getByRole('link', { name: 'Dashboard' }).click()
         await expect(page).toHaveURL(/\/dashboard/)
     })
 
