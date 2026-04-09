@@ -28,7 +28,18 @@ export default defineConfig({
         {
             name: 'local',
             testDir: './e2e/local',
+            testIgnore: 'analysis-detail.spec.ts',
             dependencies: ['local-setup'],
+            use: {
+                baseURL: LOCAL_BASE_URL,
+                storageState: './playwright/.auth/local.json',
+            },
+        },
+        {
+            name: 'local-post-scan',
+            testDir: './e2e/local',
+            testMatch: 'analysis-detail.spec.ts',
+            dependencies: ['local'],
             use: {
                 baseURL: LOCAL_BASE_URL,
                 storageState: './playwright/.auth/local.json',

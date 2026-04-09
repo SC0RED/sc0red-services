@@ -183,7 +183,7 @@ jobs:
           done
 
       - name: Run Playwright tests
-        run: cd frontend && npx playwright test --project=local
+        run: cd frontend && npx playwright test --project=local --project=local-post-scan
 
       - name: Dump logs on failure
         if: failure()
