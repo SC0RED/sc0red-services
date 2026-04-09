@@ -14,6 +14,12 @@ test.describe('authentication', () => {
         await expect(page.getByLabel('Work email')).toBeVisible()
     })
 
+    test('login page has links to signup and forgot password', async ({ page }) => {
+        await page.goto('/login')
+        await expect(page.getByRole('link', { name: 'Create one' })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Forgot password?' })).toBeVisible()
+    })
+
     test('authenticated user can access dashboard', async ({ page }) => {
         await page.goto('/dashboard')
         await expect(page).toHaveURL(/\/dashboard/)
