@@ -103,7 +103,7 @@ class DynamoDBScanRepository:
 
         Pass limit=None to return all scans (useful for deriving count).
         """
-        items = self._table.query_gsi(
+        items, _cursor = self._table.query_gsi(
             index_name="GSI2",
             pk_attr="GSI2PK",
             pk_value=f"ORG#{org_id}",

@@ -63,11 +63,12 @@ class DynamoDBAssessmentRepository:
 
     def find_by_company(self, company_id: str) -> list[dict[str, Any]]:
         """Return all assessments associated with the given company ID."""
-        return self._table.query_gsi(
+        items, _cursor = self._table.query_gsi(
             index_name="GSI3",
             pk_attr="GSI3PK",
             pk_value=f"COMPANY#{company_id}",
         )
+        return items
 
     def delete(self, assessment_id: str) -> None:
         """Delete an assessment and all its child items (risk scores, opportunities)."""

@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 const mockPush = vi.fn()
 const mockGet = vi.fn()
@@ -194,34 +194,6 @@ describe('NewScanPage', () => {
     })
 
     describe('standalone scan polling flow', () => {
-        let pollCallback: (() => void) | null
-        const realSetInterval = globalThis.setInterval.bind(globalThis)
-
-        beforeEach(() => {
-            pollCallback = null
-            // Intercept setInterval: capture 3000ms poll callbacks, pass others through
-            vi.spyOn(global, 'setInterval').mockImplementation((callback: () => void, delay?: number) => {
-                if (delay === 3000) {
-                    pollCallback = callback
-                    return 999 as unknown as ReturnType<typeof setInterval>
-                }
-                return realSetInterval(callback, delay)
-            })
-            vi.spyOn(global, 'clearInterval').mockImplementation(() => {})
-        })
-
-        afterEach(() => {
-            vi.restoreAllMocks()
-        })
-
-        async function triggerPoll(): Promise<void> {
-            if (pollCallback) {
-                await act(async () => {
-                    await pollCallback!()
-                })
-            }
-        }
-
         it('polls for status after scan starts running', async () => {
             const innerFetch = vi.fn()
             innerFetch.mockResolvedValueOnce({
@@ -252,24 +224,20 @@ describe('NewScanPage', () => {
             })
             fireEvent.click(screen.getByText('Analyze Company'))
 
-            // Wait for initial POST to resolve and set up polling
-            await waitFor(() => {
-                expect(pollCallback).not.toBeNull()
-            })
+            // Wait for initial POST to resolve, then advance past first poll
+            await waitFor(
+                () => {
+                    expect(screen.getByText('Scraping website...')).toBeInTheDocument()
+                },
+                { timeout: 3000 }
+            )
 
-            // First poll
-            await triggerPoll()
-
-            await waitFor(() => {
-                expect(screen.getByText('Scraping website...')).toBeInTheDocument()
-            })
-
-            // Second poll
-            await triggerPoll()
-
-            await waitFor(() => {
-                expect(screen.getByText('Assessing risks...')).toBeInTheDocument()
-            })
+            await waitFor(
+                () => {
+                    expect(screen.getByText('Assessing risks...')).toBeInTheDocument()
+                },
+                { timeout: 3000 }
+            )
         })
 
         it('redirects to analysis when poll returns complete', async () => {
@@ -296,15 +264,12 @@ describe('NewScanPage', () => {
             })
             fireEvent.click(screen.getByText('Analyze Company'))
 
-            await waitFor(() => {
-                expect(pollCallback).not.toBeNull()
-            })
-
-            await triggerPoll()
-
-            await waitFor(() => {
-                expect(mockPush).toHaveBeenCalledWith('/analysis/a-1')
-            })
+            await waitFor(
+                () => {
+                    expect(mockPush).toHaveBeenCalledWith('/analysis/a-1')
+                },
+                { timeout: 3000 }
+            )
         })
 
         it('shows error when scan fails during polling', async () => {
@@ -327,47 +292,17 @@ describe('NewScanPage', () => {
             })
             fireEvent.click(screen.getByText('Analyze Company'))
 
-            await waitFor(() => {
-                expect(pollCallback).not.toBeNull()
-            })
-
-            await triggerPoll()
-
-            await waitFor(() => {
-                expect(screen.getByText('Analysis failed. Please try again.')).toBeInTheDocument()
-            })
+            await waitFor(
+                () => {
+                    expect(screen.getByText('Analysis failed. Please try again.')).toBeInTheDocument()
+                },
+                { timeout: 3000 }
+            )
             expect(screen.getByLabelText('Company Website URL')).toBeInTheDocument()
         })
     })
 
     describe('portfolio confirm and polling flow', () => {
-        let pollCallback: (() => void) | null
-        const realSetInterval = globalThis.setInterval.bind(globalThis)
-
-        beforeEach(() => {
-            pollCallback = null
-            vi.spyOn(global, 'setInterval').mockImplementation((callback: () => void, delay?: number) => {
-                if (delay === 3000) {
-                    pollCallback = callback
-                    return 999 as unknown as ReturnType<typeof setInterval>
-                }
-                return realSetInterval(callback, delay)
-            })
-            vi.spyOn(global, 'clearInterval').mockImplementation(() => {})
-        })
-
-        afterEach(() => {
-            vi.restoreAllMocks()
-        })
-
-        async function triggerPoll(): Promise<void> {
-            if (pollCallback) {
-                await act(async () => {
-                    await pollCallback!()
-                })
-            }
-        }
-
         it('shows portfolio confirmation after discovery', async () => {
             const innerFetch = vi.fn()
             innerFetch.mockResolvedValueOnce({
@@ -453,16 +388,12 @@ describe('NewScanPage', () => {
                 expect(screen.getByText('Running Portfolio Analysis...')).toBeInTheDocument()
             })
 
-            // Wait for the confirm fetch to complete and polling to be set up
-            await waitFor(() => {
-                expect(pollCallback).not.toBeNull()
-            })
-
-            await triggerPoll()
-
-            await waitFor(() => {
-                expect(screen.getByText(/1\/2 complete/)).toBeInTheDocument()
-            })
+            await waitFor(
+                () => {
+                    expect(screen.getByText(/1\/2 complete/)).toBeInTheDocument()
+                },
+                { timeout: 3000 }
+            )
         })
     })
 })

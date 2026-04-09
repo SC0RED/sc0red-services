@@ -8,7 +8,12 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from src.handlers.api_gateway_handler import build_error, build_json_response
+from src.handlers.api_gateway_handler import (
+    CONFLICT,
+    VALIDATION_ERROR,
+    build_error,
+    build_json_response,
+)
 from src.handlers.cognito_client import CognitoClient
 
 logger = logging.getLogger(__name__)
@@ -28,13 +33,13 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
     org_type = body.get("orgType", "company")
 
     if not all([name, email, password, org_name]):
-        return build_error("All fields required")
+        return build_error("All fields required", code=VALIDATION_ERROR)
 
     user_repo = storage.create_user_repository()
     org_repo = storage.create_organization_repository()
 
     if user_repo.has_email(email):
-        return build_error("Email already registered")
+        return build_error("Email already registered", code=CONFLICT)
 
     org_id = str(uuid.uuid4())
     user_id = str(uuid.uuid4())

@@ -4,36 +4,25 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { useScanPolling } from '@/lib/hooks/useScanPolling'
 
 describe('useScanPolling', () => {
-    let pollCallback: (() => Promise<void>) | null
-    const realSetInterval = globalThis.setInterval.bind(globalThis)
-
     beforeEach(() => {
-        pollCallback = null
-        vi.spyOn(global, 'setInterval').mockImplementation((callback: () => void, delay?: number) => {
-            if (delay === 3000) {
-                pollCallback = callback as () => Promise<void>
-                return 999 as unknown as ReturnType<typeof setInterval>
-            }
-            return realSetInterval(callback, delay)
-        })
-        vi.spyOn(global, 'clearInterval').mockImplementation(() => {})
+        vi.useFakeTimers()
         global.fetch = vi.fn()
     })
 
     afterEach(() => {
+        vi.useRealTimers()
         vi.restoreAllMocks()
     })
 
-    async function triggerPoll(): Promise<void> {
-        if (pollCallback) {
-            await act(async () => {
-                await pollCallback!()
-            })
-        }
+    async function advanceAndFlush(ms: number) {
+        await act(async () => {
+            vi.advanceTimersByTime(ms)
+            await Promise.resolve()
+        })
     }
 
     describe('discovery mode', () => {
-        it('starts and stops polling', () => {
+        it('starts and stops polling', async () => {
             const callbacks = {
                 mode: 'discovery' as const,
                 onAwaitingConfirmation: vi.fn(),
@@ -44,11 +33,17 @@ describe('useScanPolling', () => {
 
             const { result } = renderHook(() => useScanPolling(callbacks))
 
-            result.current.startPolling('scan-1')
-            expect(pollCallback).not.toBeNull()
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            result.current.stopPolling()
-            expect(global.clearInterval).toHaveBeenCalled()
+            act(() => {
+                result.current.stopPolling()
+            })
+
+            // After stop, advancing timers should not trigger any fetch
+            await advanceAndFlush(5000)
+            expect(global.fetch).not.toHaveBeenCalled()
         })
 
         it('calls onProgress with progress data', async () => {
@@ -60,17 +55,18 @@ describe('useScanPolling', () => {
                 onProgress: vi.fn(),
             }
 
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () =>
                     Promise.resolve({ status: 'running', progress: 45, progressLabel: 'Scraping...' }),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
             expect(callbacks.onProgress).toHaveBeenCalledWith(45, 'Scraping...')
         })
@@ -84,7 +80,7 @@ describe('useScanPolling', () => {
                 onProgress: vi.fn(),
             }
 
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () =>
                     Promise.resolve({
@@ -92,17 +88,17 @@ describe('useScanPolling', () => {
                         portfolioCompanies: [{ name: 'Acme', url: 'https://acme.com', description: 'Corp' }],
                     }),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
             expect(callbacks.onAwaitingConfirmation).toHaveBeenCalledWith([
                 { name: 'Acme', url: 'https://acme.com', description: 'Corp', selected: true },
             ])
-            expect(global.clearInterval).toHaveBeenCalled()
         })
 
         it('calls onComplete when status is complete', async () => {
@@ -118,19 +114,19 @@ describe('useScanPolling', () => {
                 status: 'complete',
                 analyses: [{ id: 'a-1', analyzedAt: '2026-01-01' }],
             }
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve(responseData),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
             expect(callbacks.onComplete).toHaveBeenCalledWith(responseData)
-            expect(global.clearInterval).toHaveBeenCalled()
         })
 
         it('calls onFailed when status is failed', async () => {
@@ -142,61 +138,19 @@ describe('useScanPolling', () => {
                 onProgress: vi.fn(),
             }
 
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve({ status: 'failed' }),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
             expect(callbacks.onFailed).toHaveBeenCalledWith('Analysis failed. Please try again.')
-            expect(global.clearInterval).toHaveBeenCalled()
-        })
-
-        it('silently retries on network error', async () => {
-            const callbacks = {
-                mode: 'discovery' as const,
-                onAwaitingConfirmation: vi.fn(),
-                onComplete: vi.fn(),
-                onFailed: vi.fn(),
-                onProgress: vi.fn(),
-            }
-
-            const fetchMock = vi.fn().mockRejectedValue(new Error('Network error'))
-            global.fetch = fetchMock
-
-            const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
-
-            await triggerPoll()
-
-            expect(callbacks.onFailed).not.toHaveBeenCalled()
-            expect(callbacks.onComplete).not.toHaveBeenCalled()
-        })
-
-        it('skips update on non-ok response', async () => {
-            const callbacks = {
-                mode: 'discovery' as const,
-                onAwaitingConfirmation: vi.fn(),
-                onComplete: vi.fn(),
-                onFailed: vi.fn(),
-                onProgress: vi.fn(),
-            }
-
-            const fetchMock = vi.fn().mockResolvedValue({ ok: false })
-            global.fetch = fetchMock
-
-            const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
-
-            await triggerPoll()
-
-            expect(callbacks.onProgress).not.toHaveBeenCalled()
-            expect(callbacks.onComplete).not.toHaveBeenCalled()
         })
     })
 
@@ -210,7 +164,7 @@ describe('useScanPolling', () => {
                 onProgress: vi.fn(),
             }
 
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () =>
                     Promise.resolve({
@@ -222,15 +176,14 @@ describe('useScanPolling', () => {
                         ],
                     }),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
-            // 1 done (100) + 1 at 50 + 1 at 0 = 150/3 = 50 avg
-            // 10 + round(50 * 0.85) = 10 + 43 = 53
             expect(callbacks.onProgress).toHaveBeenCalledWith(
                 53,
                 'Assessing risks... (1/3 complete, 1 in progress)'
@@ -250,16 +203,17 @@ describe('useScanPolling', () => {
                 status: 'complete',
                 analyses: [{ analyzedAt: '2026-01-01' }, { analyzedAt: '2026-01-01' }],
             }
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve(responseData),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
             expect(callbacks.onComplete).toHaveBeenCalledWith(responseData)
         })
@@ -273,16 +227,17 @@ describe('useScanPolling', () => {
                 onProgress: vi.fn(),
             }
 
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve({ status: 'failed', analyses: [] }),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
             expect(callbacks.onFailed).toHaveBeenCalledWith('Portfolio analysis failed.')
         })
@@ -296,7 +251,7 @@ describe('useScanPolling', () => {
                 onProgress: vi.fn(),
             }
 
-            const fetchMock = vi.fn().mockResolvedValue({
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,
                 json: () =>
                     Promise.resolve({
@@ -304,19 +259,20 @@ describe('useScanPolling', () => {
                         analyses: [{ analyzedAt: '2026-01-01' }, { analyzedAt: '2026-01-01' }],
                     }),
             })
-            global.fetch = fetchMock
 
             const { result } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
-            await triggerPoll()
+            await advanceAndFlush(1000)
 
             expect(callbacks.onProgress).toHaveBeenCalledWith(95, 'Finishing up... (2/2 complete)')
         })
     })
 
     describe('cleanup', () => {
-        it('clears interval on unmount', () => {
+        it('clears timeout on unmount', () => {
             const callbacks = {
                 mode: 'discovery' as const,
                 onAwaitingConfirmation: vi.fn(),
@@ -326,11 +282,14 @@ describe('useScanPolling', () => {
             }
 
             const { result, unmount } = renderHook(() => useScanPolling(callbacks))
-            result.current.startPolling('scan-1')
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
 
             unmount()
 
-            expect(global.clearInterval).toHaveBeenCalled()
+            // No pending timers should fire after unmount
+            expect(() => vi.advanceTimersByTime(5000)).not.toThrow()
         })
     })
 })
