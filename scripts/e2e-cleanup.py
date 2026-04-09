@@ -41,13 +41,21 @@ def find_e2e_cognito_users(cognito_client: object, user_pool_id: str) -> list[di
         for user in response.get("Users", []):
             email = ""
             sub = ""
+            org_id = ""
             for attr in user.get("Attributes", []):
                 if attr["Name"] == "email":
                     email = attr["Value"]
                 elif attr["Name"] == "sub":
                     sub = attr["Value"]
+                elif attr["Name"] == "custom:org_id":
+                    org_id = attr["Value"]
             if email:
-                users.append({"username": user["Username"], "email": email, "sub": sub})
+                users.append({
+                    "username": user["Username"],
+                    "email": email,
+                    "sub": sub,
+                    "org_id": org_id,
+                })
 
         pagination_token = response.get("PaginationToken")
         if not pagination_token:
@@ -66,8 +74,8 @@ def delete_cognito_user(cognito_client: object, user_pool_id: str, username: str
         return False
 
 
-def delete_dynamodb_records(dynamodb_client: object, table_name: str, org_id: str) -> int:
-    """Delete all DynamoDB records for an org (pk starts with ORG#orgId)."""
+def delete_dynamodb_records_by_pk_prefix(dynamodb_client: object, table_name: str, prefix: str) -> int:
+    """Delete all DynamoDB records where pk starts with the given prefix."""
     deleted = 0
     last_key = None
 
@@ -75,7 +83,7 @@ def delete_dynamodb_records(dynamodb_client: object, table_name: str, org_id: st
         kwargs: dict[str, object] = {
             "TableName": table_name,
             "FilterExpression": "begins_with(pk, :prefix)",
-            "ExpressionAttributeValues": {":prefix": {"S": f"ORG#{org_id}"}},
+            "ExpressionAttributeValues": {":prefix": {"S": prefix}},
         }
         if last_key:
             kwargs["ExclusiveStartKey"] = last_key
@@ -122,17 +130,20 @@ def main() -> None:
         return
 
     for user in users:
-        print(f"\n  User: {user['email']} (sub: {user['sub']})")
+        org_id = user["org_id"]
+        print(f"\n  User: {user['email']} (org_id: {org_id})")
 
         if args.dry_run:
             print("    [DRY RUN] Would delete Cognito user and DynamoDB records")
             continue
 
-        # 2. Find and delete the user's org data from DynamoDB
-        # The org_id is stored as a custom attribute — query DynamoDB for records
-        # linked to this user's sub (which is used as the user ID)
-        org_records = delete_dynamodb_records(dynamodb, args.table, user["sub"])
-        print(f"    Deleted {org_records} DynamoDB record(s)")
+        # 2. Delete org data from DynamoDB (ORG#{org_id} prefix covers all org records:
+        #    org metadata, users, invitations, scans, analyses)
+        if org_id:
+            org_records = delete_dynamodb_records_by_pk_prefix(dynamodb, args.table, f"ORG#{org_id}")
+            print(f"    Deleted {org_records} DynamoDB record(s) for ORG#{org_id}")
+        else:
+            print("    No org_id found — skipping DynamoDB cleanup")
 
         # 3. Delete Cognito user
         if delete_cognito_user(cognito, args.user_pool_id, user["username"]):
