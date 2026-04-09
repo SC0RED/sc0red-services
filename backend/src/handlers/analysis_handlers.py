@@ -121,14 +121,22 @@ def handle_delete_analysis(
 
 
 def handle_list_analyses(
-    _event: dict[str, Any],
+    event: dict[str, Any],
     authentication: AuthContext,
     storage: DynamoDBStorageProvider,
 ) -> LambdaResponse:
-    """Handle GET /api/analyses."""
+    """Handle GET /api/analyses — supports ?limit=N&cursor=JSON pagination."""
+    query_params = event.get("queryStringParameters") or {}
+    limit = int(query_params["limit"]) if query_params.get("limit") else None
+    cursor = json.loads(query_params["cursor"]) if query_params.get("cursor") else None
+
     company_repo = storage.create_company_repository()
     scan_repo = storage.create_scan_repository()
-    companies, _cursor = company_repo.find_by_org(authentication.org_id)
+    companies, next_cursor = company_repo.find_by_org(
+        authentication.org_id,
+        limit=limit,
+        cursor=cursor,
+    )
 
     all_scans = scan_repo.find_recent_by_org(authentication.org_id, limit=None)
     scan_type_map = {s["id"]: s.get("type", "") for s in all_scans}
@@ -139,7 +147,10 @@ def handle_list_analyses(
         summary["scanType"] = scan_type_map.get(company.get("scan_id", ""), "")
         analyses.append(summary)
 
-    return build_json_response({"analyses": analyses})
+    response: dict[str, Any] = {"analyses": analyses}
+    if next_cursor:
+        response["cursor"] = json.dumps(next_cursor)
+    return build_json_response(response)
 
 
 def handle_dashboard(
@@ -147,10 +158,11 @@ def handle_dashboard(
     authentication: AuthContext,
     storage: DynamoDBStorageProvider,
 ) -> LambdaResponse:
-    """Handle GET /api/dashboard."""
+    """Handle GET /api/dashboard — aggregates stats from all companies + recent items."""
     company_repo = storage.create_company_repository()
     scan_repo = storage.create_scan_repository()
 
+    # Load all companies for stats (no limit — need totals)
     companies, _cursor = company_repo.find_by_org(authentication.org_id)
     analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
 

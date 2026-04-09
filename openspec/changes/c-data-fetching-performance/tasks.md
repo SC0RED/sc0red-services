@@ -17,11 +17,11 @@
 ## PR 2: Backend — DynamoDB pagination
 
 ### Repository pagination
-- [ ] Add limit + last_key params to company_repository.find_by_org()
-- [ ] Add limit + last_key params to scan_repository.find_recent_by_org()
-- [ ] Return (items, last_evaluated_key) tuples
+- [x] Add limit + last_key params to company_repository.find_by_org() (PR #124)
+- [x] Add limit + last_key params to scan_repository.find_recent_by_org() (PR #124)
+- [x] Return (items, last_evaluated_key) tuples (PR #124)
 
 ### API pagination
-- [ ] Update GET /api/analyses to accept ?limit=&cursor= params
-- [ ] Update GET /api/dashboard to limit recent items
-- [ ] Add pagination tests
+- [x] Update GET /api/analyses to accept ?limit=&cursor= params
+- [x] Update GET /api/dashboard — loads all for stats, limits recent items
+- [x] Add pagination tests
