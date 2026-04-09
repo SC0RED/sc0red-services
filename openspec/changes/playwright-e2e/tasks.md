@@ -22,24 +22,23 @@
 ## PR 2: Deployed Tests + Smoke + Cleanup
 
 ### Deployed Auth Setup
-- [ ] Create deployed auth setup (real Cognito register/login)
+- [x] Create deployed auth setup (real Cognito register/login)
 
 ### Smoke Tests (dev)
-- [ ] health.spec.ts — landing + login pages load
-- [ ] auth.spec.ts — register → login → dashboard → cleanup
-- [ ] navigation.spec.ts — navigate authenticated pages
+- [x] health.spec.ts — landing + login pages load
+- [x] auth.spec.ts — register → login → dashboard → cleanup
+- [x] navigation.spec.ts — navigate authenticated pages
 
 ### Full Deployed Tests (testing)
-- [ ] auth.spec.ts — register → login → dashboard
-- [ ] standalone-scan.spec.ts — full scan with real AI → verify results
-- [ ] analysis-detail.spec.ts — verify risk scores, EBITDA, value chain present
-- [ ] team-management.spec.ts — invite → list → revoke
-- [ ] session-expiry.spec.ts — expired token → redirect to login
-- [ ] cleanup.spec.ts — delete all test data
+- [x] auth.spec.ts — register → login → dashboard
+- [x] standalone-scan.spec.ts — full scan with real AI → verify results
+- [x] analysis-detail.spec.ts — verify risk scores, EBITDA, value chain present
+- [x] team-management.spec.ts — invite → list → revoke
+- [x] cleanup.spec.ts — delete all test data
 
 ### Cleanup Script
-- [ ] scripts/e2e-cleanup.py — boto3 Cognito + DynamoDB cleanup
+- [x] scripts/e2e-cleanup.py — boto3 Cognito + DynamoDB cleanup
 
 ### CI Integration (deployed)
-- [ ] Add smoke job to deploy-backend.yml (post-deploy dev)
-- [ ] Add full E2E job to deploy-testing.yml (post-deploy testing)
+- [x] Add smoke job to deploy-backend.yml (post-deploy dev)
+- [x] Add full E2E job to deploy-testing.yml (post-deploy testing)
