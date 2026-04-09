@@ -1,30 +1,16 @@
 import { test as setup, expect } from '@playwright/test'
 
-/**
- * Local auth setup for docker-compose E2E environment.
- *
- * In the E2E environment, COGNITO_USER_POOL_ID is empty — the backend
- * skips Cognito and only creates DynamoDB records. The frontend can't
- * do real Cognito login with fake pool IDs.
- *
- * Strategy: Register a test user via the backend API, then save an
- * unauthenticated storage state. Local E2E tests focus on:
- * - Unauthenticated flows (landing page, login page, signup page)
- * - Auth redirects (unauthenticated → login)
- * - Backend API integration (via the existing E2E script)
- *
- * Authenticated browser flows (dashboard, scan, analysis) are tested
- * in the deployed smoke/full E2E tests which use real Cognito.
- */
+import { createIdToken } from '../helpers/create-id-token'
+import { createSessionToken } from '../helpers/create-session'
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8001'
 
-setup('register test user and save state', async ({ page }) => {
+setup('register and create authenticated session', async ({ page, context }) => {
     const timestamp = Date.now()
     const email = `e2e-${timestamp}@janus-test.com`
 
-    // Register via backend API (no Cognito in E2E mode)
-    const response = await page.request.post(`${BACKEND_URL}/api/auth/register`, {
+    // 1. Register via backend API (no Cognito in E2E mode)
+    const registerResponse = await page.request.post(`${BACKEND_URL}/api/auth/register`, {
         data: {
             name: 'E2E Test User',
             email,
@@ -33,12 +19,45 @@ setup('register test user and save state', async ({ page }) => {
         },
     })
 
-    expect(response.ok()).toBeTruthy()
+    expect(registerResponse.ok()).toBeTruthy()
+    const { user } = await registerResponse.json()
 
-    // Verify the landing page loads
-    await page.goto('/')
-    await expect(page.getByText('Know Your AI Risk')).toBeVisible()
+    // 2. Create an RS256 ID token (same as backend E2E script)
+    const idToken = await createIdToken({
+        id: user.id,
+        email,
+        name: 'E2E Test User',
+        orgId: user.orgId,
+        role: 'admin',
+    })
 
-    // Save storage state (unauthenticated — no Cognito login possible locally)
-    await page.context().storageState({ path: './playwright/.auth/local.json' })
+    // 3. Create a NextAuth-compatible encrypted session cookie
+    const sessionToken = await createSessionToken({
+        id: user.id,
+        email,
+        name: 'E2E Test User',
+        orgId: user.orgId,
+        role: 'admin',
+        idToken,
+    })
+
+    // 4. Set the session cookie
+    await context.addCookies([
+        {
+            name: 'next-auth.session-token',
+            value: sessionToken,
+            domain: 'localhost',
+            path: '/',
+            httpOnly: true,
+            secure: false,
+            sameSite: 'Lax',
+        },
+    ])
+
+    // 5. Verify authenticated access works
+    await page.goto('/dashboard')
+    await expect(page.getByText(/Good (morning|afternoon|evening)/)).toBeVisible({ timeout: 15000 })
+
+    // 6. Save storage state for all local tests
+    await context.storageState({ path: './playwright/.auth/local.json' })
 })

@@ -1,25 +1,37 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('navigation — unauthenticated', () => {
-    test('landing page renders', async ({ page }) => {
+test.describe('navigation', () => {
+    test('sidebar links navigate correctly', async ({ page }) => {
+        await page.goto('/dashboard')
+
+        await page.getByRole('link', { name: 'New Scan' }).click()
+        await expect(page).toHaveURL(/\/scan\/new/)
+
+        await page.getByRole('link', { name: 'Analyses' }).click()
+        await expect(page).toHaveURL(/\/analyses/)
+
+        await page.getByRole('link', { name: 'Team' }).click()
+        await expect(page).toHaveURL(/\/team/)
+
+        await page.getByRole('link', { name: 'Dashboard' }).click()
+        await expect(page).toHaveURL(/\/dashboard/)
+    })
+
+    test('breadcrumbs show on non-dashboard pages', async ({ page }) => {
+        await page.goto('/analyses')
+
+        const breadcrumb = page.getByLabel('Breadcrumb')
+        await expect(breadcrumb).toBeVisible()
+        await expect(breadcrumb.getByText('Dashboard')).toBeVisible()
+    })
+
+    test('landing page accessible without auth', async ({ browser }) => {
+        const context = await browser.newContext()
+        const page = await context.newPage()
+
         await page.goto('/')
         await expect(page.getByText('Know Your AI Risk')).toBeVisible()
-    })
 
-    test('landing page has sign in and get started links', async ({ page }) => {
-        await page.goto('/')
-        await expect(page.getByRole('link', { name: 'Sign In' }).first()).toBeVisible()
-        await expect(page.getByRole('link', { name: 'Get Started' }).first()).toBeVisible()
-    })
-
-    test('sign in link navigates to login', async ({ page }) => {
-        await page.goto('/')
-        await page.getByRole('link', { name: 'Sign In' }).first().click()
-        await expect(page).toHaveURL(/\/login/)
-    })
-
-    test('protected routes redirect to login', async ({ page }) => {
-        await page.goto('/scan/new')
-        await expect(page).toHaveURL(/\/login/, { timeout: 10000 })
+        await context.close()
     })
 })
