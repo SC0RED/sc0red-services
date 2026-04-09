@@ -23,6 +23,7 @@ export default defineConfig({
             name: 'local-setup',
             testDir: './e2e/setup',
             testMatch: 'local-auth.setup.ts',
+            use: { baseURL: LOCAL_BASE_URL },
         },
         {
             name: 'local',
@@ -39,6 +40,7 @@ export default defineConfig({
             name: 'deployed-setup',
             testDir: './e2e/setup',
             testMatch: 'deployed-auth.setup.ts',
+            use: { baseURL: DEPLOYED_BASE_URL },
         },
         {
             name: 'smoke',
