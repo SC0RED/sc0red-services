@@ -13,7 +13,7 @@ test.describe('team management', () => {
 
     test('invite form accepts email input', async ({ page }) => {
         await page.goto('/team')
-        const emailInput = page.getByPlaceholder(/email/i)
+        const emailInput = page.getByLabel('Email')
         await expect(emailInput).toBeVisible({ timeout: 10000 })
         await emailInput.fill('invite-test@example.com')
         await expect(emailInput).toHaveValue('invite-test@example.com')
