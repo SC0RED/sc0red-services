@@ -24,7 +24,7 @@ vi.mock('@/components/SessionWrapper', () => ({
     ),
 }))
 
-import NewScanPage from '@/app/scan/new/page'
+import NewScanPage from '@/app/(authenticated)/scan/new/page'
 
 /**
  * Wraps a fetch mock so that calls to /api/config (used by useScanRealtime)
@@ -111,12 +111,6 @@ describe('NewScanPage', () => {
         mockGet.mockReturnValue('portfolio')
         render(<NewScanPage />)
         expect(screen.getByLabelText('PE Firm Website URL')).toBeInTheDocument()
-    })
-
-    it('renders sidebar and session wrapper', () => {
-        render(<NewScanPage />)
-        expect(screen.getByTestId('dashboard-sidebar')).toBeInTheDocument()
-        expect(screen.getByTestId('session-wrapper')).toBeInTheDocument()
     })
 
     it('shows analyzing phase after form submission', async () => {

@@ -1,7 +1,7 @@
 import { render, screen, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-import PortfolioView from '@/app/portfolio/[scanId]/PortfolioView'
+import PortfolioView from '@/app/(authenticated)/portfolio/[scanId]/PortfolioView'
 import type { ScanAnalysis } from '@/lib/types/api'
 
 vi.mock('next/link', () => ({

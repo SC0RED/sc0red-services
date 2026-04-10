@@ -3,8 +3,6 @@
 import { useState, useRef, Suspense, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-import DashboardSidebar from '@/components/DashboardSidebar'
-import SessionWrapper from '@/components/SessionWrapper'
 import ScanInputPhase from '@/components/scan/ScanInputPhase'
 import ScanProgressPhase from '@/components/scan/ScanProgressPhase'
 import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
@@ -231,76 +229,69 @@ function NewScanContent() {
     }
 
     return (
-        <div className="page-layout">
-            <DashboardSidebar />
-            <main id="main" tabIndex={-1} className="page-content-narrow">
-                <div style={{ width: '100%', maxWidth: '680px' }}>
-                    {/* Header */}
-                    <div style={{ marginBottom: '2rem' }}>
-                        <h1 className="page-title">New AI Risk Scan</h1>
-                        <p style={{ color: 'var(--text-secondary)' }}>
-                            Analyze a company or entire PE portfolio for AI-driven risks and opportunities
-                        </p>
-                    </div>
+        <div style={{ width: '100%', maxWidth: '680px' }}>
+            {/* Header */}
+            <div style={{ marginBottom: '2rem' }}>
+                <h1 className="page-title">New AI Risk Scan</h1>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                    Analyze a company or entire PE portfolio for AI-driven risks and opportunities
+                </p>
+            </div>
 
-                    {phase === 'input' && (
-                        <ScanInputPhase
-                            mode={mode}
-                            url={url}
-                            error={error}
-                            onModeChange={setMode}
-                            onUrlChange={setUrl}
-                            onSubmit={handleSubmit}
-                        />
-                    )}
+            {phase === 'input' && (
+                <ScanInputPhase
+                    mode={mode}
+                    url={url}
+                    error={error}
+                    onModeChange={setMode}
+                    onUrlChange={setUrl}
+                    onSubmit={handleSubmit}
+                />
+            )}
 
-                    {(phase === 'analyzing' || phase === 'running') && (
-                        <ScanProgressPhase phase={phase} progress={progress} progressLabel={progressLabel} />
-                    )}
+            {(phase === 'analyzing' || phase === 'running') && (
+                <ScanProgressPhase phase={phase} progress={progress} progressLabel={progressLabel} />
+            )}
 
-                    {phase === 'portfolio_confirm' && (
-                        <PortfolioConfirmPhase
-                            companies={companies}
-                            onCompanyToggle={handleCompanyToggle}
-                            onAddCompany={handleAddCompany}
-                            onConfirm={confirmPortfolio}
-                            onReset={() => setPhase('input')}
-                        />
-                    )}
-                </div>
-            </main>
+            {phase === 'portfolio_confirm' && (
+                <PortfolioConfirmPhase
+                    companies={companies}
+                    onCompanyToggle={handleCompanyToggle}
+                    onAddCompany={handleAddCompany}
+                    onConfirm={confirmPortfolio}
+                    onReset={() => setPhase('input')}
+                />
+            )}
         </div>
     )
 }
 
 export default function NewScanPage() {
     return (
-        <SessionWrapper>
-            <Suspense
-                fallback={
+        <Suspense
+            fallback={
+                <div
+                    style={{
+                        display: 'flex',
+                        minHeight: '50vh',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                    }}
+                >
                     <div
                         style={{
-                            display: 'flex',
-                            minHeight: '100vh',
-                            alignItems: 'center',
-                            justifyContent: 'center',
+                            width: '32px',
+                            height: '32px',
+                            border: '3px solid var(--border)',
+                            borderTopColor: 'var(--accent-blue)',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite',
                         }}
-                    >
-                        <div
-                            style={{
-                                width: '32px',
-                                height: '32px',
-                                border: '3px solid var(--border)',
-                                borderTopColor: 'var(--accent-blue)',
-                                borderRadius: '50%',
-                                animation: 'spin 1s linear infinite',
-                            }}
-                        />
-                    </div>
-                }
-            >
-                <NewScanContent />
-            </Suspense>
-        </SessionWrapper>
+                    />
+                </div>
+            }
+        >
+            <NewScanContent />
+        </Suspense>
     )
 }
