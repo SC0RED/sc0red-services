@@ -26,6 +26,7 @@ URL=""
 HEADED=""
 VISUAL=""
 VISUAL_UPDATE=""
+CLEANUP=""
 USER_POOL_ID=""
 TABLE=""
 REGION="us-east-1"
@@ -45,6 +46,7 @@ for arg in "$@"; do
         --debug)     HEADED="--debug" ;;
         --visual)    VISUAL="true" ;;
         --visual-update) VISUAL="true"; VISUAL_UPDATE="true" ;;
+        --cleanup)   CLEANUP="true" ;;
         --user-pool-id=*) USER_POOL_ID="${arg#*=}" ;;
         --table=*)   TABLE="${arg#*=}" ;;
         --region=*)  REGION="${arg#*=}" ;;
@@ -72,8 +74,9 @@ if [ -z "$MODE" ]; then
     echo "  --visual-update        Update visual regression baselines"
     echo ""
     echo -e "${YELLOW}Cleanup (smoke/deployed modes):${NC}"
-    echo "  --user-pool-id=<id>    Cognito User Pool ID (enables post-test cleanup)"
-    echo "  --table=<name>         DynamoDB table name (enables post-test cleanup)"
+    echo "  --cleanup              Run cleanup after tests (requires AWS credentials)"
+    echo "  --user-pool-id=<id>    Cognito User Pool ID (auto-discovered if omitted)"
+    echo "  --table=<name>         DynamoDB table name (auto-discovered if omitted)"
     echo "  --region=<region>      AWS region (default: us-east-1)"
     echo ""
     echo -e "${YELLOW}Examples:${NC}"
@@ -81,8 +84,7 @@ if [ -z "$MODE" ]; then
     echo "  ./scripts/playwright.sh --mode=local --headed"
     echo "  ./scripts/playwright.sh --mode=local --visual-update"
     echo "  ./scripts/playwright.sh --mode=smoke --url=https://dev.example.com"
-    echo "  ./scripts/playwright.sh --mode=smoke --url=https://dev.example.com \\"
-    echo "    --user-pool-id=us-east-1_XXXXX --table=janus-staging"
+    echo "  ./scripts/playwright.sh --mode=smoke --url=https://dev.example.com --cleanup"
     exit 1
 fi
 
@@ -235,14 +237,14 @@ run_remote() {
     npx playwright test "${PROJECTS[@]}" ${PLAYWRIGHT_EXTRA_ARGS[@]+"${PLAYWRIGHT_EXTRA_ARGS[@]}"} || test_exit_code=$?
 
     # Cleanup: delete e2e-* test users from Cognito + DynamoDB (runs even if tests fail)
-    if [ -n "$USER_POOL_ID" ] && [ -n "$TABLE" ]; then
+    if [ "$CLEANUP" = "true" ]; then
         echo -e "\n${YELLOW}Running cleanup (Cognito + DynamoDB)...${NC}"
-        python3 "$PROJECT_ROOT/scripts/e2e-cleanup.py" \
-            --user-pool-id "$USER_POOL_ID" \
-            --table "$TABLE" \
-            --region "$REGION" || echo -e "${RED}Cleanup failed (non-fatal)${NC}"
+        local cleanup_args=(--region "$REGION")
+        [ -n "$USER_POOL_ID" ] && cleanup_args+=(--user-pool-id "$USER_POOL_ID")
+        [ -n "$TABLE" ] && cleanup_args+=(--table "$TABLE")
+        python3 "$PROJECT_ROOT/scripts/e2e-cleanup.py" "${cleanup_args[@]}" || echo -e "${RED}Cleanup failed (non-fatal)${NC}"
     elif [ "$MODE" != "local" ]; then
-        echo -e "\n${YELLOW}Skipping cleanup — pass --user-pool-id and --table to enable${NC}"
+        echo -e "\n${YELLOW}Skipping cleanup — pass --cleanup to enable (requires AWS credentials)${NC}"
     fi
 
     return $test_exit_code

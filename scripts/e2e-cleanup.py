@@ -213,10 +213,30 @@ def cleanup_org_data(dynamodb_client: object, table_name: str, org_id: str, user
     return total
 
 
+def discover_user_pool_id(cognito_client: object) -> str:
+    """Find the Janus Cognito user pool by name pattern (janus-users-*)."""
+    response = cognito_client.list_user_pools(MaxResults=60)
+    for pool in response.get("UserPools", []):
+        if pool["Name"].startswith("janus-users-"):
+            print(f"  Auto-discovered user pool: {pool['Name']} ({pool['Id']})")
+            return pool["Id"]
+    return ""
+
+
+def discover_table_name(dynamodb_client: object) -> str:
+    """Find the Janus DynamoDB table by name pattern (janus-*)."""
+    response = dynamodb_client.list_tables()
+    for name in response.get("TableNames", []):
+        if name.startswith("janus-") and name != "janus-e2e":
+            print(f"  Auto-discovered table: {name}")
+            return name
+    return ""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Clean up E2E test data")
-    parser.add_argument("--user-pool-id", required=True, help="Cognito User Pool ID")
-    parser.add_argument("--table", required=True, help="DynamoDB table name")
+    parser.add_argument("--user-pool-id", default="", help="Cognito User Pool ID (auto-discovered if omitted)")
+    parser.add_argument("--table", default="", help="DynamoDB table name (auto-discovered if omitted)")
     parser.add_argument("--region", default="us-east-1", help="AWS region")
     parser.add_argument("--dry-run", action="store_true", help="List what would be deleted without deleting")
     args = parser.parse_args()
@@ -224,9 +244,27 @@ def main() -> None:
     cognito = boto3.client("cognito-idp", region_name=args.region)
     dynamodb = boto3.client("dynamodb", region_name=args.region)
 
+    # Auto-discover resources if not provided
+    user_pool_id = args.user_pool_id
+    table_name = args.table
+
+    if not user_pool_id:
+        print("Auto-discovering Cognito user pool...")
+        user_pool_id = discover_user_pool_id(cognito)
+        if not user_pool_id:
+            print("ERROR: No janus-users-* user pool found. Pass --user-pool-id explicitly.", file=sys.stderr)
+            sys.exit(1)
+
+    if not table_name:
+        print("Auto-discovering DynamoDB table...")
+        table_name = discover_table_name(dynamodb)
+        if not table_name:
+            print("ERROR: No janus-* table found. Pass --table explicitly.", file=sys.stderr)
+            sys.exit(1)
+
     # 1. Find E2E test users in Cognito
-    print(f"Scanning Cognito pool {args.user_pool_id} for e2e-* users...")
-    users = find_e2e_cognito_users(cognito, args.user_pool_id)
+    print(f"\nScanning Cognito pool {user_pool_id} for e2e-* users...")
+    users = find_e2e_cognito_users(cognito, user_pool_id)
     print(f"  Found {len(users)} E2E test user(s)")
 
     if not users:
@@ -235,19 +273,19 @@ def main() -> None:
 
     for user in users:
         org_id = user["org_id"]
-        user_id = user["sub"]
+        uid = user["sub"]
         print(f"\n  User: {user['email']} (org_id: {org_id})")
 
         if not org_id:
             print("    No org_id found — skipping DynamoDB cleanup")
         else:
-            total = cleanup_org_data(dynamodb, args.table, org_id, user_id, args.dry_run)
+            total = cleanup_org_data(dynamodb, table_name, org_id, uid, args.dry_run)
             if not args.dry_run:
                 print(f"    Deleted {total} DynamoDB record(s)")
 
         if args.dry_run:
             print("    [DRY RUN] Would delete Cognito user")
-        elif delete_cognito_user(cognito, args.user_pool_id, user["username"]):
+        elif delete_cognito_user(cognito, user_pool_id, user["username"]):
             print(f"    Deleted Cognito user")
 
     print(f"\nCleanup complete. Processed {len(users)} user(s).")
