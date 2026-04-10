@@ -58,10 +58,10 @@ cd ..
 ./scripts/playwright.sh --mode=local --headed
 
 # Run smoke tests against deployed dev
-./scripts/playwright.sh --mode=smoke --url=https://development.d3s20952i7opqs.amplifyapp.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
 
-# Run full E2E against deployed testing (uses real AI)
-./scripts/playwright.sh --mode=deployed --url=https://testing.d88lh5h7xvpuh.amplifyapp.com
+# Run full E2E against deployed (uses real AI)
+./scripts/playwright.sh --mode=deployed --url=https://dev.janus.sc0red.com
 ```
 
 Or use npm shortcuts from the `frontend/` directory:
@@ -85,7 +85,8 @@ npm run e2e:visual-update  # Same as --mode=local --visual-update
 | Docker Desktop | `--mode=local` | https://www.docker.com/products/docker-desktop |
 | Node.js 20+ | All modes | https://nodejs.org |
 | Python 3.12 | `--mode=local` (infra setup) | https://www.python.org |
-| `boto3` | `--mode=local` (infra setup) | `pip install boto3` |
+| `boto3` | `--mode=local` (infra setup), all modes (cleanup) | `pip install boto3` |
+| AWS credentials | `--mode=smoke`, `--mode=deployed` (cleanup) | `aws configure` or env vars |
 | GitHub CLI | `--mode=local` (docker build) | `brew install gh` |
 | Playwright browsers | All modes | `npx playwright install chromium` |
 
@@ -119,7 +120,7 @@ The script automatically:
 Runs against a real deployed environment. Tests signup, login, navigation — no scans (saves AI credits).
 
 ```bash
-./scripts/playwright.sh --mode=smoke --url=https://development.d3s20952i7opqs.amplifyapp.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
 ```
 
 Requires:
@@ -131,10 +132,10 @@ Requires:
 
 ```bash
 # Cleanup runs by default
-./scripts/playwright.sh --mode=smoke --url=https://development.d3s20952i7opqs.amplifyapp.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
 
 # Skip cleanup if needed
-./scripts/playwright.sh --mode=smoke --url=https://dev.example.com --skip-cleanup
+./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com --skip-cleanup
 ```
 
 ### Deployed Mode
@@ -142,8 +143,7 @@ Requires:
 Full E2E with real Cognito and real AI. Creates a scan against `stripe.com` and verifies results.
 
 ```bash
-./scripts/playwright.sh --mode=deployed \
-  --url=https://testing.d88lh5h7xvpuh.amplifyapp.com
+./scripts/playwright.sh --mode=deployed --url=https://dev.janus.sc0red.com
 ```
 
 This mode:
@@ -257,12 +257,13 @@ Blocks merge on failure
 
 ### Post-deploy to dev (development branch)
 
-**Workflow:** `deploy-backend.yml` → Smoke job
+**Workflow:** `deploy-backend.yml` → Smoke job + Cleanup job
 
 ```
 Projects: smoke
 Tests: 10
 Alerts on failure (does not block)
+Cleanup: e2e-cleanup.py deletes test users from Cognito + DynamoDB
 ```
 
 ### Post-deploy to testing (testing branch)
@@ -288,7 +289,8 @@ Cleanup: e2e-cleanup.py deletes test users from Cognito + DynamoDB
 ### Deployed modes
 - User registered via real signup UI → creates Cognito user + DynamoDB org
 - `cleanup.spec.ts` deletes analyses/scans via UI delete buttons
-- `scripts/e2e-cleanup.py` runs as CI failsafe — deletes `e2e-*` Cognito users + their DynamoDB records
+- `scripts/e2e-cleanup.py` runs automatically after tests — deletes `e2e-*` Cognito users + their full DynamoDB data graph (user, org, scans, companies, assessments)
+- Also detects orphaned DynamoDB records (where Cognito user was already deleted)
 - Cleanup runs even when tests fail (`if: always()` in CI)
 
 ---
