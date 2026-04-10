@@ -28,7 +28,7 @@ export default defineConfig({
         {
             name: 'local',
             testDir: './e2e/local',
-            testIgnore: 'analysis-detail.spec.ts',
+            testIgnore: ['analysis-detail.spec.ts', 'session-expiry.spec.ts'],
             dependencies: ['local-setup'],
             use: {
                 baseURL: LOCAL_BASE_URL,
@@ -43,6 +43,24 @@ export default defineConfig({
             use: {
                 baseURL: LOCAL_BASE_URL,
                 storageState: './playwright/.auth/local.json',
+            },
+        },
+
+        // ── Session Expiry (expired Cognito token) ─────────────
+        {
+            name: 'local-expiry-setup',
+            testDir: './e2e/setup',
+            testMatch: 'local-auth-expired.setup.ts',
+            use: { baseURL: LOCAL_BASE_URL },
+        },
+        {
+            name: 'local-expiry',
+            testDir: './e2e/local',
+            testMatch: 'session-expiry.spec.ts',
+            dependencies: ['local-expiry-setup'],
+            use: {
+                baseURL: LOCAL_BASE_URL,
+                storageState: './playwright/.auth/local-expired.json',
             },
         },
 
