@@ -127,19 +127,38 @@ Requires:
 - The deployed backend must be running (Amplify + Lambda)
 - Real Cognito user pool must be available (tests register via the signup UI)
 
+**Cleanup:** Smoke tests create a real Cognito user and DynamoDB org. To clean up after the run, pass `--user-pool-id` and `--table`:
+
+```bash
+./scripts/playwright.sh --mode=smoke \
+  --url=https://development.d3s20952i7opqs.amplifyapp.com \
+  --user-pool-id=us-east-1_XXXXX \
+  --table=janus-staging
+```
+
+This requires AWS credentials configured (`aws configure` or env vars). Without these flags, a warning is printed and cleanup is skipped — test data will accumulate.
+
 ### Deployed Mode
 
 Full E2E with real Cognito and real AI. Creates a scan against `stripe.com` and verifies results.
 
 ```bash
-./scripts/playwright.sh --mode=deployed --url=https://testing.d88lh5h7xvpuh.amplifyapp.com
+./scripts/playwright.sh --mode=deployed \
+  --url=https://testing.d88lh5h7xvpuh.amplifyapp.com \
+  --user-pool-id=us-east-1_XXXXX \
+  --table=janus-testing
 ```
 
 This mode:
 - Registers a real user via the signup page
 - Runs a full scan with real AI (takes 1–3 minutes)
 - Verifies analysis results (risk scores, EBITDA, value chain)
-- Cleans up test data after completion
+- Cleans up test data after completion (Cognito user + DynamoDB records)
+
+Requires:
+- `--url` pointing to a deployed Janus frontend
+- AWS credentials configured (for cleanup)
+- `--user-pool-id` and `--table` for cleanup (recommended)
 
 ---
 

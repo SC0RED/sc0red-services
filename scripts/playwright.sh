@@ -26,6 +26,9 @@ URL=""
 HEADED=""
 VISUAL=""
 VISUAL_UPDATE=""
+USER_POOL_ID=""
+TABLE=""
+REGION="us-east-1"
 PLAYWRIGHT_EXTRA_ARGS=()
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -42,6 +45,9 @@ for arg in "$@"; do
         --debug)     HEADED="--debug" ;;
         --visual)    VISUAL="true" ;;
         --visual-update) VISUAL="true"; VISUAL_UPDATE="true" ;;
+        --user-pool-id=*) USER_POOL_ID="${arg#*=}" ;;
+        --table=*)   TABLE="${arg#*=}" ;;
+        --region=*)  REGION="${arg#*=}" ;;
         *)           echo -e "${RED}Unknown argument: $arg${NC}"; exit 1 ;;
     esac
 done
@@ -58,18 +64,25 @@ if [ -z "$MODE" ]; then
     echo "  --mode=deployed   Run against deployed testing environment (real Cognito + real AI)"
     echo ""
     echo -e "${YELLOW}Options:${NC}"
-    echo "  --url=<url>       Frontend URL (required for smoke/deployed modes)"
-    echo "  --headed          Run with visible Chrome browser"
-    echo "  --ui              Launch Playwright interactive UI debugger"
-    echo "  --debug           Step through tests with Playwright inspector"
-    echo "  --visual          Run visual regression (screenshot comparison)"
-    echo "  --visual-update   Update visual regression baselines"
+    echo "  --url=<url>            Frontend URL (required for smoke/deployed modes)"
+    echo "  --headed               Run with visible Chrome browser"
+    echo "  --ui                   Launch Playwright interactive UI debugger"
+    echo "  --debug                Step through tests with Playwright inspector"
+    echo "  --visual               Run visual regression (screenshot comparison)"
+    echo "  --visual-update        Update visual regression baselines"
+    echo ""
+    echo -e "${YELLOW}Cleanup (smoke/deployed modes):${NC}"
+    echo "  --user-pool-id=<id>    Cognito User Pool ID (enables post-test cleanup)"
+    echo "  --table=<name>         DynamoDB table name (enables post-test cleanup)"
+    echo "  --region=<region>      AWS region (default: us-east-1)"
     echo ""
     echo -e "${YELLOW}Examples:${NC}"
     echo "  ./scripts/playwright.sh --mode=local"
     echo "  ./scripts/playwright.sh --mode=local --headed"
     echo "  ./scripts/playwright.sh --mode=local --visual-update"
-    echo "  ./scripts/playwright.sh --mode=smoke --url=https://development.d3s20952i7opqs.amplifyapp.com"
+    echo "  ./scripts/playwright.sh --mode=smoke --url=https://dev.example.com"
+    echo "  ./scripts/playwright.sh --mode=smoke --url=https://dev.example.com \\"
+    echo "    --user-pool-id=us-east-1_XXXXX --table=janus-staging"
     exit 1
 fi
 
@@ -214,10 +227,25 @@ print('Infrastructure ready')
 
 # ── Smoke / Deployed mode ────────────────────────────────────────
 run_remote() {
+    local test_exit_code=0
+
     echo -e "${CYAN}Running Playwright tests (mode=$MODE, url=$URL)...${NC}"
     cd "$FRONTEND_DIR"
     PLAYWRIGHT_BASE_URL="$URL" \
-    npx playwright test "${PROJECTS[@]}" ${PLAYWRIGHT_EXTRA_ARGS[@]+"${PLAYWRIGHT_EXTRA_ARGS[@]}"}
+    npx playwright test "${PROJECTS[@]}" ${PLAYWRIGHT_EXTRA_ARGS[@]+"${PLAYWRIGHT_EXTRA_ARGS[@]}"} || test_exit_code=$?
+
+    # Cleanup: delete e2e-* test users from Cognito + DynamoDB (runs even if tests fail)
+    if [ -n "$USER_POOL_ID" ] && [ -n "$TABLE" ]; then
+        echo -e "\n${YELLOW}Running cleanup (Cognito + DynamoDB)...${NC}"
+        python3 "$PROJECT_ROOT/scripts/e2e-cleanup.py" \
+            --user-pool-id "$USER_POOL_ID" \
+            --table "$TABLE" \
+            --region "$REGION" || echo -e "${RED}Cleanup failed (non-fatal)${NC}"
+    elif [ "$MODE" != "local" ]; then
+        echo -e "\n${YELLOW}Skipping cleanup — pass --user-pool-id and --table to enable${NC}"
+    fi
+
+    return $test_exit_code
 }
 
 # ── Execute ───────────────────────────────────────────────────────
