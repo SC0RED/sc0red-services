@@ -8,7 +8,7 @@ test.describe('team management', () => {
 
     test('current user shown in members list', async ({ page }) => {
         await page.goto('/team')
-        await expect(page.getByText('E2E Test User')).toBeVisible({ timeout: 10000 })
+        await expect(page.locator('#main').getByText('E2E Test User')).toBeVisible({ timeout: 10000 })
     })
 
     test('invite form accepts email input', async ({ page }) => {
