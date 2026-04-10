@@ -127,15 +127,15 @@ Requires:
 - The deployed backend must be running (Amplify + Lambda)
 - Real Cognito user pool must be available (tests register via the signup UI)
 
-**Cleanup:** Smoke tests create a real Cognito user and DynamoDB org. To clean up after the run, pass `--cleanup`:
+**Cleanup:** Smoke tests create a real Cognito user and DynamoDB org. Cleanup runs automatically after tests (requires AWS credentials). The script auto-discovers the Cognito user pool and DynamoDB table by naming convention (`janus-users-*` and `janus-*`). Pass `--skip-cleanup` to disable:
 
 ```bash
-./scripts/playwright.sh --mode=smoke \
-  --url=https://development.d3s20952i7opqs.amplifyapp.com \
-  --cleanup
-```
+# Cleanup runs by default
+./scripts/playwright.sh --mode=smoke --url=https://development.d3s20952i7opqs.amplifyapp.com
 
-This requires AWS credentials configured (`aws configure` or env vars). The script auto-discovers the Cognito user pool and DynamoDB table by naming convention (`janus-users-*` and `janus-*`). Without `--cleanup`, a warning is printed and test data will accumulate.
+# Skip cleanup if needed
+./scripts/playwright.sh --mode=smoke --url=https://dev.example.com --skip-cleanup
+```
 
 ### Deployed Mode
 
@@ -143,19 +143,18 @@ Full E2E with real Cognito and real AI. Creates a scan against `stripe.com` and 
 
 ```bash
 ./scripts/playwright.sh --mode=deployed \
-  --url=https://testing.d88lh5h7xvpuh.amplifyapp.com \
-  --cleanup
+  --url=https://testing.d88lh5h7xvpuh.amplifyapp.com
 ```
 
 This mode:
 - Registers a real user via the signup page
 - Runs a full scan with real AI (takes 1–3 minutes)
 - Verifies analysis results (risk scores, EBITDA, value chain)
-- Cleans up test data after completion (Cognito user + DynamoDB records)
+- Cleans up test data after completion (auto-discovers Cognito pool + DynamoDB table)
 
 Requires:
 - `--url` pointing to a deployed Janus frontend
-- AWS credentials configured (for `--cleanup`)
+- AWS credentials configured (for cleanup — pass `--skip-cleanup` if unavailable)
 
 ---
 
