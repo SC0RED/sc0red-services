@@ -8,7 +8,7 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
     disconnect: vi.fn(),
 }))
 
-import AnalysisDetail from '@/app/analysis/[analysisId]/AnalysisDetail'
+import AnalysisDetail from '@/app/(authenticated)/analysis/[analysisId]/AnalysisDetail'
 import type { AnalysisData } from '@/lib/types/api'
 
 const mockSignOut = vi.fn()

@@ -1,6 +1,5 @@
 'use client'
 
-import { useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -11,16 +10,7 @@ import navItems from '@/components/sidebar/navItems'
 
 export default function DashboardSidebar() {
     const pathname = usePathname()
-    const sessionRes = useSession()
-    const session = sessionRes?.data
-    // Cache the user role to prevent flicker during session re-fetch on navigation.
-    // useSession() momentarily returns undefined during client-side navigation,
-    // which caused adminOnly items to disappear and reappear.
-    const lastRoleRef = useRef(session?.user?.role)
-    if (session?.user?.role) {
-        lastRoleRef.current = session.user.role
-    }
-    const userRole = session?.user?.role || lastRoleRef.current
+    const { data: session } = useSession()
     const {
         isOpen: mobileOpen,
         open: openMobile,
@@ -134,7 +124,7 @@ export default function DashboardSidebar() {
                     }}
                 >
                     {navItems
-                        .filter((item) => !item.adminOnly || userRole === 'admin')
+                        .filter((item) => !item.adminOnly || session?.user?.role === 'admin')
                         .map((item) => {
                             const active =
                                 pathname === item.href ||
