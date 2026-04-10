@@ -53,6 +53,6 @@ test.describe('analysis detail', () => {
         await viewButton.click()
 
         await expect(page.getByText('Value Chain Analysis')).toBeVisible({ timeout: 10000 })
-        await expect(page.getByText('Primary Activities')).toBeVisible()
+        await expect(page.getByText('Primary Activities', { exact: true })).toBeVisible()
     })
 })

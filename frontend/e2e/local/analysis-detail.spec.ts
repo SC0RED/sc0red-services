@@ -46,7 +46,7 @@ test.describe('analysis detail', () => {
 
         const valueChain = page.getByText('Value Chain Analysis')
         if (await valueChain.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await expect(page.getByText('Primary Activities')).toBeVisible()
+            await expect(page.getByText('Primary Activities', { exact: true })).toBeVisible()
         }
     })
 
