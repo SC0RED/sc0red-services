@@ -35,6 +35,19 @@ End-to-end tests verify Janus as a user sees it — real browser interactions ac
 
 ---
 
+## First-Time Setup
+
+Before running any Playwright tests, install dependencies and browsers from the `frontend/` directory:
+
+```bash
+cd frontend
+npm install
+npx playwright install chromium
+cd ..
+```
+
+---
+
 ## Quick Start
 
 ```bash
