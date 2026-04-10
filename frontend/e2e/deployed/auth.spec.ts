@@ -6,12 +6,12 @@ test.describe('authentication', () => {
         await expect(page.getByText(/Good (morning|afternoon|evening)/)).toBeVisible({ timeout: 15000 })
     })
 
-    test('dashboard shows empty state or stats', async ({ page }) => {
+    test('dashboard shows content after loading', async ({ page }) => {
         await page.goto('/dashboard')
-        // New user sees empty state; returning user sees stats cards
-        await expect(page.getByText(/Run your first analysis|Companies Analyzed/)).toBeVisible({
-            timeout: 15000,
-        })
+        // Wait for dashboard to fully load — greeting confirms data is rendered
+        await expect(page.getByText(/Good (morning|afternoon|evening)/)).toBeVisible({ timeout: 15000 })
+        // Verify either stats cards or empty state is present
+        await expect(page.locator('text=/Companies Analyzed|Run your first analysis/').first()).toBeVisible()
     })
 
     test('user name appears in sidebar', async ({ page }) => {
