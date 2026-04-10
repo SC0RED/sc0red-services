@@ -213,6 +213,39 @@ def cleanup_org_data(dynamodb_client: object, table_name: str, org_id: str, user
     return total
 
 
+def find_orphaned_dynamodb_users(dynamodb_client: object, table_name: str) -> list[dict[str, str]]:
+    """Find USER# records in DynamoDB with e2e-* email (orphaned after Cognito deletion)."""
+    users: list[dict[str, str]] = []
+    last_key = None
+
+    while True:
+        kwargs: dict[str, object] = {
+            "TableName": table_name,
+            "FilterExpression": "begins_with(pk, :prefix) AND contains(email, :e2e)",
+            "ExpressionAttributeValues": {
+                ":prefix": {"S": "USER#"},
+                ":e2e": {"S": "e2e-"},
+            },
+        }
+        if last_key:
+            kwargs["ExclusiveStartKey"] = last_key
+
+        response = dynamodb_client.scan(**kwargs)
+
+        for item in response.get("Items", []):
+            users.append({
+                "id": item["pk"]["S"].replace("USER#", ""),
+                "email": item.get("email", {}).get("S", ""),
+                "org_id": item.get("org_id", {}).get("S", ""),
+            })
+
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            break
+
+    return users
+
+
 def discover_user_pool_id(cognito_client: object) -> str:
     """Find the Janus Cognito user pool by name pattern (janus-users-*)."""
     response = cognito_client.list_user_pools(MaxResults=60)
@@ -264,31 +297,59 @@ def main() -> None:
 
     # 1. Find E2E test users in Cognito
     print(f"\nScanning Cognito pool {user_pool_id} for e2e-* users...")
-    users = find_e2e_cognito_users(cognito, user_pool_id)
-    print(f"  Found {len(users)} E2E test user(s)")
+    cognito_users = find_e2e_cognito_users(cognito, user_pool_id)
+    print(f"  Found {len(cognito_users)} Cognito user(s)")
 
-    if not users:
+    # 2. Find orphaned E2E user records in DynamoDB (Cognito user already deleted)
+    print(f"\nScanning DynamoDB {table_name} for orphaned e2e-* user records...")
+    orphaned_users = find_orphaned_dynamodb_users(dynamodb, table_name)
+    cognito_user_ids = {u["sub"] for u in cognito_users}
+    orphaned_users = [u for u in orphaned_users if u["id"] not in cognito_user_ids]
+    print(f"  Found {len(orphaned_users)} orphaned DynamoDB user(s)")
+
+    if not cognito_users and not orphaned_users:
         print("Nothing to clean up.")
         return
 
-    for user in users:
+    # 3. Clean up Cognito users + their DynamoDB data
+    for user in cognito_users:
         org_id = user["org_id"]
         uid = user["sub"]
-        print(f"\n  User: {user['email']} (org_id: {org_id})")
+        print(f"\n  Cognito user: {user['email']} (org_id: {org_id})")
 
-        if not org_id:
-            print("    No org_id found — skipping DynamoDB cleanup")
-        else:
+        if org_id:
             total = cleanup_org_data(dynamodb, table_name, org_id, uid, args.dry_run)
             if not args.dry_run:
                 print(f"    Deleted {total} DynamoDB record(s)")
+        else:
+            print("    No org_id found — skipping DynamoDB cleanup")
 
         if args.dry_run:
             print("    [DRY RUN] Would delete Cognito user")
         elif delete_cognito_user(cognito, user_pool_id, user["username"]):
             print(f"    Deleted Cognito user")
 
-    print(f"\nCleanup complete. Processed {len(users)} user(s).")
+    # 4. Clean up orphaned DynamoDB records (Cognito user was already deleted)
+    for user in orphaned_users:
+        org_id = user["org_id"]
+        uid = user["id"]
+        print(f"\n  Orphaned DynamoDB user: {user['email']} (org_id: {org_id})")
+
+        if org_id:
+            total = cleanup_org_data(dynamodb, table_name, org_id, uid, args.dry_run)
+            if not args.dry_run:
+                print(f"    Deleted {total} DynamoDB record(s)")
+        else:
+            # At minimum delete the USER# record itself
+            user_items = query_pk(dynamodb, table_name, f"USER#{uid}")
+            if args.dry_run:
+                print(f"    [DRY RUN] Would delete {len(user_items)} USER record(s)")
+            else:
+                total = delete_items(dynamodb, table_name, user_items)
+                print(f"    Deleted {total} DynamoDB record(s)")
+
+    processed = len(cognito_users) + len(orphaned_users)
+    print(f"\nCleanup complete. Processed {processed} user(s).")
 
 
 if __name__ == "__main__":
