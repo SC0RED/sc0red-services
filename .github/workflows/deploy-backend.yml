@@ -29,6 +29,7 @@ jobs:
       contents: read
     outputs:
       frontend_url: ${{ steps.outputs.outputs.frontend_url }}
+      user_pool_id: ${{ steps.outputs.outputs.user_pool_id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -101,6 +102,9 @@ jobs:
                       print(f'Frontend URL: {val}')
                       with open(os.environ['GITHUB_OUTPUT'], 'a') as gh:
                           gh.write(f'frontend_url={val}\n')
+                  if 'UserPoolId' in key and 'Client' not in key and 'Provider' not in key:
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as gh:
+                          gh.write(f'user_pool_id={val}\n')
           except Exception as e:
               print(f'Could not read outputs: {e}', file=sys.stderr)
           "
@@ -137,3 +141,34 @@ jobs:
         with:
           name: smoke-report
           path: frontend/playwright-report/
+
+  smoke-cleanup:
+    name: Cleanup Test Data
+    needs: [deploy, smoke]
+    if: always() && needs.deploy.outputs.user_pool_id != ''
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install boto3
+        run: pip install boto3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.DEV_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.DEV_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.DEV_AWS_REGION }}
+
+      - name: Run cleanup script
+        run: |
+          python3 scripts/e2e-cleanup.py \
+            --user-pool-id "${{ needs.deploy.outputs.user_pool_id }}" \
+            --table janus-staging \
+            --region "${{ secrets.DEV_AWS_REGION }}"

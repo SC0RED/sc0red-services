@@ -17,6 +17,15 @@ export default defineConfig({
         screenshot: 'only-on-failure',
     },
 
+    /* Shared snapshot settings for visual regression */
+    snapshotPathTemplate: '{testDir}/../__screenshots__/{projectName}/{testFilePath}/{arg}{ext}',
+    expect: {
+        toHaveScreenshot: {
+            maxDiffPixelRatio: 0.01,
+            animations: 'disabled',
+        },
+    },
+
     projects: [
         // ── Local E2E (docker-compose) ──────────────────────────
         {
@@ -110,6 +119,41 @@ export default defineConfig({
             use: {
                 baseURL: DEPLOYED_BASE_URL,
                 storageState: './playwright/.auth/deployed.json',
+            },
+        },
+
+        // ── Visual Regression (manual only, not in CI) ─────────
+        {
+            name: 'local-visual',
+            testDir: './e2e/visual',
+            testMatch: 'local.spec.ts',
+            dependencies: ['local-setup'],
+            use: {
+                baseURL: LOCAL_BASE_URL,
+                storageState: './playwright/.auth/local.json',
+                viewport: { width: 1280, height: 720 },
+            },
+        },
+        {
+            name: 'local-visual-post-scan',
+            testDir: './e2e/visual',
+            testMatch: 'post-scan.spec.ts',
+            dependencies: ['local'],
+            use: {
+                baseURL: LOCAL_BASE_URL,
+                storageState: './playwright/.auth/local.json',
+                viewport: { width: 1280, height: 720 },
+            },
+        },
+        {
+            name: 'smoke-visual',
+            testDir: './e2e/visual',
+            testMatch: 'smoke.spec.ts',
+            dependencies: ['deployed-setup'],
+            use: {
+                baseURL: DEPLOYED_BASE_URL,
+                storageState: './playwright/.auth/deployed.json',
+                viewport: { width: 1280, height: 720 },
             },
         },
     ],
