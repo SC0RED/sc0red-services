@@ -2,7 +2,9 @@ import { useRef, useEffect, useCallback } from 'react'
 
 import type { Company, ScanPollResponse } from '@/lib/types/scan'
 
-const POLL_INTERVAL_MS = 3000
+const MIN_INTERVAL_MS = 1000
+const MAX_INTERVAL_MS = 15000
+const BACKOFF_FACTOR = 2
 
 interface DiscoveryCallbacks {
     mode: 'discovery'
@@ -89,20 +91,24 @@ export function useScanPolling(options: UseScanPollingOptions): {
     startPolling: (scanId: string) => void
     stopPolling: () => void
 } {
-    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const intervalRef = useRef(MIN_INTERVAL_MS)
+    const lastProgressRef = useRef(-1)
     const optionsRef = useRef(options)
     optionsRef.current = options
 
     const stopPolling = useCallback(() => {
-        if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current)
-            pollIntervalRef.current = null
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
         }
+        intervalRef.current = MIN_INTERVAL_MS
+        lastProgressRef.current = -1
     }, [])
 
     useEffect(() => {
         return () => {
-            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
         }
     }, [])
 
@@ -110,11 +116,21 @@ export function useScanPolling(options: UseScanPollingOptions): {
         (scanId: string) => {
             stopPolling()
 
-            pollIntervalRef.current = setInterval(async () => {
+            async function poll() {
                 try {
                     const response = await fetch(`/api/scan/${scanId}`)
                     if (!response.ok) return
                     const data: ScanPollResponse = await response.json()
+
+                    // Reset interval on progress change
+                    const currentProgress = data.progress ?? 0
+                    if (currentProgress !== lastProgressRef.current) {
+                        intervalRef.current = MIN_INTERVAL_MS
+                        lastProgressRef.current = currentProgress
+                    } else {
+                        // Exponential backoff when no progress change
+                        intervalRef.current = Math.min(intervalRef.current * BACKOFF_FACTOR, MAX_INTERVAL_MS)
+                    }
 
                     const currentOptions = optionsRef.current
                     if (currentOptions.mode === 'discovery') {
@@ -123,9 +139,18 @@ export function useScanPolling(options: UseScanPollingOptions): {
                         handlePortfolioPoll(data, currentOptions, stopPolling)
                     }
                 } catch {
-                    // Silently retry on network errors
+                    // Back off on network errors
+                    intervalRef.current = Math.min(intervalRef.current * BACKOFF_FACTOR, MAX_INTERVAL_MS)
                 }
-            }, POLL_INTERVAL_MS)
+
+                // Schedule next poll if not stopped
+                if (timeoutRef.current !== null || intervalRef.current === MIN_INTERVAL_MS) {
+                    timeoutRef.current = setTimeout(poll, intervalRef.current)
+                }
+            }
+
+            // Start first poll immediately
+            timeoutRef.current = setTimeout(poll, MIN_INTERVAL_MS)
         },
         [stopPolling]
     )

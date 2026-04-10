@@ -3,7 +3,10 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import Link from 'next/link'
+
+import { Button, Card, FormField, Input } from '@/components/ui'
 
 export default function LoginPage() {
     const router = useRouter()
@@ -33,27 +36,13 @@ export default function LoginPage() {
 
     return (
         <div
-            style={{
-                minHeight: '100vh',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '1.5rem',
-            }}
-            className="grid-bg"
+            className="grid-bg flex-col justify-center items-center"
+            style={{ minHeight: '100vh', padding: '1.5rem' }}
         >
-            <div style={{ width: '100%', maxWidth: '420px' }}>
+            <div className="w-full max-w-sm">
                 {/* Logo */}
-                <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-                    <div
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.625rem',
-                            marginBottom: '0.75rem',
-                        }}
-                    >
+                <div className="text-center mb-xl">
+                    <div className="inline-flex gap-sm mb-sm">
                         <div
                             style={{
                                 width: '56px',
@@ -66,65 +55,46 @@ export default function LoginPage() {
                                 flexShrink: 0,
                             }}
                         >
-                            <img
+                            <Image
                                 src="/janus-logo.png"
                                 alt="Janus"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                width={56}
+                                height={56}
+                                style={{ objectFit: 'cover' }}
                             />
                         </div>
                         <span style={{ fontSize: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
                             Janus
                         </span>
                     </div>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
+                    <p className="text-secondary" style={{ fontSize: '0.9375rem' }}>
                         AI Risk & Opportunity Intelligence
                     </p>
                 </div>
 
-                {/* Card */}
-                <div className="card" style={{ padding: '2rem' }}>
-                    <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.375rem' }}>
+                <Card padding="lg">
+                    <h1 className="font-bold mb-xs" style={{ fontSize: '1.25rem' }}>
                         Welcome back
                     </h1>
-                    <p
-                        style={{
-                            color: 'var(--text-secondary)',
-                            fontSize: '0.875rem',
-                            marginBottom: '1.75rem',
-                        }}
-                    >
-                        Sign in to your account
-                    </p>
+                    <p className="text-secondary text-sm mb-lg">Sign in to your account</p>
 
-                    <form
-                        onSubmit={handleSubmit}
-                        style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}
-                    >
-                        <div className="input-group">
-                            <label className="label" htmlFor="email">
-                                Email
-                            </label>
-                            <input
+                    <form onSubmit={handleSubmit} className="flex-col gap-lg">
+                        <FormField label="Email" htmlFor="email">
+                            <Input
                                 id="email"
                                 type="email"
-                                className="input"
                                 placeholder="you@firm.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 autoComplete="email"
-                                aria-describedby={error ? 'login-error' : undefined}
                             />
-                        </div>
+                        </FormField>
 
-                        <div className="input-group">
-                            <label className="label" htmlFor="password">
-                                Password
-                            </label>
-                            <input
+                        <FormField label="Password" htmlFor="password">
+                            <Input
                                 id="password"
                                 type="password"
-                                className="input"
                                 placeholder="••••••••"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -139,7 +109,7 @@ export default function LoginPage() {
                                     Forgot password?
                                 </Link>
                             </div>
-                        </div>
+                        </FormField>
 
                         {error && (
                             <div id="login-error" role="alert" className="alert-error">
@@ -147,41 +117,24 @@ export default function LoginPage() {
                             </div>
                         )}
 
-                        <button
+                        <Button
                             type="submit"
-                            className="btn btn-primary w-full"
+                            loading={loading}
+                            className="w-full"
                             style={{ justifyContent: 'center', marginTop: '0.25rem' }}
-                            disabled={loading}
                         >
-                            {loading ? (
-                                <>
-                                    <svg
-                                        style={{ animation: 'spin 1s linear infinite' }}
-                                        width="16"
-                                        height="16"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                    >
-                                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                                    </svg>
-                                    Signing in...
-                                </>
-                            ) : (
-                                'Sign In'
-                            )}
-                        </button>
+                            {loading ? 'Signing in...' : 'Sign In'}
+                        </Button>
                     </form>
 
                     <div className="divider" style={{ margin: '1.5rem 0' }} />
-                    <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                    <p className="text-center text-secondary text-sm">
                         Don&apos;t have an account?{' '}
                         <Link href="/signup" style={{ color: 'var(--accent-blue)', fontWeight: 500 }}>
                             Create one
                         </Link>
                     </p>
-                </div>
+                </Card>
             </div>
         </div>
     )

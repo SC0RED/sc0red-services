@@ -1,0 +1,58 @@
+import { test, expect } from '@playwright/test'
+
+// Runs after standalone-scan.spec.ts has created at least one analysis
+
+test.describe('analysis detail', () => {
+    test('navigate to analysis from analyses list', async ({ page }) => {
+        await page.goto('/analyses')
+
+        const viewButton = page.getByRole('link', { name: 'View analysis' }).first()
+        await expect(viewButton).toBeVisible({ timeout: 15000 })
+
+        await viewButton.click()
+        await expect(page).toHaveURL(/\/analysis\//)
+    })
+
+    test('analysis page shows core sections', async ({ page }) => {
+        await page.goto('/analyses')
+
+        const viewButton = page.getByRole('link', { name: 'View analysis' }).first()
+        await expect(viewButton).toBeVisible({ timeout: 15000 })
+        await viewButton.click()
+
+        await expect(page.getByText('Overall AI Risk Score')).toBeVisible()
+        await expect(page.getByText('Risk Dimensions')).toBeVisible()
+        await expect(page.getByText('Risk Breakdown')).toBeVisible()
+    })
+
+    test('analysis page shows opportunities', async ({ page }) => {
+        await page.goto('/analyses')
+
+        const viewButton = page.getByRole('link', { name: 'View analysis' }).first()
+        await expect(viewButton).toBeVisible({ timeout: 15000 })
+        await viewButton.click()
+
+        await expect(page.getByText('AI Opportunities')).toBeVisible()
+    })
+
+    test('analysis page shows EBITDA section', async ({ page }) => {
+        await page.goto('/analyses')
+
+        const viewButton = page.getByRole('link', { name: 'View analysis' }).first()
+        await expect(viewButton).toBeVisible({ timeout: 15000 })
+        await viewButton.click()
+
+        await expect(page.getByText('EBITDA Impact Model')).toBeVisible({ timeout: 10000 })
+    })
+
+    test('analysis page shows value chain', async ({ page }) => {
+        await page.goto('/analyses')
+
+        const viewButton = page.getByRole('link', { name: 'View analysis' }).first()
+        await expect(viewButton).toBeVisible({ timeout: 15000 })
+        await viewButton.click()
+
+        await expect(page.getByText('Value Chain Analysis')).toBeVisible({ timeout: 10000 })
+        await expect(page.getByText('Primary Activities', { exact: true })).toBeVisible()
+    })
+})

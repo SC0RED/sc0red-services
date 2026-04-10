@@ -76,12 +76,19 @@ class DynamoDBCompanyRepository:
             sk="COMPANY#METADATA",
         )
 
-    def find_by_org(self, org_id: str) -> list[dict[str, Any]]:
-        """Return all companies belonging to the given organisation ID."""
+    def find_by_org(
+        self,
+        org_id: str,
+        limit: int | None = None,
+        cursor: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+        """Return companies belonging to the given org, with optional pagination."""
         return self._table.query_gsi(
             index_name="GSI1",
             pk_attr="GSI1PK",
             pk_value=f"ORG#{org_id}",
             sk_attr="GSI1SK",
             sk_prefix="COMPANY#",
+            limit=limit,
+            cursor=cursor,
         )

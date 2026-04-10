@@ -9,6 +9,7 @@ import type { DashboardData } from '@/lib/types/api'
 import { TIER_COLORS, TIER_BG_COLORS } from '@/lib/utils/riskUtils'
 import DashboardSidebar from '@/components/DashboardSidebar'
 import DeleteScanButton from '@/components/DeleteScanButton'
+import { EmptyState } from '@/components/ui'
 
 export const metadata: Metadata = { title: 'Dashboard — Janus' }
 
@@ -57,7 +58,7 @@ export default async function DashboardPage() {
                 <div
                     style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                         gap: '1rem',
                         marginBottom: '2.5rem',
                     }}
@@ -82,44 +83,36 @@ export default async function DashboardPage() {
                 </div>
 
                 {data.totalAnalyses === 0 ? (
-                    <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
-                        <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🔍</div>
-                        <h2 style={{ fontWeight: 700, marginBottom: '0.75rem' }}>Run your first analysis</h2>
-                        <p
-                            style={{
-                                color: 'var(--text-secondary)',
-                                marginBottom: '2rem',
-                                maxWidth: '400px',
-                                margin: '0 auto 2rem',
-                            }}
-                        >
-                            Analyze a PE portfolio or single company to identify AI-driven risks and
-                            opportunities.
-                        </p>
-                        <div style={{ display: 'flex', gap: '0.875rem', justifyContent: 'center' }}>
-                            <Link href="/scan/new?type=portfolio" className="btn btn-primary">
-                                <svg
-                                    width="16"
-                                    height="16"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                    <circle cx="9" cy="7" r="4" />
-                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                                </svg>
-                                Scan PE Portfolio
-                            </Link>
-                            <Link href="/scan/new?type=standalone" className="btn btn-secondary">
-                                Single Company
-                            </Link>
-                        </div>
-                    </div>
+                    <EmptyState
+                        icon="🔍"
+                        title="Run your first analysis"
+                        description="Analyze a PE portfolio or single company to identify AI-driven risks and opportunities."
+                        action={
+                            <div className="flex gap-md justify-center">
+                                <Link href="/scan/new?type=portfolio" className="btn btn-primary">
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    >
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                        <circle cx="9" cy="7" r="4" />
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                    </svg>
+                                    Scan PE Portfolio
+                                </Link>
+                                <Link href="/scan/new?type=standalone" className="btn btn-secondary">
+                                    Single Company
+                                </Link>
+                            </div>
+                        }
+                    />
                 ) : (
                     <div
                         style={{
@@ -149,8 +142,10 @@ export default async function DashboardPage() {
                                     </Link>
                                 </div>
                             </div>
-                            <div className="card" style={{ overflow: 'hidden' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <div className="card" style={{ overflowX: 'auto' }}>
+                                <table
+                                    style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}
+                                >
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                             {['Company', 'Risk Score', 'Tier', 'Source', 'Date', ''].map(
@@ -287,8 +282,10 @@ export default async function DashboardPage() {
                             >
                                 <h2 style={{ fontWeight: 700, fontSize: '1.125rem' }}>Recent Scans</h2>
                             </div>
-                            <div className="card" style={{ overflow: 'hidden' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <div className="card" style={{ overflowX: 'auto' }}>
+                                <table
+                                    style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}
+                                >
                                     <thead>
                                         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                                             {['Source', 'Type', 'Status', 'Companies', 'Date', ''].map(

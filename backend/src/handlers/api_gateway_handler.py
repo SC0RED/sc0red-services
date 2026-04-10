@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from decimal import Decimal
 from typing import Any
 
@@ -23,6 +24,18 @@ from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 logger = logging.getLogger(__name__)
 
 LambdaResponse = dict[str, Any]
+
+# ── Error codes ────────────────────────────────────────────────────────────
+# Included in error responses as {"error": "...", "code": "..."}
+# so the frontend can handle errors programmatically.
+
+VALIDATION_ERROR = "VALIDATION_ERROR"
+NOT_FOUND = "NOT_FOUND"
+UNAUTHORIZED = "UNAUTHORIZED"
+FORBIDDEN = "FORBIDDEN"
+CONFLICT = "CONFLICT"
+NOT_CONFIGURED = "NOT_CONFIGURED"
+ROUTE_NOT_FOUND = "ROUTE_NOT_FOUND"
 
 
 def serialize_decimal(value: object) -> float | int | str:
@@ -46,9 +59,26 @@ def build_json_response(body: dict[str, Any], status: int = 200) -> LambdaRespon
     }
 
 
-def build_error(message: str, status: int = 400) -> LambdaResponse:
-    """Build an error JSON response with the given message and status code."""
-    return build_json_response({"error": message}, status)
+def build_error(message: str, status: int = 400, code: str = "") -> LambdaResponse:
+    """Build an error JSON response with the given message, status code, and error code."""
+    body: dict[str, Any] = {"error": message}
+    if code:
+        body["code"] = code
+    return build_json_response(body, status)
+
+
+def check_org_access(
+    resource: dict[str, Any] | None,
+    authentication: Any,
+) -> LambdaResponse | None:
+    """Check if a resource belongs to the authenticated user's org.
+
+    Returns a 404 error response if the resource is missing or belongs to
+    a different org. Returns None if access is allowed.
+    """
+    if not resource or resource.get("org_id") != authentication.org_id:
+        return build_error("Not found", 404, NOT_FOUND)
+    return None
 
 
 def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
@@ -267,30 +297,65 @@ class APIGatewayHandler:
         path = event.get("path", "")
         headers = event.get("headers") or {}
 
+        # Extract correlation ID from API Gateway context or generate one
+        request_context = event.get("requestContext") or {}
+        request_id = request_context.get("requestId") or str(uuid.uuid4())
+
         if method == "OPTIONS":
             return build_json_response({}, 200)
 
         result = self._router.dispatch(method, path)
         if result is None:
-            return build_error("Not found", 404)
+            return self._finalize(
+                build_error("Not found", 404, ROUTE_NOT_FOUND),
+                method,
+                path,
+                request_id,
+                start_time,
+            )
 
         handler, path_params, authenticated = result
         if not authenticated:
             response = handler(event, **path_params)
-            self._log_request(method, path, response, start_time)
-            return response
+            return self._finalize(response, method, path, request_id, start_time)
 
         try:
             authentication = require_authentication(headers)
         except ValueError as e:
-            return build_error(str(e), 401)
+            return self._finalize(
+                build_error(str(e), 401, UNAUTHORIZED),
+                method,
+                path,
+                request_id,
+                start_time,
+            )
 
         response = handler(event, authentication, **path_params)
-        self._log_request(method, path, response, start_time)
-        return response
+        return self._finalize(response, method, path, request_id, start_time)
 
     @staticmethod
-    def _log_request(method: str, path: str, response: LambdaResponse, start_time: float) -> None:
+    def _finalize(
+        response: LambdaResponse,
+        method: str,
+        path: str,
+        request_id: str,
+        start_time: float,
+    ) -> LambdaResponse:
+        """Add correlation ID header and log the request."""
         duration_ms = int((time.monotonic() - start_time) * 1000)
         status = response.get("statusCode", 0)
-        logger.info("%s %s → %d (%dms)", method, path, status, duration_ms)
+
+        # Add correlation ID to response headers
+        response_headers = response.get("headers") or {}
+        response_headers["X-Request-Id"] = request_id
+        response["headers"] = response_headers
+
+        logger.info(
+            "%s %s → %d (%dms) request_id=%s",
+            method,
+            path,
+            status,
+            duration_ms,
+            request_id,
+        )
+        return response

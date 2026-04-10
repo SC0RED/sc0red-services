@@ -14,7 +14,15 @@ from typing import TYPE_CHECKING, Any
 
 from botocore.exceptions import ClientError
 
-from src.handlers.api_gateway_handler import build_error, build_json_response
+from src.handlers.api_gateway_handler import (
+    CONFLICT,
+    FORBIDDEN,
+    NOT_FOUND,
+    VALIDATION_ERROR,
+    build_error,
+    build_json_response,
+    check_org_access,
+)
 from src.handlers.cognito_client import CognitoClient
 
 logger = logging.getLogger(__name__)
@@ -32,21 +40,21 @@ def handle_invite_member(
 ) -> LambdaResponse:
     """Handle POST /api/org/invite — admin invites a new member."""
     if authentication.role != "admin":
-        return build_error("Only admins can invite members", 403)
+        return build_error("Only admins can invite members", 403, FORBIDDEN)
 
     body = json.loads(event.get("body") or "{}")
     email = body.get("email", "").strip().lower()
     role = body.get("role", "analyst")
 
     if not email:
-        return build_error("Email is required")
+        return build_error("Email is required", code=VALIDATION_ERROR)
 
     if role not in ("analyst", "viewer"):
-        return build_error("Role must be 'analyst' or 'viewer'")
+        return build_error("Role must be 'analyst' or 'viewer'", code=VALIDATION_ERROR)
 
     user_repo = storage.create_user_repository()
     if user_repo.has_email(email):
-        return build_error("A user with this email already exists")
+        return build_error("A user with this email already exists", code=CONFLICT)
 
     invite_id = str(uuid.uuid4())
     now = datetime.now(UTC)
@@ -86,13 +94,13 @@ def handle_resend_invite(
 ) -> LambdaResponse:
     """Handle POST /api/org/invite/resend — resend invitation email."""
     if authentication.role != "admin":
-        return build_error("Only admins can resend invitations", 403)
+        return build_error("Only admins can resend invitations", 403, FORBIDDEN)
 
     body = json.loads(event.get("body") or "{}")
     email = body.get("email", "").strip().lower()
 
     if not email:
-        return build_error("Email is required")
+        return build_error("Email is required", code=VALIDATION_ERROR)
 
     cognito_client = CognitoClient()
     try:
@@ -100,7 +108,7 @@ def handle_resend_invite(
     except ClientError as error:
         error_code = error.response["Error"]["Code"]
         if error_code == "UserNotFoundException":
-            return build_error("Invitation not found in Cognito", 404)
+            return build_error("Invitation not found in Cognito", 404, NOT_FOUND)
         return build_error(f"Failed to resend invitation: {error_code}", 500)
 
     return build_json_response({"resent": True, "email": email})
@@ -114,7 +122,7 @@ def handle_revoke_invite(
 ) -> LambdaResponse:
     """Handle DELETE /api/org/invite/{invite_id} — revoke a pending invitation."""
     if authentication.role != "admin":
-        return build_error("Only admins can revoke invitations", 403)
+        return build_error("Only admins can revoke invitations", 403, FORBIDDEN)
 
     invitation_repo = storage.create_invitation_repository()
     invitations = invitation_repo.find_by_org(authentication.org_id)
@@ -126,10 +134,10 @@ def handle_revoke_invite(
             break
 
     if not target:
-        return build_error("Invitation not found", 404)
+        return build_error("Invitation not found", 404, NOT_FOUND)
 
     if target.get("status") != "pending":
-        return build_error("Only pending invitations can be revoked", 400)
+        return build_error("Only pending invitations can be revoked", 400, VALIDATION_ERROR)
 
     # Delete from Cognito — only catch "user not found" (already accepted)
     email = target["email"]
@@ -191,16 +199,16 @@ def handle_remove_member(
 ) -> LambdaResponse:
     """Handle DELETE /api/org/members/{user_id} — admin removes a member."""
     if authentication.role != "admin":
-        return build_error("Only admins can remove members", 403)
+        return build_error("Only admins can remove members", 403, FORBIDDEN)
 
     if user_id == authentication.user_id:
-        return build_error("Cannot remove yourself")
+        return build_error("Cannot remove yourself", code=VALIDATION_ERROR)
 
     user_repo = storage.create_user_repository()
     user = user_repo.get_by_id(user_id)
 
-    if not user or user.get("org_id") != authentication.org_id:
-        return build_error("Member not found", 404)
+    if error := check_org_access(user, authentication):
+        return error
 
     # Delete from Cognito
     email = user.get("email", "")

@@ -1,12 +1,16 @@
 name: Deploy Development
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - development
     paths:
       - 'backend/**'
       - 'infrastructure/**'
+      - 'frontend/e2e/**'
+      - 'frontend/playwright.config.ts'
+      - 'scripts/e2e-cleanup.py'
       - '.github/workflows/deploy-backend.yml'
 
 jobs:
@@ -23,6 +27,8 @@ jobs:
     environment: staging
     permissions:
       contents: read
+    outputs:
+      frontend_url: ${{ steps.outputs.outputs.frontend_url }}
 
     steps:
       - uses: actions/checkout@v4
@@ -79,10 +85,11 @@ jobs:
               --context "account=${{ secrets.DEV_AWS_ACCOUNT_ID }}" \
               --context "region=${{ secrets.DEV_AWS_REGION }}"
 
-      - name: Print deployment outputs
+      - name: Extract deployment outputs
+        id: outputs
         run: |
           python3 -c "
-          import json, sys
+          import json, sys, os
           try:
               with open('/tmp/janus-outputs.json') as f:
                   outputs = json.load(f)
@@ -92,6 +99,41 @@ jobs:
                       print(f'Backend API URL: {val}')
                   if 'AmplifyBranchUrl' in key:
                       print(f'Frontend URL: {val}')
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as gh:
+                          gh.write(f'frontend_url={val}\n')
           except Exception as e:
               print(f'Could not read outputs: {e}', file=sys.stderr)
           "
+
+  smoke:
+    name: Smoke Tests
+    needs: deploy
+    if: needs.deploy.outputs.frontend_url != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ needs.deploy.outputs.frontend_url }}
+        run: cd frontend && npx playwright test --project=smoke
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-report
+          path: frontend/playwright-report/

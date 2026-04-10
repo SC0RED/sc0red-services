@@ -1,12 +1,16 @@
 name: Deploy Testing
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - testing
     paths:
       - 'backend/**'
       - 'infrastructure/**'
+      - 'frontend/e2e/**'
+      - 'frontend/playwright.config.ts'
+      - 'scripts/e2e-cleanup.py'
       - '.github/workflows/deploy-testing.yml'
 
 jobs:
@@ -23,6 +27,9 @@ jobs:
     environment: testing
     permissions:
       contents: read
+    outputs:
+      frontend_url: ${{ steps.outputs.outputs.frontend_url }}
+      user_pool_id: ${{ steps.outputs.outputs.user_pool_id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -79,10 +86,11 @@ jobs:
               --context "account=${{ secrets.TEST_AWS_ACCOUNT_ID }}" \
               --context "region=${{ secrets.TEST_AWS_REGION }}"
 
-      - name: Print deployment outputs
+      - name: Extract deployment outputs
+        id: outputs
         run: |
           python3 -c "
-          import json, sys
+          import json, sys, os
           try:
               with open('/tmp/janus-outputs.json') as f:
                   outputs = json.load(f)
@@ -92,6 +100,80 @@ jobs:
                       print(f'Backend API URL: {val}')
                   if 'AmplifyBranchUrl' in key:
                       print(f'Frontend URL: {val}')
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as gh:
+                          gh.write(f'frontend_url={val}\n')
+                  if 'UserPoolId' in key and 'Client' not in key and 'Provider' not in key:
+                      with open(os.environ['GITHUB_OUTPUT'], 'a') as gh:
+                          gh.write(f'user_pool_id={val}\n')
           except Exception as e:
               print(f'Could not read outputs: {e}', file=sys.stderr)
           "
+
+  e2e:
+    name: E2E Tests
+    needs: deploy
+    if: needs.deploy.outputs.frontend_url != ''
+    runs-on: ubuntu-latest
+    environment: testing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Run deployed E2E tests
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ needs.deploy.outputs.frontend_url }}
+        run: |
+          cd frontend && npx playwright test \
+            --project=deployed \
+            --project=deployed-post-scan \
+            --project=deployed-cleanup
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: frontend/playwright-report/
+
+  cleanup:
+    name: Cleanup Test Data
+    needs: [deploy, e2e]
+    if: always() && needs.deploy.outputs.user_pool_id != ''
+    runs-on: ubuntu-latest
+    environment: testing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install boto3
+        run: pip install boto3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.TEST_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.TEST_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.TEST_AWS_REGION }}
+
+      - name: Run cleanup script
+        run: |
+          python3 scripts/e2e-cleanup.py \
+            --user-pool-id "${{ needs.deploy.outputs.user_pool_id }}" \
+            --table janus-testing \
+            --region "${{ secrets.TEST_AWS_REGION }}"
