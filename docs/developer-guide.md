@@ -297,33 +297,28 @@ npm run format:check # Prettier (check only — used in CI)
 
 ## End-to-End Tests
 
-The E2E script tests the full backend API without mocks. It creates a real DynamoDB table, registers a user, and exercises all public and authenticated endpoints.
+Janus has two E2E test systems:
+
+**1. Playwright browser tests** — test the full app as a user sees it (SSR, auth, navigation, scans). This is the primary E2E system.
 
 ```bash
-# Prerequisites
-python3 -m pip install boto3 PyJWT
+# Run all local browser E2E tests (manages docker lifecycle automatically)
+./scripts/playwright.sh --mode=local
 
-# Start the full stack
+# Or from frontend directory:
+npm run e2e:local
+```
+
+**2. Backend API tests** — test REST endpoints directly via curl (no browser).
+
+```bash
+python3 -m pip install boto3 PyJWT
 export GH_TOKEN=$(gh auth token)
 docker compose up --build -d
-
-# Run E2E tests (waits for backend to be healthy automatically)
 ./scripts/e2e-test.sh
 ```
 
-### Test scenarios
-
-| # | Test | Expectation |
-|---|---|---|
-| 1 | Backend health check | HTTP 200 |
-| 2 | Create DynamoDB table | Table created with 4 GSIs |
-| 3 | Register user | `{ "success": true }` |
-| 4 | Login with valid credentials | `{ "success": true, "user": { ... } }` |
-| 5 | Dashboard (empty org) | `{ "totalAnalyses": 0 }` |
-| 6 | List analyses (empty) | HTTP 200 |
-| 7 | Login with wrong password | HTTP 401 |
-| 8 | Access dashboard without token | HTTP 401 |
-| 9 | Access analyses without token | HTTP 401 |
+For the full guide including all test modes, headed browser, visual regression, debugging, and CI integration, see **[docs/e2e-testing.md](e2e-testing.md)**.
 
 ---
 

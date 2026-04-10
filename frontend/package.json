@@ -14,6 +14,12 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
+        "e2e": "../scripts/playwright.sh",
+        "e2e:local": "../scripts/playwright.sh --mode=local",
+        "e2e:headed": "../scripts/playwright.sh --mode=local --headed",
+        "e2e:ui": "../scripts/playwright.sh --mode=local --ui",
+        "e2e:visual": "../scripts/playwright.sh --mode=local --visual",
+        "e2e:visual-update": "../scripts/playwright.sh --mode=local --visual-update",
         "prepare": "cd .. && husky install frontend/.husky"
     },
     "dependencies": {
