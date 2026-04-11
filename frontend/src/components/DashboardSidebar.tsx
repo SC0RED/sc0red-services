@@ -10,8 +10,7 @@ import navItems from '@/components/sidebar/navItems'
 
 export default function DashboardSidebar() {
     const pathname = usePathname()
-    const sessionRes = useSession()
-    const session = sessionRes?.data
+    const { data: session } = useSession()
     const {
         isOpen: mobileOpen,
         open: openMobile,

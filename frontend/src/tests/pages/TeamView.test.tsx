@@ -5,7 +5,7 @@ vi.mock('next-auth/react', () => ({
     useSession: () => ({ data: { user: { id: 'user-1', name: 'Admin', role: 'admin' } } }),
 }))
 
-import TeamView from '@/app/team/TeamView'
+import TeamView from '@/app/(authenticated)/team/TeamView'
 
 const mockMembers = [
     { id: 'user-1', email: 'admin@test.com', name: 'Admin User', role: 'admin' },
