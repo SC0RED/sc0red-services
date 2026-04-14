@@ -45,9 +45,7 @@ def handle_oauth_approve(
     state = body.get("state", "")
 
     if not client_id or not redirect_uri or not code_challenge:
-        return build_error(
-            "client_id, redirect_uri, and code_challenge are required", 400
-        )
+        return build_error("client_id, redirect_uri, and code_challenge are required", 400)
 
     client = _repository.get_client(client_id)
     if not client:
