@@ -45,7 +45,7 @@ _GENERIC_CTA_PATTERNS = [
 ]
 
 _STARTS_WITH_SKIP = re.compile(
-    r"^(the|our|a|an|login|sign|contact|about|terms|privacy)", re.IGNORECASE
+    r"^(the|our|a|an|login|sign|contact|about|terms|privacy)\b", re.IGNORECASE
 )
 
 _MAX_COMPANIES = 30
