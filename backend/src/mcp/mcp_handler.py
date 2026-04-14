@@ -9,20 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
 
 import boto3
-import httpx
 from mangum import Mangum
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
 
 from src.mcp.oauth_provider import JanusOAuthProvider
 from src.mcp.oauth_repository import OAuthRepository
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +72,6 @@ _authentication_settings = AuthSettings(
 )
 
 
-@asynccontextmanager
-async def _lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:  # type: ignore[type-arg]
-    """Initialize shared resources for the MCP server."""
-    async with httpx.AsyncClient(base_url=API_URL, timeout=30.0) as http_client:
-        yield {"http_client": http_client, "api_url": API_URL}
-
-
 mcp = FastMCP(
     name="Janus",
     instructions=(
@@ -93,26 +80,16 @@ mcp = FastMCP(
     ),
     auth_server_provider=_oauth_provider,
     auth=_authentication_settings,
-    lifespan=_lifespan,
 )
 
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 
+from src.mcp.tools_read import register_read_tools  # noqa: E402
+from src.mcp.tools_search import register_search_tools  # noqa: E402
 
-@mcp.tool()
-async def get_analysis(analysis_id: str) -> str:
-    """Get full analysis details for a company.
-
-    Includes risk score, risk dimensions, opportunities, EBITDA tree, and value chain.
-    Use this when the user asks about a specific company's risk analysis, wants to see
-    risk scores, opportunities, or EBITDA data for a company they've already analyzed.
-
-    Args:
-        analysis_id: The ID of the analysis to retrieve.
-    """
-    # TODO: Replace with authenticated backend call using OAuth token context
-    return f"Analysis {analysis_id}: placeholder — backend integration in PR 2"
+register_read_tools(mcp)
+register_search_tools(mcp)
 
 
 # ── Lambda handler ───────────────────────────────────────────────────────────
