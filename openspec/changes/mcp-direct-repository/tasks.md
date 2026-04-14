@@ -42,4 +42,4 @@
 - [x] 6.3 Naming + abbreviation checks — clean
 - [x] 6.4 650 tests pass, 95.05% coverage
 - [x] 6.5 All files under 400 lines (max: 357)
-- [ ] 6.6 Architecture review + audit
+- [x] 6.6 Architecture review + audit (3 CRITICAL fixed: org scoping on all by-ID tools)
