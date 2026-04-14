@@ -329,5 +329,5 @@ class JanusOAuthProvider:
         """Revoke an access or refresh token."""
         if isinstance(token, StoredAccessToken):
             self._repository.delete_access_token(token.token_hash)
-        elif isinstance(token, StoredRefreshToken):
+        else:
             self._repository.delete_refresh_token(token.token_hash)

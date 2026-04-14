@@ -37,9 +37,9 @@ STAGE = os.environ.get("STAGE", "development")
 def _load_signing_keys() -> tuple[str, str]:
     """Load RSA key pair from Secrets Manager or generate for local dev."""
     if OAUTH_SIGNING_KEY_SECRET_ARN:
-        client = boto3.client("secretsmanager")
-        response = client.get_secret_value(SecretId=OAUTH_SIGNING_KEY_SECRET_ARN)
-        secret = json.loads(response["SecretString"])
+        secrets_client = boto3.client("secretsmanager")  # type: ignore[call-overload]
+        response = secrets_client.get_secret_value(SecretId=OAUTH_SIGNING_KEY_SECRET_ARN)
+        secret = json.loads(response["SecretString"])  # type: ignore[arg-type]
         return secret["private_key"], secret["public_key"]
 
     from src.mcp.token_utils import generate_rsa_key_pair
@@ -64,9 +64,9 @@ _oauth_provider = JanusOAuthProvider(
     consent_base_url=_consent_base_url,
 )
 
-_auth_settings = AuthSettings(
-    issuer_url=_issuer_url,
-    resource_server_url=_issuer_url,
+_authentication_settings = AuthSettings(
+    issuer_url=_issuer_url,  # type: ignore[arg-type]
+    resource_server_url=_issuer_url,  # type: ignore[arg-type]
     client_registration_options=ClientRegistrationOptions(
         enabled=True,
         valid_scopes=["read", "write"],
@@ -90,7 +90,7 @@ mcp = FastMCP(
         "for AI-driven risks and opportunities, manage portfolio scans, and generate reports."
     ),
     auth_server_provider=_oauth_provider,
-    auth=_auth_settings,
+    auth=_authentication_settings,
     lifespan=_lifespan,
 )
 
@@ -103,7 +103,6 @@ async def get_analysis(analysis_id: str) -> str:
     """Get full analysis details for a company.
 
     Includes risk score, risk dimensions, opportunities, EBITDA tree, and value chain.
-
     Use this when the user asks about a specific company's risk analysis, wants to see
     risk scores, opportunities, or EBITDA data for a company they've already analyzed.
 
