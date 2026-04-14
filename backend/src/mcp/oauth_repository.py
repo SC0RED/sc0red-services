@@ -16,7 +16,7 @@ class OAuthRepository:
         kwargs: dict[str, Any] = {}
         if endpoint_url:
             kwargs["endpoint_url"] = endpoint_url
-        self._table = boto3.resource("dynamodb", **kwargs).Table(table_name)
+        self._table = boto3.resource("dynamodb", **kwargs).Table(table_name)  # type: ignore[reportUnknownMemberType]
 
     # ── Clients ──────────────────────────────────────────────────────────────
 
@@ -75,21 +75,17 @@ class OAuthRepository:
 
     def get_authorization_code(self, code: str) -> dict[str, Any] | None:
         """Retrieve and validate an authorization code."""
-        response = self._table.get_item(
-            Key={"pk": f"OAUTH_CODE#{code}", "sk": "CODE#METADATA"}
-        )
+        response = self._table.get_item(Key={"pk": f"OAUTH_CODE#{code}", "sk": "CODE#METADATA"})
         item = response.get("Item")
         if not item:
             return None
-        if item.get("ttl", 0) < int(time.time()):
+        if int(item.get("ttl", 0)) < int(time.time()):  # type: ignore[arg-type]
             return None
         return item
 
     def delete_authorization_code(self, code: str) -> None:
         """Delete a used authorization code (single use)."""
-        self._table.delete_item(
-            Key={"pk": f"OAUTH_CODE#{code}", "sk": "CODE#METADATA"}
-        )
+        self._table.delete_item(Key={"pk": f"OAUTH_CODE#{code}", "sk": "CODE#METADATA"})
 
     # ── Access Tokens ────────────────────────────────────────────────────────
 
@@ -126,15 +122,13 @@ class OAuthRepository:
         item = response.get("Item")
         if not item:
             return None
-        if item.get("ttl", 0) < int(time.time()):
+        if int(item.get("ttl", 0)) < int(time.time()):  # type: ignore[arg-type]
             return None
         return item
 
     def delete_access_token(self, token_hash: str) -> None:
         """Delete an access token (revocation)."""
-        self._table.delete_item(
-            Key={"pk": f"OAUTH_TOKEN#{token_hash}", "sk": "TOKEN#METADATA"}
-        )
+        self._table.delete_item(Key={"pk": f"OAUTH_TOKEN#{token_hash}", "sk": "TOKEN#METADATA"})
 
     # ── Refresh Tokens ───────────────────────────────────────────────────────
 
@@ -175,15 +169,13 @@ class OAuthRepository:
         item = response.get("Item")
         if not item:
             return None
-        if item.get("ttl", 0) < int(time.time()):
+        if int(item.get("ttl", 0)) < int(time.time()):  # type: ignore[arg-type]
             return None
         return item
 
     def delete_refresh_token(self, token_hash: str) -> None:
         """Delete a refresh token (revocation or rotation)."""
-        self._table.delete_item(
-            Key={"pk": f"OAUTH_REFRESH#{token_hash}", "sk": "REFRESH#METADATA"}
-        )
+        self._table.delete_item(Key={"pk": f"OAUTH_REFRESH#{token_hash}", "sk": "REFRESH#METADATA"})
 
     # ── Consent Records ──────────────────────────────────────────────────────
 
@@ -206,6 +198,4 @@ class OAuthRepository:
 
     def revoke_consent(self, user_id: str, client_id: str) -> None:
         """Revoke a user's consent for a client."""
-        self._table.delete_item(
-            Key={"pk": f"OAUTH_CONSENT#{user_id}", "sk": f"CLIENT#{client_id}"}
-        )
+        self._table.delete_item(Key={"pk": f"OAUTH_CONSENT#{user_id}", "sk": f"CLIENT#{client_id}"})

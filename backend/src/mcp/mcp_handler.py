@@ -37,9 +37,11 @@ STAGE = os.environ.get("STAGE", "development")
 def _load_signing_keys() -> tuple[str, str]:
     """Load RSA key pair from Secrets Manager or generate for local dev."""
     if OAUTH_SIGNING_KEY_SECRET_ARN:
-        secrets_client = boto3.client("secretsmanager")  # type: ignore[call-overload]
-        response = secrets_client.get_secret_value(SecretId=OAUTH_SIGNING_KEY_SECRET_ARN)
-        secret = json.loads(response["SecretString"])  # type: ignore[arg-type]
+        secrets_client = boto3.client("secretsmanager")  # type: ignore[reportUnknownMemberType]
+        response = secrets_client.get_secret_value(  # type: ignore[reportUnknownMemberType,reportUnknownVariableType]
+            SecretId=OAUTH_SIGNING_KEY_SECRET_ARN,
+        )
+        secret: dict[str, str] = json.loads(response["SecretString"])  # type: ignore[arg-type]
         return secret["private_key"], secret["public_key"]
 
     from src.mcp.token_utils import generate_rsa_key_pair
