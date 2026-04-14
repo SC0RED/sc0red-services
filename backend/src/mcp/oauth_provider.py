@@ -18,7 +18,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from src.mcp.token_utils import (
     generate_refresh_token,
     hash_token,
-    sign_access_token,
+    create_signed_access_token,
     verify_access_token,
 )
 
@@ -185,7 +185,7 @@ class JanusOAuthProvider:
         authorization_code: StoredAuthorizationCode,
     ) -> OAuthToken:
         """Exchange an authorization code for access + refresh tokens."""
-        access_token = sign_access_token(
+        access_token = create_signed_access_token(
             private_key_pem=self._private_key_pem,
             user_id=authorization_code.user_id,
             email=authorization_code.email,
@@ -224,7 +224,7 @@ class JanusOAuthProvider:
 
         return OAuthToken(
             access_token=access_token,
-            token_type="Bearer",  # noqa: S106
+            token_type="Bearer",  # noqa: S106  # nosec B106
             expires_in=3600,
             refresh_token=refresh_token,
             scope=" ".join(authorization_code.scopes),
@@ -260,7 +260,7 @@ class JanusOAuthProvider:
         """Exchange a refresh token for new access + refresh tokens (rotation)."""
         effective_scopes = scopes if scopes else refresh_token.scopes
 
-        new_access_token = sign_access_token(
+        new_access_token = create_signed_access_token(
             private_key_pem=self._private_key_pem,
             user_id=refresh_token.user_id,
             email=refresh_token.email,
@@ -293,7 +293,7 @@ class JanusOAuthProvider:
 
         return OAuthToken(
             access_token=new_access_token,
-            token_type="Bearer",  # noqa: S106
+            token_type="Bearer",  # noqa: S106  # nosec B106
             expires_in=3600,
             refresh_token=new_refresh_token,
             scope=" ".join(effective_scopes),

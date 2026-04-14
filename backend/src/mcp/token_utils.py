@@ -32,7 +32,7 @@ def generate_rsa_key_pair() -> tuple[str, str]:
     return private_pem, public_pem
 
 
-def sign_access_token(
+def create_signed_access_token(
     *,
     private_key_pem: str,
     user_id: str,
@@ -113,7 +113,7 @@ def generate_refresh_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def validate_pkce(code_verifier: str, code_challenge: str) -> bool:
+def is_valid_pkce(code_verifier: str, code_challenge: str) -> bool:
     """Validate PKCE S256 challenge.
 
     Args:

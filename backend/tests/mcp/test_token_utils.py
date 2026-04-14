@@ -10,8 +10,8 @@ from src.mcp.token_utils import (
     generate_refresh_token,
     generate_rsa_key_pair,
     hash_token,
-    sign_access_token,
-    validate_pkce,
+    create_signed_access_token,
+    is_valid_pkce,
     verify_access_token,
 )
 
@@ -37,7 +37,7 @@ class TestGenerateRSAKeyPair:
 class TestSignAndVerifyAccessToken:
     def test_sign_and_verify_roundtrip(self, rsa_keys):
         private_pem, public_pem = rsa_keys
-        token = sign_access_token(
+        token = create_signed_access_token(
             private_key_pem=private_pem,
             user_id="user-123",
             email="test@example.com",
@@ -57,7 +57,7 @@ class TestSignAndVerifyAccessToken:
 
     def test_expired_token_raises(self, rsa_keys):
         private_pem, public_pem = rsa_keys
-        token = sign_access_token(
+        token = create_signed_access_token(
             private_key_pem=private_pem,
             user_id="user-123",
             email="test@example.com",
@@ -73,7 +73,7 @@ class TestSignAndVerifyAccessToken:
 
     def test_wrong_issuer_raises(self, rsa_keys):
         private_pem, public_pem = rsa_keys
-        token = sign_access_token(
+        token = create_signed_access_token(
             private_key_pem=private_pem,
             user_id="user-123",
             email="test@example.com",
@@ -89,7 +89,7 @@ class TestSignAndVerifyAccessToken:
     def test_wrong_key_raises(self, rsa_keys):
         private_pem, _ = rsa_keys
         _, other_public = generate_rsa_key_pair()
-        token = sign_access_token(
+        token = create_signed_access_token(
             private_key_pem=private_pem,
             user_id="user-123",
             email="test@example.com",
@@ -104,7 +104,7 @@ class TestSignAndVerifyAccessToken:
 
     def test_custom_expiry(self, rsa_keys):
         private_pem, public_pem = rsa_keys
-        token = sign_access_token(
+        token = create_signed_access_token(
             private_key_pem=private_pem,
             user_id="u1",
             email="t@t.com",
@@ -149,13 +149,13 @@ class TestValidatePKCE:
         verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
         digest = hashlib.sha256(verifier.encode("ascii")).digest()
         challenge = urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-        assert validate_pkce(verifier, challenge) is True
+        assert is_valid_pkce(verifier, challenge) is True
 
     def test_invalid_challenge(self):
-        assert validate_pkce("correct-verifier", "wrong-challenge") is False
+        assert is_valid_pkce("correct-verifier", "wrong-challenge") is False
 
     def test_empty_strings(self):
-        assert validate_pkce("", "") is False
+        assert is_valid_pkce("", "") is False
 
 
 class TestHashToken:

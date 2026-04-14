@@ -262,8 +262,8 @@ class TestExchangeRefreshTokenScopes:
 class TestLoadAccessToken:
     @pytest.mark.asyncio
     async def test_valid_token(self, provider):
-        from src.mcp.token_utils import hash_token, sign_access_token
-        access_token = sign_access_token(
+        from src.mcp.token_utils import hash_token, create_signed_access_token
+        access_token = create_signed_access_token(
             private_key_pem=provider._private_key_pem,
             user_id="u1", email="t@t.com", org_id="o1", role="admin",
             client_id="c1", scopes=["read"], issuer="https://mcp.test.janus.sc0red.com",
@@ -284,8 +284,8 @@ class TestLoadAccessToken:
 
     @pytest.mark.asyncio
     async def test_valid_jwt_but_not_in_db_returns_none(self, provider):
-        from src.mcp.token_utils import sign_access_token
-        access_token = sign_access_token(
+        from src.mcp.token_utils import create_signed_access_token
+        access_token = create_signed_access_token(
             private_key_pem=provider._private_key_pem,
             user_id="u1", email="t@t.com", org_id="o1", role="admin",
             client_id="c1", scopes=["read"], issuer="https://mcp.test.janus.sc0red.com",
