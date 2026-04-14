@@ -300,7 +300,11 @@ class JanusOAuthProvider:
         )
 
     async def load_access_token(self, token: str) -> StoredAccessToken | None:
-        """Verify and load an access token."""
+        """Verify and load an access token.
+
+        Also stores the authenticated user in contextvars so tool handlers
+        can access user identity via get_authenticated_user().
+        """
         try:
             payload = verify_access_token(
                 token,
@@ -313,6 +317,19 @@ class JanusOAuthProvider:
         record = self._repository.get_access_token(compute_token_hash(token))
         if not record:
             return None
+
+        from src.mcp.auth_context import AuthenticatedUser, set_authenticated_user
+
+        set_authenticated_user(
+            AuthenticatedUser(
+                user_id=payload["sub"],
+                org_id=payload["org_id"],
+                email=payload.get("email", ""),
+                role=payload.get("role", ""),
+                client_id=payload.get("client_id", ""),
+                scopes=payload.get("scope", "").split(),
+            )
+        )
 
         return StoredAccessToken(
             token_hash=compute_token_hash(token),
