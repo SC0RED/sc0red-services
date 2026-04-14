@@ -10,7 +10,22 @@ from src.mcp.auth_context import get_authenticated_user
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
+    from src.mcp.auth_context import AuthenticatedUser
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
+
+
+def _verify_org_access(
+    record: dict[str, Any] | None, user: AuthenticatedUser, label: str, record_id: str
+) -> str | None:
+    """Verify the record belongs to the authenticated user's org.
+
+    Returns an error message if access denied, or None if OK.
+    """
+    if not record:
+        return f"{label} {record_id} not found."
+    if record.get("org_id") != user.org_id:
+        return f"{label} {record_id} not found."
+    return None
 
 
 def _format_analysis_summary(company: dict[str, Any]) -> str:
@@ -129,9 +144,10 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         Args:
             analysis_id: The ID of the analysis to retrieve.
         """
+        user = get_authenticated_user()
         company = company_repo.get_by_id(analysis_id)
-        if not company:
-            return f"Analysis {analysis_id} not found."
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
+            return error
 
         data = _get_assessment_data(assessment_repo, analysis_id)
         risk_scores = data["risk_scores"]
@@ -195,9 +211,10 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         Args:
             analysis_id: The ID of the analysis.
         """
+        user = get_authenticated_user()
         company = company_repo.get_by_id(analysis_id)
-        if not company:
-            return f"Analysis {analysis_id} not found."
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
+            return error
         data = _get_assessment_data(assessment_repo, analysis_id)
         if not data["risk_scores"]:
             return f"No risk scores found for analysis {analysis_id}."
@@ -219,9 +236,10 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         Args:
             analysis_id: The ID of the analysis.
         """
+        user = get_authenticated_user()
         company = company_repo.get_by_id(analysis_id)
-        if not company:
-            return f"Analysis {analysis_id} not found."
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
+            return error
         data = _get_assessment_data(assessment_repo, analysis_id)
         if not data["opportunities"]:
             return f"No opportunities found for analysis {analysis_id}."
@@ -243,9 +261,10 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         Args:
             analysis_id: The ID of the analysis.
         """
+        user = get_authenticated_user()
         company = company_repo.get_by_id(analysis_id)
-        if not company:
-            return f"Analysis {analysis_id} not found."
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
+            return error
         data = _get_assessment_data(assessment_repo, analysis_id)
         if not data["ebitda_tree"]:
             return f"No EBITDA tree found for analysis {analysis_id}."
@@ -268,9 +287,10 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         Args:
             analysis_id: The ID of the analysis.
         """
+        user = get_authenticated_user()
         company = company_repo.get_by_id(analysis_id)
-        if not company:
-            return f"Analysis {analysis_id} not found."
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
+            return error
         data = _get_assessment_data(assessment_repo, analysis_id)
         if not data["value_chain"]:
             return f"No value chain found for analysis {analysis_id}."
@@ -291,9 +311,10 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         Args:
             scan_id: The ID of the scan.
         """
+        user = get_authenticated_user()
         scan = scan_repo.get_by_id(scan_id)
-        if not scan:
-            return f"Scan {scan_id} not found."
+        if error := _verify_org_access(scan, user, "Scan", scan_id):
+            return error
         lines = [
             f"## Scan {scan_id}",
             f"Status: {scan.get('status', 'unknown')}",
@@ -340,9 +361,10 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         Args:
             analysis_id: The ID of the analysis.
         """
+        user = get_authenticated_user()
         company = company_repo.get_by_id(analysis_id)
-        if not company:
-            return f"Analysis {analysis_id} not found."
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
+            return error
         data = _get_assessment_data(assessment_repo, analysis_id)
         if not data["documents"]:
             return f"No documents attached to analysis {analysis_id}."

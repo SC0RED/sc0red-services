@@ -147,6 +147,14 @@ class TestGetAnalysis:
         assert "not found" in text
 
     @pytest.mark.asyncio
+    async def test_cross_org_denied(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company(org_id="other-org")
+        server = _make_server(storage)
+        text = (await server.call_tool("get_analysis", {"analysis_id": "c1"}))[0][0].text
+        assert "not found" in text
+
+    @pytest.mark.asyncio
     async def test_with_documents(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
@@ -263,7 +271,7 @@ class TestGetScan:
     @pytest.mark.asyncio
     async def test_returns(self):
         storage, company_repo, _, scan_repo, *_ = _make_storage()
-        scan_repo.get_by_id.return_value = {"id": "s1", "status": "complete", "type": "single", "progress": 100}
+        scan_repo.get_by_id.return_value = {"id": "s1", "status": "complete", "type": "single", "progress": 100, "org_id": "test-org"}
         scan_repo.get_scan_companies.return_value = [{"company_id": "c1"}]
         company_repo.get_by_ids.return_value = [_make_company()]
         server = _make_server(storage)
@@ -274,7 +282,7 @@ class TestGetScan:
     @pytest.mark.asyncio
     async def test_scan_no_companies(self):
         storage, _, _, scan_repo, *_ = _make_storage()
-        scan_repo.get_by_id.return_value = {"id": "s1", "status": "running", "type": "portfolio", "progress": 50}
+        scan_repo.get_by_id.return_value = {"id": "s1", "status": "running", "type": "portfolio", "progress": 50, "org_id": "test-org"}
         server = _make_server(storage)
         text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
         assert "running" in text

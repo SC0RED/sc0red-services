@@ -62,10 +62,11 @@ def register_search_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> Non
         if len(analysis_ids) < 2:  # noqa: PLR2004
             return "Please provide at least 2 analysis IDs to compare."
 
+        user = get_authenticated_user()
         analyses: list[dict[str, Any]] = []
         for aid in analysis_ids:
             company = company_repo.get_by_id(aid)
-            if not company:
+            if not company or company.get("org_id") != user.org_id:
                 return f"Analysis {aid} not found."
             data = _get_assessment_data(assessment_repo, aid)
             analyses.append({**company, **data})
