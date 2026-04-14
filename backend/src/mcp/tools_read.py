@@ -34,9 +34,17 @@ def _format_analysis_summary(analysis: dict[str, Any]) -> str:
 def _get_user_context() -> dict[str, str]:
     """Get user context for backend API calls.
 
-    TODO: Wire this to actual OAuth token claims once MCP SDK
-    provides access to the authenticated user in tool handlers.
-    For now, uses environment-based defaults for development.
+    The MCP SDK authenticates requests via OAuth (validated in
+    load_access_token) but doesn't pass user claims into tool handlers
+    via the Context object. The access token JWT contains user_id,
+    org_id, email, role — but there's no clean SDK API to access it
+    from inside a @mcp.tool() function.
+
+    This will be resolved by storing authenticated user claims in a
+    contextvars.ContextVar during token validation (in oauth_provider)
+    and reading them here. Tracked for the next PR.
+
+    For now, uses environment-based defaults for development and testing.
     """
     import os
 
