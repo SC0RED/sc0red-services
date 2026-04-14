@@ -65,12 +65,6 @@ class MCPConstruct(Construct):
             auth_type=lambda_.FunctionUrlAuthType.NONE,
         )
 
-        # Wire the Function URL back as issuer so OAuth metadata is correct
-        mcp_lambda.add_environment("MCP_ISSUER_URL", function_url.url)
-        mcp_lambda.add_environment(
-            "CONSENT_BASE_URL", frontend_domain if frontend_domain else f"http://localhost:3000"
-        )
-
         self._function_url = function_url.url
         self._lambda = mcp_lambda
 
@@ -147,5 +141,6 @@ class MCPConstruct(Construct):
                 "COGNITO_CLIENT_ID": cognito_client_id,
                 "COGNITO_REGION": region,
                 "STAGE": self._environment,
+                "CONSENT_BASE_URL": self._frontend_domain or "http://localhost:3000",
             },
         )
