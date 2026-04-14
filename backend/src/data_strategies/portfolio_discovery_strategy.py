@@ -95,8 +95,12 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 result = scrape_url(page_url)
                 all_links.extend({**link, "source": page_url} for link in result["links"])
             except Exception:  # scrape_url raises httpx + parsing errors
-                logger.debug("Skipping portfolio path %s", page_url, exc_info=True)
+                logger.info("Failed to scrape %s", page_url, exc_info=True)
                 continue
+
+        logger.info(
+            "Scraped %d links from %d paths for %s", len(all_links), len(_PORTFOLIO_PATHS), firm_url
+        )
 
         # Filter for portfolio company links
         companies: list[dict[str, str]] = []
@@ -133,20 +137,38 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 if is_social:
                     continue
 
-                # Filter link text to look like company names
+                # Determine company name: prefer link text, fall back to context
                 text = link["text"].strip()
-                if len(text) <= _MIN_COMPANY_NAME_LENGTH or len(text) >= _MAX_COMPANY_NAME_LENGTH:
-                    continue
+                context_name = link.get("context_name", "").strip()
+                company_name = text
 
                 text_lower = text.lower()
-                if any(cta in text_lower for cta in _GENERIC_CTA_PATTERNS):
+                is_generic_cta = any(cta in text_lower for cta in _GENERIC_CTA_PATTERNS)
+
+                if is_generic_cta or not text:
+                    # CTA link — try context name from parent heading/card
+                    if context_name:
+                        company_name = context_name
+                        logger.info(
+                            "Using context name '%s' for CTA link → %s", context_name, full_url
+                        )
+                    else:
+                        logger.info(
+                            "Dropping CTA link (no context name): '%s' → %s", text, full_url
+                        )
+                        continue
+
+                if (
+                    len(company_name) <= _MIN_COMPANY_NAME_LENGTH
+                    or len(company_name) >= _MAX_COMPANY_NAME_LENGTH
+                ):
                     continue
 
-                if _STARTS_WITH_SKIP.match(text):
+                if _STARTS_WITH_SKIP.match(company_name):
                     continue
 
                 seen_urls.add(full_url)
-                companies.append({"name": text, "url": full_url, "description": ""})
+                companies.append({"name": company_name, "url": full_url, "description": ""})
 
             except Exception:  # urlparse and link access raise various errors
                 logger.debug("Skipping malformed link", exc_info=True)
