@@ -100,8 +100,10 @@ mcp = FastMCP(
 # ── Tools ────────────────────────────────────────────────────────────────────
 
 from src.mcp.tools_read import register_read_tools  # noqa: E402
+from src.mcp.tools_search import register_search_tools  # noqa: E402
 
 register_read_tools(mcp)
+register_search_tools(mcp)
 
 
 # ── Lambda handler ───────────────────────────────────────────────────────────

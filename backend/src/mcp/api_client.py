@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 API_URL = os.environ.get("API_URL", "http://localhost:8001")
 
 
-async def call_backend(
+async def call_backend(  # noqa: NAMING001
     *,
     method: str,
     path: str,

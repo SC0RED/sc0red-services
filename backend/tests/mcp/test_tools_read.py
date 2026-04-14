@@ -18,13 +18,30 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 def mcp_server():
     server = FastMCP("test")
     from src.mcp.tools_read import register_read_tools
+    from src.mcp.tools_search import register_search_tools
 
     register_read_tools(server)
+    register_search_tools(server)
     return server
 
 
-def _mock_backend(return_value):
-    return patch("src.mcp.tools_read.call_backend", new_callable=AsyncMock, return_value=return_value)
+class _mock_backend:
+    """Context manager that mocks call_backend in both tool modules."""
+
+    def __init__(self, return_value):
+        self._return_value = return_value
+        self._patches = []
+
+    def __enter__(self):
+        for module in ("src.mcp.tools_read", "src.mcp.tools_search"):
+            p = patch(f"{module}.call_backend", new_callable=AsyncMock, return_value=self._return_value)
+            p.start()
+            self._patches.append(p)
+        return self
+
+    def __exit__(self, *args):
+        for p in self._patches:
+            p.stop()
 
 
 class TestGetDashboard:
@@ -323,7 +340,7 @@ class TestCompareAnalyses:
                 "riskScores": [{"name": "Automation", "score": 7}],
             }
 
-        with patch("src.mcp.tools_read.call_backend", side_effect=mock_call):
+        with patch("src.mcp.tools_search.call_backend", side_effect=mock_call):
             result = await mcp_server.call_tool("compare_analyses", {"analysis_ids": ["a1", "a2"]})
             text = result[0][0].text
             assert "Stripe" in text
