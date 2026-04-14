@@ -99,20 +99,9 @@ mcp = FastMCP(
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 
+from src.mcp.tools_read import register_read_tools  # noqa: E402
 
-@mcp.tool()
-async def get_analysis(analysis_id: str) -> str:
-    """Get full analysis details for a company.
-
-    Includes risk score, risk dimensions, opportunities, EBITDA tree, and value chain.
-    Use this when the user asks about a specific company's risk analysis, wants to see
-    risk scores, opportunities, or EBITDA data for a company they've already analyzed.
-
-    Args:
-        analysis_id: The ID of the analysis to retrieve.
-    """
-    # TODO: Replace with authenticated backend call using OAuth token context
-    return f"Analysis {analysis_id}: placeholder — backend integration in PR 2"
+register_read_tools(mcp)
 
 
 # ── Lambda handler ───────────────────────────────────────────────────────────

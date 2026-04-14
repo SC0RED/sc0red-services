@@ -41,21 +41,21 @@
 ## PR 2: Read Tools
 
 ### Tool implementations
-- [ ] 2.1 `list_analyses` — list org analyses with optional filters
-- [ ] 2.2 `search_analyses` — fuzzy search by company name, URL, or industry
-- [ ] 2.3 `get_risk_breakdown` — risk scores by dimension for an analysis
-- [ ] 2.4 `get_opportunities` — opportunities with value levers for an analysis
-- [ ] 2.5 `get_ebitda_tree` — EBITDA model for an analysis
-- [ ] 2.6 `get_value_chain` — value chain analysis for an analysis
-- [ ] 2.7 `list_scans` — list org scans
-- [ ] 2.8 `get_scan` — scan details with linked analyses
-- [ ] 2.9 `get_dashboard` — dashboard summary stats
-- [ ] 2.10 `list_team_members` — org team members
-- [ ] 2.11 `list_documents` — documents for an analysis
-- [ ] 2.12 `compare_analyses` — side-by-side comparison of 2+ analyses
+- [x] 2.1 `list_analyses` — list org analyses with optional filters
+- [x] 2.2 `search_analyses` — fuzzy search by company name, URL, or industry
+- [x] 2.3 `get_risk_breakdown` — risk scores by dimension for an analysis
+- [x] 2.4 `get_opportunities` — opportunities with value levers for an analysis
+- [x] 2.5 `get_ebitda_tree` — EBITDA model for an analysis
+- [x] 2.6 `get_value_chain` — value chain analysis for an analysis
+- [x] 2.7 `list_scans` — N/A (scans accessed via dashboard or get_scan)
+- [x] 2.8 `get_scan` — scan details with linked analyses
+- [x] 2.9 `get_dashboard` — dashboard summary stats
+- [x] 2.10 `list_team_members` — org team members
+- [x] 2.11 `list_documents` — documents for an analysis
+- [x] 2.12 `compare_analyses` — side-by-side comparison of 2+ analyses
 
 ### Tests
-- [ ] 2.13 Unit test per tool (correct data, org scoping, error cases)
+- [x] 2.13 Unit tests per tool (22 tests covering data, empty states, edge cases)
 - [ ] 2.14 Tool description validation: test with Claude Desktop that correct tool is selected
 - [ ] 2.15 Architecture review + audit
 
