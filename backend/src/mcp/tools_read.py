@@ -1,48 +1,62 @@
-"""MCP read tools — registered on the FastMCP server, calls backend API."""
+"""MCP read tools — registered on the FastMCP server, reads DynamoDB directly."""
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
-from src.mcp.api_client import call_backend
+from src.mcp.auth_context import get_authenticated_user
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
-
-def _format_analysis_summary(analysis: dict[str, Any]) -> str:
-    """Format a single analysis as concise text for LLM consumption."""
-    lines = [
-        f"**{analysis.get('companyName', 'Unknown')}**",
-        f"URL: {analysis.get('companyUrl', 'N/A')}",
-        f"Industry: {analysis.get('industry', 'N/A')}",
-        f"Risk Score: {analysis.get('overallRiskScore', 'N/A')}/10",
-        f"Risk Tier: {analysis.get('riskTier', 'N/A')}",
-        f"Source: {analysis.get('scanType', 'N/A')}",
-        f"Analyzed: {analysis.get('analyzedAt', 'N/A')}",
-    ]
-    return "\n".join(lines)
+    from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 
-def _get_user_context() -> dict[str, str]:
-    """Get the authenticated user's identity for backend API calls.
+def _format_analysis_summary(company: dict[str, Any]) -> str:
+    """Format a single company/analysis as concise text for LLM consumption."""
+    return "\n".join(
+        [
+            f"**{company.get('company_name', 'Unknown')}**",
+            f"URL: {company.get('company_url', 'N/A')}",
+            f"Industry: {company.get('industry', 'N/A')}",
+            f"Risk Score: {company.get('overall_risk_score', 'N/A')}/10",
+            f"Risk Tier: {company.get('risk_tier', 'N/A')}",
+            f"Analyzed: {company.get('analyzed_at', 'N/A')}",
+        ]
+    )
 
-    Reads from contextvars set by oauth_provider.load_access_token()
-    during OAuth token validation.
-    """
-    from src.mcp.auth_context import get_authenticated_user
 
-    user = get_authenticated_user()
+def _get_assessment_data(assessment_repo: Any, company_id: str) -> dict[str, Any]:
+    """Load latest assessment data for a company. Mirrors handle_get_analysis."""
+    assessments = assessment_repo.find_by_company(company_id)
+    if not assessments:
+        return {
+            "risk_scores": [],
+            "opportunities": [],
+            "ebitda_tree": None,
+            "value_chain": None,
+            "documents": [],
+        }
+
+    assessments.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+    aid = assessments[0]["id"]
+
     return {
-        "user_id": user.user_id,
-        "org_id": user.org_id,
-        "email": user.email,
-        "role": user.role,
+        "risk_scores": assessment_repo.get_risk_scores(aid),
+        "opportunities": assessment_repo.get_opportunities(aid),
+        "ebitda_tree": assessment_repo.get_ebitda_tree(aid),
+        "value_chain": assessment_repo.get_value_chain(aid),
+        "documents": assessment_repo.get_documents(aid),
     }
 
 
-def register_read_tools(mcp: FastMCP) -> None:
+def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
     """Register all read-only MCP tools on the server."""
+    company_repo = storage.create_company_repository()
+    assessment_repo = storage.create_assessment_repository()
+    scan_repo = storage.create_scan_repository()
+    user_repo = storage.create_user_repository()
 
     @mcp.tool()
     async def get_dashboard() -> str:
@@ -52,30 +66,35 @@ def register_read_tools(mcp: FastMCP) -> None:
         scan count, and lists of recent analyses and scans.
         Use this when the user asks for an overview of their portfolio.
         """
-        data = await call_backend(
-            method="GET",
-            path="/api/dashboard",
-            **_get_user_context(),
+        user = get_authenticated_user()
+        companies, _ = company_repo.find_by_org(user.org_id)
+        analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
+
+        total = len(analyzed)
+        avg_score = (
+            round(sum(float(c["overall_risk_score"]) for c in analyzed) / total, 1) if total else 0
         )
+        critical = sum(1 for c in analyzed if c.get("risk_tier") == "critical")
+        all_scans = scan_repo.find_recent_by_org(user.org_id, limit=None)
+
         lines = [
             "## Portfolio Dashboard",
-            f"- Companies Analyzed: {data.get('totalAnalyses', 0)}",
-            f"- Average Risk Score: {data.get('avgRiskScore', 0):.1f}/10",
-            f"- Critical Risks: {data.get('criticalCount', 0)}",
-            f"- Total Scans: {data.get('scanCount', 0)}",
+            f"- Companies Analyzed: {total}",
+            f"- Average Risk Score: {avg_score}/10",
+            f"- Critical Risks: {critical}",
+            f"- Total Scans: {len(all_scans)}",
         ]
 
-        recent = data.get("recentAnalyses", [])
-        if recent:
+        analyzed.sort(key=lambda c: c.get("analyzed_at", ""), reverse=True)
+        if analyzed[:5]:
             lines.append("\n### Recent Analyses")
-            for analysis in recent[:5]:
-                score = analysis.get("overallRiskScore", "N/A")
-                tier = analysis.get("riskTier", "unknown")
+            for c in analyzed[:5]:
+                score = c.get("overall_risk_score", "N/A")
+                tier = c.get("risk_tier", "unknown")
                 lines.append(
-                    f"- {analysis.get('companyName', '?')} — "
-                    f"Score: {score}/10 ({tier}) — ID: {analysis.get('id', '')}"
+                    f"- {c.get('company_name', '?')} — "
+                    f"Score: {score}/10 ({tier}) — ID: {c.get('id', '')}"
                 )
-
         return "\n".join(lines)
 
     @mcp.tool()
@@ -85,21 +104,18 @@ def register_read_tools(mcp: FastMCP) -> None:
         Returns a summary of each analysis with company name, risk score,
         tier, and ID. Use get_analysis with the ID for full details.
         """
-        data = await call_backend(
-            method="GET",
-            path="/api/analyses",
-            **_get_user_context(),
-        )
-        analyses = data.get("analyses", [])
-        if not analyses:
+        user = get_authenticated_user()
+        companies, _ = company_repo.find_by_org(user.org_id)
+        analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
+
+        if not analyzed:
             return "No analyses found. Use start_company_scan to analyze a company."
 
-        lines = [f"## {len(analyses)} Analyses"]
-        for analysis in analyses:
-            lines.append(_format_analysis_summary(analysis))
-            lines.append(f"ID: {analysis.get('id', '')}")
+        lines = [f"## {len(analyzed)} Analyses"]
+        for c in analyzed:
+            lines.append(_format_analysis_summary(c))
+            lines.append(f"ID: {c.get('id', '')}")
             lines.append("")
-
         return "\n".join(lines)
 
     @mcp.tool()
@@ -113,254 +129,208 @@ def register_read_tools(mcp: FastMCP) -> None:
         Args:
             analysis_id: The ID of the analysis to retrieve.
         """
-        data = await call_backend(
-            method="GET",
-            path=f"/api/analysis/{analysis_id}",
-            **_get_user_context(),
-        )
+        company = company_repo.get_by_id(analysis_id)
+        if not company:
+            return f"Analysis {analysis_id} not found."
+
+        data = _get_assessment_data(assessment_repo, analysis_id)
+        risk_scores = data["risk_scores"]
+        opportunities = data["opportunities"]
+        ebitda_tree = data["ebitda_tree"]
+        value_chain = data["value_chain"]
+        documents = data["documents"]
+
+        metadata_json = company.get("metadata_json", "")
+        analysis_summary = ""
+        top_actions: list[str] = []
+        if metadata_json:
+            meta = json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
+            analysis_summary = meta.get("analysis_summary", "")
+            top_actions = meta.get("top_actions", [])
 
         lines = [
-            f"## {data.get('companyName', 'Unknown')} — Analysis",
-            f"URL: {data.get('companyUrl', 'N/A')}",
-            f"Industry: {data.get('industry', 'N/A')}",
-            f"Overall Risk Score: {data.get('overallRiskScore', 'N/A')}/10",
-            f"Risk Tier: {data.get('riskTier', 'N/A')}",
+            f"## {company.get('company_name', 'Unknown')} — Analysis",
+            f"URL: {company.get('company_url', 'N/A')}",
+            f"Industry: {company.get('industry', 'N/A')}",
+            f"Overall Risk Score: {company.get('overall_risk_score', 'N/A')}/10",
+            f"Risk Tier: {company.get('risk_tier', 'N/A')}",
         ]
-
-        if data.get("analysisSummary"):
-            lines.append(f"\n### Summary\n{data['analysisSummary']}")
-
-        if data.get("topActions"):
+        if analysis_summary:
+            lines.append(f"\n### Summary\n{analysis_summary}")
+        if top_actions:
             lines.append("\n### Top Actions")
-            for action in data["topActions"]:
-                lines.append(f"- {action}")  # noqa: PERF401
-
-        risk_scores = data.get("riskScores", [])
+            lines.extend(f"- {a}" for a in top_actions)
         if risk_scores:
             lines.append("\n### Risk Dimensions")
-            for risk in risk_scores:
-                risk_name = risk.get("name", risk.get("category", "?"))
-                lines.append(f"- {risk_name}: {risk.get('score', '?')}/10")
-
-        opportunities = data.get("opportunities", [])
+            for r in risk_scores:
+                name = r.get("name", r.get("category", "?"))
+                lines.append(f"- **{name}**: {r.get('score', '?')}/10")
         if opportunities:
             lines.append(f"\n### Opportunities ({len(opportunities)})")
             for opp in opportunities[:10]:
                 lever = opp.get("value_lever", "")
                 impact = opp.get("impact_rating", "")
                 lines.append(f"- [{lever}] {opp.get('title', '?')} (Impact: {impact})")
-
-        if data.get("ebitdaTree"):
-            tree = data["ebitdaTree"]
+        if ebitda_tree:
             lines.append("\n### EBITDA Impact Model")
-            if tree.get("revenueEstimate"):
-                lines.append(f"Revenue Estimate: {tree['revenueEstimate']}")
-            if tree.get("ebitdaEstimate"):
-                lines.append(f"EBITDA Estimate: {tree['ebitdaEstimate']}")
-
-        if data.get("valueChain"):
-            chain = data["valueChain"]
-            steps = chain.get("steps", [])
-            lines.append(f"\n### Value Chain ({len(steps)} activities)")
-            if chain.get("summary"):
-                lines.append(chain["summary"])
-
-        documents = data.get("documents", [])
+            if ebitda_tree.get("revenueEstimate"):
+                lines.append(f"Revenue Estimate: {ebitda_tree['revenueEstimate']}")
+            if ebitda_tree.get("ebitdaEstimate"):
+                lines.append(f"EBITDA Estimate: {ebitda_tree['ebitdaEstimate']}")
+        if value_chain and value_chain.get("steps"):
+            lines.append(f"\n### Value Chain ({len(value_chain['steps'])} activities)")
+            if value_chain.get("summary"):
+                lines.append(value_chain["summary"])
         if documents:
             lines.append(f"\n### Documents ({len(documents)})")
             lines.extend(
-                f"- {doc.get('filename', '?')} ({doc.get('fileType', '?')})" for doc in documents
+                f"- {d.get('filename', '?')} ({d.get('fileType', '?')})" for d in documents
             )
-
         return "\n".join(lines)
 
     @mcp.tool()
     async def get_risk_breakdown(analysis_id: str) -> str:
         """Get risk scores by dimension for a specific analysis.
 
-        Shows each risk category (automation, workforce, data privacy, etc.)
-        with its individual score. Use this for detailed risk dimension analysis.
-
         Args:
             analysis_id: The ID of the analysis.
         """
-        data = await call_backend(
-            method="GET",
-            path=f"/api/analysis/{analysis_id}",
-            **_get_user_context(),
-        )
-        risk_scores = data.get("riskScores", [])
-        if not risk_scores:
+        company = company_repo.get_by_id(analysis_id)
+        if not company:
+            return f"Analysis {analysis_id} not found."
+        data = _get_assessment_data(assessment_repo, analysis_id)
+        if not data["risk_scores"]:
             return f"No risk scores found for analysis {analysis_id}."
-
         lines = [
-            f"## Risk Breakdown — {data.get('companyName', 'Unknown')}",
-            f"Overall: {data.get('overallRiskScore', 'N/A')}/10 ({data.get('riskTier', 'N/A')})",
+            f"## Risk Breakdown — {company.get('company_name', 'Unknown')}",
+            f"Overall: {company.get('overall_risk_score', 'N/A')}/10 "
+            f"({company.get('risk_tier', 'N/A')})",
             "",
         ]
-        for risk in risk_scores:
-            name = risk.get("name", risk.get("category", "?"))
-            score = risk.get("score", "?")
-            lines.append(f"- **{name}**: {score}/10")
-
+        for r in data["risk_scores"]:
+            name = r.get("name", r.get("category", "?"))
+            lines.append(f"- **{name}**: {r.get('score', '?')}/10")
         return "\n".join(lines)
 
     @mcp.tool()
     async def get_opportunities(analysis_id: str) -> str:
         """Get AI opportunities with value levers for a specific analysis.
 
-        Shows each opportunity with its value lever (automation, revenue growth,
-        cost reduction, etc.), impact rating, and description.
-
         Args:
             analysis_id: The ID of the analysis.
         """
-        data = await call_backend(
-            method="GET",
-            path=f"/api/analysis/{analysis_id}",
-            **_get_user_context(),
-        )
-        opportunities = data.get("opportunities", [])
-        if not opportunities:
+        company = company_repo.get_by_id(analysis_id)
+        if not company:
+            return f"Analysis {analysis_id} not found."
+        data = _get_assessment_data(assessment_repo, analysis_id)
+        if not data["opportunities"]:
             return f"No opportunities found for analysis {analysis_id}."
-
-        lines = [f"## Opportunities — {data.get('companyName', 'Unknown')} ({len(opportunities)})"]
-        for i, opp in enumerate(opportunities, 1):
+        name = company.get("company_name", "Unknown")
+        opps = data["opportunities"]
+        lines = [f"## Opportunities — {name} ({len(opps)})"]
+        for i, opp in enumerate(opps, 1):
             lines.append(f"\n### {i}. {opp.get('title', 'Untitled')}")
             lines.append(f"Value Lever: {opp.get('value_lever', 'N/A')}")
             lines.append(f"Impact: {opp.get('impact_rating', 'N/A')}")
             if opp.get("description"):
                 lines.append(f"Description: {opp['description']}")
-
         return "\n".join(lines)
 
     @mcp.tool()
     async def get_ebitda_tree(analysis_id: str) -> str:
         """Get the EBITDA impact model for a specific analysis.
 
-        Shows revenue and EBITDA estimates with the tree structure of
-        financial impact nodes. Use this for financial analysis.
-
         Args:
             analysis_id: The ID of the analysis.
         """
-        data = await call_backend(
-            method="GET",
-            path=f"/api/analysis/{analysis_id}",
-            **_get_user_context(),
-        )
-        tree = data.get("ebitdaTree")
-        if not tree:
+        company = company_repo.get_by_id(analysis_id)
+        if not company:
+            return f"Analysis {analysis_id} not found."
+        data = _get_assessment_data(assessment_repo, analysis_id)
+        if not data["ebitda_tree"]:
             return f"No EBITDA tree found for analysis {analysis_id}."
-
+        tree = data["ebitda_tree"]
         lines = [
-            f"## EBITDA Impact Model — {data.get('companyName', 'Unknown')}",
+            f"## EBITDA Impact Model — {company.get('company_name', 'Unknown')}",
             f"Revenue Estimate: {tree.get('revenueEstimate', 'N/A')}",
             f"EBITDA Estimate: {tree.get('ebitdaEstimate', 'N/A')}",
         ]
-
         tree_data = tree.get("treeData", [])
         if tree_data:
             lines.append(f"\n### Tree Nodes ({len(tree_data)})")
-            for node in tree_data:
-                label = node.get("label", "?")
-                value = node.get("value", "")
-                lines.append(f"- {label}: {value}")
-
+            lines.extend(f"- {n.get('label', '?')}: {n.get('value', '')}" for n in tree_data)
         return "\n".join(lines)
 
     @mcp.tool()
     async def get_value_chain(analysis_id: str) -> str:
         """Get value chain analysis for a specific company.
 
-        Shows the company's value chain activities (primary and support)
-        with AI impact assessment for each step.
-
         Args:
             analysis_id: The ID of the analysis.
         """
-        data = await call_backend(
-            method="GET",
-            path=f"/api/analysis/{analysis_id}",
-            **_get_user_context(),
-        )
-        chain = data.get("valueChain")
-        if not chain:
+        company = company_repo.get_by_id(analysis_id)
+        if not company:
+            return f"Analysis {analysis_id} not found."
+        data = _get_assessment_data(assessment_repo, analysis_id)
+        if not data["value_chain"]:
             return f"No value chain found for analysis {analysis_id}."
-
-        lines = [f"## Value Chain — {data.get('companyName', 'Unknown')}"]
+        chain = data["value_chain"]
+        lines = [f"## Value Chain — {company.get('company_name', 'Unknown')}"]
         if chain.get("summary"):
             lines.append(chain["summary"])
-
-        steps = chain.get("steps", [])
-        for step in steps:
-            name = step.get("name", "?")
-            category = step.get("category", "")
-            lines.append(f"\n### {name} ({category})")
+        for step in chain.get("steps", []):
+            lines.append(f"\n### {step.get('name', '?')} ({step.get('category', '')})")
             if step.get("description"):
                 lines.append(step["description"])
-            if step.get("ai_impact"):
-                lines.append(f"AI Impact: {step['ai_impact']}")
-
         return "\n".join(lines)
 
     @mcp.tool()
     async def get_scan(scan_id: str) -> str:
         """Get scan details including status and linked analyses.
 
-        Shows scan progress, type, and all company analyses within the scan.
-
         Args:
             scan_id: The ID of the scan.
         """
-        data = await call_backend(
-            method="GET",
-            path=f"/api/scan/{scan_id}",
-            **_get_user_context(),
-        )
+        scan = scan_repo.get_by_id(scan_id)
+        if not scan:
+            return f"Scan {scan_id} not found."
         lines = [
             f"## Scan {scan_id}",
-            f"Status: {data.get('status', 'unknown')}",
-            f"Type: {data.get('type', 'unknown')}",
-            f"Progress: {data.get('progress', 0)}%",
+            f"Status: {scan.get('status', 'unknown')}",
+            f"Type: {scan.get('type', 'unknown')}",
+            f"Progress: {scan.get('progress', 0)}%",
         ]
-
-        analyses = data.get("analyses", [])
-        if analyses:
-            lines.append(f"\n### Analyses ({len(analyses)})")
-            for analysis in analyses:
-                name = analysis.get("companyName", "?")
-                score = analysis.get("overallRiskScore", "N/A")
-                lines.append(f"- {name} — Score: {score}/10 — ID: {analysis.get('id', '')}")
-
+        scan_companies = scan_repo.get_scan_companies(scan_id)
+        if scan_companies:
+            cids = [sc.get("company_id", "") for sc in scan_companies if sc.get("company_id")]
+            if cids:
+                cdata = company_repo.get_by_ids(cids)
+                lines.append(f"\n### Analyses ({len(cdata)})")
+                for c in cdata:
+                    score = c.get("overall_risk_score", "N/A")
+                    lines.append(
+                        f"- {c.get('company_name', '?')} — Score: {score}/10 "
+                        f"— ID: {c.get('id', '')}"
+                    )
         return "\n".join(lines)
 
     @mcp.tool()
     async def list_team_members() -> str:  # noqa: NAMING001
-        """List team members and pending invitations in your organization.
-
-        Shows current members with their roles and any pending invitations.
-        """
-        data = await call_backend(
-            method="GET",
-            path="/api/org/members",
-            **_get_user_context(),
-        )
-        members = data.get("members", [])
-        invitations = data.get("pendingInvitations", [])
-
+        """List team members and pending invitations in your organization."""
+        user = get_authenticated_user()
+        members = user_repo.find_by_org(user.org_id)
+        inv_repo = storage.create_invitation_repository()
+        invitations = inv_repo.find_by_org(user.org_id)
         lines = [f"## Team ({len(members)} members)"]
         lines.extend(
             f"- {m.get('name', m.get('email', '?'))} ({m.get('role', '?')})" for m in members
         )
-
         if invitations:
             lines.append(f"\n### Pending Invitations ({len(invitations)})")
             lines.extend(
                 f"- {inv.get('email', '?')} (invited as {inv.get('role', '?')})"
                 for inv in invitations
             )
-
         return "\n".join(lines)
 
     @mcp.tool()
@@ -370,20 +340,18 @@ def register_read_tools(mcp: FastMCP) -> None:
         Args:
             analysis_id: The ID of the analysis.
         """
-        data = await call_backend(
-            method="GET",
-            path=f"/api/analysis/{analysis_id}",
-            **_get_user_context(),
-        )
-        documents = data.get("documents", [])
-        if not documents:
+        company = company_repo.get_by_id(analysis_id)
+        if not company:
+            return f"Analysis {analysis_id} not found."
+        data = _get_assessment_data(assessment_repo, analysis_id)
+        if not data["documents"]:
             return f"No documents attached to analysis {analysis_id}."
-
-        lines = [f"## Documents — {data.get('companyName', 'Unknown')} ({len(documents)})"]
+        name = company.get("company_name", "Unknown")
+        docs = data["documents"]
+        lines = [f"## Documents — {name} ({len(docs)})"]
         lines.extend(
             f"- {d.get('filename', '?')} ({d.get('fileType', '?')}, "
             f"{d.get('charCount', 0)} chars) — ID: {d.get('id', '')}"
-            for d in documents
+            for d in docs
         )
-
         return "\n".join(lines)
