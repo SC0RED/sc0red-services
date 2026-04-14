@@ -16,6 +16,7 @@ from constructs import Construct
 
 from stacks.amplify_construct import AmplifyConstruct
 from stacks.cognito_construct import CognitoConstruct
+from stacks.mcp_construct import MCPConstruct
 from stacks.observability_construct import ObservabilityConstruct
 
 _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
@@ -99,6 +100,19 @@ class JanusStack(Stack):
                 cognito_user_pool_id=cognito.user_pool_id,
                 cognito_client_id=cognito.app_client_id,
             )
+
+        _mcp = MCPConstruct(
+            self,
+            "MCP",
+            environment=environment,
+            bundling=bundling,
+            lambda_architecture=self._lambda_architecture,
+            table=table,
+            api_url=api.url,
+            cognito_user_pool_id=cognito.user_pool_id,
+            cognito_client_id=cognito.app_client_id,
+            frontend_domain=frontend_domain,
+        )
 
         worker_handler.add_event_source(
             lambda_event_sources.SqsEventSource(queue, batch_size=1)
