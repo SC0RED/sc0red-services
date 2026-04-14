@@ -5,7 +5,6 @@ Split from tools_read.py to stay under 400-line file limit.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from src.mcp.api_client import call_backend
@@ -13,8 +12,6 @@ from src.mcp.tools_read import _format_analysis_summary, _get_user_context
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
-
-logger = logging.getLogger(__name__)
 
 
 def register_search_tools(mcp: FastMCP) -> None:
@@ -72,15 +69,12 @@ def register_search_tools(mcp: FastMCP) -> None:
 
         analyses = []
         for aid in analysis_ids:
-            try:
-                data = await call_backend(
-                    method="GET",
-                    path=f"/api/analysis/{aid}",
-                    **_get_user_context(),
-                )
-                analyses.append(data)
-            except Exception:
-                analyses.append({"companyName": f"Error loading {aid}", "id": aid})
+            data = await call_backend(
+                method="GET",
+                path=f"/api/analysis/{aid}",
+                **_get_user_context(),
+            )
+            analyses.append(data)
 
         lines = [f"## Comparison of {len(analyses)} Companies", ""]
 

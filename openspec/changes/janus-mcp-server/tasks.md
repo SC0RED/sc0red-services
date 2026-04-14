@@ -56,7 +56,8 @@
 
 ### Tests
 - [x] 2.13 Unit tests per tool (22 tests covering data, empty states, edge cases)
-- [ ] 2.14 Tool description validation: test with Claude Desktop that correct tool is selected
+- [ ] 2.14 Tool description validation: test with Claude Desktop (post-deployment)
+- [x] 2.15 Architecture review + audit (4 CRITICAL fixed, 4 MEDIUM fixed)
 - [ ] 2.15 Architecture review + audit
 
 ## PR 3: Write Tools

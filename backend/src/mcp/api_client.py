@@ -1,21 +1,23 @@
 """Internal API client for MCP tools to call the Janus backend.
 
 All MCP tool handlers use this client to forward requests to the existing
-backend API endpoints. The client adds authentication headers derived from
-the OAuth token's user identity.
+backend API endpoints. Authentication bridging (MCP OAuth → backend auth)
+will be implemented via contextvars when user identity propagation is wired.
+
+Currently uses a development-only HS256 token for local testing.
+Production deployment requires the contextvars auth bridge (tracked).
 """
 
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any
 
 import httpx
-
-logger = logging.getLogger(__name__)
+import jwt as pyjwt
 
 API_URL = os.environ.get("API_URL", "http://localhost:8001")
+INTERNAL_SIGNING_KEY = os.environ.get("INTERNAL_SIGNING_KEY", "")
 
 
 async def call_backend(  # noqa: NAMING001
@@ -30,10 +32,6 @@ async def call_backend(  # noqa: NAMING001
     params: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Call the Janus backend API on behalf of an MCP user.
-
-    Creates a minimal JWT-like auth header the backend accepts for
-    internal service calls. In production, this will use a service token
-    or internal auth mechanism.
 
     Args:
         method: HTTP method (GET, POST, DELETE).
@@ -50,12 +48,20 @@ async def call_backend(  # noqa: NAMING001
 
     Raises:
         httpx.HTTPStatusError: If the backend returns a non-2xx status.
+        RuntimeError: If INTERNAL_SIGNING_KEY is not configured.
     """
-    import jwt as pyjwt
+    if not INTERNAL_SIGNING_KEY:
+        message = (
+            "INTERNAL_SIGNING_KEY not set. "
+            "MCP→backend auth bridge requires this env var for development. "
+            "Production auth will use contextvars-based token forwarding."
+        )
+        raise RuntimeError(message)
 
-    # Create a minimal internal token for backend auth
-    # The backend validates JWT structure and extracts claims
-    signing_key = os.environ.get("INTERNAL_SIGNING_KEY", "internal-dev-key")
+    if not user_id or not org_id:
+        message = "user_id and org_id are required for backend API calls"
+        raise ValueError(message)
+
     internal_token = pyjwt.encode(
         {
             "sub": user_id,
@@ -64,7 +70,7 @@ async def call_backend(  # noqa: NAMING001
             "custom:role": role,
             "name": email.split("@", maxsplit=1)[0],
         },
-        signing_key,
+        INTERNAL_SIGNING_KEY,
         algorithm="HS256",
     )
 

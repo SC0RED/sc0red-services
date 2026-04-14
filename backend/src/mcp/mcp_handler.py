@@ -9,20 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
 
 import boto3
-import httpx
 from mangum import Mangum
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
 
 from src.mcp.oauth_provider import JanusOAuthProvider
 from src.mcp.oauth_repository import OAuthRepository
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +72,6 @@ _authentication_settings = AuthSettings(
 )
 
 
-@asynccontextmanager
-async def _lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:  # type: ignore[type-arg]
-    """Initialize shared resources for the MCP server."""
-    async with httpx.AsyncClient(base_url=API_URL, timeout=30.0) as http_client:
-        yield {"http_client": http_client, "api_url": API_URL}
-
-
 mcp = FastMCP(
     name="Janus",
     instructions=(
@@ -93,7 +80,6 @@ mcp = FastMCP(
     ),
     auth_server_provider=_oauth_provider,
     auth=_authentication_settings,
-    lifespan=_lifespan,
 )
 
 

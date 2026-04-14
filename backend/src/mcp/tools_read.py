@@ -1,20 +1,13 @@
-"""MCP read tools — query existing Janus data.
-
-All tools are registered on the FastMCP server instance.
-Each tool calls the backend API via the internal API client.
-"""
+"""MCP read tools — registered on the FastMCP server, calls backend API."""
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from src.mcp.api_client import call_backend
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
-
-logger = logging.getLogger(__name__)
 
 
 def _format_analysis_summary(analysis: dict[str, Any]) -> str:
