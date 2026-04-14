@@ -1,17 +1,26 @@
 """Tests for MCP read tools."""
 
-import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from mcp.server.fastmcp import FastMCP
 
-# Set env vars before importing tools
-os.environ["MCP_DEV_USER_ID"] = "test-user"
-os.environ["MCP_DEV_ORG_ID"] = "test-org"
-os.environ["MCP_DEV_EMAIL"] = "test@test.com"
-os.environ["MCP_DEV_ROLE"] = "admin"
+from src.mcp.auth_context import AuthenticatedUser, set_authenticated_user
 
-from mcp.server.fastmcp import FastMCP  # noqa: E402
+
+@pytest.fixture(autouse=True)
+def _set_auth_context():
+    """Set authenticated user context for all tool tests."""
+    set_authenticated_user(
+        AuthenticatedUser(
+            user_id="test-user",
+            org_id="test-org",
+            email="test@test.com",
+            role="admin",
+            client_id="test-client",
+            scopes=["read", "write"],
+        )
+    )
 
 
 @pytest.fixture

@@ -25,27 +25,19 @@ def _format_analysis_summary(analysis: dict[str, Any]) -> str:
 
 
 def _get_user_context() -> dict[str, str]:
-    """Get user context for backend API calls.
+    """Get the authenticated user's identity for backend API calls.
 
-    The MCP SDK authenticates requests via OAuth (validated in
-    load_access_token) but doesn't pass user claims into tool handlers
-    via the Context object. The access token JWT contains user_id,
-    org_id, email, role — but there's no clean SDK API to access it
-    from inside a @mcp.tool() function.
-
-    This will be resolved by storing authenticated user claims in a
-    contextvars.ContextVar during token validation (in oauth_provider)
-    and reading them here. Tracked for the next PR.
-
-    For now, uses environment-based defaults for development and testing.
+    Reads from contextvars set by oauth_provider.load_access_token()
+    during OAuth token validation.
     """
-    import os
+    from src.mcp.auth_context import get_authenticated_user
 
+    user = get_authenticated_user()
     return {
-        "user_id": os.environ.get("MCP_DEV_USER_ID", ""),
-        "org_id": os.environ.get("MCP_DEV_ORG_ID", ""),
-        "email": os.environ.get("MCP_DEV_EMAIL", ""),
-        "role": os.environ.get("MCP_DEV_ROLE", "admin"),
+        "user_id": user.user_id,
+        "org_id": user.org_id,
+        "email": user.email,
+        "role": user.role,
     }
 
 
