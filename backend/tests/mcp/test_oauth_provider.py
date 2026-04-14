@@ -175,9 +175,9 @@ class TestExchangeAuthorizationCode:
 class TestLoadAndExchangeRefreshToken:
     @pytest.mark.asyncio
     async def test_load_refresh_token(self, provider):
-        from src.mcp.token_utils import hash_token
+        from src.mcp.token_utils import compute_token_hash
         provider._repository.save_refresh_token(
-            hash_token("refresh-abc"), user_id="u1", org_id="o1",
+            compute_token_hash("refresh-abc"), user_id="u1", org_id="o1",
             email="t@t.com", role="admin", client_id="test-client",
             scopes=["read"],
         )
@@ -188,14 +188,14 @@ class TestLoadAndExchangeRefreshToken:
 
     @pytest.mark.asyncio
     async def test_exchange_refresh_rotates_tokens(self, provider):
-        from src.mcp.token_utils import hash_token
+        from src.mcp.token_utils import compute_token_hash
         provider._repository.save_refresh_token(
-            hash_token("old-refresh"), user_id="u1", org_id="o1",
+            compute_token_hash("old-refresh"), user_id="u1", org_id="o1",
             email="t@t.com", role="admin", client_id="test-client",
             scopes=["read", "write"],
         )
         stored = StoredRefreshToken(
-            token_hash=hash_token("old-refresh"), user_id="u1", org_id="o1",
+            token_hash=compute_token_hash("old-refresh"), user_id="u1", org_id="o1",
             email="t@t.com", role="admin", client_id="test-client",
             scopes=["read", "write"],
         )
@@ -204,7 +204,7 @@ class TestLoadAndExchangeRefreshToken:
         assert token.access_token
         assert token.refresh_token
         # Old refresh token should be deleted
-        assert provider._repository.get_refresh_token(hash_token("old-refresh")) is None
+        assert provider._repository.get_refresh_token(compute_token_hash("old-refresh")) is None
 
 
 class TestLoadAuthorizationCode:
@@ -243,14 +243,14 @@ class TestLoadAuthorizationCode:
 class TestExchangeRefreshTokenScopes:
     @pytest.mark.asyncio
     async def test_uses_provided_scopes_when_given(self, provider):
-        from src.mcp.token_utils import hash_token
+        from src.mcp.token_utils import compute_token_hash
         provider._repository.save_refresh_token(
-            hash_token("scoped-ref"), user_id="u1", org_id="o1",
+            compute_token_hash("scoped-ref"), user_id="u1", org_id="o1",
             email="t@t.com", role="admin", client_id="test-client",
             scopes=["read", "write"],
         )
         stored = StoredRefreshToken(
-            token_hash=hash_token("scoped-ref"), user_id="u1", org_id="o1",
+            token_hash=compute_token_hash("scoped-ref"), user_id="u1", org_id="o1",
             email="t@t.com", role="admin", client_id="test-client",
             scopes=["read", "write"],
         )
@@ -262,14 +262,14 @@ class TestExchangeRefreshTokenScopes:
 class TestLoadAccessToken:
     @pytest.mark.asyncio
     async def test_valid_token(self, provider):
-        from src.mcp.token_utils import hash_token, create_signed_access_token
+        from src.mcp.token_utils import compute_token_hash, create_signed_access_token
         access_token = create_signed_access_token(
             private_key_pem=provider._private_key_pem,
             user_id="u1", email="t@t.com", org_id="o1", role="admin",
             client_id="c1", scopes=["read"], issuer="https://mcp.test.janus.sc0red.com",
         )
         provider._repository.save_access_token(
-            hash_token(access_token), user_id="u1", org_id="o1",
+            compute_token_hash(access_token), user_id="u1", org_id="o1",
             client_id="c1", scopes=["read"],
         )
         result = await provider.load_access_token(access_token)
@@ -299,7 +299,7 @@ class TestRevokeToken:
     @pytest.mark.asyncio
     async def test_revoke_access_token(self, provider):
         from src.mcp.oauth_provider import StoredAccessToken
-        from src.mcp.token_utils import hash_token
+        from src.mcp.token_utils import compute_token_hash
         provider._repository.save_access_token(
             "hash-to-revoke", user_id="u1", org_id="o1", client_id="c1", scopes=["read"],
         )

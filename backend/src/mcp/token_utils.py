@@ -128,6 +128,6 @@ def is_valid_pkce(code_verifier: str, code_challenge: str) -> bool:
     return computed_challenge == code_challenge
 
 
-def hash_token(token: str) -> str:
+def compute_token_hash(token: str) -> str:
     """Hash a token for storage (used as DynamoDB pk)."""
     return hashlib.sha256(token.encode()).hexdigest()

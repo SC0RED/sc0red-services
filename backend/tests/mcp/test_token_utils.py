@@ -9,7 +9,7 @@ from src.mcp.token_utils import (
     generate_authorization_code,
     generate_refresh_token,
     generate_rsa_key_pair,
-    hash_token,
+    compute_token_hash,
     create_signed_access_token,
     is_valid_pkce,
     verify_access_token,
@@ -160,10 +160,10 @@ class TestValidatePKCE:
 
 class TestHashToken:
     def test_deterministic(self):
-        assert hash_token("abc123") == hash_token("abc123")
+        assert compute_token_hash("abc123") == compute_token_hash("abc123")
 
     def test_different_inputs_different_hashes(self):
-        assert hash_token("abc") != hash_token("def")
+        assert compute_token_hash("abc") != compute_token_hash("def")
 
     def test_returns_64_chars(self):
-        assert len(hash_token("test")) == 64
+        assert len(compute_token_hash("test")) == 64

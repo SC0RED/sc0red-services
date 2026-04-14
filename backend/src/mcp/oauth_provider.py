@@ -16,9 +16,9 @@ import jwt
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from src.mcp.token_utils import (
-    generate_refresh_token,
-    hash_token,
+    compute_token_hash,
     create_signed_access_token,
+    generate_refresh_token,
     verify_access_token,
 )
 
@@ -198,14 +198,14 @@ class JanusOAuthProvider:
         refresh_token = generate_refresh_token()
 
         self._repository.save_access_token(
-            hash_token(access_token),
+            compute_token_hash(access_token),
             user_id=authorization_code.user_id,
             org_id=authorization_code.org_id,
             client_id=authorization_code.client_id,
             scopes=authorization_code.scopes,
         )
         self._repository.save_refresh_token(
-            hash_token(refresh_token),
+            compute_token_hash(refresh_token),
             user_id=authorization_code.user_id,
             org_id=authorization_code.org_id,
             email=authorization_code.email,
@@ -236,13 +236,13 @@ class JanusOAuthProvider:
         refresh_token: str,
     ) -> StoredRefreshToken | None:
         """Load a refresh token from DynamoDB."""
-        record = self._repository.get_refresh_token(hash_token(refresh_token))
+        record = self._repository.get_refresh_token(compute_token_hash(refresh_token))
         if not record:
             return None
         if record.get("client_id") != client.client_id:
             return None
         return StoredRefreshToken(
-            token_hash=hash_token(refresh_token),
+            token_hash=compute_token_hash(refresh_token),
             user_id=record["user_id"],
             org_id=record["org_id"],
             email=record["email"],
@@ -273,14 +273,14 @@ class JanusOAuthProvider:
         new_refresh_token = generate_refresh_token()
 
         self._repository.save_access_token(
-            hash_token(new_access_token),
+            compute_token_hash(new_access_token),
             user_id=refresh_token.user_id,
             org_id=refresh_token.org_id,
             client_id=refresh_token.client_id,
             scopes=effective_scopes,
         )
         self._repository.save_refresh_token(
-            hash_token(new_refresh_token),
+            compute_token_hash(new_refresh_token),
             user_id=refresh_token.user_id,
             org_id=refresh_token.org_id,
             email=refresh_token.email,
@@ -310,12 +310,12 @@ class JanusOAuthProvider:
         except jwt.InvalidTokenError:
             return None
 
-        record = self._repository.get_access_token(hash_token(token))
+        record = self._repository.get_access_token(compute_token_hash(token))
         if not record:
             return None
 
         return StoredAccessToken(
-            token_hash=hash_token(token),
+            token_hash=compute_token_hash(token),
             user_id=payload["sub"],
             org_id=payload["org_id"],
             client_id=payload.get("client_id", ""),
