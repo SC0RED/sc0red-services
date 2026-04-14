@@ -245,7 +245,7 @@ asyncio_mode = "auto"
 [tool.coverage.run]
 branch = true
 source = ["src"]
-omit = ["src/local_server.py", "src/mcp/mcp_handler.py", "src/mcp/api_client.py"]
+omit = ["src/local_server.py", "src/mcp/mcp_handler.py"]
 
 # =============================================================================
 # COMMITIZEN - Conventional Commits

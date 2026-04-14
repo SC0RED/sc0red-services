@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 # ── Configuration ────────────────────────────────────────────────────────────
 
 DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "janus-dev")
-API_URL = os.environ.get("API_URL", "http://localhost:8001")
 OAUTH_SIGNING_KEY_SECRET_ARN = os.environ.get("OAUTH_SIGNING_KEY_SECRET_ARN", "")
 STAGE = os.environ.get("STAGE", "development")
 
@@ -87,9 +86,11 @@ mcp = FastMCP(
 
 from src.mcp.tools_read import register_read_tools  # noqa: E402
 from src.mcp.tools_search import register_search_tools  # noqa: E402
+from src.repositories.dynamodb.provider import DynamoDBStorageProvider  # noqa: E402
 
-register_read_tools(mcp)
-register_search_tools(mcp)
+_storage = DynamoDBStorageProvider()
+register_read_tools(mcp, _storage)
+register_search_tools(mcp, _storage)
 
 
 # ── Lambda handler ───────────────────────────────────────────────────────────

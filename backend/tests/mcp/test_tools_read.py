@@ -1,6 +1,6 @@
-"""Tests for MCP read tools."""
+"""Tests for MCP read tools — mocks DynamoDB repositories."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from mcp.server.fastmcp import FastMCP
@@ -10,353 +10,358 @@ from src.mcp.auth_context import AuthenticatedUser, set_authenticated_user
 
 @pytest.fixture(autouse=True)
 def _set_auth_context():
-    """Set authenticated user context for all tool tests."""
     set_authenticated_user(
         AuthenticatedUser(
-            user_id="test-user",
-            org_id="test-org",
-            email="test@test.com",
-            role="admin",
-            client_id="test-client",
-            scopes=["read", "write"],
+            user_id="test-user", org_id="test-org", email="test@test.com",
+            role="admin", client_id="test-client", scopes=["read", "write"],
         )
     )
 
 
-@pytest.fixture
-def mcp_server():
+def _make_storage():
+    """Create a mock DynamoDBStorageProvider with mock repositories."""
+    storage = MagicMock()
+    company_repo = MagicMock()
+    assessment_repo = MagicMock()
+    scan_repo = MagicMock()
+    user_repo = MagicMock()
+    invitation_repo = MagicMock()
+
+    storage.create_company_repository.return_value = company_repo
+    storage.create_assessment_repository.return_value = assessment_repo
+    storage.create_scan_repository.return_value = scan_repo
+    storage.create_user_repository.return_value = user_repo
+    storage.create_invitation_repository.return_value = invitation_repo
+
+    company_repo.find_by_org.return_value = ([], None)
+    company_repo.get_by_id.return_value = None
+    company_repo.get_by_ids.return_value = []
+    scan_repo.find_recent_by_org.return_value = []
+    scan_repo.get_by_id.return_value = None
+    scan_repo.get_scan_companies.return_value = []
+    user_repo.find_by_org.return_value = []
+    invitation_repo.find_by_org.return_value = []
+    assessment_repo.find_by_company.return_value = []
+
+    return storage, company_repo, assessment_repo, scan_repo, user_repo, invitation_repo
+
+
+def _make_server(storage):
     server = FastMCP("test")
     from src.mcp.tools_read import register_read_tools
     from src.mcp.tools_search import register_search_tools
-
-    register_read_tools(server)
-    register_search_tools(server)
+    register_read_tools(server, storage)
+    register_search_tools(server, storage)
     return server
 
 
-class _mock_backend:
-    """Context manager that mocks call_backend in both tool modules."""
+def _make_company(**overrides):
+    defaults = {
+        "id": "c1", "company_name": "Acme", "company_url": "https://acme.com",
+        "industry": "Tech", "overall_risk_score": 5.0, "risk_tier": "moderate",
+        "analyzed_at": "2026-01-01", "org_id": "test-org", "scan_id": "s1",
+        "metadata_json": '{"analysis_summary": "Good company", "top_actions": ["Act 1"]}',
+    }
+    defaults.update(overrides)
+    return defaults
 
-    def __init__(self, return_value):
-        self._return_value = return_value
-        self._patches = []
 
-    def __enter__(self):
-        for module in ("src.mcp.tools_read", "src.mcp.tools_search"):
-            p = patch(f"{module}.call_backend", new_callable=AsyncMock, return_value=self._return_value)
-            p.start()
-            self._patches.append(p)
-        return self
-
-    def __exit__(self, *args):
-        for p in self._patches:
-            p.stop()
+def _setup_assessment(assessment_repo, **overrides):
+    """Configure assessment mock with defaults."""
+    defaults = {
+        "find_by_company": [{"id": "a1", "created_at": "2026-01-01"}],
+        "get_risk_scores": [{"name": "Automation", "score": 5}],
+        "get_opportunities": [],
+        "get_ebitda_tree": None,
+        "get_value_chain": None,
+        "get_documents": [],
+    }
+    defaults.update(overrides)
+    assessment_repo.find_by_company.return_value = defaults["find_by_company"]
+    assessment_repo.get_risk_scores.return_value = defaults["get_risk_scores"]
+    assessment_repo.get_opportunities.return_value = defaults["get_opportunities"]
+    assessment_repo.get_ebitda_tree.return_value = defaults["get_ebitda_tree"]
+    assessment_repo.get_value_chain.return_value = defaults["get_value_chain"]
+    assessment_repo.get_documents.return_value = defaults["get_documents"]
 
 
 class TestGetDashboard:
     @pytest.mark.asyncio
-    async def test_returns_formatted_dashboard(self, mcp_server):
-        mock_data = {
-            "totalAnalyses": 5,
-            "avgRiskScore": 4.5,
-            "criticalCount": 1,
-            "scanCount": 3,
-            "recentAnalyses": [
-                {"id": "a1", "companyName": "Stripe", "overallRiskScore": 4.5, "riskTier": "moderate"},
-            ],
-            "recentScans": [],
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_dashboard", {})
-            text = result[0][0].text
-            assert "Portfolio Dashboard" in text
-            assert "Companies Analyzed: 5" in text
-            assert "Stripe" in text
+    async def test_returns_stats(self):
+        storage, company_repo, _, scan_repo, *_ = _make_storage()
+        company_repo.find_by_org.return_value = ([_make_company()], None)
+        scan_repo.find_recent_by_org.return_value = [{"id": "s1"}]
+        server = _make_server(storage)
+        text = (await server.call_tool("get_dashboard", {}))[0][0].text
+        assert "Companies Analyzed: 1" in text
+        assert "5.0/10" in text
+
+    @pytest.mark.asyncio
+    async def test_empty(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_dashboard", {}))[0][0].text
+        assert "Companies Analyzed: 0" in text
 
 
 class TestListAnalyses:
     @pytest.mark.asyncio
-    async def test_returns_analyses_list(self, mcp_server):
-        mock_data = {
-            "analyses": [
-                {"id": "a1", "companyName": "Acme", "overallRiskScore": 6.0, "riskTier": "high"},
-                {"id": "a2", "companyName": "Beta", "overallRiskScore": 3.0, "riskTier": "low"},
-            ]
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("list_analyses", {})
-            text = result[0][0].text
-            assert "2 Analyses" in text
-            assert "Acme" in text
-            assert "Beta" in text
+    async def test_returns_list(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.find_by_org.return_value = ([_make_company(), _make_company(id="c2", company_name="Beta")], None)
+        server = _make_server(storage)
+        text = (await server.call_tool("list_analyses", {}))[0][0].text
+        assert "2 Analyses" in text
 
     @pytest.mark.asyncio
-    async def test_empty_analyses(self, mcp_server):
-        with _mock_backend({"analyses": []}):
-            result = await mcp_server.call_tool("list_analyses", {})
-            text = result[0][0].text
-            assert "No analyses found" in text
+    async def test_empty(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("list_analyses", {}))[0][0].text
+        assert "No analyses found" in text
 
 
 class TestGetAnalysis:
     @pytest.mark.asyncio
-    async def test_returns_minimal_analysis(self, mcp_server):
-        mock_data = {
-            "companyName": "MinCo",
-            "companyUrl": "",
-            "industry": "",
-            "overallRiskScore": 3.0,
-            "riskTier": "low",
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_analysis", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "MinCo" in text
-            assert "3.0/10" in text
+    async def test_full(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo,
+            get_opportunities=[{"title": "AI Sales", "value_lever": "revenue", "impact_rating": "High"}],
+            get_ebitda_tree={"revenueEstimate": "$5B", "ebitdaEstimate": "$1B", "treeData": []},
+            get_value_chain={"summary": "Strong", "steps": [{"name": "Sales", "category": "primary"}]},
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_analysis", {"analysis_id": "c1"}))[0][0].text
+        assert "Acme" in text
+        assert "Automation" in text
+        assert "AI Sales" in text
+        assert "EBITDA" in text
+        assert "Value Chain" in text
 
     @pytest.mark.asyncio
-    async def test_returns_full_analysis(self, mcp_server):
-        mock_data = {
-            "companyName": "Stripe",
-            "companyUrl": "https://stripe.com",
-            "industry": "Fintech",
-            "overallRiskScore": 4.5,
-            "riskTier": "moderate",
-            "analysisSummary": "Payment leader",
-            "topActions": ["Action 1"],
-            "riskScores": [{"name": "Automation", "score": 5}],
-            "opportunities": [{"title": "AI Checkout", "value_lever": "revenue", "impact_rating": "High"}],
-            "ebitdaTree": {"revenueEstimate": "$10B", "ebitdaEstimate": "$3B", "treeData": []},
-            "valueChain": {"summary": "Strong chain", "steps": [{"name": "Sales", "category": "primary"}]},
-            "documents": [],
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_analysis", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "Stripe" in text
-            assert "4.5/10" in text
-            assert "Automation" in text
-            assert "AI Checkout" in text
-            assert "EBITDA" in text
-            assert "Value Chain" in text
+    async def test_not_found(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_analysis", {"analysis_id": "x"}))[0][0].text
+        assert "not found" in text
+
+    @pytest.mark.asyncio
+    async def test_cross_org_denied(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company(org_id="other-org")
+        server = _make_server(storage)
+        text = (await server.call_tool("get_analysis", {"analysis_id": "c1"}))[0][0].text
+        assert "not found" in text
+
+    @pytest.mark.asyncio
+    async def test_with_documents(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo,
+            get_documents=[{"filename": "memo.pdf", "fileType": "pdf"}],
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_analysis", {"analysis_id": "c1"}))[0][0].text
+        assert "memo.pdf" in text
+        assert "Documents" in text
+
+    @pytest.mark.asyncio
+    async def test_minimal(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company(metadata_json="")
+        server = _make_server(storage)
+        text = (await server.call_tool("get_analysis", {"analysis_id": "c1"}))[0][0].text
+        assert "Acme" in text
 
 
 class TestGetRiskBreakdown:
     @pytest.mark.asyncio
-    async def test_returns_risk_dimensions(self, mcp_server):
-        mock_data = {
-            "companyName": "Acme",
-            "overallRiskScore": 6.0,
-            "riskTier": "high",
-            "riskScores": [
-                {"name": "Automation", "score": 7},
-                {"name": "Data Privacy", "score": 5},
-            ],
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_risk_breakdown", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "Automation" in text
-            assert "Data Privacy" in text
+    async def test_returns(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo, get_risk_scores=[{"name": "Automation", "score": 7}])
+        server = _make_server(storage)
+        text = (await server.call_tool("get_risk_breakdown", {"analysis_id": "c1"}))[0][0].text
+        assert "Automation" in text
 
     @pytest.mark.asyncio
-    async def test_no_risk_scores(self, mcp_server):
-        with _mock_backend({"companyName": "X", "riskScores": []}):
-            result = await mcp_server.call_tool("get_risk_breakdown", {"analysis_id": "a1"})
-            assert "No risk scores" in result[0][0].text
-
-
-class TestGetOpportunitiesEmpty:
-    @pytest.mark.asyncio
-    async def test_no_opportunities(self, mcp_server):
-        with _mock_backend({"companyName": "X", "opportunities": []}):
-            result = await mcp_server.call_tool("get_opportunities", {"analysis_id": "a1"})
-            assert "No opportunities" in result[0][0].text
+    async def test_no_scores(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_risk_breakdown", {"analysis_id": "c1"}))[0][0].text
+        assert "No risk scores" in text
 
 
 class TestGetOpportunities:
     @pytest.mark.asyncio
-    async def test_returns_opportunities(self, mcp_server):
-        mock_data = {
-            "companyName": "Acme",
-            "opportunities": [
-                {"title": "AI Sales", "value_lever": "revenue", "impact_rating": "High", "description": "Boost sales"},
-            ],
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_opportunities", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "AI Sales" in text
-            assert "revenue" in text
+    async def test_returns(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo, get_opportunities=[{"title": "AI X", "value_lever": "cost", "impact_rating": "High", "description": "D"}])
+        server = _make_server(storage)
+        text = (await server.call_tool("get_opportunities", {"analysis_id": "c1"}))[0][0].text
+        assert "AI X" in text
+
+    @pytest.mark.asyncio
+    async def test_not_found(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_opportunities", {"analysis_id": "x"}))[0][0].text
+        assert "not found" in text
+
+    @pytest.mark.asyncio
+    async def test_no_opps(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_opportunities", {"analysis_id": "c1"}))[0][0].text
+        assert "No opportunities" in text
 
 
 class TestGetEbitdaTree:
     @pytest.mark.asyncio
-    async def test_returns_ebitda(self, mcp_server):
-        mock_data = {
-            "companyName": "Acme",
-            "ebitdaTree": {
-                "revenueEstimate": "$5B",
-                "ebitdaEstimate": "$1B",
-                "treeData": [{"label": "Revenue", "value": "$5B"}],
-            },
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_ebitda_tree", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "$5B" in text
-            assert "EBITDA" in text
+    async def test_returns(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo, get_ebitda_tree={"revenueEstimate": "$5B", "ebitdaEstimate": "$1B", "treeData": [{"label": "R", "value": "$5B"}]})
+        server = _make_server(storage)
+        text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
+        assert "$5B" in text
 
     @pytest.mark.asyncio
-    async def test_no_ebitda(self, mcp_server):
-        with _mock_backend({"companyName": "X", "ebitdaTree": None}):
-            result = await mcp_server.call_tool("get_ebitda_tree", {"analysis_id": "a1"})
-            assert "No EBITDA tree" in result[0][0].text
+    async def test_no_tree(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
+        assert "No EBITDA tree" in text
 
 
 class TestGetValueChain:
     @pytest.mark.asyncio
-    async def test_returns_value_chain(self, mcp_server):
-        mock_data = {
-            "companyName": "Acme",
-            "valueChain": {
-                "summary": "Strong operations",
-                "steps": [{"name": "Logistics", "category": "primary", "description": "Fast delivery"}],
-            },
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_value_chain", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "Logistics" in text
-            assert "Strong operations" in text
-
-
-class TestGetValueChainMinimal:
-    @pytest.mark.asyncio
-    async def test_no_value_chain(self, mcp_server):
-        with _mock_backend({"companyName": "X", "valueChain": None}):
-            result = await mcp_server.call_tool("get_value_chain", {"analysis_id": "a1"})
-            assert "No value chain" in result[0][0].text
+    async def test_returns(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo, get_value_chain={"summary": "Strong", "steps": [{"name": "Logistics", "category": "primary"}]})
+        server = _make_server(storage)
+        text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
+        assert "Logistics" in text
 
     @pytest.mark.asyncio
-    async def test_value_chain_no_summary(self, mcp_server):
-        mock_data = {
-            "companyName": "Y",
-            "valueChain": {
-                "steps": [{"name": "Ops", "category": "support"}],
-            },
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_value_chain", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "Ops" in text
+    async def test_no_chain(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
+        assert "No value chain" in text
+
+    @pytest.mark.asyncio
+    async def test_chain_no_summary(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo, get_value_chain={"steps": [{"name": "Ops", "category": "support"}]})
+        server = _make_server(storage)
+        text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
+        assert "Ops" in text
 
 
 class TestGetScan:
     @pytest.mark.asyncio
-    async def test_returns_scan_details(self, mcp_server):
-        mock_data = {
-            "status": "complete",
-            "type": "portfolio",
-            "progress": 100,
-            "analyses": [{"id": "a1", "companyName": "Stripe", "overallRiskScore": 4.5}],
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("get_scan", {"scan_id": "s1"})
-            text = result[0][0].text
-            assert "complete" in text
-            assert "Stripe" in text
+    async def test_returns(self):
+        storage, company_repo, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {"id": "s1", "status": "complete", "type": "single", "progress": 100, "org_id": "test-org"}
+        scan_repo.get_scan_companies.return_value = [{"company_id": "c1"}]
+        company_repo.get_by_ids.return_value = [_make_company()]
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "complete" in text
+        assert "Acme" in text
+
+    @pytest.mark.asyncio
+    async def test_scan_no_companies(self):
+        storage, _, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {"id": "s1", "status": "running", "type": "portfolio", "progress": 50, "org_id": "test-org"}
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "running" in text
+
+    @pytest.mark.asyncio
+    async def test_not_found(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "x"}))[0][0].text
+        assert "not found" in text
 
 
 class TestListTeamMembers:
     @pytest.mark.asyncio
-    async def test_returns_members(self, mcp_server):
-        mock_data = {
-            "members": [{"name": "Alice", "email": "a@t.com", "role": "admin"}],
-            "pendingInvitations": [{"email": "bob@t.com", "role": "analyst"}],
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("list_team_members", {})
-            text = result[0][0].text
-            assert "Alice" in text
-            assert "bob@t.com" in text
+    async def test_returns(self):
+        storage, _, _, _, user_repo, invitation_repo = _make_storage()
+        user_repo.find_by_org.return_value = [{"name": "Alice", "email": "a@t.com", "role": "admin"}]
+        invitation_repo.find_by_org.return_value = [{"email": "bob@t.com", "role": "analyst"}]
+        server = _make_server(storage)
+        text = (await server.call_tool("list_team_members", {}))[0][0].text
+        assert "Alice" in text
+        assert "bob@t.com" in text
 
 
 class TestListDocuments:
     @pytest.mark.asyncio
-    async def test_returns_documents(self, mcp_server):
-        mock_data = {
-            "companyName": "Acme",
-            "documents": [{"id": "d1", "filename": "report.pdf", "fileType": "pdf", "charCount": 5000}],
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("list_documents", {"analysis_id": "a1"})
-            text = result[0][0].text
-            assert "report.pdf" in text
+    async def test_returns(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(assessment_repo, get_documents=[{"id": "d1", "filename": "report.pdf", "fileType": "pdf", "charCount": 5000}])
+        server = _make_server(storage)
+        text = (await server.call_tool("list_documents", {"analysis_id": "c1"}))[0][0].text
+        assert "report.pdf" in text
 
     @pytest.mark.asyncio
-    async def test_no_documents(self, mcp_server):
-        with _mock_backend({"companyName": "X", "documents": []}):
-            result = await mcp_server.call_tool("list_documents", {"analysis_id": "a1"})
-            assert "No documents" in result[0][0].text
+    async def test_no_docs(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        server = _make_server(storage)
+        text = (await server.call_tool("list_documents", {"analysis_id": "c1"}))[0][0].text
+        assert "No documents" in text
 
 
 class TestSearchAnalyses:
     @pytest.mark.asyncio
-    async def test_search_by_name(self, mcp_server):
-        mock_data = {
-            "analyses": [
-                {"id": "a1", "companyName": "Stripe Inc", "companyUrl": "", "industry": "Fintech"},
-                {"id": "a2", "companyName": "Plaid", "companyUrl": "", "industry": "Fintech"},
-            ]
-        }
-        with _mock_backend(mock_data):
-            result = await mcp_server.call_tool("search_analyses", {"query": "stripe"})
-            text = result[0][0].text
-            assert "Stripe" in text
-            assert "Plaid" not in text
+    async def test_by_name(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.find_by_org.return_value = ([_make_company(company_name="Stripe Inc"), _make_company(id="c2", company_name="Plaid")], None)
+        server = _make_server(storage)
+        text = (await server.call_tool("search_analyses", {"query": "stripe"}))[0][0].text
+        assert "Stripe" in text
+        assert "Plaid" not in text
 
     @pytest.mark.asyncio
-    async def test_no_results(self, mcp_server):
-        with _mock_backend({"analyses": []}):
-            result = await mcp_server.call_tool("search_analyses", {"query": "nonexistent"})
-            assert "No analyses matching" in result[0][0].text
+    async def test_no_results(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("search_analyses", {"query": "x"}))[0][0].text
+        assert "No analyses matching" in text
 
 
 class TestCompareAnalyses:
     @pytest.mark.asyncio
-    async def test_compare_two(self, mcp_server):
-        call_count = 0
-
-        async def mock_call(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return {
-                    "companyName": "Stripe",
-                    "overallRiskScore": 4.5,
-                    "riskTier": "moderate",
-                    "industry": "Fintech",
-                    "opportunities": [{"title": "X"}],
-                    "riskScores": [{"name": "Automation", "score": 5}],
-                }
-            return {
-                "companyName": "Plaid",
-                "overallRiskScore": 6.0,
-                "riskTier": "high",
-                "industry": "Fintech",
-                "opportunities": [],
-                "riskScores": [{"name": "Automation", "score": 7}],
-            }
-
-        with patch("src.mcp.tools_search.call_backend", side_effect=mock_call):
-            result = await mcp_server.call_tool("compare_analyses", {"analysis_ids": ["a1", "a2"]})
-            text = result[0][0].text
-            assert "Stripe" in text
-            assert "Plaid" in text
-            assert "Comparison" in text
+    async def test_compare_two(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.side_effect = lambda cid: (
+            _make_company(company_name="Stripe", overall_risk_score=4.5) if cid == "c1"
+            else _make_company(id="c2", company_name="Plaid", overall_risk_score=6.0, risk_tier="high")
+        )
+        _setup_assessment(assessment_repo)
+        server = _make_server(storage)
+        text = (await server.call_tool("compare_analyses", {"analysis_ids": ["c1", "c2"]}))[0][0].text
+        assert "Stripe" in text
+        assert "Plaid" in text
+        assert "Comparison" in text
 
     @pytest.mark.asyncio
-    async def test_too_few_ids(self, mcp_server):
-        result = await mcp_server.call_tool("compare_analyses", {"analysis_ids": ["a1"]})
-        assert "at least 2" in result[0][0].text
+    async def test_too_few(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("compare_analyses", {"analysis_ids": ["c1"]}))[0][0].text
+        assert "at least 2" in text
