@@ -49,9 +49,7 @@ class ValidatePortfolioCompanies(RequestStep):
         """
         details = self.request_executor.details
         candidates = cast("list[dict[str, Any]]", details.get("portfolio_companies", []))
-        auto_included = cast(
-            "list[dict[str, Any]]", details.get("portfolio_auto_included", [])
-        )
+        auto_included = cast("list[dict[str, Any]]", details.get("portfolio_auto_included", []))
 
         if not candidates:
             # Nothing to validate — final list is just the auto-included set.

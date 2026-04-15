@@ -113,9 +113,7 @@ class DiscoverPortfolio(RequestStep):
         # Merge into auto-included (intersection, high confidence) and
         # needs-validation (remainder, only one path found it).
         if heuristic_companies or ai_companies:
-            auto_included, needs_validation = _merge_results(
-                heuristic_companies, ai_companies
-            )
+            auto_included, needs_validation = _merge_results(heuristic_companies, ai_companies)
         else:
             auto_included, needs_validation = [], []
             if not diagnostic:
@@ -140,9 +138,7 @@ class DiscoverPortfolio(RequestStep):
             {
                 "portfolio_companies": needs_validation,
                 "portfolio_auto_included": auto_included,
-                "portfolio_companies_json": json.dumps(
-                    auto_included + needs_validation
-                ),
+                "portfolio_companies_json": json.dumps(auto_included + needs_validation),
                 "portfolio_count": total,
                 "portfolio_diagnostic": diagnostic,
             }
