@@ -206,7 +206,6 @@ class APIGatewayHandler:
                 event,
                 authentication,
                 self._storage,
-                self._factory_manager,
                 self._sqs,
                 self._queue_url,
             ),

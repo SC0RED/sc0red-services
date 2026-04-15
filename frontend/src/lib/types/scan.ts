@@ -23,4 +23,5 @@ export interface ScanPollResponse {
     portfolioCompanies?: Omit<Company, 'selected'>[]
     analyses?: AnalysisSummary[]
     analysisId?: string
+    error?: string
 }

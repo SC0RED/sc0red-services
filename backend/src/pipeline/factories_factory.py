@@ -81,6 +81,7 @@ class JanusFactoriesFactory:
                 ai_client_factory=self._ai_client_factory,
                 tenant_id=event.tenant_id,
                 request_id=event.request_id,
+                scan_id=event.scan_id,
             )
         else:
             factory = CompanyAnalysisFactory(

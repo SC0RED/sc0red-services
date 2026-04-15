@@ -45,7 +45,7 @@ function handleDiscoveryPoll(
         callbacks.onComplete(data)
     } else if (data.status === 'failed') {
         stopPolling()
-        callbacks.onFailed('Analysis failed. Please try again.')
+        callbacks.onFailed(data.error?.trim() || 'Analysis failed. Please try again.')
     }
 }
 
@@ -83,7 +83,7 @@ function handlePortfolioPoll(
         callbacks.onComplete(data)
     } else if (data.status === 'failed') {
         stopPolling()
-        callbacks.onFailed('Portfolio analysis failed.')
+        callbacks.onFailed(data.error?.trim() || 'Portfolio analysis failed.')
     }
 }
 

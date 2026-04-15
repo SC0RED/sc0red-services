@@ -27,6 +27,29 @@ def build_analysis_message(
     )
 
 
+def build_portfolio_discovery_message(
+    *,
+    url: str,
+    org_id: str,
+    user_id: str,
+    scan_id: str,
+) -> str:
+    """Build a JSON message to dispatch portfolio discovery to the SQS worker.
+
+    The worker runs the ``DiscoverPortfolio`` → ``ValidatePortfolioCompanies``
+    pipeline asynchronously so the API handler never blocks on AI calls.
+    """
+    return json.dumps(
+        {
+            "type": "portfolio_discovery",
+            "url": url,
+            "org_id": org_id,
+            "user_id": user_id,
+            "scan_id": scan_id,
+        }
+    )
+
+
 def build_reanalysis_message(
     *,
     analysis_id: str,
