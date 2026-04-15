@@ -187,8 +187,10 @@ def handle_scan_status(
     scan = scan_repo.get_by_id(scan_id)
     if error := check_org_access(scan, authentication):
         return error
-    # check_org_access returns an error response when scan is None — narrow for pyright.
-    assert scan is not None  # noqa: S101
+    # check_org_access returns an error response when scan is None; this
+    # is defensive narrowing for type checkers — unreachable at runtime.
+    if scan is None:
+        raise RuntimeError(f"scan {scan_id} vanished between access check and read")
 
     company_repo = storage.create_company_repository()
     scan_companies = scan_repo.get_scan_companies(scan_id)
