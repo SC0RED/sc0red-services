@@ -44,7 +44,7 @@ def _title_case_tokens(raw: str) -> str:
     return " ".join(t.capitalize() for t in tokens)
 
 
-def _name_from_img_src(src: str) -> str:
+def _extract_name_from_img_src(src: str) -> str:
     """Derive a company name from an image URL's filename.
 
     Best-effort: works well for kebab-case / snake_case / camelCase filenames
@@ -68,14 +68,14 @@ def _name_from_img_src(src: str) -> str:
     return name
 
 
-def name_from_url(url: str) -> str:
+def extract_name_from_url(url: str) -> str:
     """Derive a company name from the target URL's hostname as a last resort.
 
     Used by :mod:`portfolio_discovery_strategy` as the final fallback when
     HTML offers no name signal at all.
 
     ``https://www.endurancelift.com/`` → ``Endurancelift``.
-    Same single-token limitation as :func:`_name_from_img_src`.
+    Same single-token limitation as :func:`_extract_name_from_img_src`.
     """
     if not url:
         return ""
@@ -129,7 +129,7 @@ def _extract_context_name(anchor: Any) -> str:
                 alt = (img.get("alt") or "").strip()
                 if alt and len(alt) > 2:  # noqa: PLR2004
                     return alt.title()
-                src_name = _name_from_img_src(img.get("src") or "")
+                src_name = _extract_name_from_img_src(img.get("src") or "")
                 if src_name:
                     return src_name
 

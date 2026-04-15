@@ -21,7 +21,7 @@ from src.data_strategies.web_scraper_strategy import (
     MIN_NAME_LENGTH,
     SCRAPER_HEADERS,
     SCRAPER_TIMEOUT,
-    name_from_url,
+    extract_name_from_url,
     scrape_url,
 )
 
@@ -162,7 +162,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                             "Using context name '%s' for CTA link → %s", context_name, full_url
                         )
                     else:
-                        url_name = name_from_url(full_url)
+                        url_name = extract_name_from_url(full_url)
                         if url_name:
                             company_name = url_name
                             logger.info(
