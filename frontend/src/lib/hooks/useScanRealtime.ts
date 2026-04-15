@@ -33,6 +33,8 @@ interface UseScanRealtimeOptions {
     onProgress: (progress: number, label: string) => void
     onComplete: () => void
     onFailed: (error: string) => void
+    /** Called when discovery reaches ``awaiting_confirmation`` (discovery mode only). */
+    onAwaitingConfirmation?: () => void
 }
 
 function computeAggregatedProgress(
@@ -157,10 +159,14 @@ export function useScanRealtime(options: UseScanRealtimeOptions): {
                                     // The complete check above will handle it when all are done
                                 }
                             } else {
-                                // Standalone mode: pass through raw progress
+                                // Standalone / discovery mode: pass through raw progress
                                 optionsRef.current.onProgress(progress.progress, progress.progressLabel)
                                 if (progress.status === 'complete') {
                                     optionsRef.current.onComplete()
+                                } else if (progress.status === 'awaiting_confirmation') {
+                                    // Portfolio discovery terminal state — caller must
+                                    // fetch the scan record to read the companies list.
+                                    optionsRef.current.onAwaitingConfirmation?.()
                                 } else if (progress.status === 'failed') {
                                     optionsRef.current.onFailed('Analysis failed.')
                                 }

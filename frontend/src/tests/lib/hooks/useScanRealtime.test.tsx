@@ -155,4 +155,51 @@ describe('useScanRealtime', () => {
 
         expect(mockCreateSubscription).not.toHaveBeenCalled()
     })
+
+    it('calls onAwaitingConfirmation when status is awaiting_confirmation', async () => {
+        // Portfolio discovery terminal state — the realtime hook must trigger
+        // a callback so the UI can fetch the companies list and transition.
+        const fetchMock = vi.fn().mockResolvedValue({
+            json: () =>
+                Promise.resolve({
+                    appsyncEndpoint: 'https://xxx.appsync-api.us-east-1.amazonaws.com/graphql',
+                    appsyncApiKey: 'da2-fakekey',
+                }),
+        })
+        global.fetch = fetchMock
+
+        let capturedOnData: ((data: Record<string, unknown>) => void) | null = null
+        mockCreateSubscription.mockImplementation((_config, _query, _vars, handlers) => {
+            capturedOnData = handlers.onData
+            return vi.fn()
+        })
+
+        const options = {
+            onProgress: vi.fn(),
+            onComplete: vi.fn(),
+            onFailed: vi.fn(),
+            onAwaitingConfirmation: vi.fn(),
+        }
+        const { result } = renderHook(() => useScanRealtime(options))
+
+        await act(async () => {
+            result.current.start('scan-1')
+        })
+
+        expect(capturedOnData).not.toBeNull()
+        act(() => {
+            capturedOnData!({
+                onScanProgress: {
+                    scanId: 'scan-1',
+                    progress: 20,
+                    progressLabel: 'Ready for confirmation',
+                    status: 'awaiting_confirmation',
+                },
+            })
+        })
+
+        expect(options.onAwaitingConfirmation).toHaveBeenCalledTimes(1)
+        expect(options.onComplete).not.toHaveBeenCalled()
+        expect(options.onFailed).not.toHaveBeenCalled()
+    })
 })

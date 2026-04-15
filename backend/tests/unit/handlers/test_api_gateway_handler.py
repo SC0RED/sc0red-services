@@ -285,16 +285,22 @@ class TestAPIGatewayHandler:
         assert message_body["request_id"] == body["analysisId"]
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_scan_start_portfolio_success(self, mock_authentication):
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+    )
+    def test_scan_start_portfolio_dispatches_to_sqs(self, mock_boto3, mock_authentication):
+        """Portfolio scan returns immediately with ``discovering`` and enqueues
+        a ``portfolio_discovery`` message — no synchronous pipeline execution."""
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
         handler, storage = self._make_handler()
 
         scan_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
+        # Factory manager must NOT be invoked for portfolio scans anymore.
         handler._factory_manager = MagicMock()
-        handler._factory_manager.run_portfolio_discovery.return_value = {
-            "details": {"portfolio_companies": [{"name": "Co1", "url": "https://co1.com"}]},
-        }
 
         result = handler.handle(
             {
@@ -306,28 +312,23 @@ class TestAPIGatewayHandler:
         )
         assert result["statusCode"] == 200
         body = json.loads(result["body"])
-        assert body["status"] == "awaiting_confirmation"
-        assert len(body["portfolioCompanies"]) == 1
+        assert body["status"] == "discovering"
+        assert "scanId" in body
+        assert "portfolioCompanies" not in body
 
-    @patch("src.handlers.api_gateway_handler.require_authentication")
-    def test_scan_start_portfolio_failure(self, mock_authentication):
-        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
-        handler, storage = self._make_handler()
+        handler._factory_manager.run_portfolio_discovery.assert_not_called()
+        mock_sqs.send_message.assert_called_once()
+        message_body = json.loads(mock_sqs.send_message.call_args[1]["MessageBody"])
+        assert message_body["type"] == "portfolio_discovery"
+        assert message_body["url"] == "https://pefirm.com/portfolio"
+        assert message_body["org_id"] == "org-1"
+        assert message_body["scan_id"] == body["scanId"]
 
-        scan_repo = MagicMock()
-        storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager = MagicMock()
-        handler._factory_manager.run_portfolio_discovery.side_effect = RuntimeError("fail")
-
-        with pytest.raises(RuntimeError, match="fail"):
-            handler.handle(
-                {
-                    "httpMethod": "POST",
-                    "path": "/api/scan/start",
-                    "headers": {"Authorization": "Bearer token"},
-                    "body": json.dumps({"url": "https://pefirm.com", "type": "portfolio"}),
-                }
-            )
+        created_record = scan_repo.create.call_args[0][0]
+        # DB record matches API response — client polling first sees the
+        # same status it already has, no race where GET returns "pending".
+        assert created_record["status"] == "discovering"
+        assert created_record["type"] == "portfolio"
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_status_not_found(self, mock_authentication):

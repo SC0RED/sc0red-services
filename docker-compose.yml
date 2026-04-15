@@ -1,3 +1,15 @@
+# Standard dev stack: API + frontend + DynamoDB.
+#
+# For scan workflows (single or portfolio), SQS + worker Lambda are required.
+# This compose file does NOT include them. Use docker-compose.e2e.yml instead:
+#
+#   GH_TOKEN=$(gh auth token) docker compose -f docker-compose.e2e.yml up --build -d
+#
+# That stack adds LocalStack (SQS + DynamoDB), ai-mock, and the worker
+# container — mirroring the production Lambda architecture. The E2E compose
+# is the supported path for exercising `_process_new_analysis` and
+# `_process_portfolio_discovery` end-to-end locally.
+
 services:
   dynamodb-local:
     image: amazon/dynamodb-local:latest

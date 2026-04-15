@@ -43,6 +43,7 @@ def _build_mock_factory(responses: dict[str, bool]) -> MagicMock:
 def _build_step_with_companies(
     companies: list[dict[str, str]],
     ai_client_factory: MagicMock | None = None,
+    auto_included: list[dict[str, str]] | None = None,
 ) -> ValidatePortfolioCompanies:
     """Create a wired ValidatePortfolioCompanies step with mock executor and accessor."""
     step = ValidatePortfolioCompanies(ai_client_factory=ai_client_factory)
@@ -52,7 +53,10 @@ def _build_step_with_companies(
     step._entity_accessor = accessor
 
     executor = MagicMock()
-    executor.details = {"portfolio_companies": companies}
+    executor.details = {
+        "portfolio_companies": companies,
+        "portfolio_auto_included": auto_included or [],
+    }
     step._request_executor = executor
 
     return step
@@ -126,7 +130,23 @@ class TestValidatePortfolioCompanies:
         validated = details_call["portfolio_companies"]
         assert len(validated) == 2
 
-    def test_empty_company_list_is_noop(self) -> None:
+    def test_empty_candidates_returns_auto_included(self) -> None:
+        """With no candidates, final list is the auto-included set."""
+        mock_factory = MagicMock()
+        auto = [_make_company("Confirmed Co", "https://confirmed.com")]
+        step = _build_step_with_companies([], mock_factory, auto_included=auto)
+
+        step.execute()
+
+        step._request_executor.mark_question_complete.assert_called_once_with(
+            "validate_portfolio"
+        )
+        details_call = step._request_executor.add_details.call_args[0][0]
+        assert details_call["portfolio_companies"] == auto
+        assert details_call["portfolio_count"] == 1
+        assert details_call["portfolio_validated_from"] == 0
+
+    def test_empty_candidates_and_no_auto_included_is_empty(self) -> None:
         mock_factory = MagicMock()
         step = _build_step_with_companies([], mock_factory)
 
@@ -135,15 +155,44 @@ class TestValidatePortfolioCompanies:
         step._request_executor.mark_question_complete.assert_called_once_with(
             "validate_portfolio"
         )
-        step._request_executor.add_details.assert_not_called()
+        details_call = step._request_executor.add_details.call_args[0][0]
+        assert details_call["portfolio_companies"] == []
+        assert details_call["portfolio_count"] == 0
 
-    def test_without_ai_client_factory_is_noop(self) -> None:
+    def test_without_ai_client_factory_keeps_all(self) -> None:
+        """Without AI factory, fail-open: keep candidates alongside auto-included."""
         companies = [_make_company("Acme Corp", "https://acme.com")]
-        step = _build_step_with_companies(companies, ai_client_factory=None)
+        auto = [_make_company("Confirmed Co", "https://confirmed.com")]
+        step = _build_step_with_companies(
+            companies, ai_client_factory=None, auto_included=auto
+        )
 
         step.execute()
 
         step._request_executor.mark_question_complete.assert_called_once_with(
             "validate_portfolio"
         )
-        step._request_executor.add_details.assert_not_called()
+        details_call = step._request_executor.add_details.call_args[0][0]
+        assert len(details_call["portfolio_companies"]) == 2
+        assert details_call["portfolio_count"] == 2
+        assert details_call["portfolio_validated_from"] == 1
+
+    def test_auto_included_preserved_alongside_validated(self) -> None:
+        """Auto-included companies are merged with validated candidates."""
+        candidates = [
+            _make_company("Acme Corp", "https://acme.com"),
+            _make_company("About Us", "https://firm.com/about"),
+        ]
+        auto = [_make_company("Confirmed Co", "https://confirmed.com")]
+        mock_factory = _build_mock_factory({"Acme Corp": True, "About Us": False})
+        step = _build_step_with_companies(candidates, mock_factory, auto_included=auto)
+
+        step.execute()
+
+        details_call = step._request_executor.add_details.call_args[0][0]
+        names = [c["name"] for c in details_call["portfolio_companies"]]
+        assert "Confirmed Co" in names  # auto-included, skipped validation
+        assert "Acme Corp" in names  # validated
+        assert "About Us" not in names  # filtered out
+        assert details_call["portfolio_count"] == 2
+        assert details_call["portfolio_validated_from"] == 2

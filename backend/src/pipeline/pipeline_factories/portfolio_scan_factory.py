@@ -31,16 +31,18 @@ class PortfolioScanFactory(PipelineFactory):
         ai_client_factory: AIClientFactory | None = None,
         tenant_id: str | None = None,
         request_id: str = "",
+        scan_id: str = "",
     ) -> None:
         self._entity_accessor = entity_accessor
         self._ai_client_factory = ai_client_factory
         self._tenant_id = tenant_id
         self._request_id = request_id
+        self._scan_id = scan_id
 
     def get_pipeline(self) -> list[RequestStep]:
         """Return the ordered list of pipeline steps for portfolio scanning."""
         return [
-            DiscoverPortfolio(),
+            DiscoverPortfolio(ai_client_factory=self._ai_client_factory),
             ValidatePortfolioCompanies(ai_client_factory=self._ai_client_factory),
         ]
 
@@ -51,6 +53,7 @@ class PortfolioScanFactory(PipelineFactory):
             tenant_id=self._tenant_id,
             request_id=self._request_id,
             pipeline=pipeline,
+            scan_id=self._scan_id,
         )
         for step in pipeline:
             step.request_executor = executor

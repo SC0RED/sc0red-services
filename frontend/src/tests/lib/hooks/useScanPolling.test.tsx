@@ -152,6 +152,67 @@ describe('useScanPolling', () => {
 
             expect(callbacks.onFailed).toHaveBeenCalledWith('Analysis failed. Please try again.')
         })
+
+        it('surfaces backend error message when status is failed', async () => {
+            const callbacks = {
+                mode: 'discovery' as const,
+                onAwaitingConfirmation: vi.fn(),
+                onComplete: vi.fn(),
+                onFailed: vi.fn(),
+                onProgress: vi.fn(),
+            }
+
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'failed',
+                        error: 'Could not scrape website',
+                    }),
+            })
+
+            const { result } = renderHook(() => useScanPolling(callbacks))
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
+
+            await advanceAndFlush(1000)
+
+            expect(callbacks.onFailed).toHaveBeenCalledWith('Could not scrape website')
+        })
+
+        it('continues polling while status is discovering', async () => {
+            const callbacks = {
+                mode: 'discovery' as const,
+                onAwaitingConfirmation: vi.fn(),
+                onComplete: vi.fn(),
+                onFailed: vi.fn(),
+                onProgress: vi.fn(),
+            }
+
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'discovering',
+                        progress: 10,
+                        progressLabel: 'Finding portfolio companies...',
+                    }),
+            })
+
+            const { result } = renderHook(() => useScanPolling(callbacks))
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
+
+            await advanceAndFlush(1000)
+
+            expect(callbacks.onProgress).toHaveBeenCalledWith(10, 'Finding portfolio companies...')
+            // Still discovering → none of the terminal callbacks fire.
+            expect(callbacks.onAwaitingConfirmation).not.toHaveBeenCalled()
+            expect(callbacks.onComplete).not.toHaveBeenCalled()
+            expect(callbacks.onFailed).not.toHaveBeenCalled()
+        })
     })
 
     describe('portfolio mode', () => {

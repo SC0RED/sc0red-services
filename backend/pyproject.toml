@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn>=0.30",
     "mangum>=0.17",
     "aws-xray-sdk>=2.14",
+    "mcp>=1.27",
 ]
 
 [project.optional-dependencies]
@@ -244,7 +245,7 @@ asyncio_mode = "auto"
 [tool.coverage.run]
 branch = true
 source = ["src"]
-omit = ["src/local_server.py"]
+omit = ["src/local_server.py", "src/mcp/mcp_handler.py"]
 
 # =============================================================================
 # COMMITIZEN - Conventional Commits

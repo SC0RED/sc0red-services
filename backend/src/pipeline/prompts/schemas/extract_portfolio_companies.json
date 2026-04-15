@@ -1,0 +1,32 @@
+{
+    "type": "object",
+    "properties": {
+        "is_pe_firm": {
+            "type": "boolean",
+            "description": "Whether this appears to be a PE/VC firm with portfolio companies"
+        },
+        "firm_type_description": {
+            "type": "string",
+            "description": "Brief description of what type of firm this is (e.g., 'PE firm', 'VC firm', 'accounting firm', 'consulting firm')"
+        },
+        "companies": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Portfolio company name"
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Portfolio company website URL"
+                    }
+                },
+                "required": ["name", "url"]
+            },
+            "description": "List of portfolio companies found on the page"
+        }
+    },
+    "required": ["is_pe_firm", "firm_type_description", "companies"]
+}
