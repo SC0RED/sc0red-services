@@ -53,7 +53,7 @@ _HTTP_OK = 200
 _MIN_COMPANY_NAME_LENGTH = 2
 _MAX_COMPANY_NAME_LENGTH = 60
 
-_PORTFOLIO_PATHS = [
+PORTFOLIO_PATHS = [
     "",  # root URL
     "/portfolio",
     "/companies",
@@ -89,7 +89,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
 
         # Collect links from all portfolio-like pages
         all_links: list[dict[str, Any]] = []
-        for path in _PORTFOLIO_PATHS:
+        for path in PORTFOLIO_PATHS:
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
                 result = scrape_url(page_url)
@@ -99,7 +99,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 continue
 
         logger.info(
-            "Scraped %d links from %d paths for %s", len(all_links), len(_PORTFOLIO_PATHS), firm_url
+            "Scraped %d links from %d paths for %s", len(all_links), len(PORTFOLIO_PATHS), firm_url
         )
 
         # Filter for portfolio company links
@@ -188,7 +188,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         companies: list[dict[str, str]] = []
         seen: set[str] = set()
 
-        for path in _PORTFOLIO_PATHS:
+        for path in PORTFOLIO_PATHS:
             page_url = f"{base_origin}{path}" if path else base_origin
             try:
                 with httpx.Client(follow_redirects=True, timeout=SCRAPER_TIMEOUT) as client:

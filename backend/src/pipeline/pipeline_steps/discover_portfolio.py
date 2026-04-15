@@ -1,10 +1,11 @@
 """Portfolio company discovery step.
 
-Runs two parallel discovery paths:
+Runs two sequential discovery paths on the same scraped data:
 1. Heuristic: scrape + filter links with context-aware CTA handling
 2. AI extraction: send page text to LLM for structured company extraction
 
-Results merged: intersection auto-included, remainder passed to validation.
+Results merged by URL domain: intersection auto-included, remainder passed
+to downstream validation step.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
+import httpx
 from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
@@ -26,16 +28,9 @@ if TYPE_CHECKING:
 
     from src.facades.company_accessor import CompanyAccessor
 
-logger = logging.getLogger(__name__)
+from src.data_strategies.portfolio_discovery_strategy import PORTFOLIO_PATHS
 
-_PORTFOLIO_PATHS = [
-    "",
-    "/portfolio",
-    "/companies",
-    "/investments",
-    "/portfolio-companies",
-    "/our-companies",
-]
+logger = logging.getLogger(__name__)
 
 
 def _normalize_domain(url: str) -> str:
@@ -80,7 +75,7 @@ def _merge_results(
 
 
 class DiscoverPortfolio(RequestStep):
-    """Discovers portfolio companies using parallel heuristic + AI paths."""
+    """Discovers portfolio companies using heuristic + AI extraction paths."""
 
     def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
         super().__init__()
@@ -98,7 +93,7 @@ class DiscoverPortfolio(RequestStep):
         # Path 1: Heuristic discovery (improved with context-aware CTA)
         strategy = PortfolioDiscoveryStrategy({"url": url})
         _raw, metadata = strategy.execute()
-        heuristic_companies = metadata.get("companies", [])
+        heuristic_companies = metadata["companies"]
 
         # Path 2: AI extraction from scraped page text
         ai_companies: list[dict[str, str]] = []
@@ -150,13 +145,13 @@ class DiscoverPortfolio(RequestStep):
 
         text_parts: list[str] = []
         all_links: list[dict[str, str]] = []
-        for path in _PORTFOLIO_PATHS:
+        for path in PORTFOLIO_PATHS:
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
                 result = scrape_url(page_url)
                 text_parts.append(result["text"])
                 all_links.extend(result["links"])
-            except Exception:
+            except (httpx.HTTPStatusError, httpx.RequestError):
                 logger.info("Skipping path %s (scrape error)", page_url)
                 continue
         return "\n\n".join(text_parts), all_links
@@ -168,9 +163,7 @@ class DiscoverPortfolio(RequestStep):
         links: list[dict[str, str]],
     ) -> dict[str, Any]:
         """Send page text to AI for structured company extraction."""
-        links_text = "\n".join(
-            f"- {link.get('text', '')}: {link.get('href', '')}" for link in links[:100]
-        )
+        links_text = "\n".join(f"- {link['text']}: {link['href']}" for link in links[:100])
         template = load_template("extract_portfolio_companies")
         schema = load_schema("extract_portfolio_companies")
         system_prompt = load_system_prompt("portfolio_validation")
@@ -180,17 +173,12 @@ class DiscoverPortfolio(RequestStep):
             page_text=page_text[:8000],
             links_text=links_text[:3000],
         )
-        try:
-            _label, result, _elapsed = run_structured_ai_call(
-                ai_client_factory=self._ai_client_factory,
-                user_prompt=prompt,
-                schema=schema,
-                system_prompt=system_prompt,
-                label="extract_portfolio",
-                step_name="DiscoverPortfolio",
-            )
-        except Exception:
-            logger.exception("AI portfolio extraction failed")
-            return {"companies": [], "is_pe_firm": True}
-        else:
-            return result
+        _label, result, _elapsed = run_structured_ai_call(
+            ai_client_factory=self._ai_client_factory,
+            user_prompt=prompt,
+            schema=schema,
+            system_prompt=system_prompt,
+            label="extract_portfolio",
+            step_name="DiscoverPortfolio",
+        )
+        return result

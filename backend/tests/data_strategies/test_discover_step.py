@@ -38,8 +38,8 @@ class TestScrapeForAI:
             call_count += 1
             if call_count <= 2:
                 return {"title": "", "description": "", "text": "ok", "links": [], "meta_keywords": ""}
-            msg = "404"
-            raise Exception(msg)  # noqa: TRY002
+            import httpx
+            raise httpx.HTTPStatusError("404", request=MagicMock(), response=MagicMock(status_code=404))
 
         with patch("src.pipeline.pipeline_steps.discover_portfolio.scrape_url", side_effect=side_effect):
             text, links = step._scrape_for_ai("https://firm.com")  # noqa: SLF001
@@ -56,14 +56,13 @@ class TestRunAIExtraction:
             result = step._run_ai_extraction("https://firm.com", "page text", [{"text": "link", "href": "https://x.com"}])  # noqa: SLF001
             assert len(result["companies"]) == 1
 
-    def test_returns_empty_on_error(self):
+    def test_propagates_error(self):
         mock_ai = MagicMock()
         step = DiscoverPortfolio(ai_client_factory=mock_ai)
 
-        with patch("src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call", side_effect=Exception("AI error")):
-            result = step._run_ai_extraction("https://firm.com", "page text", [])  # noqa: SLF001
-            assert result["companies"] == []
-            assert result["is_pe_firm"] is True
+        with patch("src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call", side_effect=RuntimeError("AI error")):
+            with pytest.raises(RuntimeError, match="AI error"):
+                step._run_ai_extraction("https://firm.com", "page text", [{"text": "a", "href": "b"}])  # noqa: SLF001
 
 
 class TestDiscoverPortfolioStep:
