@@ -28,6 +28,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Truncation budgets for the AI extraction prompt. These govern how much of
+# the scraped page is visible to the LLM — too small and large portfolios
+# (70+ companies) get truncated mid-list. Well under GPT-4o's 128k context.
+_AI_PAGE_TEXT_BUDGET = 30_000
+_AI_LINKS_TEXT_BUDGET = 10_000
+_AI_LINK_COUNT_BUDGET = 300
+
 
 def _normalize_domain(url: str) -> str:
     """Normalize URL to domain for matching (strip www., trailing slash)."""
@@ -152,15 +159,17 @@ class DiscoverPortfolio(RequestStep):
         links: list[dict[str, str]],
     ) -> dict[str, Any]:
         """Send page text to AI for structured company extraction."""
-        links_text = "\n".join(f"- {link['text']}: {link['href']}" for link in links[:100])
+        links_text = "\n".join(
+            f"- {link['text']}: {link['href']}" for link in links[:_AI_LINK_COUNT_BUDGET]
+        )
         template = load_template("extract_portfolio_companies")
         schema = load_schema("extract_portfolio_companies")
         system_prompt = load_system_prompt("portfolio_validation")
 
         prompt = template.format(
             firm_url=firm_url,
-            page_text=page_text[:8000],
-            links_text=links_text[:3000],
+            page_text=page_text[:_AI_PAGE_TEXT_BUDGET],
+            links_text=links_text[:_AI_LINKS_TEXT_BUDGET],
         )
         _label, result, _elapsed = run_structured_ai_call(
             ai_client_factory=self._ai_client_factory,

@@ -17,8 +17,11 @@ from bs4 import BeautifulSoup
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 from src.data_strategies.web_scraper_strategy import (
+    MAX_NAME_LENGTH,
+    MIN_NAME_LENGTH,
     SCRAPER_HEADERS,
     SCRAPER_TIMEOUT,
+    name_from_url,
     scrape_url,
 )
 
@@ -48,10 +51,11 @@ _STARTS_WITH_SKIP = re.compile(
     r"^(the|our|a|an|login|sign|contact|about|terms|privacy)\b", re.IGNORECASE
 )
 
-_MAX_COMPANIES = 30
 _HTTP_OK = 200
-_MIN_COMPANY_NAME_LENGTH = 2
-_MAX_COMPANY_NAME_LENGTH = 60
+# Name-length bounds live in ``web_scraper_strategy`` as the single source of
+# truth — both discovery and extraction apply the same thresholds.
+_MIN_COMPANY_NAME_LENGTH = MIN_NAME_LENGTH
+_MAX_COMPANY_NAME_LENGTH = MAX_NAME_LENGTH
 
 PORTFOLIO_PATHS = [
     "",  # root URL
@@ -148,17 +152,31 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 is_generic_cta = any(cta in text_lower for cta in _GENERIC_CTA_PATTERNS)
 
                 if is_generic_cta or not text:
-                    # CTA link — try context name from parent heading/card
+                    # CTA link — prefer a context name from the surrounding
+                    # card (heading / img alt / img filename). As a last
+                    # resort, derive from the target URL's hostname so we
+                    # keep the candidate rather than dropping it entirely.
                     if context_name:
                         company_name = context_name
                         logger.info(
                             "Using context name '%s' for CTA link → %s", context_name, full_url
                         )
                     else:
-                        logger.info(
-                            "Dropping CTA link (no context name): '%s' → %s", text, full_url
-                        )
-                        continue
+                        url_name = name_from_url(full_url)
+                        if url_name:
+                            company_name = url_name
+                            logger.info(
+                                "Using URL-derived name '%s' for CTA link → %s",
+                                url_name,
+                                full_url,
+                            )
+                        else:
+                            logger.info(
+                                "Dropping CTA link (no derivable name): '%s' → %s",
+                                text,
+                                full_url,
+                            )
+                            continue
 
                 if (
                     len(company_name) <= _MIN_COMPANY_NAME_LENGTH
@@ -175,9 +193,6 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             except Exception:  # urlparse and link access raise various errors
                 logger.debug("Skipping malformed link", exc_info=True)
                 continue
-
-            if len(companies) >= _MAX_COMPANIES:
-                break
 
         # Fallback: data attributes (data-company-name, data-company-link)
         if not companies:
@@ -220,9 +235,6 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                     ):
                         seen.add(url)
                         companies.append({"name": name, "url": url, "description": ""})
-
-                if len(companies) >= _MAX_COMPANIES:
-                    break
             except Exception:  # httpx + BeautifulSoup can raise various errors
                 logger.debug("Skipping fallback path %s", page_url, exc_info=True)
                 continue
