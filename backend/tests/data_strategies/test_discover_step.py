@@ -19,31 +19,16 @@ def _make_mock_accessor(url="https://firm.com"):
     return accessor
 
 
-class TestScrapeForAI:
-    def test_combines_text_from_paths(self):
-        step = DiscoverPortfolio()
-        mock_result = {"title": "", "description": "", "text": "page text", "links": [{"text": "a", "href": "b", "context_name": ""}], "meta_keywords": ""}
-
-        with patch("src.pipeline.pipeline_steps.discover_portfolio.scrape_url", return_value=mock_result):
-            text, links = step._scrape_for_ai("https://firm.com")  # noqa: SLF001
-            assert "page text" in text
-            assert len(links) > 0
-
-    def test_handles_scrape_errors(self):
-        step = DiscoverPortfolio()
-        call_count = 0
-
-        def side_effect(url):
-            nonlocal call_count
-            call_count += 1
-            if call_count <= 2:
-                return {"title": "", "description": "", "text": "ok", "links": [], "meta_keywords": ""}
-            import httpx
-            raise httpx.HTTPStatusError("404", request=MagicMock(), response=MagicMock(status_code=404))
-
-        with patch("src.pipeline.pipeline_steps.discover_portfolio.scrape_url", side_effect=side_effect):
-            text, links = step._scrape_for_ai("https://firm.com")  # noqa: SLF001
-            assert "ok" in text
+def _heuristic_result(companies, page_text="page text", all_links=None):
+    return (
+        "[]",
+        {
+            "companies": companies,
+            "count": len(companies),
+            "page_text": page_text,
+            "all_links": all_links or [],
+        },
+    )
 
 
 class TestRunAIExtraction:
@@ -67,21 +52,16 @@ class TestRunAIExtraction:
 
 class TestDiscoverPortfolioStep:
     def test_heuristic_only_no_ai(self):
-        """Without ai_client_factory, only heuristic runs."""
         step = DiscoverPortfolio(ai_client_factory=None)
         step.request_executor = _make_mock_executor()
         step.entity_accessor = _make_mock_accessor()
 
-        heuristic_result = (
-            "[]",
-            {"companies": [{"name": "Acme", "url": "https://acme.com"}], "count": 1},
-        )
-        with patch.object(
-            step, "_scrape_for_ai", return_value=("page text", [])
-        ), patch(
+        with patch(
             "src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy"
         ) as mock_strategy:
-            mock_strategy.return_value.execute.return_value = heuristic_result
+            mock_strategy.return_value.execute.return_value = _heuristic_result(
+                [{"name": "Acme", "url": "https://acme.com"}]
+            )
             step.execute()
 
         call_args = step.request_executor.add_details.call_args[0][0]
@@ -89,19 +69,11 @@ class TestDiscoverPortfolioStep:
         assert call_args["portfolio_companies"][0]["name"] == "Acme"
 
     def test_with_ai_extraction(self):
-        """With ai_client_factory, both paths run and merge."""
         mock_ai = MagicMock()
         step = DiscoverPortfolio(ai_client_factory=mock_ai)
         step.request_executor = _make_mock_executor()
         step.entity_accessor = _make_mock_accessor()
 
-        heuristic_result = (
-            "[]",
-            {"companies": [
-                {"name": "Acme", "url": "https://acme.com"},
-                {"name": "Gamma", "url": "https://gamma.com"},
-            ], "count": 2},
-        )
         ai_result = {
             "companies": [
                 {"name": "Acme Corp", "url": "https://www.acme.com"},
@@ -111,26 +83,27 @@ class TestDiscoverPortfolioStep:
         }
 
         with patch.object(
-            step, "_scrape_for_ai", return_value=("page text", [])
-        ), patch.object(
             step, "_run_ai_extraction", return_value=ai_result
         ), patch(
             "src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy"
         ) as mock_strategy:
-            mock_strategy.return_value.execute.return_value = heuristic_result
+            mock_strategy.return_value.execute.return_value = _heuristic_result(
+                [
+                    {"name": "Acme", "url": "https://acme.com"},
+                    {"name": "Gamma", "url": "https://gamma.com"},
+                ],
+            )
             step.execute()
 
         call_args = step.request_executor.add_details.call_args[0][0]
-        assert call_args["portfolio_count"] == 3  # acme (intersection) + gamma + beta
+        assert call_args["portfolio_count"] == 3
 
     def test_non_pe_firm_message(self):
-        """AI identifies non-PE firm and returns diagnostic."""
         mock_ai = MagicMock()
         step = DiscoverPortfolio(ai_client_factory=mock_ai)
         step.request_executor = _make_mock_executor()
         step.entity_accessor = _make_mock_accessor()
 
-        heuristic_result = ("[]", {"companies": [], "count": 0})
         ai_result = {
             "companies": [],
             "is_pe_firm": False,
@@ -138,13 +111,11 @@ class TestDiscoverPortfolioStep:
         }
 
         with patch.object(
-            step, "_scrape_for_ai", return_value=("page text", [])
-        ), patch.object(
             step, "_run_ai_extraction", return_value=ai_result
         ), patch(
             "src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy"
         ) as mock_strategy:
-            mock_strategy.return_value.execute.return_value = heuristic_result
+            mock_strategy.return_value.execute.return_value = _heuristic_result([], page_text="text")
             step.execute()
 
         call_args = step.request_executor.add_details.call_args[0][0]
@@ -165,17 +136,14 @@ class TestDiscoverPortfolioStep:
         step.request_executor = _make_mock_executor()
         step.entity_accessor = _make_mock_accessor()
 
-        heuristic_result = ("[]", {"companies": [], "count": 0})
         ai_result = {"companies": [], "is_pe_firm": True}
 
         with patch.object(
-            step, "_scrape_for_ai", return_value=("page text", [])
-        ), patch.object(
             step, "_run_ai_extraction", return_value=ai_result
         ), patch(
             "src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy"
         ) as mock_strategy:
-            mock_strategy.return_value.execute.return_value = heuristic_result
+            mock_strategy.return_value.execute.return_value = _heuristic_result([], page_text="text")
             step.execute()
 
         call_args = step.request_executor.add_details.call_args[0][0]
@@ -188,14 +156,12 @@ class TestDiscoverPortfolioStep:
         step.request_executor = _make_mock_executor()
         step.entity_accessor = _make_mock_accessor()
 
-        heuristic_result = ("[]", {"companies": [{"name": "X", "url": "https://x.com"}], "count": 1})
-
-        with patch.object(
-            step, "_scrape_for_ai", return_value=("", [])
-        ), patch(
+        with patch(
             "src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy"
         ) as mock_strategy:
-            mock_strategy.return_value.execute.return_value = heuristic_result
+            mock_strategy.return_value.execute.return_value = _heuristic_result(
+                [{"name": "X", "url": "https://x.com"}], page_text=""
+            )
             step.execute()
 
         call_args = step.request_executor.add_details.call_args[0][0]

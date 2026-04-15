@@ -87,13 +87,15 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         base_origin = f"{parsed_base.scheme}://{parsed_base.netloc}"
         firm_domain = parsed_base.hostname or ""
 
-        # Collect links from all portfolio-like pages
+        # Collect links and text from all portfolio-like pages
         all_links: list[dict[str, Any]] = []
+        page_texts: list[str] = []
         for path in PORTFOLIO_PATHS:
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
                 result = scrape_url(page_url)
                 all_links.extend({**link, "source": page_url} for link in result["links"])
+                page_texts.append(result["text"])
             except Exception:  # scrape_url raises httpx + parsing errors
                 logger.info("Failed to scrape %s", page_url, exc_info=True)
                 continue
@@ -181,7 +183,12 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         if not companies:
             companies = self._fallback_data_attributes(base_origin, firm_domain)
 
-        return json.dumps(companies), {"companies": companies, "count": len(companies)}
+        return json.dumps(companies), {
+            "companies": companies,
+            "count": len(companies),
+            "page_text": "\n\n".join(page_texts),
+            "all_links": all_links,
+        }
 
     def _fallback_data_attributes(self, base_origin: str, firm_domain: str) -> list[dict[str, str]]:
         """Check for data-company-name/data-company-link attributes."""
