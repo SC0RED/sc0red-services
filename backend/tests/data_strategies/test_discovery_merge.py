@@ -21,20 +21,28 @@ class TestNormalizeDomain:
 
 
 class TestMergeResults:
-    def test_intersection_included(self):
+    """``_merge_results`` returns ``(auto_included, needs_validation)``.
+
+    - ``auto_included``: companies found by BOTH paths (intersection, high confidence)
+    - ``needs_validation``: companies found by only one path (remainder, need AI check)
+    """
+
+    def test_intersection_goes_to_auto_included(self):
         heuristic = [{"name": "Acme", "url": "https://acme.com"}]
         ai = [{"name": "Acme Corp", "url": "https://www.acme.com"}]
-        result = _merge_results(heuristic, ai)
-        assert len(result) == 1
-        assert result[0]["name"] == "Acme"  # heuristic version preferred
+        auto_included, needs_validation = _merge_results(heuristic, ai)
+        assert len(auto_included) == 1
+        assert auto_included[0]["name"] == "Acme"  # heuristic version preferred
+        assert needs_validation == []
 
-    def test_remainder_from_both_paths(self):
+    def test_disjoint_results_all_need_validation(self):
         heuristic = [{"name": "Acme", "url": "https://acme.com"}]
         ai = [{"name": "Beta", "url": "https://beta.com"}]
-        result = _merge_results(heuristic, ai)
-        assert len(result) == 2
+        auto_included, needs_validation = _merge_results(heuristic, ai)
+        assert auto_included == []
+        assert len(needs_validation) == 2
 
-    def test_intersection_first_then_remainder(self):
+    def test_intersection_and_remainder_split(self):
         heuristic = [
             {"name": "Acme", "url": "https://acme.com"},
             {"name": "Gamma", "url": "https://gamma.com"},
@@ -43,29 +51,39 @@ class TestMergeResults:
             {"name": "Acme Corp", "url": "https://www.acme.com"},
             {"name": "Beta", "url": "https://beta.com"},
         ]
-        result = _merge_results(heuristic, ai)
-        assert len(result) == 3
-        # First should be intersection (acme.com)
-        assert result[0]["name"] == "Acme"
+        auto_included, needs_validation = _merge_results(heuristic, ai)
+        assert len(auto_included) == 1
+        assert auto_included[0]["name"] == "Acme"
+        remainder_names = {c["name"] for c in needs_validation}
+        assert remainder_names == {"Gamma", "Beta"}
 
     def test_empty_heuristic(self):
-        result = _merge_results([], [{"name": "Beta", "url": "https://beta.com"}])
-        assert len(result) == 1
-        assert result[0]["name"] == "Beta"
+        auto_included, needs_validation = _merge_results(
+            [], [{"name": "Beta", "url": "https://beta.com"}]
+        )
+        assert auto_included == []
+        assert len(needs_validation) == 1
+        assert needs_validation[0]["name"] == "Beta"
 
     def test_empty_ai(self):
-        result = _merge_results([{"name": "Acme", "url": "https://acme.com"}], [])
-        assert len(result) == 1
+        auto_included, needs_validation = _merge_results(
+            [{"name": "Acme", "url": "https://acme.com"}], []
+        )
+        assert auto_included == []
+        assert len(needs_validation) == 1
 
     def test_both_empty(self):
-        result = _merge_results([], [])
-        assert len(result) == 0
+        auto_included, needs_validation = _merge_results([], [])
+        assert auto_included == []
+        assert needs_validation == []
 
     def test_deduplicates_by_domain(self):
         heuristic = [
             {"name": "Acme", "url": "https://acme.com"},
             {"name": "Acme2", "url": "https://www.acme.com"},  # same domain
         ]
-        ai = []
-        result = _merge_results(heuristic, ai)
-        assert len(result) == 1  # deduped
+        ai: list[dict[str, str]] = []
+        auto_included, needs_validation = _merge_results(heuristic, ai)
+        # Same-domain heuristic entries dedupe; AI empty → all go to remainder
+        assert auto_included == []
+        assert len(needs_validation) == 1  # deduped
