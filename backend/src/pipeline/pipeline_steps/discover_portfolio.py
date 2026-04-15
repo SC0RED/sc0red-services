@@ -41,33 +41,36 @@ def _normalize_domain(url: str) -> str:
 def _merge_results(
     heuristic: list[dict[str, str]],
     ai_extracted: list[dict[str, str]],
-) -> list[dict[str, str]]:
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """Merge heuristic and AI results by URL domain.
 
-    Intersection (both paths) comes first, then remainder from either path.
+    Returns ``(auto_included, needs_validation)``:
+    - ``auto_included``: companies found by BOTH paths (high confidence, skip AI validation)
+    - ``needs_validation``: companies found by only one path (require AI validation)
+
     Deduplicates by normalized domain.
     """
     heuristic_by_domain = {_normalize_domain(c["url"]): c for c in heuristic}
     ai_by_domain = {_normalize_domain(c["url"]): c for c in ai_extracted}
 
     intersection = set(heuristic_by_domain) & set(ai_by_domain)
-    all_domains = set(heuristic_by_domain) | set(ai_by_domain)
+    remainder_domains = (set(heuristic_by_domain) | set(ai_by_domain)) - intersection
 
-    # Intersection first (high confidence), then remainder
-    merged = [heuristic_by_domain[d] for d in intersection]
-    merged.extend(
+    auto_included = [heuristic_by_domain[d] for d in intersection]
+    needs_validation = [
         (heuristic_by_domain if d in heuristic_by_domain else ai_by_domain)[d]
-        for d in all_domains - intersection
-    )
+        for d in remainder_domains
+    ]
 
     logger.info(
-        "Merge: heuristic=%d, ai=%d, intersection=%d, total=%d",
+        "Merge: heuristic=%d, ai=%d, intersection=%d, remainder=%d, total=%d",
         len(heuristic),
         len(ai_extracted),
         len(intersection),
-        len(merged),
+        len(needs_validation),
+        len(auto_included) + len(needs_validation),
     )
-    return merged
+    return auto_included, needs_validation
 
 
 class DiscoverPortfolio(RequestStep):
@@ -107,27 +110,36 @@ class DiscoverPortfolio(RequestStep):
                         "This does not appear to be a PE/VC firm.",
                     )
 
-        # Merge
+        # Merge into auto-included (intersection, high confidence) and
+        # needs-validation (remainder, only one path found it).
         if heuristic_companies or ai_companies:
-            companies = _merge_results(heuristic_companies, ai_companies)
+            auto_included, needs_validation = _merge_results(heuristic_companies, ai_companies)
         else:
-            companies = []
+            auto_included, needs_validation = [], []
             if not diagnostic:
                 diagnostic = "Could not identify portfolio companies from this website."
 
+        total = len(auto_included) + len(needs_validation)
         logger.info(
-            "Discovered %d companies from %s (heuristic=%d, ai=%d)",
-            len(companies),
+            "Discovered %d companies from %s (heuristic=%d, ai=%d, "
+            "auto_included=%d, needs_validation=%d)",
+            total,
             url,
             len(heuristic_companies),
             len(ai_companies),
+            len(auto_included),
+            len(needs_validation),
         )
 
+        # ``portfolio_companies`` carries only the remainder that needs AI
+        # validation. ``portfolio_auto_included`` is merged back in by
+        # ``ValidatePortfolioCompanies`` after validation completes.
         self.request_executor.add_details(
             {
-                "portfolio_companies": companies,
-                "portfolio_companies_json": json.dumps(companies),
-                "portfolio_count": len(companies),
+                "portfolio_companies": needs_validation,
+                "portfolio_auto_included": auto_included,
+                "portfolio_companies_json": json.dumps(auto_included + needs_validation),
+                "portfolio_count": total,
                 "portfolio_diagnostic": diagnostic,
             }
         )
