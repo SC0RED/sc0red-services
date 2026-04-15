@@ -40,7 +40,7 @@ class PortfolioScanFactory(PipelineFactory):
     def get_pipeline(self) -> list[RequestStep]:
         """Return the ordered list of pipeline steps for portfolio scanning."""
         return [
-            DiscoverPortfolio(),
+            DiscoverPortfolio(ai_client_factory=self._ai_client_factory),
             ValidatePortfolioCompanies(ai_client_factory=self._ai_client_factory),
         ]
 
