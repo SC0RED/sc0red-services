@@ -28,5 +28,5 @@
             "description": "List of portfolio companies found on the page"
         }
     },
-    "required": ["is_pe_firm", "companies"]
+    "required": ["is_pe_firm", "firm_type_description", "companies"]
 }
