@@ -50,4 +50,4 @@
 - [x] 8.1 All lint checks pass
 - [x] 8.2 691 tests pass, 95.20% coverage
 - [x] 8.3 All files under 400 lines (max: 223)
-- [ ] 8.4 Architecture review + audit
+- [x] 8.4 Architecture review + audit (2 CRITICAL, 4 MEDIUM fixed)
