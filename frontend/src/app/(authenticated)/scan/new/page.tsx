@@ -98,6 +98,25 @@ function NewScanContent() {
             }
             handleDiscoveryComplete({ status: 'complete' })
         },
+        onAwaitingConfirmation: async () => {
+            // Worker finished discovery — fetch the scan record to read the
+            // companies list and transition to the confirmation screen.
+            try {
+                const response = await fetch(`/api/scan/${scanIdRef.current}`)
+                if (response.ok) {
+                    const data = (await response.json()) as ScanPollResponse
+                    const discoveredCompanies = (data.portfolioCompanies ?? []).map((c) => ({
+                        ...c,
+                        selected: true,
+                    }))
+                    handleAwaitingConfirmation(discoveredCompanies)
+                    return
+                }
+            } catch {
+                // Fetch failed — fall back to polling which will re-fetch and transition
+            }
+            discoveryPolling.startPolling(scanIdRef.current)
+        },
         onFailed: handleFailed,
     })
 
@@ -136,7 +155,7 @@ function NewScanContent() {
         setError('')
         setPhase('analyzing')
         setProgress(5)
-        setProgressLabel('Starting analysis...')
+        setProgressLabel(mode === 'portfolio' ? 'Finding portfolio companies...' : 'Starting analysis...')
 
         try {
             const res = await fetch('/api/scan/start', {

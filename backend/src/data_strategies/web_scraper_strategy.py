@@ -29,6 +29,41 @@ SCRAPER_TIMEOUT = 15.0
 _MAX_TEXT_LENGTH = 20_000
 
 
+def _extract_context_name(anchor: Any) -> str:
+    """Extract a company name from the context around a link.
+
+    Looks for headings, img alt text, or title attributes in parent elements.
+    Useful when the link text is a generic CTA like "LEARN MORE".
+    """
+    # Check link attributes first
+    for attr in ("title", "aria-label"):
+        value = anchor.get(attr, "").strip()
+        if value and len(value) > 2 and "learn" not in value.lower():  # noqa: PLR2004
+            return value
+
+    # Walk up the DOM looking for a name in the same card/article
+    for parent in anchor.parents:
+        if parent.name in ("article", "div", "li", "section"):
+            # Try headings first
+            heading = parent.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+            if heading:
+                name = heading.get_text(strip=True)
+                if name and len(name) > 2:  # noqa: PLR2004
+                    return name
+
+            # Try img alt text (common in portfolio cards)
+            img = parent.find("img", alt=True)
+            if img:
+                alt = img.get("alt", "").strip()
+                if alt and len(alt) > 2:  # noqa: PLR2004
+                    return alt.title()
+
+            # Stop at the first meaningful container
+            if parent.name in ("article", "section", "li"):
+                break
+    return ""
+
+
 def normalize_url(url: str) -> str:
     """Normalize a URL to origin + pathname."""
     if not url.startswith("http"):
@@ -89,7 +124,7 @@ def scrape_url(url: str) -> dict[str, Any]:
     if body:
         text = re.sub(r"\s+", " ", body.get_text(separator=" ")).strip()[:_MAX_TEXT_LENGTH]
 
-    # Extract links
+    # Extract links with contextual company name
     links: list[dict[str, str]] = []
     for a in soup.find_all("a", href=True):
         href = a.get("href", "")
@@ -104,8 +139,17 @@ def scrape_url(url: str) -> dict[str, Any]:
                     link_text = img.get("alt", "")
                 link_text = link_text.strip() if link_text else ""
 
-        if link_text and href and not href.startswith("#") and not href.startswith("mailto:"):
-            links.append({"text": link_text, "href": href})
+        # Extract contextual name from surrounding elements
+        # (useful when link text is generic CTA like "LEARN MORE")
+        context_name = _extract_context_name(a)
+
+        if (
+            (link_text or context_name)
+            and href
+            and not href.startswith("#")
+            and not href.startswith("mailto:")
+        ):
+            links.append({"text": link_text, "href": href, "context_name": context_name})
 
     return {
         "title": title,

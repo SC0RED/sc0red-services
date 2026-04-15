@@ -137,6 +137,7 @@ class APIGatewayHandler:
             handle_resend_invite,
             handle_revoke_invite,
         )
+        from src.handlers.oauth_handlers import handle_oauth_approve
         from src.handlers.scan_handlers import (
             handle_delete_scan,
             handle_scan_confirm,
@@ -205,7 +206,6 @@ class APIGatewayHandler:
                 event,
                 authentication,
                 self._storage,
-                self._factory_manager,
                 self._sqs,
                 self._queue_url,
             ),
@@ -285,6 +285,15 @@ class APIGatewayHandler:
             "/api/analysis/{analysis_id}/documents/{document_id}",
             lambda event, authentication, analysis_id, document_id: handle_delete_document(
                 event, authentication, self._storage, analysis_id, document_id
+            ),
+        )
+
+        # ── OAuth ────────────────────────────────────────────────────────────
+        router.protected(
+            "POST",
+            "/api/oauth/approve",
+            lambda event, authentication: handle_oauth_approve(
+                event, authentication, self._storage
             ),
         )
 

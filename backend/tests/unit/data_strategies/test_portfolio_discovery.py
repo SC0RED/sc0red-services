@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from src.data_strategies.portfolio_discovery_strategy import (
     _GENERIC_CTA_PATTERNS,
     _MAX_COMPANIES,
-    _PORTFOLIO_PATHS,
+    PORTFOLIO_PATHS,
     _SOCIAL_DOMAINS,
     PortfolioDiscoveryStrategy,
 )
@@ -19,9 +19,9 @@ class TestPortfolioDiscoveryConstants:
         assert "facebook.com" in _SOCIAL_DOMAINS
 
     def test_portfolio_paths_includes_common(self):
-        assert "/portfolio" in _PORTFOLIO_PATHS
-        assert "/companies" in _PORTFOLIO_PATHS
-        assert "/investments" in _PORTFOLIO_PATHS
+        assert "/portfolio" in PORTFOLIO_PATHS
+        assert "/companies" in PORTFOLIO_PATHS
+        assert "/investments" in PORTFOLIO_PATHS
 
     def test_max_companies_is_reasonable(self):
         assert _MAX_COMPANIES == 30

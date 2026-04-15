@@ -254,6 +254,160 @@ class TestSQSHandler:
         mock_notify.assert_not_called()
 
 
+class TestSQSHandlerPortfolioDiscovery:
+    """Portfolio discovery dispatch path — runs pipeline in the worker."""
+
+    _PORTFOLIO_MESSAGE = {
+        "type": "portfolio_discovery",
+        "url": "https://perotjain.com",
+        "org_id": "org-1",
+        "user_id": "user-1",
+        "scan_id": "scan-p1",
+    }
+
+    def _make_handler(self):
+        storage = MagicMock()
+        handler = SQSHandler(storage=storage)
+        handler._factory_manager = MagicMock()
+        return handler, storage
+
+    def test_dispatch_routes_to_portfolio_discovery(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_discovery.return_value = {
+            "details": {"portfolio_companies": []},
+        }
+
+        handler._process_message(dict(self._PORTFOLIO_MESSAGE))
+
+        handler._factory_manager.run_portfolio_discovery.assert_called_once_with(
+            url="https://perotjain.com",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-p1",
+        )
+        handler._factory_manager.run_company_analysis.assert_not_called()
+
+    def test_success_writes_awaiting_confirmation_and_companies(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        companies = [
+            {"name": "Co1", "url": "https://co1.com"},
+            {"name": "Co2", "url": "https://co2.com"},
+        ]
+        handler._factory_manager.run_portfolio_discovery.return_value = {
+            "details": {"portfolio_companies": companies},
+        }
+
+        handler._process_message(dict(self._PORTFOLIO_MESSAGE))
+
+        # First update marks discovering at entry; second writes final results.
+        assert scan_repo.update.call_args_list == [
+            call("scan-p1", {"status": "discovering", "progress": 5}),
+            call(
+                "scan-p1",
+                {
+                    "status": "awaiting_confirmation",
+                    "progress": 20,
+                    "portfolio_companies": companies,
+                },
+            ),
+        ]
+
+    def test_domain_error_marks_scan_failed_and_does_not_retry(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_discovery.side_effect = RuntimeError(
+            "scrape blocked"
+        )
+
+        result = handler.handle(
+            {
+                "Records": [
+                    {
+                        "messageId": "msg-pd-1",
+                        "body": json.dumps(self._PORTFOLIO_MESSAGE),
+                    }
+                ],
+            }
+        )
+
+        # Message consumed, not retried — domain errors are user-visible, not bugs.
+        assert result == {"batchItemFailures": []}
+        # Final state is failed with error surfaced on the scan record.
+        scan_repo.update.assert_any_call(
+            "scan-p1", {"status": "failed", "error": "scrape blocked"}
+        )
+
+    def test_value_error_is_caught_as_domain_error(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_discovery.side_effect = ValueError(
+            "No URL provided"
+        )
+
+        handler._process_message(dict(self._PORTFOLIO_MESSAGE))
+
+        scan_repo.update.assert_any_call(
+            "scan-p1", {"status": "failed", "error": "No URL provided"}
+        )
+
+    def test_programming_error_propagates_for_sqs_retry(self):
+        """Bugs (KeyError/AttributeError/TypeError) must propagate so SQS retries
+        and the stack trace lands in CloudWatch."""
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_discovery.side_effect = KeyError("boom")
+
+        result = handler.handle(
+            {
+                "Records": [
+                    {
+                        "messageId": "msg-pd-bug",
+                        "body": json.dumps(self._PORTFOLIO_MESSAGE),
+                    }
+                ],
+            }
+        )
+
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-pd-bug"}]}
+        failed_updates = [
+            c for c in scan_repo.update.call_args_list if c[0][1].get("status") == "failed"
+        ]
+        assert failed_updates == []
+
+    @patch("src.handlers.sqs_handler.notify_progress")
+    def test_notifies_progress_on_entry_and_success(self, mock_notify):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_discovery.return_value = {
+            "details": {"portfolio_companies": []},
+        }
+
+        handler._process_message(dict(self._PORTFOLIO_MESSAGE))
+
+        statuses = [kwargs["status"] for _, kwargs in mock_notify.call_args_list]
+        assert statuses == ["discovering", "awaiting_confirmation"]
+
+    @patch("src.handlers.sqs_handler.notify_progress")
+    def test_notifies_progress_on_failure(self, mock_notify):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_discovery.side_effect = RuntimeError("fail")
+
+        handler._process_message(dict(self._PORTFOLIO_MESSAGE))
+
+        statuses = [kwargs["status"] for _, kwargs in mock_notify.call_args_list]
+        assert "failed" in statuses
+
+
 class TestSQSHandlerReanalysis:
     def _make_handler(self):
         storage = MagicMock()

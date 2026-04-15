@@ -16,12 +16,14 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
-from src.handlers.sqs_messages import build_analysis_message
+from src.handlers.sqs_messages import (
+    build_analysis_message,
+    build_portfolio_discovery_message,
+)
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
     from src.handlers.auth_middleware import AuthContext
-    from src.handlers.factory_manager import FactoryManager
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
     from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 
@@ -32,7 +34,6 @@ def handle_scan_start(
     event: dict[str, Any],
     authentication: AuthContext,
     storage: DynamoDBStorageProvider,
-    factory_manager: FactoryManager,
     sqs: Any,
     queue_url: str,
 ) -> LambdaResponse:
@@ -48,7 +49,7 @@ def handle_scan_start(
     scan_id = _create_scan_record(scan_repo, url, scan_type, authentication)
 
     if scan_type == "portfolio":
-        return _start_portfolio_scan(scan_repo, scan_id, url, authentication, factory_manager)
+        return _start_portfolio_scan(scan_id, url, authentication, sqs, queue_url)
     return _start_single_scan(scan_repo, scan_id, url, authentication, sqs, queue_url)
 
 
@@ -59,6 +60,12 @@ def _create_scan_record(
     authentication: AuthContext,
 ) -> str:
     scan_id = str(uuid.uuid4())
+    # Portfolio scans are created in "discovering" so the DB record matches
+    # the API response the client receives. The worker is idempotent — it
+    # re-asserts "discovering" on entry, then transitions to
+    # "awaiting_confirmation" (success) or "failed" (domain error). Single
+    # scans are "running" since they dispatch per-company work to SQS.
+    initial_status = "discovering" if scan_type == "portfolio" else "running"
     scan_repo.create(
         {
             "id": scan_id,
@@ -66,7 +73,7 @@ def _create_scan_record(
             "created_by": authentication.user_id,
             "type": scan_type,
             "source_url": url,
-            "status": "running",
+            "status": initial_status,
             "progress": 0,
             "created_at": datetime.now(UTC).isoformat(),
         }
@@ -75,34 +82,32 @@ def _create_scan_record(
 
 
 def _start_portfolio_scan(
-    scan_repo: DynamoDBScanRepository,
     scan_id: str,
     url: str,
     authentication: AuthContext,
-    factory_manager: FactoryManager,
+    sqs: Any,
+    queue_url: str,
 ) -> LambdaResponse:
-    scan_repo.update(scan_id, {"progress": 5})
-    result = factory_manager.run_portfolio_discovery(
-        url=url,
-        org_id=authentication.org_id,
-        user_id=authentication.user_id,
-        scan_id=scan_id,
-    )
-    companies = result["details"]["portfolio_companies"]
+    """Dispatch portfolio discovery to the SQS worker and return immediately.
 
-    scan_repo.update(
-        scan_id,
-        {
-            "status": "awaiting_confirmation",
-            "progress": 20,
-            "portfolio_companies": companies,
-        },
+    The worker runs ``DiscoverPortfolio`` → ``ValidatePortfolioCompanies`` and
+    writes results to the scan record. Clients poll GET /api/scan/{id} to
+    observe the status transition through ``discovering`` to
+    ``awaiting_confirmation`` (or ``failed``).
+    """
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=build_portfolio_discovery_message(
+            url=url,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
+        ),
     )
     return build_json_response(
         {
             "scanId": scan_id,
-            "status": "awaiting_confirmation",
-            "portfolioCompanies": companies,
+            "status": "discovering",
         }
     )
 
@@ -182,6 +187,10 @@ def handle_scan_status(
     scan = scan_repo.get_by_id(scan_id)
     if error := check_org_access(scan, authentication):
         return error
+    # check_org_access returns an error response when scan is None; this
+    # is defensive narrowing for type checkers — unreachable at runtime.
+    if scan is None:
+        raise RuntimeError(f"scan {scan_id} vanished between access check and read")
 
     company_repo = storage.create_company_repository()
     scan_companies = scan_repo.get_scan_companies(scan_id)
@@ -222,6 +231,7 @@ def handle_scan_status(
             "type": scan.get("type"),
             "portfolioCompanies": scan.get("portfolio_companies", []),
             "analyses": analyses,
+            "error": scan.get("error", ""),
         }
     )
 
