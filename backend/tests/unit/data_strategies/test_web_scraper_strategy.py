@@ -1,11 +1,17 @@
 """Tests for WebScraperStrategy and scrape_url."""
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import httpx
 
+from bs4 import BeautifulSoup
+
 from src.data_strategies.web_scraper_strategy import (
     WebScraperStrategy,
+    _extract_context_name,
+    _extract_name_from_img_src,
+    extract_name_from_url,
     normalize_url,
     scrape_url,
 )
@@ -213,3 +219,120 @@ class TestWebScraperStrategy:
         text, meta = strategy.execute()
         assert text == ""
         assert "error" in meta
+
+
+class TestNameFromImgSrc:
+    def test_hyphenated_filename(self):
+        assert _extract_name_from_img_src("https://cdn/access-healthcare.png") == "Access Healthcare"
+
+    def test_underscored_filename(self):
+        assert _extract_name_from_img_src("access_healthcare.png") == "Access Healthcare"
+
+    def test_camel_case_filename(self):
+        assert _extract_name_from_img_src("accessHealthcare.png") == "Access Healthcare"
+
+    def test_single_lowercase_token(self):
+        # No separators → can't split; title-cased single token (imperfect but surfaced).
+        assert _extract_name_from_img_src("accesshealthcare.png") == "Accesshealthcare"
+
+    def test_strips_logo_suffix(self):
+        assert _extract_name_from_img_src("fold-health-logo.png") == "Fold Health"
+        assert _extract_name_from_img_src("fold-health_logo.png") == "Fold Health"
+        assert _extract_name_from_img_src("fold-healthlogo.png") == "Fold Health"
+
+    def test_handles_full_url_with_path(self):
+        src = "https://perotjain.com/wp-content/uploads/2022/09/accesshealthcare.png"
+        assert _extract_name_from_img_src(src) == "Accesshealthcare"
+
+    def test_handles_query_string_and_fragment(self):
+        assert _extract_name_from_img_src("/img/access-healthcare.png?v=2") == "Access Healthcare"
+        assert _extract_name_from_img_src("/img/access-healthcare.png#anchor") == "Access Healthcare"
+
+    def test_no_extension(self):
+        assert _extract_name_from_img_src("/img/access-healthcare") == "Access Healthcare"
+
+    def test_empty_returns_empty(self):
+        assert _extract_name_from_img_src("") == ""
+
+    def test_short_result_rejected(self):
+        # Single char → below min length
+        assert _extract_name_from_img_src("/img/a.png") == ""
+
+    def test_too_long_result_rejected(self):
+        assert _extract_name_from_img_src(f"/img/{'a' * 80}.png") == ""
+
+
+class TestNameFromUrl:
+    def test_bare_hostname(self):
+        assert extract_name_from_url("https://endurancelift.com") == "Endurancelift"
+
+    def test_strips_www(self):
+        assert extract_name_from_url("https://www.endurancelift.com/") == "Endurancelift"
+
+    def test_hyphenated_hostname(self):
+        assert extract_name_from_url("https://access-healthcare.com") == "Access Healthcare"
+
+    def test_with_path(self):
+        assert extract_name_from_url("https://www.endurancelift.com/about") == "Endurancelift"
+
+    def test_missing_scheme_gets_added(self):
+        assert extract_name_from_url("endurancelift.com") == "Endurancelift"
+
+    def test_subdomain_stripped_only_if_www(self):
+        # Non-www subdomain is kept as part of the hostname stem
+        assert extract_name_from_url("https://portfolio.endurancelift.com") == "Portfolio Endurancelift"
+
+    def test_empty_returns_empty(self):
+        assert extract_name_from_url("") == ""
+
+    def test_too_long_rejected(self):
+        long_host = "a" * 80 + ".com"
+        assert extract_name_from_url(f"https://{long_host}") == ""
+
+
+class TestExtractContextNameImgSrcFallback:
+    """The perotjain-style DOM: logo image has empty alt, name lives in filename."""
+
+    def _anchor(self, html: str) -> Any:
+        soup = BeautifulSoup(html, "html.parser")
+        return soup.find("a")
+
+    def test_empty_alt_falls_back_to_img_src(self):
+        html = """
+        <article class="single-card">
+          <div class="overlay-content">
+            <img alt="" src="/wp-content/uploads/endurance-lift.png">
+            <div class="card-text">
+              <a class="btn-arrow" href="https://endurancelift.com/">LEARN MORE</a>
+            </div>
+          </div>
+        </article>
+        """
+        assert _extract_context_name(self._anchor(html)) == "Endurance Lift"
+
+    def test_missing_alt_attribute_falls_back_to_img_src(self):
+        html = """
+        <article>
+          <img src="/img/fold-health-logo.png">
+          <a href="https://fold.health">LEARN MORE</a>
+        </article>
+        """
+        assert _extract_context_name(self._anchor(html)) == "Fold Health"
+
+    def test_non_empty_alt_still_wins_over_src(self):
+        # Non-empty alt takes precedence — src is only a fallback.
+        html = """
+        <article>
+          <img alt="Access Healthcare" src="/img/something-else.png">
+          <a href="https://accesshealthcare.com">LEARN MORE</a>
+        </article>
+        """
+        assert _extract_context_name(self._anchor(html)) == "Access Healthcare"
+
+    def test_no_img_returns_empty(self):
+        html = """
+        <article>
+          <a href="https://example.com">LEARN MORE</a>
+        </article>
+        """
+        assert _extract_context_name(self._anchor(html)) == ""

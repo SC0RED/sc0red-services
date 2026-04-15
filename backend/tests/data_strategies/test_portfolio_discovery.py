@@ -29,14 +29,24 @@ class TestCTAContextHandling:
             assert companies[0]["name"] == "Acme Corp"
             assert companies[0]["url"] == "https://acme.com"
 
-    def test_learn_more_without_context_dropped(self):
+    def test_learn_more_without_context_falls_back_to_url_domain(self):
+        """CTA link with no context is kept; name is derived from the URL domain.
+
+        Prior behavior dropped these links entirely. That cost us ~9 cards on
+        perotjain.com (empty alt + no heading). Deriving ``Acme`` from
+        ``acme.com`` is imperfect but strictly better than losing the URL —
+        the AI validation step confirms whether the candidate is real.
+        """
         links = [
             {"text": "LEARN MORE", "href": "https://acme.com", "context_name": ""},
         ]
         with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
-            assert len(result["companies"]) == 0
+            companies = result["companies"]
+            assert len(companies) == 1
+            assert companies[0]["name"] == "Acme"
+            assert companies[0]["url"] == "https://acme.com"
 
     def test_normal_link_text_used_directly(self):
         links = [
@@ -66,7 +76,8 @@ class TestCTAContextHandling:
             _, result = strategy.execute()
             assert len(result["companies"]) == 0
 
-    def test_multiple_cta_links_with_context(self):
+    def test_multiple_cta_links_with_mixed_context(self):
+        """Links with context keep their rich names; links without fall back to the URL domain."""
         links = [
             {"text": "Learn More", "href": "https://acme.com", "context_name": "Acme Corp"},
             {"text": "Learn More", "href": "https://beta.com", "context_name": "Beta Inc"},
@@ -75,9 +86,9 @@ class TestCTAContextHandling:
         with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
-            assert len(result["companies"]) == 2
+            assert len(result["companies"]) == 3
             names = {c["name"] for c in result["companies"]}
-            assert names == {"Acme Corp", "Beta Inc"}
+            assert names == {"Acme Corp", "Beta Inc", "Gamma"}
 
     def test_empty_link_text_with_context(self):
         links = [
