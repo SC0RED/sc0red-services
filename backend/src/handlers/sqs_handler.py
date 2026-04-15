@@ -44,8 +44,16 @@ class SQSHandler:
         return {"batchItemFailures": batch_item_failures}
 
     def _process_message(self, message: dict[str, Any]) -> None:
-        """Process a single SQS message — either new analysis or re-analysis."""
-        if message.get("reanalyze"):
+        """Dispatch an SQS message to the correct pipeline.
+
+        Message discriminators (checked in order):
+        - ``type == "portfolio_discovery"`` → portfolio-scan pipeline
+        - ``reanalyze == True`` → company re-analysis
+        - default → new company analysis
+        """
+        if message.get("type") == "portfolio_discovery":
+            self._process_portfolio_discovery(message)
+        elif message.get("reanalyze"):
             self._process_reanalysis(message)
         else:
             self._process_new_analysis(message)
@@ -132,6 +140,74 @@ class SQSHandler:
 
         if scan_id:
             self._update_scan_progress(scan_id)
+
+    def _process_portfolio_discovery(self, message: dict[str, Any]) -> None:
+        """Run the portfolio discovery + validation pipeline for a scan.
+
+        Flow: mark scan ``discovering`` → run pipeline → write results +
+        transition to ``awaiting_confirmation`` (success) or ``failed``
+        (domain error). Programming errors propagate to trigger SQS retry.
+        """
+        url = message["url"]
+        org_id = message["org_id"]
+        user_id = message["user_id"]
+        scan_id = message["scan_id"]
+
+        logger.info("Starting portfolio discovery for %s (scan=%s)", url, scan_id)
+
+        scan_repo = self._storage.create_scan_repository()
+        scan_repo.update(scan_id, {"status": "discovering", "progress": 5})
+        notify_progress(
+            scan_id=scan_id,
+            progress=5,
+            label="Starting portfolio discovery…",
+            status="discovering",
+        )
+
+        try:
+            result = self._factory_manager.run_portfolio_discovery(
+                url=url,
+                org_id=org_id,
+                user_id=user_id,
+                scan_id=scan_id,
+            )
+        except (EngineError, ValueError, RuntimeError) as error:
+            logger.exception("Portfolio discovery failed for scan=%s", scan_id)
+            scan_repo.update(scan_id, {"status": "failed", "error": str(error)})
+            notify_progress(
+                scan_id=scan_id,
+                progress=0,
+                label=f"Discovery failed: {error}",
+                status="failed",
+            )
+            return
+        # Programming errors (AttributeError, KeyError, TypeError) propagate
+        # to the outer SQS handler, triggering retry via batchItemFailures.
+
+        # Bare key access — if the pipeline succeeds but omits this key it
+        # is a programming error (schema drift), not a user-visible state.
+        # Let KeyError propagate so SQS retries and CloudWatch captures it
+        # rather than silently stranding the user on an empty confirmation.
+        companies = result["details"]["portfolio_companies"]
+        scan_repo.update(
+            scan_id,
+            {
+                "status": "awaiting_confirmation",
+                "progress": 20,
+                "portfolio_companies": companies,
+            },
+        )
+        notify_progress(
+            scan_id=scan_id,
+            progress=20,
+            label="Ready for confirmation",
+            status="awaiting_confirmation",
+        )
+        logger.info(
+            "Portfolio discovery complete for scan=%s (companies=%d)",
+            scan_id,
+            len(companies),
+        )
 
     def _record_failure(self, scan_id: str, request_id: str, error_message: str) -> None:
         """Record a pipeline failure on the company and update scan progress.

@@ -136,7 +136,7 @@ function NewScanContent() {
         setError('')
         setPhase('analyzing')
         setProgress(5)
-        setProgressLabel('Starting analysis...')
+        setProgressLabel(mode === 'portfolio' ? 'Finding portfolio companies...' : 'Starting analysis...')
 
         try {
             const res = await fetch('/api/scan/start', {
