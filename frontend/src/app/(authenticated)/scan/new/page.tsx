@@ -159,8 +159,17 @@ function NewScanContent() {
     const portfolioRealtime = useScanRealtime({
         totalCompanies: selectedCount,
         onProgress: handleProgress,
+        onFirstComplete: () => {
+            // First company done via AppSync — navigate to portfolio page
+            // immediately so the user can start reviewing results.
+            if (!hasNavigatedToPortfolio.current && phaseRef.current === 'running') {
+                hasNavigatedToPortfolio.current = true
+                router.push(`/portfolio/${scanIdRef.current}`)
+            }
+        },
         onComplete: async () => {
-            // AppSync told us it's complete — fetch full data for navigation
+            // All companies done via AppSync — fetch full data for navigation
+            if (hasNavigatedToPortfolio.current) return
             try {
                 const response = await fetch(`/api/scan/${scanIdRef.current}`)
                 if (response.ok) {
