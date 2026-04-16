@@ -35,7 +35,10 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         return () => clearInterval(interval)
     }, [scanId, scan.analyses, scan.status])
 
-    const analyses = scan.analyses
+    // Sort by id for stable ordering — DynamoDB BatchGetItem returns items in
+    // arbitrary order, so each poll cycle would otherwise shuffle the cards.
+    // IDs are UUIDs assigned at confirm time; sorting by them is deterministic.
+    const analyses = [...scan.analyses].sort((a, b) => a.id.localeCompare(b.id))
     const completed = analyses.filter((a) => a.overallRiskScore !== null)
     const avgScore = completed.length
         ? completed.reduce((s, a) => s + Number(a.overallRiskScore), 0) / completed.length

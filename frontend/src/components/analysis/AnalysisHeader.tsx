@@ -9,6 +9,7 @@ interface AnalysisHeaderProps {
     companyUrl?: string
     industry?: string
     tier: string
+    scanId?: string
     onExportCsv?: () => void
 }
 
@@ -18,6 +19,7 @@ export default function AnalysisHeader({
     companyUrl,
     industry,
     tier,
+    scanId,
     onExportCsv,
 }: AnalysisHeaderProps) {
     return (
@@ -36,15 +38,15 @@ export default function AnalysisHeader({
                     style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.75rem',
+                        gap: '0.25rem',
                         marginBottom: '0.5rem',
+                        fontSize: '0.875rem',
                     }}
                 >
                     <Link
                         href="/dashboard"
                         style={{
                             color: 'var(--text-tertiary)',
-                            fontSize: '0.875rem',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '0.25rem',
@@ -64,6 +66,14 @@ export default function AnalysisHeader({
                         </svg>
                         Dashboard
                     </Link>
+                    {scanId && (
+                        <>
+                            <span style={{ color: 'var(--text-tertiary)' }}>/</span>
+                            <Link href={`/portfolio/${scanId}`} style={{ color: 'var(--text-tertiary)' }}>
+                                Portfolio
+                            </Link>
+                        </>
+                    )}
                 </div>
                 <h1 style={{ fontSize: '1.625rem', fontWeight: 700, marginBottom: '0.375rem' }}>
                     {companyName}
