@@ -12,6 +12,7 @@ import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
+import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import { LoadingSpinner } from '@/components/ui'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
@@ -168,6 +169,26 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
         return { category: CAT_LABELS[cat.id] ?? cat.name, score: rs?.score ?? 0, fullMark: 10 }
     })
 
+    // Failed analysis — show error + retry UI instead of the full analysis.
+    if (data.error && !data.analyzedAt) {
+        return (
+            <FailedAnalysisView
+                analysisId={analysisId}
+                companyName={data.companyName}
+                companyUrl={data.companyUrl}
+                error={data.error}
+                scanId={data.scanId}
+                documents={documents}
+                documentError={documentError}
+                reanalyzing={reanalyzing}
+                reanalysisProgress={reanalysisProgress}
+                reanalysisLabel={reanalysisLabel}
+                onRetry={handleReanalyze}
+                onDocumentsChange={handleDocumentsChange}
+            />
+        )
+    }
+
     return (
         <>
             <AnalysisHeader
@@ -306,25 +327,13 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
                         Re-analyzing with documents...
                     </h3>
-                    <p
-                        style={{
-                            color: 'var(--text-secondary)',
-                            fontSize: '0.875rem',
-                            marginBottom: '1rem',
-                        }}
-                    >
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
                         {reanalysisLabel || 'Starting pipeline...'}
                     </p>
                     <div className="progress-bar" style={{ maxWidth: '360px', margin: '0 auto' }}>
                         <div className="progress-fill" style={{ width: `${reanalysisProgress}%` }} />
                     </div>
-                    <div
-                        style={{
-                            marginTop: '0.5rem',
-                            fontSize: '0.75rem',
-                            color: 'var(--text-tertiary)',
-                        }}
-                    >
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                         {reanalysisProgress}% complete
                     </div>
                 </div>

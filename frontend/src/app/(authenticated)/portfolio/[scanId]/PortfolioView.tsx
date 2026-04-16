@@ -181,7 +181,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                                             marginBottom: '0.375rem',
                                         }}
                                     >
-                                        {a.companyName || 'Analyzing...'}
+                                        {a.companyName || (a.error ? 'Unknown Company' : 'Analyzing...')}
                                     </div>
                                     {a.industry && (
                                         <div
@@ -224,11 +224,16 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                                     ) : a.error ? (
                                         <span
                                             style={{
-                                                fontSize: '0.75rem',
+                                                display: 'inline-block',
+                                                fontSize: '0.7rem',
+                                                fontWeight: 600,
+                                                padding: '0.2rem 0.5rem',
+                                                borderRadius: '4px',
+                                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
                                                 color: 'var(--risk-critical)',
                                             }}
                                         >
-                                            Analysis failed
+                                            FAILED
                                         </span>
                                     ) : (
                                         <span

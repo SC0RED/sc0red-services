@@ -106,8 +106,8 @@ class TestSQSHandler:
         # No batch item failures — message is consumed, not retried
         assert result == {"batchItemFailures": []}
 
-        # Error was patched onto the company record (not a full overwrite)
-        company_repo.update.assert_called_once_with(
+        # Identity was written first, then error was patched on failure
+        company_repo.update.assert_any_call(
             "analysis-id-1", {"id": "analysis-id-1", "error": "AI provider boom"}
         )
 
@@ -123,10 +123,43 @@ class TestSQSHandler:
 
         handler._process_message(_BASE_MESSAGE)
 
-        company_repo.update.assert_called_once_with(
+        company_repo.update.assert_any_call(
             "analysis-id-1", {"id": "analysis-id-1", "error": "timeout"}
         )
         scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100, "completed_count": 1})
+
+    def test_identity_written_before_pipeline_survives_failure(self):
+        """Company name + URL are persisted before the pipeline runs, so failures
+        still have identity for display and retry."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("scrape blocked")
+        self._make_scan_repo(storage, {"progress": 10, "total_companies": 1}, resolved_companies=0)
+        company_repo = storage.create_company_repository.return_value
+        company_repo.get_by_id.return_value = {"error": "scrape blocked"}
+
+        handler.handle(
+            {
+                "Records": [
+                    {
+                        "messageId": "msg-1",
+                        "body": json.dumps(_BASE_MESSAGE),
+                    }
+                ],
+            }
+        )
+
+        # First update: identity (before pipeline)
+        identity_call = company_repo.update.call_args_list[0]
+        assert identity_call[0][0] == "analysis-id-1"
+        identity_data = identity_call[0][1]
+        assert identity_data["company_name"] == "Test Co"
+        assert identity_data["company_url"] == "https://example.com"
+        assert identity_data["scan_id"] == "scan-1"
+        assert identity_data["org_id"] == "org-1"
+
+        # Second update: error (after pipeline failure)
+        error_call = company_repo.update.call_args_list[1]
+        assert error_call[0][1] == {"id": "analysis-id-1", "error": "scrape blocked"}
 
     def test_json_parse_error_reports_batch_failure(self):
         """Malformed JSON in the SQS body is a transient issue — report for retry."""

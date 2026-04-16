@@ -84,6 +84,7 @@ export interface AnalysisData {
     valueChain?: ValueChain
     documents?: DocumentInfo[]
     analyzedAt?: string
+    error?: string | null
     scanType?: string
     pipelineProgress?: number
     pipelineLabel?: string
