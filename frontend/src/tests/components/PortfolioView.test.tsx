@@ -170,4 +170,24 @@ describe('PortfolioView', () => {
         // Still showing pending — not crashed
         expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
     })
+
+    it('renders cards in stable order regardless of API response order', () => {
+        // API returns analyses in arbitrary order (DynamoDB BatchGetItem)
+        const reverseOrder = makeScan(
+            [
+                { ...failedAnalysis, id: 'z-3' },
+                { ...pendingAnalysis, id: 'm-2' },
+                { ...completedAnalysis, id: 'a-1' },
+            ],
+            'running'
+        )
+
+        const { container } = render(<PortfolioView scanId="scan-1" initialScan={reverseOrder} />)
+
+        // Cards should be sorted by id ascending: a-1, m-2, z-3
+        const cards = container.querySelectorAll('.card .truncate')
+        const renderedNames = Array.from(cards).map((el) => el.textContent)
+        // First card should be a-1 (Acme Corp), not z-3 (Gamma Ltd)
+        expect(renderedNames[0]).toBe('Acme Corp')
+    })
 })
