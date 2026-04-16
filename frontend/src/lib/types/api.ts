@@ -121,6 +121,8 @@ export interface ScanAnalysis {
     riskTier: string | null
     error: string | null
     analyzedAt: string | null
+    pipelineProgress?: number
+    pipelineLabel?: string
 }
 
 export interface ScanData {

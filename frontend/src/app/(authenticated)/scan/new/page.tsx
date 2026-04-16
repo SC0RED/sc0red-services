@@ -24,6 +24,8 @@ function NewScanContent() {
     const [scanId, setScanId] = useState('')
     const [companies, setCompanies] = useState<Company[]>([])
     const scanIdRef = useRef('')
+    const hasNavigatedToPortfolio = useRef(false)
+    const phaseRef = useRef<Phase>('input')
 
     const handleProgress = useCallback((newProgress: number, label: string) => {
         setProgress((prev) => Math.max(prev, newProgress))
@@ -57,6 +59,8 @@ function NewScanContent() {
 
     const handlePortfolioComplete = useCallback(
         (_data: ScanPollResponse) => {
+            if (hasNavigatedToPortfolio.current) return
+            hasNavigatedToPortfolio.current = true
             setProgress(100)
             setProgressLabel('Portfolio analysis complete!')
             router.push(`/portfolio/${scanId}`)
@@ -122,12 +126,34 @@ function NewScanContent() {
 
     const selectedCount = companies.filter((c) => c.selected).length
 
+    const handlePortfolioProgress = useCallback(
+        (newProgress: number, label: string, rawData?: ScanPollResponse) => {
+            handleProgress(newProgress, label)
+
+            // Navigate to the portfolio page as soon as the first company
+            // completes — user can start reviewing results immediately
+            // instead of staring at the progress bar for 10-20 minutes.
+            // Uses phaseRef (not phase state) to avoid stale closure — state
+            // updates are async so the callback could fire before the next
+            // render delivers the updated phase.
+            if (
+                !hasNavigatedToPortfolio.current &&
+                phaseRef.current === 'running' &&
+                rawData?.analyses?.some((a) => a.analyzedAt)
+            ) {
+                hasNavigatedToPortfolio.current = true
+                router.push(`/portfolio/${scanIdRef.current}`)
+            }
+        },
+        [handleProgress, router]
+    )
+
     const portfolioPolling = useScanPolling({
         mode: 'portfolio',
         totalCompanies: selectedCount,
         onComplete: handlePortfolioComplete,
         onFailed: handleFailed,
-        onProgress: handleProgress,
+        onProgress: handlePortfolioProgress,
     })
 
     const portfolioRealtime = useScanRealtime({
@@ -209,6 +235,7 @@ function NewScanContent() {
 
     async function confirmPortfolio() {
         const selected = companies.filter((c) => c.selected)
+        phaseRef.current = 'running'
         setPhase('running')
         setProgress(5)
         setProgressLabel('Queuing company analyses...')

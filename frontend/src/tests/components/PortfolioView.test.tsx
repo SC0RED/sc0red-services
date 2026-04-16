@@ -81,16 +81,20 @@ describe('PortfolioView', () => {
         expect(screen.getAllByText(/high risk/i).length).toBeGreaterThan(0)
     })
 
-    it('renders pending analysis with Analyzing... placeholder', () => {
+    it('renders queued analysis with Queued label (no pipeline progress)', () => {
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />)
+        expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
+    })
+
+    it('renders analyzing analysis with Analyzing... label (has pipeline progress)', () => {
+        const analyzingAnalysis = { ...pendingAnalysis, pipelineProgress: 30 }
+        render(<PortfolioView scanId="scan-1" initialScan={makeScan([analyzingAnalysis])} />)
         expect(screen.getAllByText('Analyzing...').length).toBeGreaterThan(0)
     })
 
     it('renders failed analysis with company name and FAILED badge', () => {
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([failedAnalysis])} />)
-        // Company name is visible (not "Analyzing...")
         expect(screen.getAllByText('Gamma Ltd').length).toBeGreaterThan(0)
-        // FAILED badge renders
         expect(screen.getByText('FAILED')).toBeInTheDocument()
     })
 
@@ -101,9 +105,22 @@ describe('PortfolioView', () => {
         expect(screen.getByText('FAILED')).toBeInTheDocument()
     })
 
-    it('shows updating indicator when analyses are pending', () => {
+    it('shows progress strip when scan is running', () => {
+        const scan = makeScan([completedAnalysis, pendingAnalysis], 'running')
+        render(<PortfolioView scanId="scan-1" initialScan={scan} />)
+        expect(screen.getByText('1 of 2 done')).toBeInTheDocument()
+    })
+
+    it('hides progress strip and shows stats when scan is complete', () => {
+        const scan = makeScan([completedAnalysis], 'complete')
+        render(<PortfolioView scanId="scan-1" initialScan={scan} />)
+        expect(screen.queryByText(/of.*done/)).not.toBeInTheDocument()
+        expect(screen.getByText('Avg Risk Score')).toBeInTheDocument()
+    })
+
+    it('hides summary stats while scan is running', () => {
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />)
-        expect(screen.getByText(/updating/i)).toBeInTheDocument()
+        expect(screen.queryByText('Avg Risk Score')).not.toBeInTheDocument()
     })
 
     it('does not show updating indicator when all analyses are complete', () => {
@@ -120,14 +137,13 @@ describe('PortfolioView', () => {
 
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />)
 
-        expect(screen.getAllByText('Analyzing...').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
 
         await act(async () => {
             await vi.runAllTimersAsync()
         })
 
         expect(screen.getAllByText('Acme Corp').length).toBeGreaterThan(0)
-        expect(screen.queryByText(/updating/i)).not.toBeInTheDocument()
     })
 
     it('does not poll when all analyses are already resolved', () => {
@@ -152,6 +168,6 @@ describe('PortfolioView', () => {
         })
 
         // Still showing pending — not crashed
-        expect(screen.getAllByText('Analyzing...').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
     })
 })
