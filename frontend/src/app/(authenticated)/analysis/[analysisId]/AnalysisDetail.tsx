@@ -197,6 +197,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 companyUrl={data.companyUrl}
                 industry={data.industry}
                 tier={tier}
+                scanId={data.scanId}
                 onExportCsv={() => exportAnalysisDetailCsv(data)}
             />
 
