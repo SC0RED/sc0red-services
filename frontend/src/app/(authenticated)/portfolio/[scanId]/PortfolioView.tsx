@@ -45,7 +45,11 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         if (a.riskTier) tierCounts[a.riskTier as keyof typeof tierCounts]++
     })
 
-    const isRunning = scan.status !== 'complete' && analyses.length > 0
+    // Show progress strip until scan is complete OR all analyses are resolved
+    // (analyzedAt or error). The scan.status can lag behind individual completions
+    // because _update_scan_progress runs after each company finishes.
+    const allResolved = analyses.length > 0 && analyses.every((a) => a.analyzedAt || a.error)
+    const isRunning = scan.status !== 'complete' && !allResolved && analyses.length > 0
 
     return (
         <>

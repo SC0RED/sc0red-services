@@ -76,6 +76,7 @@ class SQSHandler:
         company_repo.update(
             request_id,
             {
+                "id": request_id,
                 "company_name": company_name,
                 "company_url": url,
                 "scan_id": scan_id,
