@@ -262,14 +262,23 @@ class TestSQSHandler:
             handler._process_message(message)
 
     @patch("src.handlers.sqs_handler.notify_progress")
-    def test_update_scan_progress_calls_notify_on_complete(self, mock_notify):
-        """When all companies are resolved, notify_progress is called with status=complete."""
+    def test_per_company_complete_event_sent_on_success(self, mock_notify):
+        """Successful company analysis sends a per-company status=complete AppSync event."""
         handler, storage = self._make_handler()
         self._make_scan_repo(storage, {"progress": 80, "total_companies": 2}, resolved_companies=2)
 
         handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
 
-        mock_notify.assert_called_once_with(
+        # First call: per-company complete (with company_id)
+        mock_notify.assert_any_call(
+            scan_id="scan-1",
+            progress=100,
+            label="Analysis complete",
+            status="complete",
+            company_id="analysis-id-1",
+        )
+        # Second call: scan-level complete (all companies resolved)
+        mock_notify.assert_any_call(
             scan_id="scan-1",
             progress=100,
             label="Analysis complete!",
@@ -277,14 +286,40 @@ class TestSQSHandler:
         )
 
     @patch("src.handlers.sqs_handler.notify_progress")
-    def test_update_scan_progress_does_not_notify_when_incomplete(self, mock_notify):
-        """When not all companies are resolved, notify_progress should not be called."""
+    def test_per_company_complete_event_when_scan_not_finished(self, mock_notify):
+        """Per-company complete fires even when the overall scan isn't done yet."""
         handler, storage = self._make_handler()
         self._make_scan_repo(storage, {"progress": 10, "total_companies": 4}, resolved_companies=1)
 
         handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
 
-        mock_notify.assert_not_called()
+        # Per-company complete event still fires
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=100,
+            label="Analysis complete",
+            status="complete",
+            company_id="analysis-id-1",
+        )
+
+    @patch("src.handlers.sqs_handler.notify_progress")
+    def test_per_company_failed_event_sent_on_failure(self, mock_notify):
+        """Failed company analysis sends a per-company status=failed AppSync event."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("scrape blocked")
+        self._make_scan_repo(storage, {"progress": 10, "total_companies": 2}, resolved_companies=0)
+        company_repo = storage.create_company_repository.return_value
+        company_repo.get_by_id.return_value = {"error": "scrape blocked"}
+
+        handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
+
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=0,
+            label="Analysis failed: scrape blocked",
+            status="failed",
+            company_id="analysis-id-1",
+        )
 
 
 class TestSQSHandlerPortfolioDiscovery:
