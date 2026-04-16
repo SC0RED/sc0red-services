@@ -129,6 +129,7 @@ export interface ScanData {
     status: string
     progress: number
     type: string
+    totalCompanies?: number
     portfolioCompanies: Array<{ name: string; url: string }>
     analyses: ScanAnalysis[]
 }

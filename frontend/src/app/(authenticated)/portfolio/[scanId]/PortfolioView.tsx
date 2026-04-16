@@ -39,6 +39,9 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
     // arbitrary order, so each poll cycle would otherwise shuffle the cards.
     // IDs are UUIDs assigned at confirm time; sorting by them is deterministic.
     const analyses = [...scan.analyses].sort((a, b) => a.id.localeCompare(b.id))
+    // totalCompanies from the scan record is the true count (set at confirm time).
+    // analyses.length only reflects companies with DynamoDB records (grows as workers pick up messages).
+    const totalCompanies = scan.totalCompanies || analyses.length
     const completed = analyses.filter((a) => a.overallRiskScore !== null)
     const avgScore = completed.length
         ? completed.reduce((s, a) => s + Number(a.overallRiskScore), 0) / completed.length
@@ -51,8 +54,9 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
     // Show progress strip until scan is complete OR all analyses are resolved
     // (analyzedAt or error). The scan.status can lag behind individual completions
     // because _update_scan_progress runs after each company finishes.
-    const allResolved = analyses.length > 0 && analyses.every((a) => a.analyzedAt || a.error)
-    const isRunning = scan.status !== 'complete' && !allResolved && analyses.length > 0
+    const resolvedCount = analyses.filter((a) => a.analyzedAt || a.error).length
+    const allResolved = resolvedCount >= totalCompanies && totalCompanies > 0
+    const isRunning = scan.status !== 'complete' && !allResolved
 
     return (
         <>
@@ -87,14 +91,14 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                     Portfolio Analysis
                 </h1>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
-                    {analyses.length} companies
+                    {totalCompanies} companies
                 </p>
             </div>
 
             {/* Progress strip — visible while scan is running */}
             <PortfolioProgressStrip
-                completedCount={completed.length + analyses.filter((a) => a.error).length}
-                totalCount={analyses.length}
+                completedCount={resolvedCount}
+                totalCount={totalCompanies}
                 visible={isRunning}
             />
 
