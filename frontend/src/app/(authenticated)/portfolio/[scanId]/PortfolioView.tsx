@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import PortfolioProgressStrip from '@/components/scan/PortfolioProgressStrip'
 import { getRiskTierLabel, getRiskTier, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { ScanAnalysis, ScanData } from '@/lib/types/api'
 
@@ -34,7 +35,13 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         return () => clearInterval(interval)
     }, [scanId, scan.analyses, scan.status])
 
-    const analyses = scan.analyses
+    // Sort by id for stable ordering — DynamoDB BatchGetItem returns items in
+    // arbitrary order, so each poll cycle would otherwise shuffle the cards.
+    // IDs are UUIDs assigned at confirm time; sorting by them is deterministic.
+    const analyses = [...scan.analyses].sort((a, b) => a.id.localeCompare(b.id))
+    // totalCompanies from the scan record is the true count (set at confirm time).
+    // analyses.length only reflects companies with DynamoDB records (grows as workers pick up messages).
+    const totalCompanies = scan.totalCompanies || analyses.length
     const completed = analyses.filter((a) => a.overallRiskScore !== null)
     const avgScore = completed.length
         ? completed.reduce((s, a) => s + Number(a.overallRiskScore), 0) / completed.length
@@ -44,7 +51,12 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         if (a.riskTier) tierCounts[a.riskTier as keyof typeof tierCounts]++
     })
 
-    const pending = hasPendingAnalyses(analyses)
+    // Show progress strip until scan is complete OR all analyses are resolved
+    // (analyzedAt or error). The scan.status can lag behind individual completions
+    // because _update_scan_progress runs after each company finishes.
+    const resolvedCount = analyses.filter((a) => a.analyzedAt || a.error).length
+    const allResolved = resolvedCount >= totalCompanies && totalCompanies > 0
+    const isRunning = scan.status !== 'complete' && !allResolved
 
     return (
         <>
@@ -79,70 +91,67 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                     Portfolio Analysis
                 </h1>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
-                    {analyses.length} companies
-                    {pending && (
-                        <span
-                            style={{
-                                marginLeft: '0.75rem',
-                                fontSize: '0.8125rem',
-                                color: 'var(--accent-blue)',
-                            }}
-                        >
-                            · {completed.length}/{analyses.length} complete · updating...
-                        </span>
-                    )}
+                    {totalCompanies} companies
                 </p>
             </div>
 
-            {/* Stats Row */}
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(5, 1fr)',
-                    gap: '1rem',
-                    marginBottom: '2rem',
-                }}
-            >
-                <div className="card" style={{ padding: '1.25rem' }}>
-                    <div style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--accent-blue)' }}>
-                        {avgScore.toFixed(1)}
+            {/* Progress strip — visible while scan is running */}
+            <PortfolioProgressStrip
+                completedCount={resolvedCount}
+                totalCount={totalCompanies}
+                visible={isRunning}
+            />
+
+            {/* Stats Row — only after scan completes (partial stats are misleading) */}
+            {!isRunning && (
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(5, 1fr)',
+                        gap: '1rem',
+                        marginBottom: '2rem',
+                    }}
+                >
+                    <div className="card" style={{ padding: '1.25rem' }}>
+                        <div style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--accent-blue)' }}>
+                            {avgScore.toFixed(1)}
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                            Avg Risk Score
+                        </div>
                     </div>
-                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                        Avg Risk Score
-                    </div>
+                    {[
+                        {
+                            tier: 'critical',
+                            label: 'Critical',
+                            color: 'var(--risk-critical)',
+                            count: tierCounts.critical,
+                        },
+                        {
+                            tier: 'high',
+                            label: 'High Risk',
+                            color: 'var(--risk-high)',
+                            count: tierCounts.high,
+                        },
+                        {
+                            tier: 'moderate',
+                            label: 'Moderate',
+                            color: 'var(--risk-moderate)',
+                            count: tierCounts.moderate,
+                        },
+                        { tier: 'low', label: 'Low Risk', color: 'var(--risk-low)', count: tierCounts.low },
+                    ].map((s) => (
+                        <div key={s.tier} className="card" style={{ padding: '1.25rem' }}>
+                            <div style={{ fontSize: '1.625rem', fontWeight: 800, color: s.color }}>
+                                {s.count}
+                            </div>
+                            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                {s.label}
+                            </div>
+                        </div>
+                    ))}
                 </div>
-                {[
-                    {
-                        tier: 'critical',
-                        label: 'Critical',
-                        color: 'var(--risk-critical)',
-                        count: tierCounts.critical,
-                    },
-                    {
-                        tier: 'high',
-                        label: 'High Risk',
-                        color: 'var(--risk-high)',
-                        count: tierCounts.high,
-                    },
-                    {
-                        tier: 'moderate',
-                        label: 'Moderate',
-                        color: 'var(--risk-moderate)',
-                        count: tierCounts.moderate,
-                    },
-                    {
-                        tier: 'low',
-                        label: 'Low Risk',
-                        color: 'var(--risk-low)',
-                        count: tierCounts.low,
-                    },
-                ].map((s) => (
-                    <div key={s.tier} className="card" style={{ padding: '1.25rem' }}>
-                        <div style={{ fontSize: '1.625rem', fontWeight: 800, color: s.color }}>{s.count}</div>
-                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{s.label}</div>
-                    </div>
-                ))}
-            </div>
+            )}
 
             {/* Heatmap */}
             <div style={{ marginBottom: '2rem' }}>
@@ -181,7 +190,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                                             marginBottom: '0.375rem',
                                         }}
                                     >
-                                        {a.companyName || 'Analyzing...'}
+                                        {a.companyName || (a.error ? 'Unknown Company' : 'Analyzing...')}
                                     </div>
                                     {a.industry && (
                                         <div
@@ -224,20 +233,35 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                                     ) : a.error ? (
                                         <span
                                             style={{
-                                                fontSize: '0.75rem',
+                                                display: 'inline-block',
+                                                fontSize: '0.7rem',
+                                                fontWeight: 600,
+                                                padding: '0.2rem 0.5rem',
+                                                borderRadius: '4px',
+                                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
                                                 color: 'var(--risk-critical)',
                                             }}
                                         >
-                                            Analysis failed
+                                            FAILED
+                                        </span>
+                                    ) : (a.pipelineProgress ?? 0) > 0 ? (
+                                        <span
+                                            style={{
+                                                fontSize: '0.75rem',
+                                                color: 'var(--accent-blue)',
+                                            }}
+                                        >
+                                            Analyzing...
                                         </span>
                                     ) : (
                                         <span
                                             style={{
                                                 fontSize: '0.75rem',
                                                 color: 'var(--text-tertiary)',
+                                                opacity: 0.6,
                                             }}
                                         >
-                                            Analyzing...
+                                            Queued
                                         </span>
                                     )}
                                 </div>

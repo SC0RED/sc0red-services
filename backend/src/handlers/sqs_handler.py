@@ -69,6 +69,21 @@ class SQSHandler:
 
         logger.info("Processing async analysis for %s (%s)", company_name or url, scan_id)
 
+        # Persist company identity BEFORE the pipeline runs. On failure,
+        # this ensures the record has a name and URL for display + retry.
+        # PersistResults overwrites with pipeline-resolved values on success.
+        company_repo = self._storage.create_company_repository()
+        company_repo.update(
+            request_id,
+            {
+                "id": request_id,
+                "company_name": company_name,
+                "company_url": url,
+                "scan_id": scan_id,
+                "org_id": org_id,
+            },
+        )
+
         try:
             self._factory_manager.run_company_analysis(
                 url=url,
@@ -89,6 +104,16 @@ class SQSHandler:
             return
         # Programming errors (AttributeError, KeyError, TypeError) propagate
         # to the outer SQS handler, triggering retry via batchItemFailures.
+
+        # Per-company completion event — the realtime hook uses this to detect
+        # the first completed company and navigate to the portfolio page early.
+        notify_progress(
+            scan_id=scan_id,
+            progress=100,
+            label="Analysis complete",
+            status="complete",
+            company_id=request_id,
+        )
 
         self._update_scan_progress(scan_id)
 
@@ -218,6 +243,16 @@ class SQSHandler:
         """
         company_repo = self._storage.create_company_repository()
         company_repo.update(request_id, {"id": request_id, "error": error_message})
+
+        # Per-company failure event — lets the frontend show the FAILED badge
+        # instantly via realtime instead of waiting for the next poll cycle.
+        notify_progress(
+            scan_id=scan_id,
+            progress=0,
+            label=f"Analysis failed: {error_message}",
+            status="failed",
+            company_id=request_id,
+        )
 
         self._update_scan_progress(scan_id)
 

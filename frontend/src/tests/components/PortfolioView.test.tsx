@@ -81,19 +81,46 @@ describe('PortfolioView', () => {
         expect(screen.getAllByText(/high risk/i).length).toBeGreaterThan(0)
     })
 
-    it('renders pending analysis with Analyzing... placeholder', () => {
+    it('renders queued analysis with Queued label (no pipeline progress)', () => {
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />)
+        expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
+    })
+
+    it('renders analyzing analysis with Analyzing... label (has pipeline progress)', () => {
+        const analyzingAnalysis = { ...pendingAnalysis, pipelineProgress: 30 }
+        render(<PortfolioView scanId="scan-1" initialScan={makeScan([analyzingAnalysis])} />)
         expect(screen.getAllByText('Analyzing...').length).toBeGreaterThan(0)
     })
 
-    it('renders failed analysis with Analysis failed label', () => {
+    it('renders failed analysis with company name and FAILED badge', () => {
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([failedAnalysis])} />)
-        expect(screen.getByText('Analysis failed')).toBeInTheDocument()
+        expect(screen.getAllByText('Gamma Ltd').length).toBeGreaterThan(0)
+        expect(screen.getByText('FAILED')).toBeInTheDocument()
     })
 
-    it('shows updating indicator when analyses are pending', () => {
+    it('renders failed analysis without company name as Unknown Company', () => {
+        const noNameFailure = { ...failedAnalysis, companyName: '' }
+        render(<PortfolioView scanId="scan-1" initialScan={makeScan([noNameFailure])} />)
+        expect(screen.getAllByText('Unknown Company').length).toBeGreaterThan(0)
+        expect(screen.getByText('FAILED')).toBeInTheDocument()
+    })
+
+    it('shows progress strip when scan is running', () => {
+        const scan = makeScan([completedAnalysis, pendingAnalysis], 'running')
+        render(<PortfolioView scanId="scan-1" initialScan={scan} />)
+        expect(screen.getByText('1 of 2 done')).toBeInTheDocument()
+    })
+
+    it('hides progress strip and shows stats when scan is complete', () => {
+        const scan = makeScan([completedAnalysis], 'complete')
+        render(<PortfolioView scanId="scan-1" initialScan={scan} />)
+        expect(screen.queryByText(/of.*done/)).not.toBeInTheDocument()
+        expect(screen.getByText('Avg Risk Score')).toBeInTheDocument()
+    })
+
+    it('hides summary stats while scan is running', () => {
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />)
-        expect(screen.getByText(/updating/i)).toBeInTheDocument()
+        expect(screen.queryByText('Avg Risk Score')).not.toBeInTheDocument()
     })
 
     it('does not show updating indicator when all analyses are complete', () => {
@@ -110,14 +137,13 @@ describe('PortfolioView', () => {
 
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />)
 
-        expect(screen.getAllByText('Analyzing...').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
 
         await act(async () => {
             await vi.runAllTimersAsync()
         })
 
         expect(screen.getAllByText('Acme Corp').length).toBeGreaterThan(0)
-        expect(screen.queryByText(/updating/i)).not.toBeInTheDocument()
     })
 
     it('does not poll when all analyses are already resolved', () => {
@@ -142,6 +168,26 @@ describe('PortfolioView', () => {
         })
 
         // Still showing pending — not crashed
-        expect(screen.getAllByText('Analyzing...').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
+    })
+
+    it('renders cards in stable order regardless of API response order', () => {
+        // API returns analyses in arbitrary order (DynamoDB BatchGetItem)
+        const reverseOrder = makeScan(
+            [
+                { ...failedAnalysis, id: 'z-3' },
+                { ...pendingAnalysis, id: 'm-2' },
+                { ...completedAnalysis, id: 'a-1' },
+            ],
+            'running'
+        )
+
+        const { container } = render(<PortfolioView scanId="scan-1" initialScan={reverseOrder} />)
+
+        // Cards should be sorted by id ascending: a-1, m-2, z-3
+        const cards = container.querySelectorAll('.card .truncate')
+        const renderedNames = Array.from(cards).map((el) => el.textContent)
+        // First card should be a-1 (Acme Corp), not z-3 (Gamma Ltd)
+        expect(renderedNames[0]).toBe('Acme Corp')
     })
 })

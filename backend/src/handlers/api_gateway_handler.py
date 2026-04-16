@@ -83,9 +83,11 @@ def check_org_access(
 
 def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
     """Build a camelCase summary dict from a company DynamoDB record."""
-    # Uses .get() because during pipeline execution, the company record is
-    # a partial item (only pipeline_progress + pipeline_label) created by
-    # _report_progress. Full fields are only present after persist_results.
+    # Uses .get() because the record evolves through multiple pipeline phases:
+    # 1. Identity write (company_name, company_url, scan_id, org_id) at pipeline start
+    # 2. Progress updates (pipeline_progress, pipeline_label) during execution
+    # 3. Full results (risk_score, analyzed_at, etc.) after persist_results
+    # On failure, only phases 1-2 are present + the error field.
     return {
         "id": company.get("id", ""),
         "companyName": company.get("company_name", ""),

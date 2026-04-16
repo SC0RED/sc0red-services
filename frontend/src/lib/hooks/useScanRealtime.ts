@@ -35,6 +35,8 @@ interface UseScanRealtimeOptions {
     onFailed: (error: string) => void
     /** Called when discovery reaches ``awaiting_confirmation`` (discovery mode only). */
     onAwaitingConfirmation?: () => void
+    /** Called when the first company analysis completes (portfolio mode only). */
+    onFirstComplete?: () => void
 }
 
 function computeAggregatedProgress(
@@ -85,8 +87,10 @@ export function useScanRealtime(options: UseScanRealtimeOptions): {
 
     const unsubscribeRef = useRef<(() => void) | null>(null)
     const companyMapRef = useRef<Map<string, CompanyState>>(new Map())
+    const hasNotifiedFirstComplete = useRef(false)
 
     const stop = useCallback(() => {
+        hasNotifiedFirstComplete.current = false
         if (unsubscribeRef.current) {
             unsubscribeRef.current()
             unsubscribeRef.current = null
@@ -144,11 +148,19 @@ export function useScanRealtime(options: UseScanRealtimeOptions): {
                                 )
                                 optionsRef.current.onProgress(aggregated.progress, aggregated.label)
 
-                                // Check if all companies are complete
+                                // Check completion state
                                 let doneCount = 0
                                 for (const state of companyMapRef.current.values()) {
                                     if (state.status === 'complete') doneCount++
                                 }
+
+                                // First company done → caller can navigate early
+                                if (doneCount >= 1 && !hasNotifiedFirstComplete.current) {
+                                    hasNotifiedFirstComplete.current = true
+                                    optionsRef.current.onFirstComplete?.()
+                                }
+
+                                // All companies done
                                 if (doneCount >= totalCompanies) {
                                     optionsRef.current.onComplete()
                                 }

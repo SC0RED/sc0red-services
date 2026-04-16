@@ -85,6 +85,7 @@ def handle_get_analysis(
             "pipelineProgress": company.get("pipeline_progress", 0),
             "pipelineLabel": company.get("pipeline_label", ""),
             "analyzedAt": company.get("analyzed_at"),
+            "error": company.get("error"),
             "scanId": company.get("scan_id", ""),
         }
     )
