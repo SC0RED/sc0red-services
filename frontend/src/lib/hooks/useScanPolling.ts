@@ -19,7 +19,7 @@ interface PortfolioCallbacks {
     totalCompanies: number
     onComplete: (data: ScanPollResponse) => void
     onFailed: (error: string) => void
-    onProgress: (progress: number, label: string) => void
+    onProgress: (progress: number, label: string, rawData?: ScanPollResponse) => void
 }
 
 type UseScanPollingOptions = DiscoveryCallbacks | PortfolioCallbacks
@@ -76,7 +76,7 @@ function handlePortfolioPoll(
         label = `Analyzing companies... (${done}/${callbacks.totalCompanies} complete)`
     }
 
-    callbacks.onProgress(targetProgress, label)
+    callbacks.onProgress(targetProgress, label, data)
 
     if (data.status === 'complete') {
         stopPolling()

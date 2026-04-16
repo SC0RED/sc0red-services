@@ -245,10 +245,13 @@ describe('useScanPolling', () => {
 
             await advanceAndFlush(1000)
 
-            expect(callbacks.onProgress).toHaveBeenCalledWith(
-                53,
-                'Assessing risks... (1/3 complete, 1 in progress)'
-            )
+            const progressCall = callbacks.onProgress.mock.calls[0]
+            expect(progressCall[0]).toBe(53)
+            expect(progressCall[1]).toBe('Assessing risks... (1/3 complete, 1 in progress)')
+            // Third arg is the raw poll data — portfolio callers use this to
+            // detect first-company-complete for early navigation.
+            expect(progressCall[2]).toBeDefined()
+            expect(progressCall[2].analyses).toHaveLength(3)
         })
 
         it('calls onComplete when portfolio status is complete', async () => {
@@ -328,7 +331,10 @@ describe('useScanPolling', () => {
 
             await advanceAndFlush(1000)
 
-            expect(callbacks.onProgress).toHaveBeenCalledWith(95, 'Finishing up... (2/2 complete)')
+            const progressCall = callbacks.onProgress.mock.calls[0]
+            expect(progressCall[0]).toBe(95)
+            expect(progressCall[1]).toBe('Finishing up... (2/2 complete)')
+            expect(progressCall[2]).toBeDefined()
         })
     })
 

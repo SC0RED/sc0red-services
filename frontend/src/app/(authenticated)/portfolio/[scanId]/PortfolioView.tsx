@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import PortfolioProgressStrip from '@/components/scan/PortfolioProgressStrip'
 import { getRiskTierLabel, getRiskTier, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { ScanAnalysis, ScanData } from '@/lib/types/api'
 
@@ -44,7 +45,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         if (a.riskTier) tierCounts[a.riskTier as keyof typeof tierCounts]++
     })
 
-    const pending = hasPendingAnalyses(analyses)
+    const isRunning = scan.status !== 'complete' && analyses.length > 0
 
     return (
         <>
@@ -80,69 +81,66 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                 </h1>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
                     {analyses.length} companies
-                    {pending && (
-                        <span
-                            style={{
-                                marginLeft: '0.75rem',
-                                fontSize: '0.8125rem',
-                                color: 'var(--accent-blue)',
-                            }}
-                        >
-                            · {completed.length}/{analyses.length} complete · updating...
-                        </span>
-                    )}
                 </p>
             </div>
 
-            {/* Stats Row */}
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(5, 1fr)',
-                    gap: '1rem',
-                    marginBottom: '2rem',
-                }}
-            >
-                <div className="card" style={{ padding: '1.25rem' }}>
-                    <div style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--accent-blue)' }}>
-                        {avgScore.toFixed(1)}
+            {/* Progress strip — visible while scan is running */}
+            <PortfolioProgressStrip
+                completedCount={completed.length + analyses.filter((a) => a.error).length}
+                totalCount={analyses.length}
+                visible={isRunning}
+            />
+
+            {/* Stats Row — only after scan completes (partial stats are misleading) */}
+            {!isRunning && (
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(5, 1fr)',
+                        gap: '1rem',
+                        marginBottom: '2rem',
+                    }}
+                >
+                    <div className="card" style={{ padding: '1.25rem' }}>
+                        <div style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--accent-blue)' }}>
+                            {avgScore.toFixed(1)}
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                            Avg Risk Score
+                        </div>
                     </div>
-                    <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                        Avg Risk Score
-                    </div>
+                    {[
+                        {
+                            tier: 'critical',
+                            label: 'Critical',
+                            color: 'var(--risk-critical)',
+                            count: tierCounts.critical,
+                        },
+                        {
+                            tier: 'high',
+                            label: 'High Risk',
+                            color: 'var(--risk-high)',
+                            count: tierCounts.high,
+                        },
+                        {
+                            tier: 'moderate',
+                            label: 'Moderate',
+                            color: 'var(--risk-moderate)',
+                            count: tierCounts.moderate,
+                        },
+                        { tier: 'low', label: 'Low Risk', color: 'var(--risk-low)', count: tierCounts.low },
+                    ].map((s) => (
+                        <div key={s.tier} className="card" style={{ padding: '1.25rem' }}>
+                            <div style={{ fontSize: '1.625rem', fontWeight: 800, color: s.color }}>
+                                {s.count}
+                            </div>
+                            <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                                {s.label}
+                            </div>
+                        </div>
+                    ))}
                 </div>
-                {[
-                    {
-                        tier: 'critical',
-                        label: 'Critical',
-                        color: 'var(--risk-critical)',
-                        count: tierCounts.critical,
-                    },
-                    {
-                        tier: 'high',
-                        label: 'High Risk',
-                        color: 'var(--risk-high)',
-                        count: tierCounts.high,
-                    },
-                    {
-                        tier: 'moderate',
-                        label: 'Moderate',
-                        color: 'var(--risk-moderate)',
-                        count: tierCounts.moderate,
-                    },
-                    {
-                        tier: 'low',
-                        label: 'Low Risk',
-                        color: 'var(--risk-low)',
-                        count: tierCounts.low,
-                    },
-                ].map((s) => (
-                    <div key={s.tier} className="card" style={{ padding: '1.25rem' }}>
-                        <div style={{ fontSize: '1.625rem', fontWeight: 800, color: s.color }}>{s.count}</div>
-                        <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{s.label}</div>
-                    </div>
-                ))}
-            </div>
+            )}
 
             {/* Heatmap */}
             <div style={{ marginBottom: '2rem' }}>
@@ -235,14 +233,24 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                                         >
                                             FAILED
                                         </span>
+                                    ) : (a.pipelineProgress ?? 0) > 0 ? (
+                                        <span
+                                            style={{
+                                                fontSize: '0.75rem',
+                                                color: 'var(--accent-blue)',
+                                            }}
+                                        >
+                                            Analyzing...
+                                        </span>
                                     ) : (
                                         <span
                                             style={{
                                                 fontSize: '0.75rem',
                                                 color: 'var(--text-tertiary)',
+                                                opacity: 0.6,
                                             }}
                                         >
-                                            Analyzing...
+                                            Queued
                                         </span>
                                     )}
                                 </div>

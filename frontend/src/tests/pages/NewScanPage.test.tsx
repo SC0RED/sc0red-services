@@ -382,12 +382,73 @@ describe('NewScanPage', () => {
                 expect(screen.getByText('Running Portfolio Analysis...')).toBeInTheDocument()
             })
 
+            // First poll has one analyzedAt → early navigation to portfolio page
             await waitFor(
                 () => {
-                    expect(screen.getByText(/1\/2 complete/)).toBeInTheDocument()
+                    expect(mockPush).toHaveBeenCalledWith('/portfolio/s-1')
                 },
                 { timeout: 3000 }
             )
+        })
+
+        it('stays on progress bar when no company has completed yet', async () => {
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        scanId: 's-2',
+                        status: 'awaiting_confirmation',
+                        portfolioCompanies: [
+                            { name: 'Acme Corp', url: 'https://acme.com', description: 'A corp' },
+                        ],
+                    }),
+            })
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
+
+            render(<NewScanPage />)
+
+            fireEvent.change(screen.getByLabelText('PE Firm Website URL'), {
+                target: { value: 'https://pe-firm.com' },
+            })
+            fireEvent.click(screen.getByText('Discover Portfolio & Analyze'))
+
+            await waitFor(() => {
+                expect(screen.getByText('Portfolio companies discovered')).toBeInTheDocument()
+            })
+
+            // POST /api/scan/s-2/confirm
+            innerFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () => Promise.resolve({ status: 'running' }),
+            })
+            // GET /api/scan/s-2 — poll: 0 complete, all still analyzing
+            innerFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'running',
+                        analyses: [{ analyzedAt: null, pipelineProgress: 30, pipelineLabel: 'Scraping...' }],
+                    }),
+            })
+
+            mockPush.mockClear()
+            fireEvent.click(screen.getByText('Analyze 1 Companies'))
+
+            await waitFor(() => {
+                expect(screen.getByText('Running Portfolio Analysis...')).toBeInTheDocument()
+            })
+
+            // Wait for poll to fire
+            await waitFor(
+                () => {
+                    expect(screen.getByText(/Scraping/)).toBeInTheDocument()
+                },
+                { timeout: 3000 }
+            )
+
+            // Should NOT have navigated — no analyzedAt yet
+            expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining('/portfolio/'))
         })
     })
 })
