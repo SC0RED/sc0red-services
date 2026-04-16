@@ -86,9 +86,19 @@ describe('PortfolioView', () => {
         expect(screen.getAllByText('Analyzing...').length).toBeGreaterThan(0)
     })
 
-    it('renders failed analysis with Analysis failed label', () => {
+    it('renders failed analysis with company name and FAILED badge', () => {
         render(<PortfolioView scanId="scan-1" initialScan={makeScan([failedAnalysis])} />)
-        expect(screen.getByText('Analysis failed')).toBeInTheDocument()
+        // Company name is visible (not "Analyzing...")
+        expect(screen.getAllByText('Gamma Ltd').length).toBeGreaterThan(0)
+        // FAILED badge renders
+        expect(screen.getByText('FAILED')).toBeInTheDocument()
+    })
+
+    it('renders failed analysis without company name as Unknown Company', () => {
+        const noNameFailure = { ...failedAnalysis, companyName: '' }
+        render(<PortfolioView scanId="scan-1" initialScan={makeScan([noNameFailure])} />)
+        expect(screen.getAllByText('Unknown Company').length).toBeGreaterThan(0)
+        expect(screen.getByText('FAILED')).toBeInTheDocument()
     })
 
     it('shows updating indicator when analyses are pending', () => {

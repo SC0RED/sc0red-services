@@ -69,6 +69,20 @@ class SQSHandler:
 
         logger.info("Processing async analysis for %s (%s)", company_name or url, scan_id)
 
+        # Persist company identity BEFORE the pipeline runs. On failure,
+        # this ensures the record has a name and URL for display + retry.
+        # PersistResults overwrites with pipeline-resolved values on success.
+        company_repo = self._storage.create_company_repository()
+        company_repo.update(
+            request_id,
+            {
+                "company_name": company_name,
+                "company_url": url,
+                "scan_id": scan_id,
+                "org_id": org_id,
+            },
+        )
+
         try:
             self._factory_manager.run_company_analysis(
                 url=url,
