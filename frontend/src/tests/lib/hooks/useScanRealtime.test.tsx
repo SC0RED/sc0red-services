@@ -202,4 +202,82 @@ describe('useScanRealtime', () => {
         expect(options.onComplete).not.toHaveBeenCalled()
         expect(options.onFailed).not.toHaveBeenCalled()
     })
+
+    it('calls onFirstComplete when first company completes in portfolio mode', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            json: () =>
+                Promise.resolve({
+                    appsyncEndpoint: 'https://xxx.appsync-api.us-east-1.amazonaws.com/graphql',
+                    appsyncApiKey: 'da2-fakekey',
+                }),
+        })
+        global.fetch = fetchMock
+
+        let capturedOnData: ((data: Record<string, unknown>) => void) | null = null
+        mockCreateSubscription.mockImplementation((_config, _query, _vars, handlers) => {
+            capturedOnData = handlers.onData
+            return vi.fn()
+        })
+
+        const options = {
+            totalCompanies: 3,
+            onProgress: vi.fn(),
+            onComplete: vi.fn(),
+            onFailed: vi.fn(),
+            onFirstComplete: vi.fn(),
+        }
+        const { result } = renderHook(() => useScanRealtime(options))
+
+        await act(async () => {
+            result.current.start('scan-1')
+        })
+
+        // First company completes
+        act(() => {
+            capturedOnData!({
+                onScanProgress: {
+                    scanId: 'scan-1',
+                    companyId: 'c-1',
+                    progress: 100,
+                    progressLabel: 'Complete',
+                    status: 'complete',
+                },
+            })
+        })
+
+        expect(options.onFirstComplete).toHaveBeenCalledTimes(1)
+        expect(options.onComplete).not.toHaveBeenCalled()
+
+        // Second company completes — onFirstComplete should NOT fire again
+        act(() => {
+            capturedOnData!({
+                onScanProgress: {
+                    scanId: 'scan-1',
+                    companyId: 'c-2',
+                    progress: 100,
+                    progressLabel: 'Complete',
+                    status: 'complete',
+                },
+            })
+        })
+
+        expect(options.onFirstComplete).toHaveBeenCalledTimes(1)
+        expect(options.onComplete).not.toHaveBeenCalled()
+
+        // Third (last) company completes — onComplete fires
+        act(() => {
+            capturedOnData!({
+                onScanProgress: {
+                    scanId: 'scan-1',
+                    companyId: 'c-3',
+                    progress: 100,
+                    progressLabel: 'Complete',
+                    status: 'complete',
+                },
+            })
+        })
+
+        expect(options.onFirstComplete).toHaveBeenCalledTimes(1)
+        expect(options.onComplete).toHaveBeenCalledTimes(1)
+    })
 })
