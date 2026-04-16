@@ -84,6 +84,7 @@ export interface AnalysisData {
     valueChain?: ValueChain
     documents?: DocumentInfo[]
     analyzedAt?: string
+    error?: string
     scanType?: string
     pipelineProgress?: number
     pipelineLabel?: string
@@ -120,12 +121,15 @@ export interface ScanAnalysis {
     riskTier: string | null
     error: string | null
     analyzedAt: string | null
+    pipelineProgress?: number
+    pipelineLabel?: string
 }
 
 export interface ScanData {
     status: string
     progress: number
     type: string
+    totalCompanies?: number
     portfolioCompanies: Array<{ name: string; url: string }>
     analyses: ScanAnalysis[]
 }

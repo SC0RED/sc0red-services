@@ -106,8 +106,8 @@ class TestSQSHandler:
         # No batch item failures — message is consumed, not retried
         assert result == {"batchItemFailures": []}
 
-        # Error was patched onto the company record (not a full overwrite)
-        company_repo.update.assert_called_once_with(
+        # Identity was written first, then error was patched on failure
+        company_repo.update.assert_any_call(
             "analysis-id-1", {"id": "analysis-id-1", "error": "AI provider boom"}
         )
 
@@ -123,10 +123,43 @@ class TestSQSHandler:
 
         handler._process_message(_BASE_MESSAGE)
 
-        company_repo.update.assert_called_once_with(
+        company_repo.update.assert_any_call(
             "analysis-id-1", {"id": "analysis-id-1", "error": "timeout"}
         )
         scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100, "completed_count": 1})
+
+    def test_identity_written_before_pipeline_survives_failure(self):
+        """Company name + URL are persisted before the pipeline runs, so failures
+        still have identity for display and retry."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("scrape blocked")
+        self._make_scan_repo(storage, {"progress": 10, "total_companies": 1}, resolved_companies=0)
+        company_repo = storage.create_company_repository.return_value
+        company_repo.get_by_id.return_value = {"error": "scrape blocked"}
+
+        handler.handle(
+            {
+                "Records": [
+                    {
+                        "messageId": "msg-1",
+                        "body": json.dumps(_BASE_MESSAGE),
+                    }
+                ],
+            }
+        )
+
+        # First update: identity (before pipeline)
+        identity_call = company_repo.update.call_args_list[0]
+        assert identity_call[0][0] == "analysis-id-1"
+        identity_data = identity_call[0][1]
+        assert identity_data["company_name"] == "Test Co"
+        assert identity_data["company_url"] == "https://example.com"
+        assert identity_data["scan_id"] == "scan-1"
+        assert identity_data["org_id"] == "org-1"
+
+        # Second update: error (after pipeline failure)
+        error_call = company_repo.update.call_args_list[1]
+        assert error_call[0][1] == {"id": "analysis-id-1", "error": "scrape blocked"}
 
     def test_json_parse_error_reports_batch_failure(self):
         """Malformed JSON in the SQS body is a transient issue — report for retry."""
@@ -229,14 +262,23 @@ class TestSQSHandler:
             handler._process_message(message)
 
     @patch("src.handlers.sqs_handler.notify_progress")
-    def test_update_scan_progress_calls_notify_on_complete(self, mock_notify):
-        """When all companies are resolved, notify_progress is called with status=complete."""
+    def test_per_company_complete_event_sent_on_success(self, mock_notify):
+        """Successful company analysis sends a per-company status=complete AppSync event."""
         handler, storage = self._make_handler()
         self._make_scan_repo(storage, {"progress": 80, "total_companies": 2}, resolved_companies=2)
 
         handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
 
-        mock_notify.assert_called_once_with(
+        # First call: per-company complete (with company_id)
+        mock_notify.assert_any_call(
+            scan_id="scan-1",
+            progress=100,
+            label="Analysis complete",
+            status="complete",
+            company_id="analysis-id-1",
+        )
+        # Second call: scan-level complete (all companies resolved)
+        mock_notify.assert_any_call(
             scan_id="scan-1",
             progress=100,
             label="Analysis complete!",
@@ -244,14 +286,40 @@ class TestSQSHandler:
         )
 
     @patch("src.handlers.sqs_handler.notify_progress")
-    def test_update_scan_progress_does_not_notify_when_incomplete(self, mock_notify):
-        """When not all companies are resolved, notify_progress should not be called."""
+    def test_per_company_complete_event_when_scan_not_finished(self, mock_notify):
+        """Per-company complete fires even when the overall scan isn't done yet."""
         handler, storage = self._make_handler()
         self._make_scan_repo(storage, {"progress": 10, "total_companies": 4}, resolved_companies=1)
 
         handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
 
-        mock_notify.assert_not_called()
+        # Per-company complete event still fires
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=100,
+            label="Analysis complete",
+            status="complete",
+            company_id="analysis-id-1",
+        )
+
+    @patch("src.handlers.sqs_handler.notify_progress")
+    def test_per_company_failed_event_sent_on_failure(self, mock_notify):
+        """Failed company analysis sends a per-company status=failed AppSync event."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = RuntimeError("scrape blocked")
+        self._make_scan_repo(storage, {"progress": 10, "total_companies": 2}, resolved_companies=0)
+        company_repo = storage.create_company_repository.return_value
+        company_repo.get_by_id.return_value = {"error": "scrape blocked"}
+
+        handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
+
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=0,
+            label="Analysis failed: scrape blocked",
+            status="failed",
+            company_id="analysis-id-1",
+        )
 
 
 class TestSQSHandlerPortfolioDiscovery:

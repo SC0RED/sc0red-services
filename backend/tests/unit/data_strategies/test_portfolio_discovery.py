@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 from src.data_strategies.portfolio_discovery_strategy import (
     _GENERIC_CTA_PATTERNS,
-    _MAX_COMPANIES,
     PORTFOLIO_PATHS,
     _SOCIAL_DOMAINS,
     PortfolioDiscoveryStrategy,
@@ -22,9 +21,6 @@ class TestPortfolioDiscoveryConstants:
         assert "/portfolio" in PORTFOLIO_PATHS
         assert "/companies" in PORTFOLIO_PATHS
         assert "/investments" in PORTFOLIO_PATHS
-
-    def test_max_companies_is_reasonable(self):
-        assert _MAX_COMPANIES == 30
 
     def test_cta_patterns_are_strings(self):
         assert len(_GENERIC_CTA_PATTERNS) > 0
@@ -289,9 +285,15 @@ class TestPortfolioDiscoveryStrategy:
         assert "Good Link" in names
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
-    def test_max_companies_limit(self, mock_scrape):
-        """Once 30 companies are collected, processing stops."""
-        links = [{"text": f"Company {i}", "href": f"https://company{i}.com"} for i in range(50)]
+    def test_no_hardcoded_company_cap(self, mock_scrape):
+        """Heuristic returns all valid candidates — no silent truncation.
+
+        Regression: heuristic path previously truncated at 30 companies
+        (cap since removed); must return all valid candidates regardless
+        of page size. Customer-facing symptom was perotjain.com returning
+        30-38 companies when the page contains 70+.
+        """
+        links = [{"text": f"Company {i:02d}", "href": f"https://company{i}.com"} for i in range(50)]
         mock_scrape.return_value = {
             "text": "content",
             "title": "title",
@@ -303,7 +305,10 @@ class TestPortfolioDiscoveryStrategy:
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _, meta = strategy.execute()
 
-        assert len(meta["companies"]) == 30
+        # Every valid candidate is returned — no longer capped at 30.
+        # scrape_url is called once per PORTFOLIO_PATHS entry, so the same
+        # 50 links are seen multiple times; dedup by URL leaves exactly 50.
+        assert len(meta["companies"]) == 50
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")

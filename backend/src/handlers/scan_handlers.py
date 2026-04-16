@@ -229,6 +229,7 @@ def handle_scan_status(
             "progress": progress,
             "progressLabel": progress_label,
             "type": scan.get("type"),
+            "totalCompanies": total_companies,
             "portfolioCompanies": scan.get("portfolio_companies", []),
             "analyses": analyses,
             "error": scan.get("error", ""),

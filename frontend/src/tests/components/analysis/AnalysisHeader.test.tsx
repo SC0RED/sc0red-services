@@ -55,4 +55,16 @@ describe('AnalysisHeader', () => {
         render(<AnalysisHeader analysisId="test-id" companyName="Acme Corp" tier="high" />)
         expect(screen.getByText('Delete Analysis')).toBeInTheDocument()
     })
+
+    it('renders Portfolio breadcrumb when scanId is present', () => {
+        render(<AnalysisHeader analysisId="test-id" companyName="Acme Corp" tier="high" scanId="scan-123" />)
+        const portfolioLink = screen.getByText('Portfolio')
+        expect(portfolioLink).toBeInTheDocument()
+        expect(portfolioLink.closest('a')).toHaveAttribute('href', '/portfolio/scan-123')
+    })
+
+    it('does not render Portfolio breadcrumb when scanId is absent', () => {
+        render(<AnalysisHeader analysisId="test-id" companyName="Acme Corp" tier="high" />)
+        expect(screen.queryByText('Portfolio')).not.toBeInTheDocument()
+    })
 })
