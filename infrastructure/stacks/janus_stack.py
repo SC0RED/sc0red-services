@@ -115,7 +115,11 @@ class JanusStack(Stack):
         )
 
         worker_handler.add_event_source(
-            lambda_event_sources.SqsEventSource(queue, batch_size=1)
+            lambda_event_sources.SqsEventSource(
+                queue,
+                batch_size=1,
+                report_batch_item_failures=True,
+            )
         )
 
         observability = ObservabilityConstruct(

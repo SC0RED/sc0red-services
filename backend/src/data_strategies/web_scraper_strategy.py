@@ -172,7 +172,12 @@ def scrape_url(url: str) -> dict[str, Any]:
     for el in soup.find_all(class_=True):
         if el.name in ("html", "body"):
             continue
-        class_tokens = {c.lower() for c in el.get("class", [])}
+        # Guard: decompose() on earlier elements can corrupt the tree,
+        # leaving some elements with attrs=None. Skip those.
+        try:
+            class_tokens = {c.lower() for c in el.get("class", [])}
+        except AttributeError:
+            continue
         if class_tokens & clutter_classes:
             el.decompose()
 
