@@ -147,11 +147,20 @@ def _start_single_scan(
 def _compute_scan_progress(
     analyses: list[dict[str, Any]],
     scan_progress: int,
+    total_companies: int = 0,
 ) -> tuple[int, int]:
-    """Return (done_count, computed_progress) from per-company pipeline progress."""
+    """Return (done_count, computed_progress) from per-company pipeline progress.
+
+    Uses ``total_companies`` (from the scan record, set at confirm time) as the
+    denominator — not ``len(analyses)``, which only counts companies that have
+    DynamoDB records. Companies still queued in SQS have no record yet and would
+    be invisible, making progress appear 100% prematurely.
+    """
     if not analyses:
         return 0, scan_progress
-    total = len(analyses)
+    # Use the true total; fall back to len(analyses) for standalone scans
+    # where total_companies may be 0 or absent.
+    total = max(total_companies, len(analyses))
     done_count = sum(1 for a in analyses if a.get("analyzedAt") or a.get("error"))
     company_progress_sum = sum(
         100 if (a.get("analyzedAt") or a.get("error")) else a.get("pipelineProgress", 0)
@@ -201,7 +210,9 @@ def handle_scan_status(
     status = scan.get("status")
     total_companies = scan.get("total_companies", 0)
 
-    done_count, computed_progress = _compute_scan_progress(analyses, scan.get("progress", 0))
+    done_count, computed_progress = _compute_scan_progress(
+        analyses, scan.get("progress", 0), total_companies
+    )
 
     # Detect completion from company data even if scan record is stale.
     # Handles race conditions where _update_scan_progress hasn't run yet.

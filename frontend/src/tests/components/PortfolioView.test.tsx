@@ -53,11 +53,12 @@ const failedAnalysis = {
     analyzedAt: null,
 }
 
-function makeScan(analyses: ScanAnalysis[], status = 'running') {
+function makeScan(analyses: ScanAnalysis[], status = 'running', totalCompanies?: number) {
     return {
         status,
         progress: 50,
         type: 'portfolio',
+        totalCompanies: totalCompanies ?? analyses.length,
         portfolioCompanies: [],
         analyses,
     }
@@ -189,5 +190,15 @@ describe('PortfolioView', () => {
         const renderedNames = Array.from(cards).map((el) => el.textContent)
         // First card should be a-1 (Acme Corp), not z-3 (Gamma Ltd)
         expect(renderedNames[0]).toBe('Acme Corp')
+    })
+
+    it('shows progress strip when fewer analyses exist than totalCompanies', () => {
+        // 5 analyses all resolved, but totalCompanies=6 — 6th not picked up yet
+        const scan = makeScan([completedAnalysis], 'running', 6)
+        render(<PortfolioView scanId="scan-1" initialScan={scan} />)
+        // Should NOT show stats — allResolved is false (1 record < 6 total)
+        expect(screen.queryByText('Avg Risk Score')).not.toBeInTheDocument()
+        // Progress strip should be visible
+        expect(screen.getByText('1 of 6 done')).toBeInTheDocument()
     })
 })
