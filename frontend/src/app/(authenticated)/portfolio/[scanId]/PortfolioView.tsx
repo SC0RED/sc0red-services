@@ -8,7 +8,10 @@ import type { ScanAnalysis, ScanData } from '@/lib/types/api'
 
 const POLL_INTERVAL_MS = 4000
 
-function hasPendingAnalyses(analyses: ScanAnalysis[]): boolean {
+function hasPendingWork(analyses: ScanAnalysis[], totalCompanies: number): boolean {
+    // Keep polling if any analysis is unresolved OR if fewer records exist
+    // than the total (some companies haven't been picked up by the worker yet).
+    if (analyses.length < totalCompanies) return true
     return analyses.some((a) => a.overallRiskScore === null && !a.error)
 }
 
@@ -16,7 +19,8 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
     const [scan, setScan] = useState<ScanData>(initialScan)
 
     useEffect(() => {
-        if (!hasPendingAnalyses(scan.analyses) || scan.status === 'complete') return
+        const total = scan.totalCompanies || scan.analyses.length
+        if (!hasPendingWork(scan.analyses, total) || scan.status === 'complete') return
 
         const interval = setInterval(async () => {
             try {
@@ -24,7 +28,8 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                 if (!res.ok) return
                 const updated: ScanData = await res.json()
                 setScan(updated)
-                if (!hasPendingAnalyses(updated.analyses) || updated.status === 'complete') {
+                const updatedTotal = updated.totalCompanies || updated.analyses.length
+                if (!hasPendingWork(updated.analyses, updatedTotal) || updated.status === 'complete') {
                     clearInterval(interval)
                 }
             } catch {
@@ -33,7 +38,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         }, POLL_INTERVAL_MS)
 
         return () => clearInterval(interval)
-    }, [scanId, scan.analyses, scan.status])
+    }, [scanId, scan.analyses, scan.status, scan.totalCompanies])
 
     // Sort by id for stable ordering — DynamoDB BatchGetItem returns items in
     // arbitrary order, so each poll cycle would otherwise shuffle the cards.
