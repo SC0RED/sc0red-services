@@ -123,6 +123,65 @@ class TestScrapeUrl:
         assert "Real content" in result["text"]
 
     @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
+    def test_scrape_removes_element_with_exact_clutter_class(self, mock_client_cls):
+        """Element with class exactly matching 'sidebar' is removed."""
+        mock_response = MagicMock()
+        mock_response.text = (
+            "<html><body>"
+            '<div class="sidebar">Sidebar junk</div>'
+            "<p>Main content</p>"
+            "</body></html>"
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = scrape_url("https://example.com")
+        assert "Sidebar junk" not in result["text"]
+        assert "Main content" in result["text"]
+
+    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
+    def test_scrape_preserves_compound_class_with_clutter_substring(self, mock_client_cls):
+        """Element with class 'no-sidebar' is NOT removed — token matching, not substring."""
+        mock_response = MagicMock()
+        mock_response.text = (
+            '<html><body class="home no-sidebar wp-theme">'
+            "<p>Important content about the company</p>"
+            "</body></html>"
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = scrape_url("https://example.com")
+        assert "Important content" in result["text"]
+
+    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
+    def test_scrape_never_removes_body_element(self, mock_client_cls):
+        """<body> is never decomposed even if its class matches a clutter keyword."""
+        mock_response = MagicMock()
+        mock_response.text = (
+            '<html><body class="sidebar">'
+            "<p>Content inside body with sidebar class</p>"
+            "</body></html>"
+        )
+        mock_response.raise_for_status = MagicMock()
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = scrape_url("https://example.com")
+        assert "Content inside body" in result["text"]
+
+    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
     def test_scrape_image_link_fallback(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.text = (
