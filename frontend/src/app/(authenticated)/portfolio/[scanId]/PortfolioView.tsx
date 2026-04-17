@@ -55,7 +55,10 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
     // (analyzedAt or error). The scan.status can lag behind individual completions
     // because _update_scan_progress runs after each company finishes.
     const resolvedCount = analyses.filter((a) => a.analyzedAt || a.error).length
-    const allResolved = resolvedCount >= totalCompanies && totalCompanies > 0
+    // All companies must have records AND be resolved. If analyses.length < totalCompanies,
+    // some companies haven't been picked up by the worker yet — not truly complete.
+    const allResolved =
+        analyses.length >= totalCompanies && resolvedCount >= totalCompanies && totalCompanies > 0
     const isRunning = scan.status !== 'complete' && !allResolved
 
     return (
