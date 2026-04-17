@@ -76,7 +76,7 @@ class JanusStack(Stack):
             function_name=f"janus-worker-{environment}",
             handler="src.handlers.worker_handler_entry.handle_worker_event",
             bundling=bundling, environment=common_environment,
-            timeout_seconds=540, memory_size=1769, reserved_concurrency=5,
+            timeout_seconds=540, memory_size=1769, reserved_concurrency=3,
         )
 
         table.grant_read_write_data(api_handler)
