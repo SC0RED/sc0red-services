@@ -58,8 +58,8 @@ class TestHandleSendWave:
         assert mock_lambda.invoke.call_count == 2
         assert result["wave_company_ids"] == ["a-1", "a-2"]
         assert result["remaining_count"] == 1
-        assert len(result["remaining_companies"]) == 1
-        assert result["remaining_companies"][0]["analysis_id"] == "a-3"
+        assert len(result["companies"]) == 1
+        assert result["companies"][0]["analysis_id"] == "a-3"
         # Passthrough fields
         assert result["scan_id"] == "scan-1"
         assert result["wave_size"] == 2
@@ -81,7 +81,7 @@ class TestHandleSendWave:
         result = handle_send_wave(event, None)
 
         assert result["remaining_count"] == 0
-        assert result["remaining_companies"] == []
+        assert result["companies"] == []
         assert result["wave_company_ids"] == ["a-1"]
 
     @patch("src.handlers.step_function_handlers.boto3")
@@ -126,7 +126,7 @@ class TestHandleCheckWave:
         event = {
             "wave_company_ids": ["a-1", "a-2"],
             "scan_id": "scan-1",
-            "remaining_companies": [],
+            "companies": [],
             "remaining_count": 0,
         }
 
@@ -146,7 +146,7 @@ class TestHandleCheckWave:
         event = {
             "wave_company_ids": ["a-1", "a-2"],
             "scan_id": "scan-1",
-            "remaining_companies": [{"analysis_id": "a-3"}],
+            "companies": [{"analysis_id": "a-3"}],
             "remaining_count": 1,
         }
 

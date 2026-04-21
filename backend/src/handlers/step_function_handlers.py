@@ -77,7 +77,7 @@ def handle_send_wave(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     )
 
     return {
-        "remaining_companies": remaining,
+        "companies": remaining,
         "remaining_count": len(remaining),
         "wave_company_ids": wave_company_ids,
         "scan_id": scan_id,
