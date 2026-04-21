@@ -37,7 +37,84 @@ def _get_storage() -> DynamoDBStorageProvider:
 
 
 def handle_worker_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
-    """Lambda handler for SQS worker events."""
-    logger.info("SQS event: %d records", len(event.get("Records", [])))
+    """Lambda handler for SQS worker events AND direct Step Function invocations.
+
+    Event shape detection:
+    - SQS: {"Records": [...]} → existing SQSHandler path
+    - Step Functions: {"source": "step_functions", "url": ..., ...} → direct analysis
+    """
     storage = _get_storage()
+
+    if event.get("source") == "step_functions":
+        # Direct invocation from Step Functions. Domain errors (EngineError,
+        # ValueError, RuntimeError) are recorded on the company and the Lambda
+        # returns success — the check_wave poll sees the error field and
+        # considers the company resolved. Programming errors PROPAGATE so the
+        # Lambda returns a non-200 → Step Functions retries the invocation.
+        from signalfield_core.exceptions.base import EngineError
+
+        from src.handlers.factory_manager import FactoryManager
+
+        logger.info(
+            "Step Functions invocation: %s (%s)",
+            event.get("company_name") or event.get("url"),
+            event.get("scan_id"),
+        )
+
+        request_id = event["request_id"]
+        scan_id = event["scan_id"]
+
+        # Identity-at-start write (idempotent on re-dispatch)
+        company_repo = storage.create_company_repository()
+        company_repo.update(
+            request_id,
+            {
+                "id": request_id,
+                "company_name": event.get("company_name", ""),
+                "company_url": event["url"],
+                "scan_id": scan_id,
+                "org_id": event["org_id"],
+            },
+        )
+
+        factory_manager = FactoryManager(storage)
+        try:
+            factory_manager.run_company_analysis(
+                url=event["url"],
+                org_id=event["org_id"],
+                user_id=event["user_id"],
+                scan_id=scan_id,
+                company_name=event.get("company_name", ""),
+                request_id=request_id,
+            )
+        except (EngineError, ValueError, RuntimeError) as error:
+            # Domain error — record failure, return success so Step Functions
+            # doesn't retry (the company is resolved with an error).
+            logger.exception("Pipeline failed for %s (step_functions)", request_id)
+            company_repo.update(request_id, {"id": request_id, "error": str(error)})
+            from src.pipeline.appsync_notifier import notify_progress
+
+            notify_progress(
+                scan_id=scan_id,
+                progress=0,
+                label=f"Analysis failed: {error}",
+                status="failed",
+                company_id=request_id,
+            )
+            return {"status": "failed", "error": str(error)}
+        # Programming errors (AttributeError, KeyError, etc.) propagate →
+        # Lambda returns non-200 → Step Functions retries the invocation.
+
+        from src.pipeline.appsync_notifier import notify_progress
+
+        notify_progress(
+            scan_id=scan_id,
+            progress=100,
+            label="Analysis complete",
+            status="complete",
+            company_id=request_id,
+        )
+        return {"status": "processed"}
+
+    logger.info("SQS event: %d records", len(event.get("Records", [])))
     return SQSHandler(storage).handle(event)

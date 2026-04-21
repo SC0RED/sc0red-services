@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+import boto3
 
 from src.handlers.api_gateway_handler import (
     NOT_FOUND,
@@ -256,7 +259,11 @@ def handle_scan_confirm(
     queue_url: str,
     scan_id: str,
 ) -> LambdaResponse:
-    """Handle POST /api/scan/{scan_id}/confirm."""
+    """Handle POST /api/scan/{scan_id}/confirm.
+
+    Creates scan→company links and dispatches analyses via Step Functions
+    (portfolio scans with multiple companies) or SQS (single company).
+    """
     body = json.loads(event.get("body") or "{}")
     companies = body.get("companies", [])
     if not companies:
@@ -276,25 +283,57 @@ def handle_scan_confirm(
         {"status": "running", "progress": 10, "total_companies": len(valid_companies)},
     )
 
+    # Create scan→company links and build the company list for dispatch
     queued = []
+    company_payloads = []
     for company in valid_companies:
         company_name = company.get("name", "")
         company_url = company["url"]
         analysis_id = str(uuid.uuid4())
         scan_repo.link_company(scan_id, analysis_id, company_name)
+        queued.append({"name": company_name, "analysisId": analysis_id})
+        company_payloads.append(
+            {
+                "name": company_name,
+                "url": company_url,
+                "analysis_id": analysis_id,
+            }
+        )
 
-        sqs.send_message(
-            QueueUrl=queue_url,
-            MessageBody=build_analysis_message(
-                url=company_url,
-                org_id=authentication.org_id,
-                user_id=authentication.user_id,
-                scan_id=scan_id,
-                request_id=analysis_id,
-                company_name=company_name,
+    # Dispatch via Step Functions for portfolio scans (multiple companies).
+    # Step Functions dispatches in waves matching worker concurrency,
+    # avoiding SQS poller throttle that causes messages to land in DLQ.
+    state_machine_arn = os.environ.get("PORTFOLIO_STATE_MACHINE_ARN", "")
+    if state_machine_arn and len(valid_companies) > 1:
+        wave_size = int(os.environ.get("WAVE_SIZE", "4"))
+        sfn_client = boto3.client("stepfunctions")
+        sfn_client.start_execution(
+            stateMachineArn=state_machine_arn,
+            input=json.dumps(
+                {
+                    "companies": company_payloads,
+                    "wave_size": wave_size,
+                    "scan_id": scan_id,
+                    "org_id": authentication.org_id,
+                    "user_id": authentication.user_id,
+                }
             ),
         )
-        queued.append({"name": company_name, "analysisId": analysis_id})
+    else:
+        # Fallback: single company or no state machine configured (local dev).
+        # Send directly to SQS as before.
+        for index, company in enumerate(valid_companies):
+            sqs.send_message(
+                QueueUrl=queue_url,
+                MessageBody=build_analysis_message(
+                    url=company["url"],
+                    org_id=authentication.org_id,
+                    user_id=authentication.user_id,
+                    scan_id=scan_id,
+                    request_id=queued[index]["analysisId"],
+                    company_name=company.get("name", ""),
+                ),
+            )
 
     return build_json_response({"ok": True, "queued": queued}, 202)
 
