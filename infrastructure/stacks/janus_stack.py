@@ -205,7 +205,7 @@ class JanusStack(Stack):
             queue_name=f"janus-analysis-queue-{self._environment}",
             visibility_timeout=Duration.seconds(600),
             retention_period=Duration.days(1),
-            dead_letter_queue=sqs.DeadLetterQueue(queue=dlq, max_receive_count=3),
+            dead_letter_queue=sqs.DeadLetterQueue(queue=dlq, max_receive_count=20),
         )
         return queue, dlq
 

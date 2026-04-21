@@ -161,6 +161,36 @@ class TestSQSHandler:
         error_call = company_repo.update.call_args_list[1]
         assert error_call[0][1] == {"id": "analysis-id-1", "error": "scrape blocked"}
 
+    def test_programming_error_caught_and_recorded(self):
+        """Programming errors (AttributeError, etc.) are caught, recorded as failures,
+        and the message is consumed — no SQS retry, no starving other messages."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = AttributeError(
+            "'NoneType' object has no attribute 'get'"
+        )
+        self._make_scan_repo(storage, {"progress": 10, "total_companies": 2}, resolved_companies=0)
+        company_repo = storage.create_company_repository.return_value
+        company_repo.get_by_id.return_value = {"error": "'NoneType' object has no attribute 'get'"}
+
+        result = handler.handle(
+            {
+                "Records": [
+                    {
+                        "messageId": "msg-attr-err",
+                        "body": json.dumps(_BASE_MESSAGE),
+                    }
+                ],
+            }
+        )
+
+        # Message consumed — no batch item failures (no SQS retry)
+        assert result == {"batchItemFailures": []}
+        # Error recorded on the company record
+        company_repo.update.assert_any_call(
+            "analysis-id-1",
+            {"id": "analysis-id-1", "error": "'NoneType' object has no attribute 'get'"},
+        )
+
     def test_json_parse_error_reports_batch_failure(self):
         """Malformed JSON in the SQS body is a transient issue — report for retry."""
         handler, _ = self._make_handler()
@@ -639,3 +669,35 @@ class TestSQSHandlerReanalysis:
 
         # scan_id is "" → _update_scan_progress should NOT be called
         storage.create_scan_repository.assert_not_called()
+
+    def test_reanalysis_programming_error_caught_and_recorded(self):
+        """Programming errors during re-analysis are caught and recorded, not retried."""
+        handler, storage = self._make_handler()
+        handler._factory_manager.run_company_analysis.side_effect = AttributeError("broken")
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = [{"id": "assess-1"}]
+        assessment_repo.get_combined_document_text.return_value = ""
+        storage.create_assessment_repository.return_value = assessment_repo
+        company_repo = MagicMock()
+        storage.create_company_repository.return_value = company_repo
+
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"total_companies": 1}
+        scan_repo.get_scan_companies.return_value = [{"company_id": "a-1"}]
+        storage.create_scan_repository.return_value = scan_repo
+        company_repo.get_by_id.return_value = {"error": "broken"}
+
+        message = {
+            "reanalyze": True,
+            "analysis_id": "a-1",
+            "url": "https://test.com",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+            "request_id": "a-1",
+        }
+
+        # Should NOT raise — message consumed, not retried
+        handler._process_message(message)
+
+        company_repo.update.assert_called_once_with("a-1", {"error": "broken"})
