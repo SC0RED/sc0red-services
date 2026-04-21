@@ -102,8 +102,20 @@ class SQSHandler:
             )
             self._record_failure(scan_id, request_id, str(error))
             return
-        # Programming errors (AttributeError, KeyError, TypeError) propagate
-        # to the outer SQS handler, triggering retry via batchItemFailures.
+        except Exception as error:
+            # Catch-all for programming errors (AttributeError, KeyError, etc.).
+            # Record the failure and consume the message instead of retrying via
+            # SQS — a consistently-crashing message would retry max_receive_count
+            # times, each consuming Lambda capacity and starving other messages.
+            # The full traceback is logged to CloudWatch for debugging.
+            logger.exception(
+                "Unexpected error for %s (scan=%s, request=%s)",
+                company_name or url,
+                scan_id,
+                request_id,
+            )
+            self._record_failure(scan_id, request_id, str(error))
+            return
 
         # Per-company completion event — the realtime hook uses this to detect
         # the first completed company and navigate to the portfolio page early.
@@ -153,6 +165,13 @@ class SQSHandler:
             )
         except (EngineError, ValueError, RuntimeError) as error:
             logger.exception("Re-analysis pipeline failed for %s", analysis_id)
+            company_repo = self._storage.create_company_repository()
+            company_repo.update(analysis_id, {"error": str(error)})
+            if scan_id:
+                self._update_scan_progress(scan_id)
+            return
+        except Exception as error:
+            logger.exception("Unexpected error during re-analysis for %s", analysis_id)
             company_repo = self._storage.create_company_repository()
             company_repo.update(analysis_id, {"error": str(error)})
             if scan_id:
