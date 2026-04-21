@@ -1,12 +1,37 @@
 """Tests for Step Function batch coordinator handlers."""
 
+import os
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.handlers.step_function_handlers import (
     handle_check_wave,
     handle_mark_complete,
     handle_send_wave,
 )
+
+
+@pytest.fixture(autouse=True)
+def _set_worker_function_name():
+    with patch.dict(os.environ, {"WORKER_FUNCTION_NAME": "janus-worker-test"}):
+        import src.handlers.step_function_handlers as mod
+        mod._WORKER_FUNCTION_NAME = "janus-worker-test"
+        yield
+        mod._WORKER_FUNCTION_NAME = ""
+
+
+class TestSendWaveMissingEnv:
+    def test_raises_when_worker_function_name_missing(self):
+        import src.handlers.step_function_handlers as mod
+
+        original = mod._WORKER_FUNCTION_NAME
+        mod._WORKER_FUNCTION_NAME = ""
+        try:
+            with pytest.raises(RuntimeError, match="WORKER_FUNCTION_NAME not set"):
+                handle_send_wave({"companies": [], "wave_size": 1, "scan_id": "", "org_id": "", "user_id": ""}, None)
+        finally:
+            mod._WORKER_FUNCTION_NAME = original
 
 
 class TestHandleSendWave:

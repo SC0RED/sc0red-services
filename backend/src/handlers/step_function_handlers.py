@@ -20,9 +20,7 @@ from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logger = logging.getLogger(__name__)
 
-_WORKER_FUNCTION_NAME = os.environ.get("WORKER_FUNCTION_NAME")
-if not _WORKER_FUNCTION_NAME:
-    logger.warning("WORKER_FUNCTION_NAME not set — send_wave will fail at runtime")
+_WORKER_FUNCTION_NAME = os.environ.get("WORKER_FUNCTION_NAME", "")
 
 
 def handle_send_wave(event: dict[str, Any], _context: Any) -> dict[str, Any]:
@@ -43,6 +41,10 @@ def handle_send_wave(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     scan_id = event["scan_id"]
     org_id = event["org_id"]
     user_id = event["user_id"]
+
+    if not _WORKER_FUNCTION_NAME:
+        message = "WORKER_FUNCTION_NAME not set — cannot dispatch wave"
+        raise RuntimeError(message)
 
     wave = companies[:wave_size]
     remaining = companies[wave_size:]

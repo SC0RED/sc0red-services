@@ -53,7 +53,10 @@ def _is_transient_infrastructure_error(error: BaseException) -> bool:
         # httpx connection and timeout errors
         module = type(current).__module__ or ""
         if module.startswith("httpx") and class_name in (
-            "ConnectError", "ConnectTimeout", "ReadTimeout", "PoolTimeout"
+            "ConnectError",
+            "ConnectTimeout",
+            "ReadTimeout",
+            "PoolTimeout",
         ):
             return True
 
@@ -93,6 +96,7 @@ def handle_worker_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         from signalfield_core.exceptions.base import EngineError
 
         from src.handlers.factory_manager import FactoryManager
+        from src.pipeline.appsync_notifier import notify_progress
 
         logger.info(
             "Step Functions invocation: %s (%s)",
@@ -131,8 +135,6 @@ def handle_worker_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             # doesn't retry (the company is resolved with an error).
             logger.exception("Pipeline failed for %s (step_functions)", request_id)
             company_repo.update(request_id, {"id": request_id, "error": str(error)})
-            from src.pipeline.appsync_notifier import notify_progress
-
             notify_progress(
                 scan_id=scan_id,
                 progress=0,
@@ -153,8 +155,6 @@ def handle_worker_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             # Permanent/unknown error — record and move on.
             logger.exception("Unexpected error for %s (step_functions)", request_id)
             company_repo.update(request_id, {"id": request_id, "error": str(error)})
-            from src.pipeline.appsync_notifier import notify_progress
-
             notify_progress(
                 scan_id=scan_id,
                 progress=0,
@@ -164,12 +164,10 @@ def handle_worker_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             )
             return {"status": "failed", "error": str(error)}
 
-        from src.pipeline.appsync_notifier import notify_progress
-
         notify_progress(
             scan_id=scan_id,
             progress=100,
-            label="Analysis complete",
+            label="Analysis complete!",
             status="complete",
             company_id=request_id,
         )

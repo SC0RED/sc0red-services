@@ -300,11 +300,23 @@ def handle_scan_confirm(
             }
         )
 
-    # Dispatch via Step Functions for portfolio scans (multiple companies).
-    # Step Functions dispatches in waves matching worker concurrency,
-    # avoiding SQS poller throttle that causes messages to land in DLQ.
-    state_machine_arn = os.environ.get("PORTFOLIO_STATE_MACHINE_ARN", "")
-    if state_machine_arn and len(valid_companies) > 1:
+    if len(valid_companies) == 1:
+        # Single company — send directly to SQS (fast path, no orchestration).
+        sqs.send_message(
+            QueueUrl=queue_url,
+            MessageBody=build_analysis_message(
+                url=valid_companies[0]["url"],
+                org_id=authentication.org_id,
+                user_id=authentication.user_id,
+                scan_id=scan_id,
+                request_id=queued[0]["analysisId"],
+                company_name=valid_companies[0].get("name", ""),
+            ),
+        )
+    else:
+        # Multiple companies — dispatch via Step Functions in waves.
+        # Fail-fast: missing ARN in a deployed environment is a config bug.
+        state_machine_arn = os.environ["PORTFOLIO_STATE_MACHINE_ARN"]
         wave_size = int(os.environ.get("WAVE_SIZE", "4"))
         sfn_client = boto3.client("stepfunctions")
         sfn_client.start_execution(
@@ -319,21 +331,6 @@ def handle_scan_confirm(
                 }
             ),
         )
-    else:
-        # Fallback: single company or no state machine configured (local dev).
-        # Send directly to SQS as before.
-        for index, company in enumerate(valid_companies):
-            sqs.send_message(
-                QueueUrl=queue_url,
-                MessageBody=build_analysis_message(
-                    url=company["url"],
-                    org_id=authentication.org_id,
-                    user_id=authentication.user_id,
-                    scan_id=scan_id,
-                    request_id=queued[index]["analysisId"],
-                    company_name=company.get("name", ""),
-                ),
-            )
 
     return build_json_response({"ok": True, "queued": queued}, 202)
 
