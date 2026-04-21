@@ -26,6 +26,45 @@ _storage: DynamoDBStorageProvider | None = None  # Lazy — initialized on first
 _storage_lock = threading.Lock()
 
 
+_TRANSIENT_BOTO_CODES = {
+    "ThrottlingException",
+    "ProvisionedThroughputExceededException",
+    "RequestLimitExceeded",
+    "InternalServerError",
+    "ServiceUnavailable",
+}
+
+
+def _is_transient_infrastructure_error(error: BaseException) -> bool:
+    """Walk the exception chain looking for retryable infrastructure errors.
+
+    Returns True for: botocore throttle/5xx, httpx connection/timeout errors.
+    Returns False for everything else (programming errors, unknown exceptions).
+    """
+    current: BaseException | None = error
+    while current is not None:
+        # botocore ClientError with a transient error code
+        class_name = type(current).__name__
+        if class_name == "ClientError":
+            error_code = getattr(current, "response", {}).get("Error", {}).get("Code", "")
+            if error_code in _TRANSIENT_BOTO_CODES:
+                return True
+
+        # httpx connection and timeout errors
+        module = type(current).__module__ or ""
+        if module.startswith("httpx") and class_name in (
+            "ConnectError", "ConnectTimeout", "ReadTimeout", "PoolTimeout"
+        ):
+            return True
+
+        current = current.__cause__ or current.__context__
+        # Prevent infinite loop on self-referencing chains
+        if current is error:
+            break
+
+    return False
+
+
 def _get_storage() -> DynamoDBStorageProvider:
     """Return the singleton storage provider, initialising it on first call."""
     global _storage
@@ -102,8 +141,28 @@ def handle_worker_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
                 company_id=request_id,
             )
             return {"status": "failed", "error": str(error)}
-        # Programming errors (AttributeError, KeyError, etc.) propagate →
-        # Lambda returns non-200 → Step Functions retries the invocation.
+        except Exception as error:
+            # Check if the root cause is a transient infrastructure error
+            # (DynamoDB throttle, connection reset, etc.) — worth retrying.
+            if _is_transient_infrastructure_error(error):
+                logger.warning(
+                    "Transient error for %s — re-raising for Step Functions retry",
+                    request_id,
+                )
+                raise
+            # Permanent/unknown error — record and move on.
+            logger.exception("Unexpected error for %s (step_functions)", request_id)
+            company_repo.update(request_id, {"id": request_id, "error": str(error)})
+            from src.pipeline.appsync_notifier import notify_progress
+
+            notify_progress(
+                scan_id=scan_id,
+                progress=0,
+                label=f"Analysis failed: {error}",
+                status="failed",
+                company_id=request_id,
+            )
+            return {"status": "failed", "error": str(error)}
 
         from src.pipeline.appsync_notifier import notify_progress
 

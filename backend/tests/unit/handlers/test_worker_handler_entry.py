@@ -89,7 +89,8 @@ class TestStepFunctionsInvocation:
 
     @patch("src.handlers.factory_manager.FactoryManager")
     @patch("src.handlers.worker_handler_entry._get_storage")
-    def test_step_functions_programming_error_propagates(self, mock_storage, mock_fm_cls):
+    def test_step_functions_programming_error_recorded_not_retried(self, mock_storage, mock_fm_cls):
+        """Non-transient programming errors are recorded and NOT retried."""
         mock_storage.return_value = MagicMock()
         mock_fm_cls.return_value.run_company_analysis.side_effect = AttributeError("bug")
 
@@ -103,9 +104,39 @@ class TestStepFunctionsInvocation:
             "request_id": "req-1",
         }
 
+        result = handle_worker_event(event, None)
+
+        assert result["status"] == "failed"
+        assert "bug" in result["error"]
+
+    @patch("src.handlers.factory_manager.FactoryManager")
+    @patch("src.handlers.worker_handler_entry._get_storage")
+    def test_step_functions_transient_error_propagates_for_retry(self, mock_storage, mock_fm_cls):
+        """Transient infrastructure errors (DynamoDB throttle) propagate for Step Functions retry."""
+        mock_storage.return_value = MagicMock()
+
+        # Simulate a DynamoDB throttle wrapped inside a pipeline error
+        from botocore.exceptions import ClientError
+
+        throttle = ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}},
+            "PutItem",
+        )
+        mock_fm_cls.return_value.run_company_analysis.side_effect = throttle
+
+        event = {
+            "source": "step_functions",
+            "url": "https://throttled.com",
+            "company_name": "Throttled",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+            "request_id": "req-1",
+        }
+
         import pytest
 
-        with pytest.raises(AttributeError, match="bug"):
+        with pytest.raises(ClientError):
             handle_worker_event(event, None)
 
     @patch("src.handlers.worker_handler_entry._get_storage")
@@ -120,6 +151,48 @@ class TestStepFunctionsInvocation:
 
         assert "batchItemFailures" in result
         mock_handler_cls.return_value.handle.assert_called_once()
+
+
+class TestIsTransientInfrastructureError:
+    def test_botocore_throttle_is_transient(self):
+        from botocore.exceptions import ClientError
+
+        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+
+        error = ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}},
+            "PutItem",
+        )
+        assert _is_transient_infrastructure_error(error) is True
+
+    def test_botocore_non_throttle_is_not_transient(self):
+        from botocore.exceptions import ClientError
+
+        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+
+        error = ClientError(
+            {"Error": {"Code": "ValidationException", "Message": "Bad request"}},
+            "PutItem",
+        )
+        assert _is_transient_infrastructure_error(error) is False
+
+    def test_attribute_error_is_not_transient(self):
+        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+
+        assert _is_transient_infrastructure_error(AttributeError("bug")) is False
+
+    def test_chained_transient_error_detected(self):
+        from botocore.exceptions import ClientError
+
+        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+
+        throttle = ClientError(
+            {"Error": {"Code": "ProvisionedThroughputExceededException", "Message": ""}},
+            "Query",
+        )
+        wrapper = RuntimeError("pipeline failed")
+        wrapper.__cause__ = throttle
+        assert _is_transient_infrastructure_error(wrapper) is True
 
 
 class TestGetStorageSingleton:
