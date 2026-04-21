@@ -146,19 +146,29 @@ class DynamoDBTable:
         return items, None
 
     def batch_get(self, keys: list[dict[str, str]]) -> list[dict[str, Any]]:
-        """Fetch multiple items in a single BatchGetItem call (max 100 keys).
+        """Fetch multiple items via BatchGetItem, retrying any unprocessed keys.
 
-        Uses the DynamoDB resource API so items are auto-deserialized,
-        consistent with get_item() and query().
+        DynamoDB may not process all keys in one shot due to throughput
+        limits. Unprocessed keys are returned in the response and must be
+        retried — otherwise items are silently dropped.
         """
         if not keys:
             return []
-        response = self._dynamodb.batch_get_item(
-            RequestItems={
-                self._table_name: {"Keys": [{"pk": k["pk"], "sk": k["sk"]} for k in keys]}
-            }
-        )
-        return response.get("Responses", {}).get(self._table_name, [])
+
+        request_keys = [{"pk": k["pk"], "sk": k["sk"]} for k in keys]
+        results: list[dict[str, Any]] = []
+
+        while request_keys:
+            response = self._dynamodb.batch_get_item(
+                RequestItems={self._table_name: {"Keys": request_keys}}
+            )
+            results.extend(response.get("Responses", {}).get(self._table_name, []))
+
+            # Retry any keys that DynamoDB didn't process in this batch
+            unprocessed = response.get("UnprocessedKeys", {})
+            request_keys = unprocessed.get(self._table_name, {}).get("Keys", [])
+
+        return results
 
     def update_item(
         self,

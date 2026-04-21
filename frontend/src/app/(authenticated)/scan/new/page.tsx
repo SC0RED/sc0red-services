@@ -243,6 +243,13 @@ function NewScanContent() {
     }
 
     async function confirmPortfolio() {
+        // Stop discovery hooks before starting company analyses. They share
+        // the same scanId subscription — if left running, per-company
+        // status=failed events trigger discoveryRealtime's standalone branch,
+        // firing handleFailed and resetting the page to input.
+        discoveryPolling.stopPolling()
+        discoveryRealtime.stop()
+
         const selected = companies.filter((c) => c.selected)
         phaseRef.current = 'running'
         setPhase('running')
