@@ -157,34 +157,34 @@ class TestIsTransientInfrastructureError:
     def test_botocore_throttle_is_transient(self):
         from botocore.exceptions import ClientError
 
-        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+        from src.handlers.worker_handler_entry import is_transient_infrastructure_error
 
         error = ClientError(
             {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}},
             "PutItem",
         )
-        assert _is_transient_infrastructure_error(error) is True
+        assert is_transient_infrastructure_error(error) is True
 
     def test_botocore_non_throttle_is_not_transient(self):
         from botocore.exceptions import ClientError
 
-        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+        from src.handlers.worker_handler_entry import is_transient_infrastructure_error
 
         error = ClientError(
             {"Error": {"Code": "ValidationException", "Message": "Bad request"}},
             "PutItem",
         )
-        assert _is_transient_infrastructure_error(error) is False
+        assert is_transient_infrastructure_error(error) is False
 
     def test_attribute_error_is_not_transient(self):
-        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+        from src.handlers.worker_handler_entry import is_transient_infrastructure_error
 
-        assert _is_transient_infrastructure_error(AttributeError("bug")) is False
+        assert is_transient_infrastructure_error(AttributeError("bug")) is False
 
     def test_chained_transient_error_detected(self):
         from botocore.exceptions import ClientError
 
-        from src.handlers.worker_handler_entry import _is_transient_infrastructure_error
+        from src.handlers.worker_handler_entry import is_transient_infrastructure_error
 
         throttle = ClientError(
             {"Error": {"Code": "ProvisionedThroughputExceededException", "Message": ""}},
@@ -192,7 +192,7 @@ class TestIsTransientInfrastructureError:
         )
         wrapper = RuntimeError("pipeline failed")
         wrapper.__cause__ = throttle
-        assert _is_transient_infrastructure_error(wrapper) is True
+        assert is_transient_infrastructure_error(wrapper) is True
 
 
 class TestGetStorageSingleton:

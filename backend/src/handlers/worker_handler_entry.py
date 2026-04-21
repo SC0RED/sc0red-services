@@ -35,7 +35,7 @@ _TRANSIENT_BOTO_CODES = {
 }
 
 
-def _is_transient_infrastructure_error(error: BaseException) -> bool:
+def is_transient_infrastructure_error(error: BaseException) -> bool:
     """Walk the exception chain looking for retryable infrastructure errors.
 
     Returns True for: botocore throttle/5xx, httpx connection/timeout errors.
@@ -146,7 +146,7 @@ def handle_worker_event(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         except Exception as error:
             # Check if the root cause is a transient infrastructure error
             # (DynamoDB throttle, connection reset, etc.) — worth retrying.
-            if _is_transient_infrastructure_error(error):
+            if is_transient_infrastructure_error(error):
                 logger.warning(
                     "Transient error for %s — re-raising for Step Functions retry",
                     request_id,
