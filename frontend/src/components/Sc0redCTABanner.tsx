@@ -31,6 +31,7 @@ export default function Sc0redCTABanner({ contactUrl }: Sc0redCTABannerProps) {
                 onClick={() => setIsOpen(!isOpen)}
                 aria-expanded={isOpen}
                 aria-controls={controlsId}
+                className="sc0red-cta-toggle"
                 style={{
                     width: '100%',
                     background: 'none',
@@ -122,6 +123,7 @@ export default function Sc0redCTABanner({ contactUrl }: Sc0redCTABannerProps) {
                         href={contactUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        className="sc0red-cta-button"
                         style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -133,7 +135,6 @@ export default function Sc0redCTABanner({ contactUrl }: Sc0redCTABannerProps) {
                             fontSize: '0.875rem',
                             fontWeight: 600,
                             textDecoration: 'none',
-                            transition: 'opacity var(--transition-fast)',
                         }}
                     >
                         Start the conversation

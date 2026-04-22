@@ -165,7 +165,7 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
   <div class="sc0red-cta">
     <div class="sc0red-cta-heading">sc0red can help you capture these opportunities</div>
     <p class="sc0red-cta-body">Our AI specialists implement opportunities like these end-to-end — from strategy through production deployment — moving faster than traditional enterprise timelines.</p>
-    <span class="sc0red-cta-link">Start the conversation: ${escapeHtml(getSc0redContactUrl())}</span>
+    <a class="sc0red-cta-link" href="${escapeHtml(getSc0redContactUrl())}" target="_blank" rel="noopener noreferrer">Start the conversation: ${escapeHtml(getSc0redContactUrl())}</a>
   </div>`
           : ''
   }
