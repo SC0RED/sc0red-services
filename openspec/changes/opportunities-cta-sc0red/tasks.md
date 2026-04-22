@@ -66,3 +66,61 @@
 ## 8. Fast-follow (not part of this PR)
 
 - [ ] 8.1 Wire `NEXT_PUBLIC_SC0RED_CONTACT_URL` through `infrastructure/stacks/amplify_construct.py` so per-environment overrides are possible (accept optional `sc0red_contact_url: str | None = None` on `create_branch()`, inject as `CfnBranch.EnvironmentVariableProperty` only when set). Only needed when we want a non-default URL in staging/production (not needed today — default is the production URL).
+
+## 9. Phase 2 — Backend removal of `related_services` (follow-up PR)
+
+This phase is a separate PR, landing after Phase 1 (PR #178) merges. See `design.md` Decision #8 for the rationale behind the two-phase split and the full removal-touchpoint table.
+
+### 9.1 Frontend-first removal (to close the UX regression window)
+
+- [ ] 9.1.1 Delete the "Tech Stack" section (heading + chip loop) from `frontend/src/components/OpportunitiesList.tsx`
+- [ ] 9.1.2 Delete the same section from `frontend/src/app/api/export/pdf/[analysisId]/route.ts` (keep the sc0red CTA block — only the per-card "Tech Stack" block goes)
+- [ ] 9.1.3 Drop the `related_services?: string[]` field from the `Opportunity` type in `frontend/src/lib/types/api.ts`
+- [ ] 9.1.4 Update `frontend/src/tests/components/OpportunitiesList.test.tsx` — remove the "Tech Stack" heading assertion, remove `related_services` fixture values, drop the assertion that the old "Implementation Partners" heading does not render (now trivially true)
+- [ ] 9.1.5 Update `frontend/src/tests/pages/AnalysisDetail.test.tsx` — remove `related_services` fixture values
+- [ ] 9.1.6 Grep the frontend for any remaining references to `related_services` and delete them
+
+### 9.2 AI pipeline (prompt + schema + steps)
+
+- [ ] 9.2.1 Remove the `related_services` field from `src/pipeline/prompts/schemas/detail.json` (field definition + any required/properties entries)
+- [ ] 9.2.2 Remove the "up to 3 relevant vendor / service recommendations" instruction from `src/pipeline/prompts/templates/detail.md`
+- [ ] 9.2.3 Remove any vendor-mention guidance from `src/pipeline/prompts/system/opportunity_detail.md`
+- [ ] 9.2.4 In `src/pipeline/pipeline_steps/detail_opportunity.py`, stop reading `related_services` from the model response
+- [ ] 9.2.5 In `src/pipeline/pipeline_steps/persist_results.py`, stop passing `related_services` when constructing `Opportunity` objects
+
+### 9.3 Domain model
+
+- [ ] 9.3.1 Remove the `related_services: list[str] = Field(default_factory=list)` field from `Opportunity` in `src/models/model_company.py`
+
+### 9.4 Storage (DynamoDB repository)
+
+- [ ] 9.4.1 `src/repositories/dynamodb/assessment_repository.py::save_opportunity` — stop writing `related_services` to the DynamoDB item
+- [ ] 9.4.2 `src/repositories/dynamodb/assessment_repository.py::batch_save_opportunities` — same removal
+- [ ] 9.4.3 `src/repositories/dynamodb/assessment_repository.py::get_opportunities` — stop deserializing `related_services` (historical rows with the attribute continue to deserialize correctly; the attribute is simply ignored)
+- [ ] 9.4.4 No data migration — existing DynamoDB items retain the stale attribute harmlessly. Document this in the PR description.
+
+### 9.5 Mock AI server
+
+- [ ] 9.5.1 Remove `related_services` from the opportunity fixtures in `scripts/mock_ai_server.py` so E2E tests exercise the post-removal shape
+
+### 9.6 Tests (backend)
+
+- [ ] 9.6.1 Update `tests/unit/pipeline/test_detail_opportunity.py` — remove `related_services` from fixtures and assertions
+- [ ] 9.6.2 Update `tests/unit/pipeline/test_detail_opportunities.py` — same
+- [ ] 9.6.3 Update `tests/unit/pipeline/test_generate_opportunities.py` — same
+- [ ] 9.6.4 Update `tests/unit/repositories/test_assessment_repository.py` — remove the field from save/batch-save/get fixtures and assertions
+- [ ] 9.6.5 Update `tests/unit/models/test_model_company.py` — remove any `related_services` fixture references
+
+### 9.7 Docs
+
+- [ ] 9.7.1 Remove the `related_services` row from the API contract table in `docs/api.md`
+
+### 9.8 Verify
+
+- [ ] 9.8.1 `uv run ruff check src/` — clean
+- [ ] 9.8.2 `uv run pyright src/` — no new errors
+- [ ] 9.8.3 `uv run pytest tests/ -q` — all tests pass, coverage still ≥ 95%
+- [ ] 9.8.4 `cd frontend && npm run lint && npx tsc --noEmit && npm test` — all green
+- [ ] 9.8.5 Run E2E: bring up `docker-compose.e2e.yml`, run `./scripts/e2e-test.sh`, confirm analyses complete successfully without `related_services` in responses
+- [ ] 9.8.6 Architecture-reviewer agent on the Phase 2 PR (crosses >3 files, touches pipeline steps + repository + model)
+- [ ] 9.8.7 Deploy to development branch; open an existing analysis (row with stale `related_services` attribute in DynamoDB) and confirm it renders correctly (no runtime error from the now-ignored attribute)

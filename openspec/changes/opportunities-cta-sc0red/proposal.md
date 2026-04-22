@@ -9,10 +9,27 @@ We want to reposition sc0red as *the* implementation partner while the reader is
 
 ## What Changes
 
-- **Relabel "Implementation Partners" → "Tech Stack"** on each opportunity card. Vendor chips remain as credibility signals ("these are the tools a real build would use") rather than a partner directory.
+The change ships in **two phases**:
+
+### Phase 1 — Frontend reposition (PR #178, in flight)
+
+- **Relabel "Implementation Partners" → "Tech Stack"** on each opportunity card as an interim step. Vendor chips remain visible so the existing backend data still has a home while Phase 2 is in flight.
 - **Add a single expandable sc0red CTA banner** at the bottom of the `OpportunitiesList`. Collapsed by default — one line with a chevron. Expanded — pitch copy + an external link to the sc0red contact page.
 - **Make the contact URL env-configurable** via `NEXT_PUBLIC_SC0RED_CONTACT_URL`, defaulting to `https://www.sc0red.com/contact`. Trivial to swap per environment or rebrand later.
 - **Mirror the changes in the PDF export** (`/api/export/pdf/[analysisId]`). The PDF version renders the pitch inline (non-interactive) and uses "Tech Stack" labels. A single sc0red block closes the opportunities section.
+
+### Phase 2 — Backend removal (follow-up PR)
+
+The original intent was to *replace* third-party implementation partner framing with sc0red branding — not rename it. Keeping the backend generating `related_services` indefinitely wastes AI tokens, storage, and bandwidth on a field we're actively de-emphasizing. Phase 2 removes the field end-to-end:
+
+- **AI pipeline**: drop `related_services` from the `detail.json` schema, remove the "up to 3 vendor recommendations" instruction from the prompt template and system prompt, and stop extracting the field in `DetailOpportunity` / `PersistResults` steps.
+- **Domain model**: remove `related_services` from the `Opportunity` Pydantic model (`src/models/model_company.py`).
+- **Storage**: stop writing/reading the field in `assessment_repository.py` (save, batch_save, get). Existing rows in DynamoDB retain the attribute; reads simply ignore it (no migration required).
+- **Mock AI server**: remove from `scripts/mock_ai_server.py` so E2E tests don't simulate a field that no longer exists.
+- **Frontend**: drop the "Tech Stack" section entirely from `OpportunitiesList.tsx` and the PDF export; remove `related_services` from the `Opportunity` TypeScript type; clean up fixtures/assertions in affected tests.
+- **Docs**: remove the field from `docs/api.md`.
+
+Expected wins: ~50–100 tokens saved per scan, one fewer field to maintain, smaller API responses, and a frontend that leads with the sc0red CTA without competing signal from vendor chips.
 
 ## Capabilities
 
