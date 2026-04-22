@@ -1,7 +1,7 @@
 """Opportunity detail enrichment constants — schema and prompt builder.
 
 Each selected opportunity from the ideation phase gets a focused detail call
-that adds implementation steps, timeline, investment, ROI, and services.
+that adds implementation steps, timeline, investment range, and ROI estimate.
 """
 
 from __future__ import annotations

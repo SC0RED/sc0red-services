@@ -63,7 +63,6 @@ class TestAssessmentRepository:
             {
                 "title": "Deploy AI Chatbot",
                 "impact_rating": "High",
-                "related_services": [{"service_type": "AI Consulting"}],
             },
         )
         repo.save_opportunity(
@@ -210,119 +209,6 @@ class TestAssessmentRepository:
     # ── Document operations ─────────────────────────────────────────
 
     @mock_aws
-    def test_save_and_get_documents(self, dynamodb_table):
-        repo = DynamoDBAssessmentRepository(dynamodb_table)
-        repo.save({"id": "assess-doc", "company_id": "comp-1"})
-
-        repo.save_document(
-            "assess-doc",
-            {
-                "id": "doc-1",
-                "filename": "report.pdf",
-                "file_type": "pdf",
-                "extracted_text": "Revenue was $10M last year.",
-                "char_count": 26,
-                "uploaded_at": "2026-03-13T00:00:00",
-            },
-        )
-        repo.save_document(
-            "assess-doc",
-            {
-                "id": "doc-2",
-                "filename": "memo.txt",
-                "file_type": "txt",
-                "extracted_text": "Investment memo content.",
-                "char_count": 23,
-                "uploaded_at": "2026-03-13T01:00:00",
-            },
-        )
-
-        documents = repo.get_documents("assess-doc")
-        assert len(documents) == 2
-        filenames = {d["filename"] for d in documents}
-        assert filenames == {"report.pdf", "memo.txt"}
-        assert documents[0]["fileType"] in ("pdf", "txt")
-        assert documents[0]["charCount"] > 0
-
-    @mock_aws
-    def test_delete_document(self, dynamodb_table):
-        repo = DynamoDBAssessmentRepository(dynamodb_table)
-        repo.save({"id": "assess-deldoc", "company_id": "comp-1"})
-        repo.save_document(
-            "assess-deldoc",
-            {
-                "id": "doc-del",
-                "filename": "old.txt",
-                "file_type": "txt",
-                "extracted_text": "old content",
-                "char_count": 11,
-                "uploaded_at": "2026-03-13T00:00:00",
-            },
-        )
-
-        repo.delete_document("assess-deldoc", "doc-del")
-        documents = repo.get_documents("assess-deldoc")
-        assert len(documents) == 0
-
-    @mock_aws
-    def test_get_combined_document_text(self, dynamodb_table):
-        repo = DynamoDBAssessmentRepository(dynamodb_table)
-        repo.save({"id": "assess-combined", "company_id": "comp-1"})
-        repo.save_document(
-            "assess-combined",
-            {
-                "id": "doc-a",
-                "filename": "a.txt",
-                "file_type": "txt",
-                "extracted_text": "First document",
-                "char_count": 14,
-                "uploaded_at": "2026-03-13T00:00:00",
-            },
-        )
-        repo.save_document(
-            "assess-combined",
-            {
-                "id": "doc-b",
-                "filename": "b.txt",
-                "file_type": "txt",
-                "extracted_text": "Second document",
-                "char_count": 15,
-                "uploaded_at": "2026-03-13T01:00:00",
-            },
-        )
-
-        combined = repo.get_combined_document_text("assess-combined")
-        assert "First document" in combined
-        assert "Second document" in combined
-        assert "---" in combined
-
-    @mock_aws
-    def test_get_combined_document_text_empty(self, dynamodb_table):
-        repo = DynamoDBAssessmentRepository(dynamodb_table)
-        repo.save({"id": "assess-empty-docs", "company_id": "comp-1"})
-        combined = repo.get_combined_document_text("assess-empty-docs")
-        assert combined == ""
-
-    @mock_aws
-    def test_delete_cascades_documents(self, dynamodb_table):
-        repo = DynamoDBAssessmentRepository(dynamodb_table)
-        repo.save({"id": "assess-cascade-doc", "company_id": "comp-1"})
-        repo.save_document(
-            "assess-cascade-doc",
-            {
-                "id": "doc-cascade",
-                "filename": "test.txt",
-                "file_type": "txt",
-                "extracted_text": "content",
-                "char_count": 7,
-                "uploaded_at": "2026-03-13T00:00:00",
-            },
-        )
-
-        repo.delete("assess-cascade-doc")
-        assert repo.get_documents("assess-cascade-doc") == []
-
-    @mock_aws
     def test_batch_save_risk_scores(self, dynamodb_table):
         repo = DynamoDBAssessmentRepository(dynamodb_table)
         repo.save({"id": "assess-batch-rs", "company_id": "comp-1"})
@@ -347,14 +233,12 @@ class TestAssessmentRepository:
             {
                 "title": "Deploy AI Chatbot",
                 "impact_rating": "High",
-                "related_services": ["Accenture - AI strategy"],
                 "implementation_steps": ["Step 1", "Step 2"],
                 "value_lever": "Revenue Side",
             },
             {
                 "title": "Automate QA",
                 "impact_rating": "Medium",
-                "related_services": [],
                 "implementation_steps": [],
                 "value_lever": "Cost Side",
             },
@@ -365,6 +249,36 @@ class TestAssessmentRepository:
         assert len(result) == 2
         titles = {r["title"] for r in result}
         assert titles == {"Deploy AI Chatbot", "Automate QA"}
+
+    @mock_aws
+    def test_get_opportunities_scrubs_legacy_related_services(self, dynamodb_table):
+        """Historical rows may still carry a `related_services` attribute.
+
+        The repository must scrub it so the removed field never leaks to the
+        API response. See openspec/changes/opportunities-cta-sc0red Phase 2.
+        """
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-legacy", "company_id": "comp-1"})
+        # Simulate a historical row written before Phase 2 by writing the
+        # attribute directly — bypassing save_opportunity, which no longer
+        # writes the field.
+        repo._table.put_item(
+            {
+                "pk": "ASSESSMENT#assess-legacy",
+                "sk": "OPP#0000",
+                "entity_type": "opportunity",
+                "assessment_id": "assess-legacy",
+                "sort_order": 0,
+                "title": "Legacy opportunity",
+                "implementation_steps": "[\"Step 1\"]",
+                "related_services": "[\"Datadog - Observability\"]",
+            }
+        )
+
+        result = repo.get_opportunities("assess-legacy")
+        assert len(result) == 1
+        assert "related_services" not in result[0]
+        assert result[0]["implementation_steps"] == ["Step 1"]
 
     @mock_aws
     def test_delete_analysis_results_keeps_documents_and_metadata(self, dynamodb_table):

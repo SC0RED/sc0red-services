@@ -88,7 +88,6 @@ function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData 
                 implementation_steps: ['Step 1', 'Step 2'],
                 investment_range: '$100K-$500K',
                 roi_estimate: '30% improvement',
-                related_services: ['Accenture - AI strategy'],
             },
             {
                 title: 'Automate Support',
@@ -100,7 +99,6 @@ function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData 
                 implementation_steps: ['Step A'],
                 investment_range: '$50K-$100K',
                 roi_estimate: '2x ROI',
-                related_services: [],
             },
             {
                 title: 'AI Platform',
@@ -112,7 +110,6 @@ function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData 
                 implementation_steps: ['Step X'],
                 investment_range: '$500K-$1M',
                 roi_estimate: 'New revenue stream',
-                related_services: [],
             },
         ],
         topActions: ['Action 1', 'Action 2', 'Action 3'],

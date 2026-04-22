@@ -317,36 +317,6 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                                             </div>
                                         </div>
                                     </div>
-
-                                    {opp.related_services && opp.related_services.length > 0 && (
-                                        <div>
-                                            <div
-                                                style={{
-                                                    fontWeight: 600,
-                                                    fontSize: '0.875rem',
-                                                    color: 'var(--text-secondary)',
-                                                    marginBottom: '0.75rem',
-                                                    textTransform: 'uppercase',
-                                                    letterSpacing: '0.06em',
-                                                }}
-                                            >
-                                                Tech Stack
-                                            </div>
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    gap: '0.5rem',
-                                                    flexWrap: 'wrap',
-                                                }}
-                                            >
-                                                {opp.related_services.map((svc, si) => (
-                                                    <span key={si} className="badge badge-neutral">
-                                                        {svc}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             )}
                         </div>

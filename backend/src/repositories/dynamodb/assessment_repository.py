@@ -162,11 +162,12 @@ class DynamoDBAssessmentRepository:
             pk=f"ASSESSMENT#{assessment_id}",
             sk_prefix="OPP#",
         )
-        # Deserialize JSON fields
+        # Deserialize JSON fields; scrub the removed `related_services` attribute
+        # from historical rows so it never leaks to the API response.
         for item in items:
-            for field in ("implementation_steps", "related_services"):
-                if field in item and isinstance(item[field], str):
-                    item[field] = json.loads(item[field])
+            item.pop("related_services", None)
+            if "implementation_steps" in item and isinstance(item["implementation_steps"], str):
+                item["implementation_steps"] = json.loads(item["implementation_steps"])
         return items
 
     # ── EBITDA tree operations ────────────────────────────────────────
