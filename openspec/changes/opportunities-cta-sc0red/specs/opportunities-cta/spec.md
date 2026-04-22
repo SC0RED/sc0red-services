@@ -49,26 +49,26 @@ The banner's call-to-action button SHALL link to the URL defined by `NEXT_PUBLIC
 - **WHEN** the CTA link renders
 - **THEN** it has `target="_blank"` and `rel` containing both `noopener` and `noreferrer`
 
-### Requirement: Per-opportunity vendor section relabeled "Tech Stack"
-Each opportunity card in the expanded view SHALL display its `related_services` list under the heading **"Tech Stack"**. The heading **"Implementation Partners"** SHALL NOT appear anywhere in the opportunities list UI.
+### Requirement: Per-opportunity vendor section relabeled "Tech Stack" (Phase 1 interim)
+Phase 1 only — superseded by Phase 2 removal below. Each opportunity card in the expanded view SHALL display its `related_services` list under the heading **"Tech Stack"**. The heading **"Implementation Partners"** SHALL NOT appear anywhere in the opportunities list UI.
 
 #### Scenario: Heading uses "Tech Stack"
-- **WHEN** an opportunity card with non-empty `related_services` is expanded
+- **WHEN** an opportunity card with non-empty `related_services` is expanded (Phase 1)
 - **THEN** the section heading reads "Tech Stack" (not "Implementation Partners")
 
 #### Scenario: Vendor chips render unchanged
-- **WHEN** an opportunity has `related_services: ["Datadog - Observability"]` and is expanded
+- **WHEN** an opportunity has `related_services: ["Datadog - Observability"]` and is expanded (Phase 1)
 - **THEN** the chip text "Datadog - Observability" renders inside the "Tech Stack" section using the existing `.badge.badge-neutral` styling
 
 #### Scenario: Section hidden when no vendors
-- **WHEN** an opportunity's `related_services` is missing or empty
-- **THEN** the "Tech Stack" heading and its container are not rendered (matches current behavior)
+- **WHEN** an opportunity's `related_services` is missing or empty (Phase 1)
+- **THEN** the "Tech Stack" heading and its container are not rendered
 
-### Requirement: PDF export mirrors the CTA and label changes
-The analysis PDF export route SHALL render the same relabeling and sc0red CTA content as the React UI. Because a PDF is static, the CTA SHALL render inline (always visible, no collapse affordance), with the contact URL printed as visible text.
+### Requirement: PDF export mirrors the CTA block
+The analysis PDF export route SHALL render the same sc0red CTA content as the React UI. Because a PDF is static, the CTA SHALL render inline (always visible, no collapse affordance), with the contact URL printed as visible text.
 
-#### Scenario: PDF uses "Tech Stack" label
-- **WHEN** a PDF is generated for an analysis whose opportunities have `related_services`
+#### Scenario: PDF uses "Tech Stack" label (Phase 1 interim)
+- **WHEN** a PDF is generated for an analysis whose opportunities have `related_services` (Phase 1)
 - **THEN** each opportunity's vendor chip section is headed "Tech Stack" (not "Implementation Partners")
 
 #### Scenario: PDF includes sc0red CTA block
@@ -82,3 +82,33 @@ The analysis PDF export route SHALL render the same relabeling and sc0red CTA co
 #### Scenario: PDF contact URL respects env var
 - **WHEN** the PDF route generates its sc0red block
 - **THEN** the printed URL equals `NEXT_PUBLIC_SC0RED_CONTACT_URL` if set to a non-empty value, else `https://www.sc0red.com/contact`
+
+## REMOVED Requirements (Phase 2)
+
+Phase 2 is a follow-up PR that removes the "vendor recommendations" feature end-to-end. After Phase 2 ships, the following requirements no longer apply. See `design.md` Decision #8 for the phasing rationale and the full removal-touchpoint table; see `tasks.md` section 9 for the executable task list.
+
+### Requirement: Per-opportunity "Tech Stack" section exists
+**Removed in Phase 2.** The section added in Phase 1 is deleted entirely — the heading, the chip container, and the underlying `related_services` field are all gone. The opportunities list and PDF lead with the sc0red CTA without a competing vendor-chip signal.
+
+#### Scenario: No "Tech Stack" heading anywhere
+- **WHEN** any opportunity card is expanded, under any filter, after Phase 2
+- **THEN** no "Tech Stack" heading renders (regardless of what historical data may still exist in DynamoDB)
+
+#### Scenario: No "Tech Stack" block in PDF
+- **WHEN** a PDF is generated after Phase 2
+- **THEN** no per-opportunity "Tech Stack" block appears; the sc0red CTA block is the only vendor-adjacent content
+
+### Requirement: Opportunity API payload includes `related_services`
+**Removed in Phase 2.** The `Opportunity` domain model (`src/models/model_company.py`), the `Opportunity` TypeScript type (`frontend/src/lib/types/api.ts`), and the DynamoDB assessment-repository serializer (`src/repositories/dynamodb/assessment_repository.py`) all drop the `related_services` field. The AI pipeline stops producing the field; the detail prompt no longer asks for it.
+
+#### Scenario: AI pipeline does not generate `related_services`
+- **WHEN** the `DetailOpportunity` step runs after Phase 2
+- **THEN** the prompt makes no request for vendor recommendations and the response schema does not include `related_services`
+
+#### Scenario: API response omits `related_services`
+- **WHEN** the analysis API returns an opportunity after Phase 2
+- **THEN** the response payload has no `related_services` attribute
+
+#### Scenario: Historical DynamoDB rows render without error
+- **WHEN** a user opens an analysis created before Phase 2 (DynamoDB item still carries a `related_services` attribute)
+- **THEN** the read path ignores the stale attribute and the page renders without a runtime error (no migration required)

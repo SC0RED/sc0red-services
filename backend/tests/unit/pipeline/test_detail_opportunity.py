@@ -14,7 +14,6 @@ class TestDetailSchema:
             "timeline",
             "investment_range",
             "roi_estimate",
-            "related_services",
         }
 
     def test_no_extra_fields(self):
@@ -27,11 +26,12 @@ class TestDetailSchema:
     def test_does_not_have_impact_rating(self):
         assert "impact_rating" not in DETAIL_SCHEMA["properties"]
 
+    def test_does_not_have_related_services(self):
+        """Phase 2 removal: schema no longer produces vendor recommendations."""
+        assert "related_services" not in DETAIL_SCHEMA["properties"]
+
     def test_implementation_steps_is_array(self):
         assert DETAIL_SCHEMA["properties"]["implementation_steps"]["type"] == "array"
-
-    def test_related_services_max_items(self):
-        assert DETAIL_SCHEMA["properties"]["related_services"]["maxItems"] == 3
 
 
 class TestDetailSystemPrompt:

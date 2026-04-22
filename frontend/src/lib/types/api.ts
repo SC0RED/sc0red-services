@@ -4,17 +4,6 @@ export interface RiskScore {
     rationale?: string
 }
 
-export interface Vendor {
-    name: string
-    url: string
-    specialty: string
-}
-
-export interface RelatedService {
-    service_type: string
-    vendors: Vendor[]
-}
-
 export interface Opportunity {
     title: string
     description: string
@@ -24,7 +13,6 @@ export interface Opportunity {
     implementation_steps?: string[]
     investment_range?: string
     roi_estimate?: string
-    related_services?: string[]
     value_lever?: 'Revenue Side' | 'Cost Side' | 'Both'
 }
 

@@ -15,7 +15,6 @@ const mockOpportunities: Opportunity[] = [
         implementation_steps: ['Step 1', 'Step 2'],
         investment_range: '$100K-$500K',
         roi_estimate: '30% improvement',
-        related_services: ['Accenture - AI strategy'],
     },
     {
         title: 'Automate Support',
@@ -27,7 +26,6 @@ const mockOpportunities: Opportunity[] = [
         implementation_steps: ['Step A'],
         investment_range: '$50K-$100K',
         roi_estimate: '2x ROI',
-        related_services: [],
     },
     {
         title: 'AI Platform',
@@ -39,7 +37,6 @@ const mockOpportunities: Opportunity[] = [
         implementation_steps: ['Step X'],
         investment_range: '$500K-$1M',
         roi_estimate: 'New revenue stream',
-        related_services: [],
     },
 ]
 
@@ -98,16 +95,6 @@ describe('OpportunitiesList', () => {
         expect(screen.getByText('Step 2')).toBeInTheDocument()
         expect(screen.getByText('$100K-$500K')).toBeInTheDocument()
         expect(screen.getByText('30% improvement')).toBeInTheDocument()
-        expect(screen.getByText('Accenture - AI strategy')).toBeInTheDocument()
-    })
-
-    it('renames the vendor section heading to "Tech Stack" (no "Implementation Partners")', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
-
-        fireEvent.click(screen.getByText('Deploy AI Chatbot').closest('button')!)
-
-        expect(screen.getByText('Tech Stack')).toBeInTheDocument()
-        expect(screen.queryByText('Implementation Partners')).not.toBeInTheDocument()
     })
 
     it('renders the sc0red CTA banner when opportunities are visible', () => {

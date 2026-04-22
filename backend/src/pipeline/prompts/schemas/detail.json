@@ -17,20 +17,13 @@
         "roi_estimate": {
             "type": "string",
             "description": "Specific ROI description tied to this company"
-        },
-        "related_services": {
-            "type": "array",
-            "items": {"type": "string"},
-            "maxItems": 3,
-            "description": "Up to 3 relevant vendor or service names (e.g. 'Datadog - Observability')"
         }
     },
     "required": [
         "implementation_steps",
         "timeline",
         "investment_range",
-        "roi_estimate",
-        "related_services"
+        "roi_estimate"
     ],
     "additionalProperties": false
 }

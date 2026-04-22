@@ -17,7 +17,6 @@ class TestBuildOpportunity:
             "timeline": "Medium-term (3-9 months)",
             "investment_range": "$100K-$500K",
             "roi_estimate": "30% improvement in support efficiency",
-            "related_services": ["Accenture - AI strategy"],
             "value_lever": "Both",
         }
         opp = build_opportunity(data)

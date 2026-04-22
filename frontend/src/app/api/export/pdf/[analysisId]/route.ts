@@ -50,7 +50,6 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
     .callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0; }
     .callout { padding: 0.875rem; border-radius: 6px; }
     .label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8B9AC4; margin-bottom: 0.25rem; }
-    .vendor-chip { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(139,154,196,0.1); border: 1px solid rgba(139,154,196,0.2); font-size: 0.75rem; color: #8B9AC4; margin: 0.2rem; text-decoration: none; }
     .sc0red-cta { margin-top: 2rem; padding: 1.5rem 1.75rem; border-top: 3px solid #3B7BF6; background: rgba(59,123,246,0.06); border-radius: 8px; }
     .sc0red-cta-heading { font-size: 1rem; font-weight: 700; color: #EEF2FF; margin: 0 0 0.75rem; }
     .sc0red-cta-body { font-size: 0.9rem; line-height: 1.7; color: #c4cde8; margin: 0 0 1rem; }
@@ -147,14 +146,6 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
         <div style="font-weight:600;color:#22C55E;font-size:0.875rem;">${escapeHtml(opp.roi_estimate)}</div>
       </div>
     </div>
-    ${
-        opp.related_services?.length
-            ? `<div style="margin-top:0.75rem;">
-        <div class="label">Tech Stack</div>
-        ${opp.related_services.map((svc: string) => `<span class="vendor-chip">${escapeHtml(svc)}</span>`).join('')}
-      </div>`
-            : ''
-    }
   </div>`
       )
       .join('')}

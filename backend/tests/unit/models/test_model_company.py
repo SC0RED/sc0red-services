@@ -83,7 +83,7 @@ class TestRiskAssessment:
 
 
 class TestOpportunity:
-    def test_create_with_related_services(self):
+    def test_create_with_all_fields(self):
         opportunity = Opportunity(
             title="Deploy AI Churn Prediction",
             impact_rating="High",
@@ -93,10 +93,10 @@ class TestOpportunity:
             timeline="Medium-term (3-9 months)",
             investment_range="$100K-$500K",
             roi_estimate="20% reduction in churn",
-            related_services=["DataRobot - AutoML", "Snowflake - Data Platform"],
         )
         assert opportunity.title == "Deploy AI Churn Prediction"
-        assert opportunity.related_services == ["DataRobot - AutoML", "Snowflake - Data Platform"]
+        assert opportunity.impact_rating == "High"
+        assert opportunity.implementation_steps == ["Step 1", "Step 2"]
 
 
 class TestOpportunityResult:
