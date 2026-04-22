@@ -6,7 +6,7 @@
 
 ## 2. Create the sc0red CTA banner component
 
-- [ ] 2.1 Create `frontend/src/components/Sc0redCTABanner.tsx` as a client component (`"use client"`)
+- [x] 2.1 Create `frontend/src/components/Sc0redCTABanner.tsx` as a client component (`"use client"`)
   - Takes `contactUrl: string` as a prop (keeps the component pure and testable)
   - Collapsed state: single row with ◆ icon + "sc0red can help you capture these opportunities" + chevron
   - Expanded state: same header + pitch paragraph + "Start the conversation →" button styled as a link-button
@@ -21,43 +21,43 @@
 
 ## 3. Wire the banner into OpportunitiesList
 
-- [ ] 3.1 In `frontend/src/components/OpportunitiesList.tsx`, import the banner and `getSc0redContactUrl`
-- [ ] 3.2 Rename the per-card section label from "Implementation Partners" to "Tech Stack" (single literal at line 331)
-- [ ] 3.3 Render `<Sc0redCTABanner contactUrl={getSc0redContactUrl()} />` after the last opportunity card, gated on `filteredOpps.length > 0`
+- [x] 3.1 In `frontend/src/components/OpportunitiesList.tsx`, import the banner and `getSc0redContactUrl`
+- [x] 3.2 Rename the per-card section label from "Implementation Partners" to "Tech Stack" (single literal at line 331)
+- [x] 3.3 Render `<Sc0redCTABanner contactUrl={getSc0redContactUrl()} />` after the last opportunity card, gated on `filteredOpps.length > 0`
 
 ## 4. Mirror changes in the PDF export
 
-- [ ] 4.1 In `frontend/src/app/api/export/pdf/[analysisId]/route.ts` (lines 145-152), rename "Implementation Partners" → "Tech Stack"
-- [ ] 4.2 After the opportunities loop closes, render a static sc0red CTA block containing:
+- [x] 4.1 In `frontend/src/app/api/export/pdf/[analysisId]/route.ts` (lines 145-152), rename "Implementation Partners" → "Tech Stack"
+- [x] 4.2 After the opportunities loop closes, render a static sc0red CTA block containing:
   - Header: "sc0red can help you capture these opportunities"
   - Body pitch copy (same as the React banner's expanded state)
   - Contact URL rendered as visible text (not just a hyperlink) on its own line
   - Only render the block if the opportunities array is non-empty
-- [ ] 4.3 Use a dedicated CSS class (e.g. `.sc0red-cta`) defined in the existing inline stylesheet — distinct background, matches the banner's visual weight
-- [ ] 4.4 Read the contact URL in the PDF route via `process.env.NEXT_PUBLIC_SC0RED_CONTACT_URL || 'https://www.sc0red.com/contact'` (or import `getSc0redContactUrl` if it's SSR-safe)
+- [x] 4.3 Use a dedicated CSS class (e.g. `.sc0red-cta`) defined in the existing inline stylesheet — distinct background, matches the banner's visual weight
+- [x] 4.4 Read the contact URL in the PDF route via `process.env.NEXT_PUBLIC_SC0RED_CONTACT_URL || 'https://www.sc0red.com/contact'` (or import `getSc0redContactUrl` if it's SSR-safe)
 
 ## 5. Tests
 
-- [ ] 5.1 Create `frontend/src/tests/components/Sc0redCTABanner.test.tsx`:
+- [x] 5.1 Create `frontend/src/tests/components/Sc0redCTABanner.test.tsx`:
   - Renders the collapsed heading
   - Clicking the trigger toggles `aria-expanded` and reveals the pitch + CTA
   - The CTA link has the passed `contactUrl` as `href`, `target="_blank"`, and `rel` including `noopener` and `noreferrer`
-- [ ] 5.2 Update `frontend/src/tests/components/OpportunitiesList.test.tsx`:
+- [x] 5.2 Update `frontend/src/tests/components/OpportunitiesList.test.tsx`:
   - Existing assertion on "Accenture - AI strategy" stays — only the *heading* changes
   - Add assertion that the old heading "Implementation Partners" is no longer rendered
   - Add assertion that "Tech Stack" heading is rendered
   - Add assertion that the sc0red banner renders when `opportunities.length > 0`
   - Add assertion that the sc0red banner does NOT render when `opportunities` is empty (or the active-lever filter returns zero)
-- [ ] 5.3 Confirm coverage floor (95%) still holds
+- [x] 5.3 Confirm coverage floor (95%) still holds
 
 ## 6. Verify
 
-- [ ] 6.1 `cd frontend && npm run lint` — no new errors
-- [ ] 6.2 `cd frontend && npx tsc --noEmit` — no type errors
-- [ ] 6.3 `cd frontend && npm test` — all tests pass
-- [ ] 6.4 Manual: visit an analysis page with opportunities, confirm the "Tech Stack" rename, expand/collapse the banner, click the CTA (opens new tab, lands on `sc0red.com/contact`)
-- [ ] 6.5 Manual: trigger a PDF export, open the PDF, confirm "Tech Stack" label and the closing sc0red block with a visible URL
-- [ ] 6.6 Manual: apply a lever filter that returns zero opportunities — confirm the banner is not rendered
+- [x] 6.1 `cd frontend && npm run lint` — no new errors
+- [x] 6.2 `cd frontend && npx tsc --noEmit` — no type errors
+- [x] 6.3 `cd frontend && npm test` — all tests pass
+- [x] 6.4 Manual: visit an analysis page with opportunities, confirm the "Tech Stack" rename, expand/collapse the banner, click the CTA (opens new tab, lands on `sc0red.com/contact`)
+- [x] 6.5 Manual: trigger a PDF export, open the PDF, confirm "Tech Stack" label and the closing sc0red block with a visible URL
+- [x] 6.6 Manual: apply a lever filter that returns zero opportunities — confirm the banner is not rendered
 
 ## 7. Final copy sign-off
 
@@ -73,54 +73,54 @@ This phase is a separate PR, landing after Phase 1 (PR #178) merges. See `design
 
 ### 9.1 Frontend-first removal (to close the UX regression window)
 
-- [ ] 9.1.1 Delete the "Tech Stack" section (heading + chip loop) from `frontend/src/components/OpportunitiesList.tsx`
-- [ ] 9.1.2 Delete the same section from `frontend/src/app/api/export/pdf/[analysisId]/route.ts` (keep the sc0red CTA block — only the per-card "Tech Stack" block goes)
-- [ ] 9.1.3 Drop the `related_services?: string[]` field from the `Opportunity` type in `frontend/src/lib/types/api.ts`
-- [ ] 9.1.4 Update `frontend/src/tests/components/OpportunitiesList.test.tsx` — remove the "Tech Stack" heading assertion, remove `related_services` fixture values, drop the assertion that the old "Implementation Partners" heading does not render (now trivially true)
-- [ ] 9.1.5 Update `frontend/src/tests/pages/AnalysisDetail.test.tsx` — remove `related_services` fixture values
-- [ ] 9.1.6 Grep the frontend for any remaining references to `related_services` and delete them
+- [x] 9.1.1 Delete the "Tech Stack" section (heading + chip loop) from `frontend/src/components/OpportunitiesList.tsx`
+- [x] 9.1.2 Delete the same section from `frontend/src/app/api/export/pdf/[analysisId]/route.ts` (keep the sc0red CTA block — only the per-card "Tech Stack" block goes)
+- [x] 9.1.3 Drop the `related_services?: string[]` field from the `Opportunity` type in `frontend/src/lib/types/api.ts` (also removed orphan `Vendor` and `RelatedService` interfaces)
+- [x] 9.1.4 Update `frontend/src/tests/components/OpportunitiesList.test.tsx` — remove the "Tech Stack" heading assertion, remove `related_services` fixture values, drop the assertion that the old "Implementation Partners" heading does not render (now trivially true)
+- [x] 9.1.5 Update `frontend/src/tests/pages/AnalysisDetail.test.tsx` — remove `related_services` fixture values
+- [x] 9.1.6 Grep the frontend for any remaining references to `related_services` and delete them
 
 ### 9.2 AI pipeline (prompt + schema + steps)
 
-- [ ] 9.2.1 Remove the `related_services` field from `src/pipeline/prompts/schemas/detail.json` (field definition + any required/properties entries)
-- [ ] 9.2.2 Remove the "up to 3 relevant vendor / service recommendations" instruction from `src/pipeline/prompts/templates/detail.md`
-- [ ] 9.2.3 Remove any vendor-mention guidance from `src/pipeline/prompts/system/opportunity_detail.md`
-- [ ] 9.2.4 In `src/pipeline/pipeline_steps/detail_opportunity.py`, stop reading `related_services` from the model response
-- [ ] 9.2.5 In `src/pipeline/pipeline_steps/persist_results.py`, stop passing `related_services` when constructing `Opportunity` objects
+- [x] 9.2.1 Remove the `related_services` field from `src/pipeline/prompts/schemas/detail.json` (field definition + required array entry)
+- [x] 9.2.2 Remove the "up to 3 relevant vendor / service recommendations" instruction from `src/pipeline/prompts/templates/detail.md`
+- [x] 9.2.3 Remove any vendor-mention guidance from `src/pipeline/prompts/system/opportunity_detail.md`
+- [x] 9.2.4 In `src/pipeline/pipeline_steps/detail_opportunity.py`, stop reading `related_services` from the model response (docstring-only change — field is no longer in schema so it's naturally absent from responses)
+- [x] 9.2.5 In `src/pipeline/pipeline_steps/persist_results.py`, stop passing `related_services` when constructing `Opportunity` objects
 
 ### 9.3 Domain model
 
-- [ ] 9.3.1 Remove the `related_services: list[str] = Field(default_factory=list)` field from `Opportunity` in `src/models/model_company.py`
+- [x] 9.3.1 Remove the `related_services: list[str] = Field(default_factory=list)` field from `Opportunity` in `src/models/model_company.py`
 
 ### 9.4 Storage (DynamoDB repository)
 
-- [ ] 9.4.1 `src/repositories/dynamodb/assessment_repository.py::save_opportunity` — stop writing `related_services` to the DynamoDB item
-- [ ] 9.4.2 `src/repositories/dynamodb/assessment_repository.py::batch_save_opportunities` — same removal
-- [ ] 9.4.3 `src/repositories/dynamodb/assessment_repository.py::get_opportunities` — stop deserializing `related_services` (historical rows with the attribute continue to deserialize correctly; the attribute is simply ignored)
-- [ ] 9.4.4 No data migration — existing DynamoDB items retain the stale attribute harmlessly. Document this in the PR description.
+- [x] 9.4.1 `src/repositories/dynamodb/assessment_repository.py::save_opportunity` — stop writing `related_services` to the DynamoDB item (field no longer on model, so nothing to write)
+- [x] 9.4.2 `src/repositories/dynamodb/assessment_repository.py::batch_save_opportunities` — same removal
+- [x] 9.4.3 `src/repositories/dynamodb/assessment_repository.py::get_opportunities` — **went further than planned**: added active `item.pop("related_services", None)` scrub so historical rows with the stale attribute cannot leak to the API response, plus a dedicated test (`test_get_opportunities_scrubs_legacy_related_services`)
+- [x] 9.4.4 No data migration — existing DynamoDB items retain the stale attribute harmlessly. Documented in PR #179 description.
 
 ### 9.5 Mock AI server
 
-- [ ] 9.5.1 Remove `related_services` from the opportunity fixtures in `scripts/mock_ai_server.py` so E2E tests exercise the post-removal shape
+- [x] 9.5.1 Remove `related_services` from the opportunity fixtures in `scripts/mock_ai_server.py` so E2E tests exercise the post-removal shape
 
 ### 9.6 Tests (backend)
 
-- [ ] 9.6.1 Update `tests/unit/pipeline/test_detail_opportunity.py` — remove `related_services` from fixtures and assertions
-- [ ] 9.6.2 Update `tests/unit/pipeline/test_detail_opportunities.py` — same
-- [ ] 9.6.3 Update `tests/unit/pipeline/test_generate_opportunities.py` — same
-- [ ] 9.6.4 Update `tests/unit/repositories/test_assessment_repository.py` — remove the field from save/batch-save/get fixtures and assertions
-- [ ] 9.6.5 Update `tests/unit/models/test_model_company.py` — remove any `related_services` fixture references
+- [x] 9.6.1 Update `tests/unit/pipeline/test_detail_opportunity.py` — removed `related_services` from fixtures; added negative test `test_does_not_have_related_services`
+- [x] 9.6.2 Update `tests/unit/pipeline/test_detail_opportunities.py` — fixture update
+- [x] 9.6.3 Update `tests/unit/pipeline/test_generate_opportunities.py` — fixture update
+- [x] 9.6.4 Update `tests/unit/repositories/test_assessment_repository.py` — removed the field from save/batch-save/get fixtures; added legacy-scrub test; split oversized file into three (`_documents.py`, `_value_chain.py`) to stay under the 400-line cap
+- [x] 9.6.5 Update `tests/unit/models/test_model_company.py` — removed `related_services` fixture references (renamed `test_create_with_related_services` → `test_create_with_all_fields`)
 
 ### 9.7 Docs
 
-- [ ] 9.7.1 Remove the `related_services` row from the API contract table in `docs/api.md`
+- [x] 9.7.1 Remove the `related_services` row from the API contract example in `docs/api.md`
 
 ### 9.8 Verify
 
-- [ ] 9.8.1 `uv run ruff check src/` — clean
-- [ ] 9.8.2 `uv run pyright src/` — no new errors
-- [ ] 9.8.3 `uv run pytest tests/ -q` — all tests pass, coverage still ≥ 95%
-- [ ] 9.8.4 `cd frontend && npm run lint && npx tsc --noEmit && npm test` — all green
-- [ ] 9.8.5 Run E2E: bring up `docker-compose.e2e.yml`, run `./scripts/e2e-test.sh`, confirm analyses complete successfully without `related_services` in responses
-- [ ] 9.8.6 Architecture-reviewer agent on the Phase 2 PR (crosses >3 files, touches pipeline steps + repository + model)
-- [ ] 9.8.7 Deploy to development branch; open an existing analysis (row with stale `related_services` attribute in DynamoDB) and confirm it renders correctly (no runtime error from the now-ignored attribute)
+- [x] 9.8.1 `uv run ruff check src/` — clean
+- [x] 9.8.2 `uv run pyright src/` — no new errors (pre-existing errors in unrelated files unchanged)
+- [x] 9.8.3 `uv run pytest tests/ -q` — 760 passed, coverage 95.26% (≥ 95% floor; lifted from 94.98% via new `get_value_chain` tests)
+- [x] 9.8.4 `cd frontend && npm run lint && ./node_modules/.bin/tsc --noEmit && npm test` — clean, 427 tests pass
+- [x] 9.8.5 Ran E2E: `docker-compose.e2e.yml` + `./scripts/e2e-test.sh` — 44/44 pass. CI E2E + Playwright also green on PR #179.
+- [x] 9.8.6 Architecture-reviewer agent run — no CRITICAL findings; one MEDIUM (test file size) resolved by splitting `test_assessment_repository.py` into three files.
+- [ ] 9.8.7 Deploy to development branch; open an existing analysis (row with stale `related_services` attribute in DynamoDB) and confirm it renders correctly (no runtime error from the now-ignored attribute) — **pending merge of PR #179 + Amplify redeploy**
