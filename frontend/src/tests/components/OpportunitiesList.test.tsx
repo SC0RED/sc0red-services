@@ -101,6 +101,34 @@ describe('OpportunitiesList', () => {
         expect(screen.getByText('Accenture - AI strategy')).toBeInTheDocument()
     })
 
+    it('renames the vendor section heading to "Tech Stack" (no "Implementation Partners")', () => {
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+
+        fireEvent.click(screen.getByText('Deploy AI Chatbot').closest('button')!)
+
+        expect(screen.getByText('Tech Stack')).toBeInTheDocument()
+        expect(screen.queryByText('Implementation Partners')).not.toBeInTheDocument()
+    })
+
+    it('renders the sc0red CTA banner when opportunities are visible', () => {
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+
+        expect(screen.getByText('sc0red can help you capture these opportunities')).toBeInTheDocument()
+    })
+
+    it('hides the sc0red CTA banner when the filter returns zero opportunities', () => {
+        render(<OpportunitiesList opportunities={[]} activeLever="All" />)
+
+        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
+    })
+
+    it('hides the sc0red CTA banner when the lever filter matches nothing', () => {
+        const revenueOnly: Opportunity[] = [{ ...mockOpportunities[0]!, value_lever: 'Revenue Side' }]
+        render(<OpportunitiesList opportunities={revenueOnly} activeLever="Cost Side" />)
+
+        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
+    })
+
     it('shows ImpactBadge and TimelineBadge for each opportunity', () => {
         render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 

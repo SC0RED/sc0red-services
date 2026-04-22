@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 
+import Sc0redCTABanner from '@/components/Sc0redCTABanner'
+import { getSc0redContactUrl } from '@/lib/config'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -328,7 +330,7 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                                                     letterSpacing: '0.06em',
                                                 }}
                                             >
-                                                Implementation Partners
+                                                Tech Stack
                                             </div>
                                             <div
                                                 style={{
@@ -351,6 +353,8 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                     )
                 })}
             </div>
+
+            {filteredOpps.length > 0 && <Sc0redCTABanner contactUrl={getSc0redContactUrl()} />}
         </div>
     )
 }

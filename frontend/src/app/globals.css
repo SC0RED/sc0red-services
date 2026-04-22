@@ -956,3 +956,29 @@ a:focus:not(:focus-visible),
 .max-w-sm { max-width: 420px; }
 .max-w-md { max-width: 480px; }
 .max-w-lg { max-width: 600px; }
+
+/* ── sc0red CTA Banner ─────────────────────────────────────── */
+.sc0red-cta-toggle {
+    transition: background var(--transition-fast);
+}
+.sc0red-cta-toggle:hover {
+    background: rgba(59, 123, 246, 0.06);
+}
+.sc0red-cta-toggle:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+}
+.sc0red-cta-button {
+    transition:
+        opacity var(--transition-fast),
+        box-shadow var(--transition-fast);
+}
+.sc0red-cta-button:hover {
+    opacity: 0.9;
+    box-shadow: 0 0 0 4px var(--accent-blue-glow);
+}
+.sc0red-cta-button:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--accent-blue-glow);
+}
