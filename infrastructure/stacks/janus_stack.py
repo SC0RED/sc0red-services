@@ -18,6 +18,7 @@ from stacks.amplify_construct import AmplifyConstruct
 from stacks.cognito_construct import CognitoConstruct
 from stacks.mcp_construct import MCPConstruct
 from stacks.observability_construct import ObservabilityConstruct
+from stacks.step_functions_construct import StepFunctionsConstruct
 
 _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
     7: logs.RetentionDays.ONE_WEEK,
@@ -71,12 +72,13 @@ class JanusStack(Stack):
             bundling=bundling, environment=common_environment,
             timeout_seconds=30, memory_size=512,
         )
+        worker_concurrency = self._config.get("worker_concurrency", 4)
         worker_handler = self._create_lambda(
             "WorkerHandler",
             function_name=f"janus-worker-{environment}",
             handler="src.handlers.worker_handler_entry.handle_worker_event",
             bundling=bundling, environment=common_environment,
-            timeout_seconds=540, memory_size=1769, reserved_concurrency=5,
+            timeout_seconds=540, memory_size=1769, reserved_concurrency=worker_concurrency,
         )
 
         table.grant_read_write_data(api_handler)
@@ -115,7 +117,11 @@ class JanusStack(Stack):
         )
 
         worker_handler.add_event_source(
-            lambda_event_sources.SqsEventSource(queue, batch_size=1)
+            lambda_event_sources.SqsEventSource(
+                queue,
+                batch_size=1,
+                report_batch_item_failures=True,
+            )
         )
 
         observability = ObservabilityConstruct(
@@ -126,6 +132,25 @@ class JanusStack(Stack):
         worker_handler.add_environment("APPSYNC_API_KEY", observability.appsync_api_key)
         api_handler.add_environment("APPSYNC_ENDPOINT", observability.appsync_url)
         api_handler.add_environment("APPSYNC_API_KEY", observability.appsync_api_key)
+
+        # ── Step Functions for portfolio batch coordination ──────────
+        batch_coordinator = StepFunctionsConstruct(
+            self,
+            "BatchCoordinator",
+            environment=environment,
+            bundling=bundling,
+            lambda_architecture=self._lambda_architecture,
+            worker_lambda=worker_handler,
+            table_name=table.table_name,
+            appsync_endpoint=observability.appsync_url,
+            appsync_api_key=observability.appsync_api_key,
+        )
+        batch_coordinator.grant_table_access(table)
+        batch_coordinator.grant_start_execution(api_handler)
+
+        # Auto-configure wave_size from worker concurrency — single source of truth
+        api_handler.add_environment("PORTFOLIO_STATE_MACHINE_ARN", batch_coordinator.state_machine_arn)
+        api_handler.add_environment("WAVE_SIZE", str(worker_concurrency))
 
         CfnOutput(self, "ApiUrl", value=api.url, description=f"API Gateway URL — {environment}")
         CfnOutput(self, "TableName", value=table.table_name)
@@ -201,7 +226,7 @@ class JanusStack(Stack):
             queue_name=f"janus-analysis-queue-{self._environment}",
             visibility_timeout=Duration.seconds(600),
             retention_period=Duration.days(1),
-            dead_letter_queue=sqs.DeadLetterQueue(queue=dlq, max_receive_count=3),
+            dead_letter_queue=sqs.DeadLetterQueue(queue=dlq, max_receive_count=20),
         )
         return queue, dlq
 

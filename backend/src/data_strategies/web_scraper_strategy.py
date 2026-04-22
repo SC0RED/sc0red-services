@@ -165,9 +165,20 @@ def scrape_url(url: str) -> dict[str, Any]:
     for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
         tag.decompose()
 
-    # Remove elements by class name patterns
-    for cls in ["nav", "footer", "header", "sidebar", "cookie", "popup"]:
-        for el in soup.find_all(class_=re.compile(cls, re.IGNORECASE)):
+    # Remove elements whose CSS class tokens exactly match clutter patterns.
+    # Uses token-level matching (not substring regex) to avoid false positives
+    # like "no-sidebar" matching "sidebar" and stripping the entire <body>.
+    clutter_classes = {"nav", "footer", "header", "sidebar", "cookie", "popup"}
+    for el in soup.find_all(class_=True):
+        if el.name in ("html", "body"):
+            continue
+        # Guard: decompose() on earlier elements can corrupt the tree,
+        # leaving some elements with attrs=None. Skip those.
+        try:
+            class_tokens = {c.lower() for c in el.get("class", [])}
+        except AttributeError:
+            continue
+        if class_tokens & clutter_classes:
             el.decompose()
 
     # Extract title

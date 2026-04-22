@@ -436,13 +436,21 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
+    @patch("src.handlers.scan_handlers.boto3")
     @patch.dict(
-        "os.environ", {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"}
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "PORTFOLIO_STATE_MACHINE_ARN": "arn:aws:states:us-east-1:123:stateMachine:test",
+            "WAVE_SIZE": "4",
+        },
     )
-    def test_scan_confirm_success(self, mock_boto3, mock_authentication):
+    def test_scan_confirm_success(self, mock_scan_boto3, mock_api_boto3, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sfn = MagicMock()
+        mock_scan_boto3.client.return_value = mock_sfn
         mock_sqs = MagicMock()
-        mock_boto3.client.return_value = mock_sqs
+        mock_api_boto3.client.return_value = mock_sqs
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         scan_repo.get_by_id.return_value = {"org_id": "org-1"}
@@ -467,7 +475,9 @@ class TestAPIGatewayHandler:
         body = json.loads(result["body"])
         assert body["ok"] is True
         assert len(body["queued"]) == 2
-        assert mock_sqs.send_message.call_count == 2
+        # 2 companies → Step Functions path, not SQS
+        mock_sfn.start_execution.assert_called_once()
+        mock_sqs.send_message.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
@@ -530,6 +540,51 @@ class TestAPIGatewayHandler:
         assert result["statusCode"] == 400
         body = json.loads(result["body"])
         assert "url" in body["error"]
+        mock_sqs.send_message.assert_not_called()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch("src.handlers.scan_handlers.boto3")
+    @patch.dict(
+        "os.environ",
+        {
+            "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
+            "PORTFOLIO_STATE_MACHINE_ARN": "arn:aws:states:us-east-1:123:stateMachine:test",
+            "WAVE_SIZE": "4",
+        },
+    )
+    def test_scan_confirm_uses_step_functions_for_multiple_companies(
+        self, mock_scan_boto3, mock_api_boto3, mock_authentication
+    ):
+        """Portfolio confirm with 2+ companies uses Step Functions, not SQS."""
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_sfn = MagicMock()
+        mock_api_boto3.client.return_value = mock_sqs
+        mock_scan_boto3.client.return_value = mock_sfn
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"org_id": "org-1"}
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/confirm",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps(
+                    {
+                        "companies": [
+                            {"name": "Co1", "url": "https://co1.com"},
+                            {"name": "Co2", "url": "https://co2.com"},
+                        ],
+                    }
+                ),
+            }
+        )
+        assert result["statusCode"] == 202
+        # Step Functions was called instead of SQS
+        mock_sfn.start_execution.assert_called_once()
         mock_sqs.send_message.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
