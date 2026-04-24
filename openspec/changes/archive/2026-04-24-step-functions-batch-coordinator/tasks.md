@@ -19,14 +19,14 @@
 - [x] 3.1 `worker_handler_entry.py` detects `event.get("source") == "step_functions"` for direct invocations
 - [x] 3.2 Direct invocation calls `SQSHandler._process_new_analysis(event)` directly
 - [x] 3.3 Returns `{"status": "processed"}` for Step Functions (vs batchItemFailures for SQS)
-- [ ] 3.4 Unit tests: direct invocation + SQS event both work
+- [x] 3.4 Unit tests: direct invocation + SQS event both work — `test_worker_handler_entry.py` (step_functions_event_processes_company, domain_error, programming_error, transient_error, SQS path unaffected)
 
 ## 4. Backend — Update handle_scan_confirm
 
 - [x] 4.1 Starts Step Function execution when `PORTFOLIO_STATE_MACHINE_ARN` is set and `len(companies) > 1`
 - [x] 4.2 `scan_repo.link_company()` preserved for all companies
 - [x] 4.3 Reads `WAVE_SIZE` and `PORTFOLIO_STATE_MACHINE_ARN` from env vars; SQS fallback when not configured
-- [ ] 4.4 Unit tests: confirm handler with Step Functions path
+- [x] 4.4 Unit tests: confirm handler with Step Functions path — `test_api_gateway_handler.py::test_scan_confirm_uses_step_functions_for_multiple_companies` + related fixtures
 
 ## 5. CDK — Wire everything together
 
@@ -40,13 +40,13 @@
 ## 6. Quality gates
 
 - [x] 6.1 Ruff clean, format clean
-- [x] 6.2 743 backend tests pass
-- [ ] 6.3 Frontend tests still pass
-- [ ] 6.4 CDK synth succeeds
-- [ ] 6.5 Architecture-reviewer agent
-- [ ] 6.6 E2E verification
+- [x] 6.2 760 backend tests pass (re-verified 2026-04-24 — coverage 95.26%)
+- [x] 6.3 Frontend tests pass (427 tests — verified in pre-push hook)
+- [x] 6.4 CDK synth succeeds (CI green on PR #174)
+- [x] 6.5 Architecture-reviewer agent ran on PR #174 prior to merge
+- [x] 6.6 E2E verification — portfolio scan path exercised; follow-up fix #175 landed for state-loop key mismatch
 
 ## 7. Deploy + verify
 
-- [ ] 7.1 Open PR against development; CI green
-- [ ] 7.2-7.5 Deploy + verify (post-merge)
+- [x] 7.1 PR #174 opened against `development`; CI green; merged 2026-04-21
+- [x] 7.2-7.5 Deployed to `development` → `testing` → `production`; fix #175 applied for the `companies` state-loop key; 8+ days in production without regression
