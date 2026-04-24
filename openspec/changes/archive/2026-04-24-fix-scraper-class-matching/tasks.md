@@ -14,4 +14,4 @@
 
 - [x] 3.1 Ruff + format clean
 - [x] 3.2 730 tests pass
-- [ ] 3.3 Open PR, CI green, merge
+- [x] 3.3 Open PR, CI green, merge (PR #167, commit 0dc5590)

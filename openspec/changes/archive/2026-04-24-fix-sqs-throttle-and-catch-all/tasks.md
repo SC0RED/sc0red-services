@@ -15,4 +15,4 @@
 ## 4. Quality gates
 
 - [x] 4.1 Ruff clean, 30 SQS handler tests pass
-- [ ] 4.2 Open PR, CI green, merge
+- [x] 4.2 Open PR, CI green, merge (PR #173, commit 356970f)

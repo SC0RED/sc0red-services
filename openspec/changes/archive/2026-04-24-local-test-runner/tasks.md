@@ -36,7 +36,7 @@
 ## 5. Verification
 
 - [x] 5.1 Run `./scripts/playwright.sh --mode=local` end-to-end (all 28 tests pass)
-- [ ] 5.2 Run `./scripts/playwright.sh --mode=local --headed` (browser visible)
+- [x] 5.2 Run `./scripts/playwright.sh --mode=local --headed` (browser visible) — verified
 - [x] 5.3 Run `./scripts/playwright.sh --mode=local --visual-update` (baselines generated)
 - [x] 5.4 Run `./scripts/playwright.sh --mode=local --visual` (comparisons pass)
-- [ ] 5.5 Verify npm scripts work (`npm run e2e:local`, `npm run e2e:headed`)
+- [x] 5.5 Verify npm scripts work (`npm run e2e:local`, `npm run e2e:headed`) — verified

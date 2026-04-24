@@ -42,8 +42,8 @@
 ## 7. Integration testing
 
 - [x] 7.1 perotjain.com: 0 → 30 companies (verified locally)
-- [ ] 7.2 Known working PE firm (post-deploy verification)
-- [ ] 7.3 bdo.com non-PE message (post-deploy with AI)
+- [x] 7.2 Known working PE firm (post-deploy verification) — verified live on development
+- [x] 7.3 bdo.com non-PE message (post-deploy with AI) — verified live on development
 
 ## 8. Verify
 

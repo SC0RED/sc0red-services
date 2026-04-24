@@ -63,9 +63,12 @@
 
 - [x] 7.1 Copy reviewed: no hard timeline commitment (removed "60–90 days" claim — replaced with "faster than traditional enterprise timelines"). Heading and CTA button text kept from the initial draft.
 
-## 8. Fast-follow (not part of this PR)
+## 8. Fast-follow (descoped — tracked separately)
 
-- [ ] 8.1 Wire `NEXT_PUBLIC_SC0RED_CONTACT_URL` through `infrastructure/stacks/amplify_construct.py` so per-environment overrides are possible (accept optional `sc0red_contact_url: str | None = None` on `create_branch()`, inject as `CfnBranch.EnvironmentVariableProperty` only when set). Only needed when we want a non-default URL in staging/production (not needed today — default is the production URL).
+Section descoped from this change. The Amplify per-environment override
+for `NEXT_PUBLIC_SC0RED_CONTACT_URL` was never in scope for the CTA or the
+`related_services` removal. If/when a non-default contact URL is needed in
+staging or production, propose a new OpenSpec change for the infra wiring.
 
 ## 9. Phase 2 — Backend removal of `related_services` (follow-up PR)
 
@@ -123,4 +126,4 @@ This phase is a separate PR, landing after Phase 1 (PR #178) merges. See `design
 - [x] 9.8.4 `cd frontend && npm run lint && ./node_modules/.bin/tsc --noEmit && npm test` — clean, 427 tests pass
 - [x] 9.8.5 Ran E2E: `docker-compose.e2e.yml` + `./scripts/e2e-test.sh` — 44/44 pass. CI E2E + Playwright also green on PR #179.
 - [x] 9.8.6 Architecture-reviewer agent run — no CRITICAL findings; one MEDIUM (test file size) resolved by splitting `test_assessment_repository.py` into three files.
-- [ ] 9.8.7 Deploy to development branch; open an existing analysis (row with stale `related_services` attribute in DynamoDB) and confirm it renders correctly (no runtime error from the now-ignored attribute) — **pending merge of PR #179 + Amplify redeploy**
+- [x] 9.8.7 Deploy to development branch; open an existing analysis (row with stale `related_services` attribute in DynamoDB) and confirm it renders correctly (no runtime error from the now-ignored attribute) — verified post-merge (PR #179, commit 3088813)

@@ -13,4 +13,4 @@
 
 - [x] 3.1 Backend: ruff clean, 70 handler tests pass
 - [x] 3.2 Frontend: lint + typecheck clean, 15 PortfolioView tests pass
-- [ ] 3.3 Open PR, CI green, merge
+- [x] 3.3 Open PR, CI green, merge (PR #169, commit b3c2a21)

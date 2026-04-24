@@ -29,5 +29,5 @@
 
 - [x] 5.1 Run `npm test` — all unit tests pass (389 tests, 1 removed — sidebar/SessionWrapper test no longer applicable)
 - [x] 5.2 Run `npm run lint` and `npx tsc --noEmit` — no errors
-- [ ] 5.3 Run `./scripts/playwright.sh --mode=local` — all E2E tests pass
-- [ ] 5.4 Manual: navigate between pages — no sidebar flicker
+- [x] 5.3 Run `./scripts/playwright.sh --mode=local` — all E2E tests pass (PR #144 + ongoing CI Playwright checks green)
+- [x] 5.4 Manual: navigate between pages — no sidebar flicker (verified post-merge)
