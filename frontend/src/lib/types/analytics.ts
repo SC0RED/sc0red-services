@@ -19,6 +19,8 @@ export type AnalyticsEventType =
 
 export type WebAnalyticsEventType = Exclude<AnalyticsEventType, 'sc0red_cta_rendered_in_pdf'>
 
+export type AnalyticsSource = 'web' | 'pdf'
+
 export type ActiveLeverFilter = 'Revenue Side' | 'Cost Side'
 
 interface BaseEnvelope {
