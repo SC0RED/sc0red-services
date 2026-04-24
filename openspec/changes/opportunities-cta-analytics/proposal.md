@@ -1,49 +1,71 @@
-## Status
-
-**Stub — deferred.** Placed in the radar as a follow-on to `opportunities-cta-sc0red`.
-
 ## Why
 
-Once the sc0red CTA banner ships (see `opportunities-cta-sc0red`), we have no way to measure whether it works:
+The sc0red CTA banner shipped on every opportunity detail view (`opportunities-cta-sc0red`, PRs #178, #179) but has zero instrumentation. Today we cannot answer:
 
 - How often does someone expand the banner vs. leave it collapsed?
 - How often does an expansion convert to a click on "Start the conversation"?
 - Which analyses / orgs / users drive the clicks?
-- Does expansion/click rate differ per environment (staging vs. production)?
+- Does expansion or click rate differ across environments?
 
-Without this data we're shipping a CTA blind and can't tell if the copy, placement, or visual treatment is working.
+Without this data we are shipping a conversion surface blind. Copy, placement, and visual treatment can only be iterated against a measured baseline; a baseline requires events.
 
-## What Changes (sketch — to be refined when this is picked up)
+## What Changes
 
-- **Emit analytics events** from the `Sc0redCTABanner` component:
-  - `sc0red_cta_banner_expanded` (fires when user opens the banner)
-  - `sc0red_cta_banner_collapsed` (optional — symmetry)
-  - `sc0red_cta_clicked` (fires on the CTA link click, before navigation)
-- **Same for the PDF export** — arguably we can't track PDF clicks directly, but we can emit a `sc0red_cta_rendered_in_pdf` event when the PDF is generated so we at least know how many PDFs carry the CTA.
-- **Pick an analytics sink.** Options (decide when picking this up):
-  - PostHog / Amplitude / Segment (SaaS)
-  - AppSync / CloudWatch custom metric (stays in-AWS)
-  - Backend API endpoint that writes to DynamoDB (simplest, no new vendor)
-- **Include useful dimensions** in each event: `analysis_id`, `org_id`, `user_id`, `opportunity_count`, `active_lever_filter` (for expand/collapse — signals which view triggered engagement).
-- **Respect user privacy.** No PII beyond the user ID already captured in the NextAuth session. No tracking of which specific opportunity was hovered/read.
+### 1. Event emission from the CTA surfaces
+
+Emit four event types from the two places the banner renders:
+
+- `sc0red_cta_banner_expanded` — the user toggled the collapsed banner open (web)
+- `sc0red_cta_banner_collapsed` — the user toggled it closed again (web, optional symmetry)
+- `sc0red_cta_clicked` — the user clicked the external link, fired before navigation (web)
+- `sc0red_cta_rendered_in_pdf` — a PDF export was generated that contains the CTA (server-side)
+
+Every event carries a common envelope: `event_id`, `event_type`, `timestamp`, `user_id`, `org_id`, `analysis_id`, `opportunity_count`, `active_lever_filter`, `source` (`"web"` or `"pdf"`), and `analytics_version`.
+
+### 2. Sink: backend endpoint → CloudWatch Logs
+
+A new `POST /analytics/events` endpoint validates and enriches incoming events and writes them as structured JSON to a dedicated CloudWatch Log Group (`/janus/{env}/analytics-events`, 90-day retention).
+
+Funnel queries run in **CloudWatch Logs Insights** — `stats count() by event_type`, filter by `org_id` / `analysis_id`, time-range scoped.
+
+Rejected alternatives:
+- **SaaS vendor** (PostHog/Amplitude/Segment) — premature for current scale, new vendor + secret + privacy review
+- **DynamoDB events** — all four GSIs are already allocated, analytics in the same table pollutes operational queries, no native query engine for funnel math
+- **AppSync mutations** — schema overhead for a write-only stream, wrong tool
+
+### 3. Privacy posture
+
+- **No opportunity content captured** — no titles, no rationale text, no service-mapping suggestions
+- **No hover / mouse tracking** — only explicit expand / collapse / click intents
+- **No IP logging** — events do not include source IP, and API Gateway access logs are not forwarded to the analytics log group
+- **`org_id` sourced from JWT, not request body** — prevents spoofing via crafted requests
+- **User ID == Cognito `sub`** — opaque to external observers and already present in NextAuth session
 
 ## Capabilities
 
 ### New Capabilities
-- `opportunities-cta-analytics`: Event tracking for sc0red CTA banner engagement across the web UI and PDF export.
+- `opportunities-cta-analytics`: Event tracking for sc0red CTA banner engagement across web and PDF surfaces, backed by a CloudWatch log group queried via Logs Insights.
 
-## Impact (rough)
+### Modified Capabilities
+_(None — purely additive.)_
 
-- **Depends on sink choice.** If we go with a backend endpoint, expect a new handler + DynamoDB write path + CDK changes (event table or metric). If we go with a SaaS vendor, expect a new client SDK, a secret to manage, and a privacy review.
-- **Component change is small.** Adding `onExpand` / `onClick` handlers to `Sc0redCTABanner` that fire events is under 20 lines of code.
-- **Copy of this proposal:** to be expanded into full `design.md` + `tasks.md` when picked up — this stub captures intent only.
+## Impact
 
-## Non-Goals (for this stub)
+- **New backend module**: `src/handlers/analytics_handlers.py` with a single `handle_post_event` function, routed from `api_gateway_handler.py`
+- **New backend model**: `src/models/analytics_events.py` — Pydantic envelope + per-event validators
+- **New route**: `POST /analytics/events` — authenticated (Cognito JWT), validates + enriches + logs
+- **New frontend module**: `src/lib/analytics/emitEvent.ts` — typed client, exported helper `emit(eventType, payload)`
+- **New Next.js route**: `src/app/api/analytics/events/route.ts` — thin proxy to backend via `backendFetch()`
+- **Frontend wiring**: `Sc0redCTABanner.tsx` emits expand/collapse/click events via the new helper
+- **PDF route**: `src/app/api/export/pdf/[analysisId]/route.ts` emits `sc0red_cta_rendered_in_pdf` after the document is generated
+- **Infrastructure**: new CDK log group `/janus/{env}/analytics-events` with 90-day retention; API Lambda granted `logs:PutLogEvents` on it
+- **No DynamoDB schema changes**: none
+- **No frontend SDK additions**: no PostHog, no Amplitude, no Segment
 
-- **Implementation.** This proposal is a placeholder until we decide to prioritize it. Do NOT start work on it without first promoting the stub to a full proposal.
-- **A/B testing the CTA copy.** That's a separate concern — once we have analytics, we can scope A/B as its own proposal.
-- **Cross-page analytics.** This proposal is specifically about the sc0red CTA surface. A broader "frontend analytics" strategy is a larger conversation.
+## Non-Goals
 
-## Next Step
-
-When prioritized: convert this stub into a full proposal with `design.md` (sink choice, schema, privacy review) and `tasks.md`. Until then, leave it as a tracked placeholder.
+- **A/B testing the CTA copy**. Scope a separate change once we have a funnel baseline.
+- **Cross-page analytics**. This change is only about the sc0red CTA surface.
+- **Real-time dashboards**. Logs Insights ad-hoc queries are sufficient at current volume.
+- **Per-opportunity engagement** (e.g., which opportunity card was visible when the user expanded). Added later if the funnel baseline shows it matters.
+- **Batching / beacon API**. At current volume (tens to low hundreds of events per day) a single `fetch()` per event is fine and keeps the code path simple.
