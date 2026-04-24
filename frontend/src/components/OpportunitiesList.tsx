@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import Sc0redCTABanner from '@/components/Sc0redCTABanner'
 import { getSc0redContactUrl } from '@/lib/config'
+import type { ActiveLeverFilter } from '@/lib/types/analytics'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -23,9 +24,24 @@ function TimelineBadge({ timeline }: { timeline: string }) {
 interface OpportunitiesListProps {
     opportunities: Opportunity[]
     activeLever: string
+    analysisId: string
 }
 
-export default function OpportunitiesList({ opportunities, activeLever }: OpportunitiesListProps) {
+function toActiveLeverFilter(activeLever: string): ActiveLeverFilter | null {
+    // Only the two named levers are tracked as filters for analytics. "All",
+    // "Both", or any other value collapses to null — the funnel only
+    // distinguishes Revenue/Cost intent.
+    if (activeLever === 'Revenue Side' || activeLever === 'Cost Side') {
+        return activeLever
+    }
+    return null
+}
+
+export default function OpportunitiesList({
+    opportunities,
+    activeLever,
+    analysisId,
+}: OpportunitiesListProps) {
     const [activeOppCat, setActiveOppCat] = useState<string>('All')
     const [expandedOpp, setExpandedOpp] = useState<string | null>(null)
 
@@ -324,7 +340,14 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                 })}
             </div>
 
-            {filteredOpps.length > 0 && <Sc0redCTABanner contactUrl={getSc0redContactUrl()} />}
+            {filteredOpps.length > 0 && (
+                <Sc0redCTABanner
+                    contactUrl={getSc0redContactUrl()}
+                    analysisId={analysisId}
+                    opportunityCount={filteredOpps.length}
+                    activeLeverFilter={toActiveLeverFilter(activeLever)}
+                />
+            )}
         </div>
     )
 }

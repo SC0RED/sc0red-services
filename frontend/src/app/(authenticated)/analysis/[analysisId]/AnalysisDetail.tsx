@@ -309,7 +309,11 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 onLeverChange={setActiveLever}
             />
 
-            <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
+            <OpportunitiesList
+                opportunities={opportunities}
+                activeLever={activeLever}
+                analysisId={analysisId}
+            />
 
             {data.valueChain && data.valueChain.steps.length > 0 && (
                 <ValueChainDiagram
