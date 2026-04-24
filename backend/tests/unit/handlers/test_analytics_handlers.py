@@ -38,7 +38,7 @@ def _event(body: dict[str, object] | None = None, raw: str | None = None) -> dic
 
 class TestHandlePostEventHappyPath:
     def test_returns_202_on_valid_envelope(self) -> None:
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event(_event(), _auth())
         assert result["statusCode"] == 202
         body = json.loads(result["body"])
@@ -46,7 +46,7 @@ class TestHandlePostEventHappyPath:
         mock_log.assert_called_once()
 
     def test_enriches_with_jwt_identity(self) -> None:
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             handle_post_event(_event(), _auth(user_id="user-42", org_id="org-99"))
 
         enriched = mock_log.call_args.args[0]
@@ -58,7 +58,7 @@ class TestHandlePostEventHappyPath:
         """Anti-spoofing: body-side user_id / org_id are rejected by the envelope,
         but even the happy path above proves JWT values override anything the
         client might send. Here we explicitly confirm the JWT wins."""
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             handle_post_event(
                 _event(_body()),  # clean body
                 _auth(user_id="real-user", org_id="real-org"),
@@ -71,7 +71,7 @@ class TestHandlePostEventHappyPath:
 
 class TestHandlePostEventValidation:
     def test_invalid_json_returns_400(self) -> None:
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event(_event(raw="{not json"), _auth())
         assert result["statusCode"] == 400
         mock_log.assert_not_called()
@@ -79,13 +79,13 @@ class TestHandlePostEventValidation:
     def test_missing_event_type_returns_400(self) -> None:
         body = _body()
         del body["event_type"]
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event(_event(body), _auth())
         assert result["statusCode"] == 400
         mock_log.assert_not_called()
 
     def test_unknown_event_type_returns_400(self) -> None:
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event(
                 _event(_body(event_type="sc0red_cta_unicorn")),
                 _auth(),
@@ -95,7 +95,7 @@ class TestHandlePostEventValidation:
 
     def test_spoofed_user_id_in_body_is_rejected(self) -> None:
         """`extra="forbid"` on AnalyticsEvent rejects body-level identity fields."""
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event(
                 _event(_body(user_id="spoofed")),
                 _auth(),
@@ -104,7 +104,7 @@ class TestHandlePostEventValidation:
         mock_log.assert_not_called()
 
     def test_spoofed_org_id_in_body_is_rejected(self) -> None:
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event(
                 _event(_body(org_id="spoofed-org")),
                 _auth(),
@@ -118,13 +118,13 @@ class TestHandlePostEventValidation:
             source="web",
             active_lever_filter=None,
         )
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event(_event(body), _auth())
         assert result["statusCode"] == 400
         mock_log.assert_not_called()
 
     def test_empty_body_returns_400(self) -> None:
-        with patch("src.handlers.analytics_handlers.log_event") as mock_log:
+        with patch("src.handlers.analytics_handlers.emit_event") as mock_log:
             result = handle_post_event({"body": None}, _auth())
         assert result["statusCode"] == 400
         mock_log.assert_not_called()
@@ -136,7 +136,7 @@ class TestHandlePostEventErrorPropagation:
         Gateway handler converts it to 500. We do NOT swallow logger errors."""
         with (
             patch(
-                "src.handlers.analytics_handlers.log_event",
+                "src.handlers.analytics_handlers.emit_event",
                 side_effect=RuntimeError("CloudWatch unavailable"),
             ),
             pytest.raises(RuntimeError, match="CloudWatch unavailable"),

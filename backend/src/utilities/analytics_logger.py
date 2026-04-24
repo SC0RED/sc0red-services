@@ -43,9 +43,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_ANALYTICS_LOG_GROUP_ENV = "ANALYTICS_LOG_GROUP"
-_STAGE_ENV = "STAGE"
-_LAMBDA_STREAM_ENV = "AWS_LAMBDA_LOG_STREAM_NAME"
+_ANALYTICS_LOG_GROUP_ENVIRONMENT = "ANALYTICS_LOG_GROUP"
+_STAGE_ENVIRONMENT = "STAGE"
+_LAMBDA_STREAM_ENVIRONMENT = "AWS_LAMBDA_LOG_STREAM_NAME"
 
 
 class AnalyticsLoggerNotConfiguredError(RuntimeError):
@@ -57,7 +57,7 @@ class AnalyticsLoggerNotConfiguredError(RuntimeError):
     """
 
 
-class _CloudWatchAnalyticsSink:
+class _CloudWatchAnalyticsSink:  # noqa: NAMING001  # Module-private class, underscore prefix is idiomatic.
     """Singleton wrapper around ``boto3.client("logs")``.
 
     Creates the log stream lazily on first write. Subsequent writes reuse
@@ -121,15 +121,15 @@ def _resolve_stream_name() -> str:
     module-lifetime UUID — tests and local dev won't collide with each
     other because each process gets its own.
     """
-    lambda_stream = os.environ.get(_LAMBDA_STREAM_ENV)
+    lambda_stream = os.environ.get(_LAMBDA_STREAM_ENVIRONMENT)
     if lambda_stream:
         return lambda_stream
     return f"local-{uuid.uuid4()}"
 
 
-def _is_development() -> bool:
+def _is_development() -> bool:  # noqa: NAMING001  # Checker doesn't strip leading `_` before matching is_ prefix.
     """Return True when running in the development stage (LocalStack, tests, local dev)."""
-    return os.environ.get(_STAGE_ENV, "development") == "development"
+    return os.environ.get(_STAGE_ENVIRONMENT, "development") == "development"
 
 
 def _get_sink() -> _CloudWatchAnalyticsSink | None:
@@ -143,16 +143,16 @@ def _get_sink() -> _CloudWatchAnalyticsSink | None:
     if _sink is not None:
         return _sink
 
-    log_group = os.environ.get(_ANALYTICS_LOG_GROUP_ENV, "")
+    log_group = os.environ.get(_ANALYTICS_LOG_GROUP_ENVIRONMENT, "")
     if not log_group:
         if _is_development():
             logger.warning(
                 "%s is unset — analytics events will be dropped (development stage only)",
-                _ANALYTICS_LOG_GROUP_ENV,
+                _ANALYTICS_LOG_GROUP_ENVIRONMENT,
             )
             return None
         raise AnalyticsLoggerNotConfiguredError(
-            f"{_ANALYTICS_LOG_GROUP_ENV} is required outside the development stage"
+            f"{_ANALYTICS_LOG_GROUP_ENVIRONMENT} is required outside the development stage"
         )
 
     with _sink_lock:
@@ -164,7 +164,7 @@ def _get_sink() -> _CloudWatchAnalyticsSink | None:
     return _sink
 
 
-def log_event(enriched_event: EnrichedAnalyticsEvent) -> None:
+def emit_event(enriched_event: EnrichedAnalyticsEvent) -> None:
     """Write an enriched analytics event to the dedicated CloudWatch log group.
 
     The event is serialized as a single-line JSON object — Logs Insights

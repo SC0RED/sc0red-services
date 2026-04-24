@@ -32,7 +32,7 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
 )
 from src.models.analytics_events import AnalyticsEvent, EnrichedAnalyticsEvent
-from src.utilities.analytics_logger import log_event
+from src.utilities.analytics_logger import emit_event
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -72,7 +72,7 @@ def handle_post_event(
         org_id=authentication.org_id,
     )
 
-    log_event(enriched)
+    emit_event(enriched)
 
     logger.info(
         "analytics event accepted: event_type=%s analysis_id=%s org_id=%s",

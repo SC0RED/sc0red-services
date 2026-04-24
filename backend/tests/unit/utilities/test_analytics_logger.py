@@ -13,7 +13,7 @@ from src.models.analytics_events import AnalyticsEvent, EnrichedAnalyticsEvent
 from src.utilities import analytics_logger
 from src.utilities.analytics_logger import (
     AnalyticsLoggerNotConfiguredError,
-    log_event,
+    emit_event,
     reset_for_testing,
 )
 
@@ -44,14 +44,14 @@ def _isolate_sink() -> None:
 
 
 class TestLogEventInDevelopment:
-    """Development stage: no log group configured is expected; log_event no-ops."""
+    """Development stage: no log group configured is expected; emit_event no-ops."""
 
     def test_no_log_group_in_development_is_noop(self, monkeypatch: MonkeyPatch) -> None:
         monkeypatch.delenv("ANALYTICS_LOG_GROUP", raising=False)
         monkeypatch.setenv("STAGE", "development")
 
         with patch.object(analytics_logger, "boto3") as mock_boto:
-            log_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
 
         mock_boto.client.assert_not_called()
 
@@ -61,7 +61,7 @@ class TestLogEventInDevelopment:
         monkeypatch.delenv("STAGE", raising=False)
 
         # No raise means "treated as development".
-        log_event(_sample_enriched_event())
+        emit_event(_sample_enriched_event())
 
 
 class TestLogEventFailsFastOutsideDevelopment:
@@ -71,7 +71,7 @@ class TestLogEventFailsFastOutsideDevelopment:
         monkeypatch.setenv("STAGE", stage)
 
         with pytest.raises(AnalyticsLoggerNotConfiguredError):
-            log_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
 
 
 class TestLogEventSuccess:
@@ -83,7 +83,7 @@ class TestLogEventSuccess:
         mock_client = MagicMock()
         with patch.object(analytics_logger, "boto3") as mock_boto:
             mock_boto.client.return_value = mock_client
-            log_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
 
         mock_boto.client.assert_called_once_with("logs")
         mock_client.create_log_stream.assert_called_once_with(
@@ -112,9 +112,9 @@ class TestLogEventSuccess:
         mock_client = MagicMock()
         with patch.object(analytics_logger, "boto3") as mock_boto:
             mock_boto.client.return_value = mock_client
-            log_event(_sample_enriched_event())
-            log_event(_sample_enriched_event())
-            log_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
 
         assert mock_client.create_log_stream.call_count == 1
         assert mock_client.put_log_events.call_count == 3
@@ -128,7 +128,7 @@ class TestLogEventSuccess:
         mock_client = MagicMock()
         with patch.object(analytics_logger, "boto3") as mock_boto:
             mock_boto.client.return_value = mock_client
-            log_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
 
         stream_name = mock_client.create_log_stream.call_args.kwargs["logStreamName"]
         assert stream_name.startswith("local-")
@@ -146,7 +146,7 @@ class TestLogEventSuccess:
         )
         with patch.object(analytics_logger, "boto3") as mock_boto:
             mock_boto.client.return_value = mock_client
-            log_event(_sample_enriched_event())
+            emit_event(_sample_enriched_event())
 
         mock_client.put_log_events.assert_called_once()
 
@@ -165,7 +165,7 @@ class TestLogEventErrorPropagation:
         with patch.object(analytics_logger, "boto3") as mock_boto:
             mock_boto.client.return_value = mock_client
             with pytest.raises(ClientError):
-                log_event(_sample_enriched_event())
+                emit_event(_sample_enriched_event())
 
         mock_client.put_log_events.assert_not_called()
 
@@ -181,4 +181,4 @@ class TestLogEventErrorPropagation:
         with patch.object(analytics_logger, "boto3") as mock_boto:
             mock_boto.client.return_value = mock_client
             with pytest.raises(ClientError):
-                log_event(_sample_enriched_event())
+                emit_event(_sample_enriched_event())
