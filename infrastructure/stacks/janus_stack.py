@@ -56,6 +56,7 @@ class JanusStack(Stack):
         table = self._create_table()
         queue, dlq = self._create_queues()
         documents_bucket = self._create_documents_bucket(frontend_domain)
+        analytics_log_group = self._create_analytics_log_group()
 
         bundling = self._build_bundling_options()
 
@@ -87,6 +88,8 @@ class JanusStack(Stack):
         queue.grant_consume_messages(worker_handler)
         documents_bucket.grant_read_write(api_handler)
         cognito.grant_admin_actions(api_handler)
+        analytics_log_group.grant_write(api_handler)
+        api_handler.add_environment("ANALYTICS_LOG_GROUP", analytics_log_group.log_group_name)
 
         api = self._create_api(api_handler, frontend_domain)
 
@@ -159,6 +162,7 @@ class JanusStack(Stack):
         CfnOutput(self, "BucketName", value=documents_bucket.bucket_name)
         CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
         CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)
+        CfnOutput(self, "AnalyticsLogGroup", value=analytics_log_group.log_group_name)
 
     # ── Amplify ─────────────────────────────────────────────────────────────────
 
@@ -229,6 +233,24 @@ class JanusStack(Stack):
             dead_letter_queue=sqs.DeadLetterQueue(queue=dlq, max_receive_count=20),
         )
         return queue, dlq
+
+    # ── CloudWatch Logs — analytics sink ─────────────────────────────────────
+
+    def _create_analytics_log_group(self) -> logs.LogGroup:
+        """Create the dedicated log group the API Lambda writes CTA analytics into.
+
+        Isolated from the API Lambda's own log group so Logs Insights
+        funnel queries never have to filter operational log noise. 90-day
+        retention matches the design (see
+        ``openspec/changes/opportunities-cta-analytics/design.md``).
+        """
+        return logs.LogGroup(
+            self,
+            "AnalyticsEventsLogGroup",
+            log_group_name=f"/janus/{self._environment}/analytics-events",
+            retention=logs.RetentionDays.THREE_MONTHS,
+            removal_policy=self._config["removal_policy"],
+        )
 
     # ── S3 ───────────────────────────────────────────────────────────────────
 
@@ -308,7 +330,15 @@ class JanusStack(Stack):
         documents_bucket: s3.Bucket,
         cognito_construct: CognitoConstruct,
     ) -> dict[str, str]:
-        """Build the environment variables shared by both Lambdas."""
+        """Build the environment variables shared by both Lambdas.
+
+        Analytics env vars are deliberately NOT included here: only the API
+        Lambda has `logs:PutLogEvents` permission on the analytics log
+        group, so putting `ANALYTICS_LOG_GROUP` in the worker environment
+        would invite a future change to write analytics from the worker and
+        get `AccessDeniedException` at runtime. Wire API-only config via
+        `add_environment()` on the API handler instead.
+        """
         region = self.region or os.environ.get("AWS_REGION", "us-east-1")
 
         return {

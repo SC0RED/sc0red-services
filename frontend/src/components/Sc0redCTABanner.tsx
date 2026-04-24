@@ -2,8 +2,14 @@
 
 import { useState } from 'react'
 
+import { emit } from '@/lib/analytics/emitEvent'
+import type { ActiveLeverFilter } from '@/lib/types/analytics'
+
 interface Sc0redCTABannerProps {
     contactUrl: string
+    analysisId: string
+    opportunityCount: number
+    activeLeverFilter: ActiveLeverFilter | null
 }
 
 /**
@@ -11,11 +17,48 @@ interface Sc0redCTABannerProps {
  * opportunities list. Collapsed by default — one line with a chevron.
  * Expanded — pitch copy + an external link to the sc0red contact page.
  *
- * See openspec/changes/opportunities-cta-sc0red for the full spec.
+ * Emits three analytics events via `POST /api/analytics/events`:
+ * - `sc0red_cta_banner_expanded` — toggle opens
+ * - `sc0red_cta_banner_collapsed` — toggle closes
+ * - `sc0red_cta_clicked` — "Start the conversation" link click
+ *
+ * Emit failures never block the UI (see `lib/analytics/emitEvent`).
+ *
+ * See openspec/changes/opportunities-cta-analytics for the full spec.
  */
-export default function Sc0redCTABanner({ contactUrl }: Sc0redCTABannerProps) {
+export default function Sc0redCTABanner({
+    contactUrl,
+    analysisId,
+    opportunityCount,
+    activeLeverFilter,
+}: Sc0redCTABannerProps) {
     const [isOpen, setIsOpen] = useState(false)
     const controlsId = 'sc0red-cta-details'
+
+    const analyticsContext = {
+        analysisId,
+        opportunityCount,
+        activeLeverFilter,
+    }
+
+    const handleToggle = () => {
+        const next = !isOpen
+        setIsOpen(next)
+        // Fire-and-forget — the visual toggle is instant, the emit is best-effort.
+        void emit(next ? 'sc0red_cta_banner_expanded' : 'sc0red_cta_banner_collapsed', analyticsContext)
+    }
+
+    const handleCtaClick = () => {
+        // Fire-and-forget. The browser dispatches the anchor's default
+        // navigation as soon as this handler returns — awaiting a Promise
+        // here would NOT delay navigation (React does not suspend the
+        // default action for async handlers). We rely on `keepalive: true`
+        // inside `emit()` so the POST completes even if the new tab opens
+        // before the fetch resolves. The current tab also stays open
+        // (target="_blank"), so the fetch's owning document is not torn
+        // down either way.
+        void emit('sc0red_cta_clicked', analyticsContext)
+    }
 
     return (
         <div
@@ -28,7 +71,7 @@ export default function Sc0redCTABanner({ contactUrl }: Sc0redCTABannerProps) {
             }}
         >
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={handleToggle}
                 aria-expanded={isOpen}
                 aria-controls={controlsId}
                 className="sc0red-cta-toggle"
@@ -123,6 +166,7 @@ export default function Sc0redCTABanner({ contactUrl }: Sc0redCTABannerProps) {
                         href={contactUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={handleCtaClick}
                         className="sc0red-cta-button"
                         style={{
                             display: 'inline-flex',

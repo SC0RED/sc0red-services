@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { emitFromServer } from '@/lib/analytics/emitEvent.server'
 import { BackendError } from '@/lib/api/errors'
 import { backendFetch } from '@/lib/api/serverToken'
 import { getSc0redContactUrl } from '@/lib/config'
@@ -178,6 +179,19 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
 </div>
 </body>
 </html>`
+
+        // Fire the PDF-render analytics event without blocking the response.
+        // `emitFromServer` already swallows its own failures, so we cast the
+        // promise to `void` — the PDF download returns immediately while the
+        // emit's fetch runs in the background. Only fire when the CTA is
+        // actually rendered (opportunities exist), otherwise the event
+        // would pollute funnel queries with impressions that never happened.
+        if (opportunities.length > 0) {
+            void emitFromServer('sc0red_cta_rendered_in_pdf', {
+                analysisId: params.analysisId,
+                opportunityCount: opportunities.length,
+            })
+        }
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },

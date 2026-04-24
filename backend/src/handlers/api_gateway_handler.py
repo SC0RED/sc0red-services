@@ -126,6 +126,7 @@ class APIGatewayHandler:
             handle_list_analyses,
             handle_reanalyze,
         )
+        from src.handlers.analytics_handlers import handle_post_event as handle_post_analytics_event
         from src.handlers.auth_handlers import handle_register
         from src.handlers.document_handlers import (
             handle_create_document,
@@ -297,6 +298,13 @@ class APIGatewayHandler:
             lambda event, authentication: handle_oauth_approve(
                 event, authentication, self._storage
             ),
+        )
+
+        # ── Analytics ────────────────────────────────────────────────────────
+        router.protected(
+            "POST",
+            "/api/analytics/events",
+            handle_post_analytics_event,
         )
 
         return router
