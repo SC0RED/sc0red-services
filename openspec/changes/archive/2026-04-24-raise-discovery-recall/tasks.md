@@ -41,8 +41,8 @@
 
 ## 7. Deploy + verify
 
-- [ ] 7.1 Open PR against `development`; CI green
-- [ ] 7.2 Deploy to `development` AWS account via CI
-- [ ] 7.3 Manual smoke: run a portfolio scan for `perotjain.com` in the dev UI; expect 60+ companies post-validation (was 35-38)
-- [ ] 7.4 Compare token spend for the perotjain scan pre/post via CloudWatch AI-call logs; confirm cost impact is within 2-3× (expected)
-- [ ] 7.5 Promote `development` → `testing` → `production`
+- [x] 7.1 Open PR against `development`; CI green (PR #157 — merged)
+- [x] 7.2 Deployed to `development` AWS account via CI
+- [x] 7.3 Manual smoke: perotjain.com scan in dev UI — recall lifted from 35-38 to 60+ companies post-validation
+- [x] 7.4 Token spend for the perotjain scan reviewed via CloudWatch AI-call logs — cost impact within the expected 2-3× envelope; no rollback required in 8+ days of production use
+- [x] 7.5 Promoted `development` → `testing` → `production`
