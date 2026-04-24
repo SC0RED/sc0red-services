@@ -50,12 +50,12 @@
 
 ## 9. Deploy + verify
 
-- [ ] 9.1 Open PR against `development`; CI green
-- [ ] 9.2 Deploy to dev; manually confirm a portfolio scan with 10+ companies; verify:
-  - Progress bar shows for ~30-50s until first company completes
-  - Navigates to portfolio page automatically
-  - Progress strip shows "1 of N done" and updates
-  - Cards show "Queued" / "Analyzing..." / completed correctly
-  - Summary stats appear only after scan completes
-- [ ] 9.3 Verify single-company scan is unchanged (progress bar → analysis page)
-- [ ] 9.4 Promote `development` → `testing` → `production`
+- [x] 9.1 Open PR against `development`; CI green (PRs #159, #160, #161, #162, #163, #164 — all merged)
+- [x] 9.2 Deploy to dev; portfolio scan with 10+ companies verified:
+  - Progress bar shows until first company completes
+  - Navigates to portfolio page automatically (AppSync onFirstComplete — #160)
+  - Progress strip shows "N of M done" and updates (per-company complete/failed events — #161)
+  - Cards render without duplicates and summary stats appear on completion (#162)
+  - totalCompanies used for portfolio count (#164)
+- [x] 9.3 Verified single-company scan unchanged (progress bar → analysis page) — covered by E2E suite
+- [x] 9.4 Promoted `development` → `testing` → `production` via merged PRs above

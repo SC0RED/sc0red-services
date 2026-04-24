@@ -32,10 +32,10 @@
 - [x] 5.3 Backend: 726 tests pass
 - [x] 5.4 Frontend: lint clean, typecheck clean, 401 tests pass
 - [x] 5.5 Architecture-reviewer: 0 CRITICAL, 0 MEDIUM, 2 LOW (file size fixed by compacting JSX; duplicate repo instantiation noted, not blocking)
-- [ ] 5.6 E2E: portfolio scan with intentionally-failing companies shows name + retry button
+- [x] 5.6 E2E: portfolio scan with intentionally-failing companies shows name + retry button — verified in full E2E run (44/44)
 
 ## 6. Deploy + verify
 
-- [ ] 6.1 Open PR against `development`; CI green
-- [ ] 6.2 Deploy to dev; manually trigger a portfolio scan, verify failed cards show real name, detail page renders, retry works
-- [ ] 6.3 Promote `development` → `testing` → `production`
+- [x] 6.1 Open PR against `development`; CI green (PR #158 — merged)
+- [x] 6.2 Deployed to dev; portfolio scan verified: failed cards show real name, detail page renders, retry works
+- [x] 6.3 Promoted `development` → `testing` → `production`

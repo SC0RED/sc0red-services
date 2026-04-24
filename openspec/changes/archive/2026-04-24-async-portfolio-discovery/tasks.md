@@ -51,13 +51,13 @@
 - [x] 8.3 Backend: `uv run ruff format --check src/` — zero diffs
 - [x] 8.4 Backend: `uv run pyright src/` — 329 vs 336 (net **−7 errors**, no new regressions)
 - [x] 8.5 Frontend: `npm run lint && npx tsc --noEmit && npm test` — lint clean, typecheck clean, 391 tests pass
-- [ ] 8.6 E2E: run `scripts/e2e-test.sh` locally in `E2E_MODE=full` — portfolio scan happy path passes
-- [ ] 8.7 Manual smoke test: submit perotjain.com scan in staging, verify no 504, verify `discovering` → `awaiting_confirmation` transition, verify companies list populated
+- [x] 8.6 E2E: `scripts/e2e-test.sh` in `E2E_MODE=full` — portfolio scan happy path passes (44/44)
+- [x] 8.7 Manual smoke test: perotjain.com scan in staging — no 504, `discovering` → `awaiting_confirmation` transition verified, companies list populated (#153, #154)
 - [x] 8.8 Architecture review via `architecture-reviewer` agent — CRITICAL + MEDIUM findings resolved (status-lie fixed by creating record as `discovering`; silent-fallback fixed with bare key access; docker-compose parity gap documented). LOW polling-ref finding is pre-existing and out of scope.
 
 ## 9. Deploy & verify
 
-- [ ] 9.1 Merge backend + frontend in the same PR (or two PRs merged back-to-back) — do not split across deploys
-- [ ] 9.2 Deploy to staging (dev account) via CI
-- [ ] 9.3 Run perotjain.com scan against staging; confirm < 1s API response + full discovery under worker
-- [ ] 9.4 Promote to testing, then production
+- [x] 9.1 Backend + frontend merged back-to-back: #153 (worker discovery) then #154 (awaiting_confirmation transition)
+- [x] 9.2 Deployed to staging (dev account) via CI
+- [x] 9.3 Ran perotjain.com scan against staging — sub-second API response + full discovery under worker verified
+- [x] 9.4 Promoted to testing, then production
