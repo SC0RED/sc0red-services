@@ -47,6 +47,15 @@ jobs:
             exit 1
           fi
 
+      - name: Check analytics envelope type parity (backend vs frontend)
+        working-directory: backend
+        run: |
+          python scripts/check_analytics_type_parity.py || exit_code=$?
+          if [ "${exit_code:-0}" -ne 0 ]; then
+            echo "::error::Analytics envelope types drifted between backend and frontend."
+            exit 1
+          fi
+
   validate-with-ruff:
     runs-on: ubuntu-latest
     name: Validate with Ruff (N rules)
