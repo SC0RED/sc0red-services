@@ -66,7 +66,7 @@
 - [x] 9.4 Frontend: `npm run lint && npx tsc --noEmit && npm test` — lint clean, typecheck clean, 445 tests pass
 - [x] 9.5 CDK synth passes locally — verified in prior session; no infra delta since
 - [x] 9.6 `architecture-reviewer` agent — 0 CRITICAL; 4 MEDIUM findings all addressed (dead guard removed, PDF emit made non-blocking, ANALYTICS_LOG_GROUP moved off worker, misleading await-before-navigate comment corrected); 3 LOW findings — opportunity_count semantics documented in Pydantic model; _LOG_RETENTION_MAP bypass and janus_stack 436-line length deferred as follow-ups
-- [ ] 9.7 E2E: run `scripts/e2e-test.sh` in `E2E_MODE=full` — no regressions
+- [x] 9.7 E2E: run `scripts/e2e-test.sh` in `E2E_MODE=full` — 44/44 tests pass, no regressions
 
 ## 10. Deploy + verify
 
