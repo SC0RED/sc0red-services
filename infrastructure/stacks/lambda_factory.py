@@ -115,7 +115,13 @@ def create_lambda(
     enable_tracing: bool,
     reserved_concurrency: int | None = None,
 ) -> lambda_.Function:
-    """Create a Lambda function with its own log group and tracing config."""
+    """Create a Lambda function with its own log group and tracing config.
+
+    ``reserved_concurrency`` is optional — pass ``None`` (default) to
+    leave the function with account-wide unreserved concurrency. The
+    worker Lambda sets this to cap concurrent analyses; the API Lambda
+    leaves it unset to burst freely.
+    """
     log_group = logs.LogGroup(
         scope,
         f"{construct_id}Logs",

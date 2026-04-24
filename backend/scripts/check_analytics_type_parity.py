@@ -110,17 +110,27 @@ def _extract_literal_values(expr: ast.expr, alias: str) -> set[str]:
 # --------------------------------------------------------------------------- #
 
 
-_TS_STRING_LITERAL_RE = re.compile(r"'([^']+)'")
+# Accept either quote style — Prettier configs vary between repos, and
+# the checker should care about literal values, not their delimiters.
+_TS_STRING_LITERAL_RE = re.compile(r"['\"]([^'\"]+)['\"]")
+
+# Any top-level declaration keyword terminates the current type body.
+# Keeping this set tight avoids bleeding string literals from an
+# adjacent declaration (e.g. ``WebAnalyticsEventType = Exclude<...,
+# '...'>``) — but it must cover every form someone might add between
+# aliases, or we silently read past the intended end of the body.
+_TS_BODY_BOUNDARY_RE = re.compile(
+    r"\n(?:export|interface|declare|const|class|function|type)\s"
+)
 
 
 def extract_frontend_values(source: str) -> tuple[dict[str, set[str]], str]:
     """Return ({alias: {values}}, version) from the TS types file.
 
-    The TS file uses multi-line unions (`export type X =\\n    | 'a'\\n    | 'b'`),
+    The TS file uses multi-line unions (``export type X =\\n    | 'a'\\n    | 'b'``),
     so we anchor on ``export type <Alias> =`` and read until the next
-    top-level declaration keyword (``export`` / ``interface``). That
-    boundary is tight enough to avoid bleeding string literals in from
-    adjacent types (e.g., ``WebAnalyticsEventType = Exclude<..., '...'>``).
+    top-level declaration keyword. That boundary is tight enough to
+    avoid bleeding string literals in from adjacent types.
     """
     union_values: dict[str, set[str]] = {}
     for alias in _UNION_ALIASES:
@@ -129,7 +139,7 @@ def extract_frontend_values(source: str) -> tuple[dict[str, set[str]], str]:
             raise SystemExit(f"Missing frontend type alias `{alias}` (in {_FRONTEND_TYPES})")
 
         body_start = anchor.end()
-        boundary = re.search(r"\n(?:export|interface)\s", source[body_start:])
+        boundary = _TS_BODY_BOUNDARY_RE.search(source[body_start:])
         body_end = body_start + boundary.start() if boundary else len(source)
         body = source[body_start:body_end]
 
@@ -139,7 +149,7 @@ def extract_frontend_values(source: str) -> tuple[dict[str, set[str]], str]:
         union_values[alias] = literals
 
     version_match = re.search(
-        rf"export\s+const\s+{_VERSION_NAME}\s*=\s*'([^']+)'",
+        rf"export\s+const\s+{_VERSION_NAME}\s*=\s*['\"]([^'\"]+)['\"]",
         source,
     )
     if not version_match:
