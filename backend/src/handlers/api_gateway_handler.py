@@ -81,7 +81,7 @@ def check_org_access(
     return None
 
 
-# `build_company_summary` and `derive_company_state` live in
+# `build_company_summary` and `compute_company_state` live in
 # `src.utilities.scan_summary` to keep utilities independent of
 # handlers (utilities ← handlers, never the reverse). Import from
 # `src.utilities.scan_summary` directly.

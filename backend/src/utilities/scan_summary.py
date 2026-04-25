@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def derive_company_state(company: dict[str, Any]) -> str:
+def compute_company_state(company: dict[str, Any]) -> str:
     """Return the lifecycle state of a company-record at this poll.
 
     States: ``"failed"`` > ``"done"`` > ``"scanning"`` > ``"pending"``.
@@ -62,7 +62,7 @@ def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
         "analyzedAt": company.get("analyzed_at"),
         "pipelineProgress": company.get("pipeline_progress", 0),
         "pipelineLabel": company.get("pipeline_label", ""),
-        "state": derive_company_state(company),
+        "state": compute_company_state(company),
         "orderIndex": None,
     }
 
