@@ -458,6 +458,30 @@ select {
     }
 }
 
+/* ── Portfolio scanning indicator ──────────────────────────────
+ * Single shared keyframe + class so 50–200 simultaneous scanning
+ * cards don't each carry their own animation cost. Animates only
+ * `opacity` (GPU-cheap, no layout thrash). The global
+ * `prefers-reduced-motion: reduce` rule above handles a11y by
+ * collapsing animation-duration to 0.01ms — the dot freezes at
+ * its starting opacity (1.0), so it stays visible without pulsing.
+ */
+@keyframes pulse-dot {
+    0% { opacity: 1; }
+    50% { opacity: 0.35; }
+    100% { opacity: 1; }
+}
+
+.pulse-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background-color: var(--accent-blue);
+    animation: pulse-dot 1.4s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
 /* ── Input Error State ─────────────────────────────────────── */
 .input-error {
     border-color: var(--risk-critical) !important;

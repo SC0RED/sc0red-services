@@ -81,25 +81,10 @@ def check_org_access(
     return None
 
 
-def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
-    """Build a camelCase summary dict from a company DynamoDB record."""
-    # Uses .get() because the record evolves through multiple pipeline phases:
-    # 1. Identity write (company_name, company_url, scan_id, org_id) at pipeline start
-    # 2. Progress updates (pipeline_progress, pipeline_label) during execution
-    # 3. Full results (risk_score, analyzed_at, etc.) after persist_results
-    # On failure, only phases 1-2 are present + the error field.
-    return {
-        "id": company.get("id", ""),
-        "companyName": company.get("company_name", ""),
-        "companyUrl": company.get("company_url", ""),
-        "industry": company.get("industry", ""),
-        "overallRiskScore": company.get("overall_risk_score"),
-        "riskTier": company.get("risk_tier"),
-        "error": company.get("error"),
-        "analyzedAt": company.get("analyzed_at"),
-        "pipelineProgress": company.get("pipeline_progress", 0),
-        "pipelineLabel": company.get("pipeline_label", ""),
-    }
+# `build_company_summary` and `compute_company_state` live in
+# `src.utilities.scan_summary` to keep utilities independent of
+# handlers (utilities ← handlers, never the reverse). Import from
+# `src.utilities.scan_summary` directly.
 
 
 class APIGatewayHandler:

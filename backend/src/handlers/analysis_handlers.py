@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import (
     VALIDATION_ERROR,
-    build_company_summary,
     build_error,
     build_json_response,
     check_org_access,
 )
 from src.handlers.sqs_messages import build_reanalysis_message
+from src.utilities.scan_summary import build_company_summary
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
