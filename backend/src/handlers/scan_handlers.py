@@ -14,7 +14,6 @@ import boto3
 from src.handlers.api_gateway_handler import (
     NOT_FOUND,
     VALIDATION_ERROR,
-    build_company_summary,
     build_error,
     build_json_response,
     check_org_access,
@@ -23,6 +22,7 @@ from src.handlers.sqs_messages import (
     build_analysis_message,
     build_portfolio_discovery_message,
 )
+from src.utilities.scan_summary import build_unified_analyses
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -208,7 +208,11 @@ def handle_scan_status(
     scan_companies = scan_repo.get_scan_companies(scan_id)
     company_ids = [link["company_id"] for link in scan_companies if link.get("company_id")]
     companies_batch = company_repo.get_by_ids(company_ids) if company_ids else []
-    analyses = [build_company_summary(c) for c in companies_batch]
+    # Build one analysis entry per scan_company link — pending entries
+    # are synthesized from links for companies that have not yet been
+    # picked up by a worker. The frontend renders state-driven cards
+    # off the explicit `state` field on each entry.
+    analyses = build_unified_analyses(scan_companies, companies_batch)
 
     status = scan.get("status")
     total_companies = scan.get("total_companies", 0)
@@ -283,14 +287,23 @@ def handle_scan_confirm(
         {"status": "running", "progress": 10, "total_companies": len(valid_companies)},
     )
 
-    # Create scan→company links and build the company list for dispatch
+    # Create scan→company links and build the company list for dispatch.
+    # The link record persists company_url + order_index so the portfolio
+    # view can render every card from t=0 in submission order, even
+    # before a worker has picked up the SQS message.
     queued = []
     company_payloads = []
-    for company in valid_companies:
+    for index, company in enumerate(valid_companies):
         company_name = company.get("name", "")
         company_url = company["url"]
         analysis_id = str(uuid.uuid4())
-        scan_repo.link_company(scan_id, analysis_id, company_name)
+        scan_repo.link_company(
+            scan_id,
+            analysis_id,
+            company_name,
+            company_url=company_url,
+            order_index=index,
+        )
         queued.append({"name": company_name, "analysisId": analysis_id})
         company_payloads.append(
             {

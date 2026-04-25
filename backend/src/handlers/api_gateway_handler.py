@@ -81,6 +81,22 @@ def check_org_access(
     return None
 
 
+def derive_company_state(company: dict[str, Any]) -> str:
+    """Return the lifecycle state of a company-record at this poll.
+
+    States: ``"failed"`` > ``"done"`` > ``"scanning"`` > ``"pending"``.
+    Order matters — a company with both ``error`` set and a stale
+    ``analyzed_at`` is reported as failed.
+    """
+    if company.get("error"):
+        return "failed"
+    if company.get("analyzed_at"):
+        return "done"
+    if company.get("pipeline_progress", 0) > 0:
+        return "scanning"
+    return "pending"
+
+
 def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
     """Build a camelCase summary dict from a company DynamoDB record."""
     # Uses .get() because the record evolves through multiple pipeline phases:
@@ -99,6 +115,8 @@ def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
         "analyzedAt": company.get("analyzed_at"),
         "pipelineProgress": company.get("pipeline_progress", 0),
         "pipelineLabel": company.get("pipeline_label", ""),
+        "state": derive_company_state(company),
+        "orderIndex": None,
     }
 
 

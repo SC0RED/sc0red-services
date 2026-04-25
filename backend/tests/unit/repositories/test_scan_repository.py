@@ -51,6 +51,51 @@ class TestScanRepository:
         assert "Company Two" in names
 
     @mock_aws
+    def test_link_company_persists_url_and_order_index(self, dynamodb_table):
+        """link_company writes company_url + order_index when provided."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "pending"})
+
+        repo.link_company(
+            scan_id,
+            "comp-1",
+            "Company One",
+            company_url="https://one.example.com",
+            order_index=0,
+        )
+        repo.link_company(
+            scan_id,
+            "comp-2",
+            "Company Two",
+            company_url="https://two.example.com",
+            order_index=1,
+        )
+
+        companies = repo.get_scan_companies(scan_id)
+        by_id = {c["company_id"]: c for c in companies}
+        assert by_id["comp-1"]["company_url"] == "https://one.example.com"
+        assert by_id["comp-1"]["order_index"] == 0
+        assert by_id["comp-2"]["company_url"] == "https://two.example.com"
+        assert by_id["comp-2"]["order_index"] == 1
+
+    @mock_aws
+    def test_link_company_legacy_call_omits_new_fields(self, dynamodb_table):
+        """Legacy call shape (no kwargs) does not write company_url/order_index.
+
+        Models the migration scenario: a record written by an older
+        Lambda version is read by the new code without crashing.
+        """
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-1", "status": "pending"})
+
+        repo.link_company(scan_id, "comp-1", "Company One")
+
+        companies = repo.get_scan_companies(scan_id)
+        assert len(companies) == 1
+        assert "company_url" not in companies[0]
+        assert "order_index" not in companies[0]
+
+    @mock_aws
     def test_delete(self, dynamodb_table):
         repo = DynamoDBScanRepository(dynamodb_table)
         scan_id = repo.create({"org_id": "org-1", "status": "pending"})

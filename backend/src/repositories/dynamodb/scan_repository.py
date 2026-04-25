@@ -71,17 +71,36 @@ class DynamoDBScanRepository:
         """Delete the scan metadata item for the given ID."""
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
 
-    def link_company(self, scan_id: str, company_id: str, company_name: str) -> None:
-        """Create a scan→company association item."""
-        self._table.put_item(
-            {
-                "pk": f"SCAN#{scan_id}",
-                "sk": f"COMPANY#{company_id}",
-                "entity_type": "scan_company",
-                "company_id": company_id,
-                "company_name": company_name,
-            }
-        )
+    def link_company(
+        self,
+        scan_id: str,
+        company_id: str,
+        company_name: str,
+        *,
+        company_url: str | None = None,
+        order_index: int | None = None,
+    ) -> None:
+        """Create a scan→company association item.
+
+        ``company_url`` and ``order_index`` are persisted when provided so
+        the portfolio view can render every company card from t=0 in
+        submission order — even before a worker has created the
+        corresponding ``companies`` record. Reads tolerate their absence
+        on records written before this change shipped (see
+        ``get_scan_companies``).
+        """
+        item: dict[str, Any] = {
+            "pk": f"SCAN#{scan_id}",
+            "sk": f"COMPANY#{company_id}",
+            "entity_type": "scan_company",
+            "company_id": company_id,
+            "company_name": company_name,
+        }
+        if company_url is not None:
+            item["company_url"] = company_url
+        if order_index is not None:
+            item["order_index"] = order_index
+        self._table.put_item(item)
 
     def unlink_company(self, scan_id: str, company_id: str) -> None:
         """Delete a single scan→company association item."""

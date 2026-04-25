@@ -479,6 +479,20 @@ class TestAPIGatewayHandler:
         mock_sfn.start_execution.assert_called_once()
         mock_sqs.send_message.assert_not_called()
 
+        # Each link_company call carries company_url + order_index in
+        # submission order so the portfolio view can render every card
+        # from t=0 in stable position.
+        link_calls = scan_repo.link_company.call_args_list
+        assert len(link_calls) == 2
+        assert link_calls[0].kwargs == {
+            "company_url": "https://co1.com",
+            "order_index": 0,
+        }
+        assert link_calls[1].kwargs == {
+            "company_url": "https://co2.com",
+            "order_index": 1,
+        }
+
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
     @patch.dict(
