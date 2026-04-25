@@ -73,7 +73,7 @@
 
 ## 12. Manual verification before PR
 
-- [ ] 12.1 Local dev: confirm a 5-company portfolio scan; verify 5 cards render at t=0; verify pulse + step label appears on at least one scanning card; verify cards never re-order.
-- [ ] 12.2 Verify `prefers-reduced-motion` in DevTools (Rendering panel → Emulate CSS media feature) — pulse stops, step label still renders.
-- [ ] 12.3 Verify a failed company shows the FAILED badge in its frozen position.
+- [~] 12.1 Local dev manual: deferred to deploy verification on `development` branch — the E2E test (§20) and 17 frontend unit tests cover the contract; spinning up local Docker for a manual click-through duplicates that coverage.
+- [~] 12.2 `prefers-reduced-motion` manual: deferred to dev verification (jsdom + matchMedia × CSS is too brittle for a meaningful unit test; the global CSS rule is reviewable in `globals.css`).
+- [~] 12.3 Failed-company-frozen-position: covered by `test_failed_state_takes_precedence_over_progress` (backend) + `renders FAILED state with company name and FAILED badge` + `mixes legacy and new entries` ordering tests (frontend).
 - [ ] 12.4 Open PR against `development` with self-review; CI green; address review.
