@@ -155,18 +155,19 @@ def _compute_scan_progress(
     """Return (done_count, computed_progress) from per-company pipeline progress.
 
     Uses ``total_companies`` (from the scan record, set at confirm time) as the
-    denominator — not ``len(analyses)``, which only counts companies that have
-    DynamoDB records. Companies still queued in SQS have no record yet and would
-    be invisible, making progress appear 100% prematurely.
+    denominator. Drives terminal-state detection off the explicit ``state``
+    field set by ``build_unified_analyses`` rather than re-deriving from
+    ``analyzedAt``/``error`` — the contract that ``state`` is authoritative
+    means downstream logic should not duplicate the derivation.
     """
     if not analyses:
         return 0, scan_progress
     # Use the true total; fall back to len(analyses) for standalone scans
     # where total_companies may be 0 or absent.
     total = max(total_companies, len(analyses))
-    done_count = sum(1 for a in analyses if a.get("analyzedAt") or a.get("error"))
+    done_count = sum(1 for a in analyses if a.get("state") in ("done", "failed"))
     company_progress_sum = sum(
-        100 if (a.get("analyzedAt") or a.get("error")) else a.get("pipelineProgress", 0)
+        100 if a.get("state") in ("done", "failed") else a.get("pipelineProgress", 0)
         for a in analyses
     )
     return done_count, company_progress_sum // total
@@ -177,11 +178,7 @@ def _derive_progress_label(
     fallback_label: str,
 ) -> str:
     """Return the progress label from the most advanced in-progress company."""
-    in_progress = [
-        a
-        for a in analyses
-        if not a.get("analyzedAt") and not a.get("error") and a.get("pipelineProgress")
-    ]
+    in_progress = [a for a in analyses if a.get("state") == "scanning"]
     if in_progress:
         furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
         return str(furthest.get("pipelineLabel", fallback_label))

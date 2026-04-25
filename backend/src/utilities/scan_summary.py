@@ -16,7 +16,55 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.handlers.api_gateway_handler import build_company_summary
+
+def derive_company_state(company: dict[str, Any]) -> str:
+    """Return the lifecycle state of a company-record at this poll.
+
+    States: ``"failed"`` > ``"done"`` > ``"scanning"`` > ``"pending"``.
+    Order matters — a company with both ``error`` set and a stale
+    ``analyzed_at`` is reported as failed, so the analyst sees an
+    actionable signal rather than a misleading "done" card.
+    """
+    if company.get("error"):
+        return "failed"
+    if company.get("analyzed_at"):
+        return "done"
+    if company.get("pipeline_progress", 0) > 0:
+        return "scanning"
+    return "pending"
+
+
+def build_company_summary(company: dict[str, Any]) -> dict[str, Any]:
+    """Build a camelCase summary dict from a company DynamoDB record.
+
+    Uses ``.get()`` because the record evolves through multiple pipeline
+    phases:
+        1. Identity write (``company_name``, ``company_url``, ``scan_id``,
+           ``org_id``) at pipeline start.
+        2. Progress updates (``pipeline_progress``, ``pipeline_label``)
+           during execution.
+        3. Full results (``risk_score``, ``analyzed_at``, etc.) after
+           ``persist_results``.
+    On failure, only phases 1-2 are present plus the ``error`` field.
+
+    The ``orderIndex`` field is filled in by ``build_unified_analyses``
+    from the corresponding ``scan_company`` link record; this function
+    initializes it to ``None``.
+    """
+    return {
+        "id": company.get("id", ""),
+        "companyName": company.get("company_name", ""),
+        "companyUrl": company.get("company_url", ""),
+        "industry": company.get("industry", ""),
+        "overallRiskScore": company.get("overall_risk_score"),
+        "riskTier": company.get("risk_tier"),
+        "error": company.get("error"),
+        "analyzedAt": company.get("analyzed_at"),
+        "pipelineProgress": company.get("pipeline_progress", 0),
+        "pipelineLabel": company.get("pipeline_label", ""),
+        "state": derive_company_state(company),
+        "orderIndex": None,
+    }
 
 
 def _synthesize_pending_entry(link: dict[str, Any]) -> dict[str, Any]:

@@ -109,7 +109,14 @@ class DynamoDBScanRepository:
     def delete_all_company_links(self, scan_id: str) -> None:
         """Delete all scan→company association items for the given scan."""
         links = self.get_scan_companies(scan_id)
-        keys = [{"pk": f"SCAN#{scan_id}", "sk": f"COMPANY#{link['company_id']}"} for link in links]
+        # Match the defensive guard in scan_handlers:_handle_scan_status —
+        # the link record's `company_id` is guaranteed by `link_company`
+        # but skip any anomaly defensively rather than raising KeyError.
+        keys = [
+            {"pk": f"SCAN#{scan_id}", "sk": f"COMPANY#{link['company_id']}"}
+            for link in links
+            if link.get("company_id")
+        ]
         if keys:
             self._table.batch_delete(keys)
 
