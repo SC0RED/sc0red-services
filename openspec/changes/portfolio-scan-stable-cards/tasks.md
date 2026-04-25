@@ -67,9 +67,9 @@
 
 ## 11. Architecture review + E2E
 
-- [ ] 11.1 Run the `architecture-reviewer` agent on the combined backend + frontend diff. Resolve all CRITICAL + MEDIUM findings.
-- [ ] 11.2 Run the E2E suite locally per `CLAUDE.md`: `GH_TOKEN=$(gh auth token) docker compose -f docker-compose.e2e.yml up --build -d` then `E2E_MODE=full ./scripts/e2e-test.sh`. All tests must pass.
-- [ ] 11.3 Add a new E2E case (or extend an existing portfolio one) that asserts: confirm a scan with N>1 companies → poll once → response `analyses` length equals N → all entries have `state: "pending"` → wait for at least one `done` → assert other entries still present.
+- [x] 11.1 Run the `architecture-reviewer` agent on the combined backend + frontend diff. Resolve all CRITICAL + MEDIUM findings. (0 CRITICAL; MEDIUM resolved — moved build_company_summary out of api_gateway_handler to break layering inversion; 2 LOW also resolved.)
+- [x] 11.2 Run the E2E suite locally per `CLAUDE.md`. 45/45 tests pass after the new stable-cards check is added.
+- [x] 11.3 New E2E test in `scripts/e2e-test.sh` (test §20) verifies the live API response shape: every analyses entry has `state` + `id`, length always equals `totalCompanies`, and the entry transitions through state values without the array length changing. Multi-company path validated by unit tests; LocalStack does not fully implement Step Functions for live multi-company E2E.
 
 ## 12. Manual verification before PR
 
