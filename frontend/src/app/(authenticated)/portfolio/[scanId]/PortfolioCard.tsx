@@ -62,7 +62,25 @@ function CardStateContent({ analysis }: { analysis: ScanAnalysis }): JSX.Element
     const tier = analysis.riskTier
     const tierColor = tier ? TIER_COLORS[tier] : 'var(--text-tertiary)'
 
-    if (analysis.state === 'done' && analysis.overallRiskScore !== null) {
+    if (analysis.state === 'done') {
+        // A done card without a numeric score means the record was marked
+        // analyzed but the score never got persisted (rare backend
+        // inconsistency). Surface a neutral "Analyzed" affordance so the
+        // wrapper's `data-state="done"` and the inner content stay
+        // consistent — no Pending text leaking onto a done card.
+        if (analysis.overallRiskScore === null) {
+            return (
+                <span
+                    style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                        fontStyle: 'italic',
+                    }}
+                >
+                    Analyzed
+                </span>
+            )
+        }
         return (
             <div
                 style={{

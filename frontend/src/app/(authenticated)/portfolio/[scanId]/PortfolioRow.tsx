@@ -64,7 +64,13 @@ export default function PortfolioRow({
 
 function RowStatusCell({ analysis }: { analysis: ScanAnalysis }): JSX.Element {
     const tier = analysis.riskTier
-    if (analysis.state === 'done' && analysis.overallRiskScore !== null) {
+    if (analysis.state === 'done') {
+        // Same fail-soft treatment as PortfolioCard: a done row whose
+        // record never got an `overall_risk_score` persisted shows a
+        // neutral "Analyzed" instead of falling through to "Pending".
+        if (analysis.overallRiskScore === null) {
+            return <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Analyzed</span>
+        }
         return (
             <span
                 style={{

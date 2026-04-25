@@ -107,11 +107,18 @@ class DynamoDBScanRepository:
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk=f"COMPANY#{company_id}")
 
     def delete_all_company_links(self, scan_id: str) -> None:
-        """Delete all scan→company association items for the given scan."""
+        """Delete all scan→company association items for the given scan.
+
+        Trade-off: ``link_company`` always writes ``company_id``, so an
+        anomalous link record (direct DynamoDB write or data corruption)
+        is the only path to a missing field. We skip such records rather
+        than ``KeyError``-ing the entire batch — partial corruption
+        shouldn't block the rest of the cascade. This matches the read
+        guard in ``handle_scan_status`` for consistency. Strict
+        fail-fast would raise here; we accept the small drift to keep
+        the delete cascade resilient.
+        """
         links = self.get_scan_companies(scan_id)
-        # Match the defensive guard in scan_handlers:_handle_scan_status —
-        # the link record's `company_id` is guaranteed by `link_company`
-        # but skip any anomaly defensively rather than raising KeyError.
         keys = [
             {"pk": f"SCAN#{scan_id}", "sk": f"COMPANY#{link['company_id']}"}
             for link in links

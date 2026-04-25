@@ -162,48 +162,67 @@ describe('PortfolioView', () => {
                 orderIndex: i,
             }))
             const { container } = render(<PortfolioView scanId="scan-1" initialScan={makeScan(allPending)} />)
-            expect(container.querySelectorAll('[data-state="pending"]').length).toBe(
-                50 * 2 // 50 cards + 50 table rows
-            )
+            // Heatmap and table both render — assert each surface independently
+            // so a regression in one place doesn't disappear into a sum.
+            const cardsPending = container.querySelectorAll('.card[data-state="pending"]')
+            const rowsPending = container.querySelectorAll('tr[data-state="pending"]')
+            expect(cardsPending.length).toBe(50)
+            expect(rowsPending.length).toBe(50)
         })
+
+        function getCardCompanyNames(container: HTMLElement): string[] {
+            const cards = container.querySelectorAll('.card[data-state]')
+            return Array.from(cards).map((el) => el.querySelector('.truncate')?.textContent ?? '')
+        }
 
         it('renders cards in orderIndex ascending order', () => {
             const shuffled = [
-                { ...pendingAnalysis, id: 'z', orderIndex: 2 },
-                { ...pendingAnalysis, id: 'a', orderIndex: 0 },
-                { ...pendingAnalysis, id: 'm', orderIndex: 1 },
+                { ...pendingAnalysis, id: 'z', companyName: 'Z Co', orderIndex: 2 },
+                { ...pendingAnalysis, id: 'a', companyName: 'A Co', orderIndex: 0 },
+                { ...pendingAnalysis, id: 'm', companyName: 'M Co', orderIndex: 1 },
             ]
             const { container } = render(<PortfolioView scanId="scan-1" initialScan={makeScan(shuffled)} />)
-            // Heatmap cards have data-state on the card div; assert they
-            // appear in id order matching orderIndex (a → m → z).
-            const cards = container.querySelectorAll('.card[data-state]')
-            const ids = Array.from(cards).map((el) => el.querySelector('.truncate')?.textContent)
-            // First card should be the orderIndex=0 entry (id 'a')
-            expect(ids[0]).toBe('Beta Inc')
+            expect(getCardCompanyNames(container)).toEqual(['A Co', 'M Co', 'Z Co'])
         })
 
         it('falls back to id sort when orderIndex is null (legacy)', () => {
             const legacy = [
-                { ...pendingAnalysis, id: 'z', orderIndex: null },
-                { ...pendingAnalysis, id: 'a', orderIndex: null },
+                { ...pendingAnalysis, id: 'z', companyName: 'Z Co', orderIndex: null },
+                { ...pendingAnalysis, id: 'a', companyName: 'A Co', orderIndex: null },
             ]
             const { container } = render(<PortfolioView scanId="scan-1" initialScan={makeScan(legacy)} />)
-            // Should not crash; first card is the lower id ('a')
-            const cards = container.querySelectorAll('.card[data-state]')
-            expect(cards.length).toBe(2)
+            // Both legacy → sort by id ascending: 'a' before 'z'.
+            expect(getCardCompanyNames(container)).toEqual(['A Co', 'Z Co'])
         })
 
         it('mixes legacy and new entries: numeric orderIndex sorts before null', () => {
             const mixed = [
-                { ...pendingAnalysis, id: 'legacy-z', orderIndex: null },
-                { ...pendingAnalysis, id: 'new-1', orderIndex: 1 },
-                { ...pendingAnalysis, id: 'new-0', orderIndex: 0 },
-                { ...pendingAnalysis, id: 'legacy-a', orderIndex: null },
+                { ...pendingAnalysis, id: 'legacy-z', companyName: 'L-Z', orderIndex: null },
+                { ...pendingAnalysis, id: 'new-1', companyName: 'N-1', orderIndex: 1 },
+                { ...pendingAnalysis, id: 'new-0', companyName: 'N-0', orderIndex: 0 },
+                { ...pendingAnalysis, id: 'legacy-a', companyName: 'L-A', orderIndex: null },
             ]
             const { container } = render(<PortfolioView scanId="scan-1" initialScan={makeScan(mixed)} />)
-            // Cards render — actual order: new-0, new-1, legacy-a, legacy-z
-            // We assert no crash and all 4 are present.
-            expect(container.querySelectorAll('.card[data-state]').length).toBe(4)
+            // Numeric orderIndex first (0, 1), then legacy by id (legacy-a, legacy-z).
+            expect(getCardCompanyNames(container)).toEqual(['N-0', 'N-1', 'L-A', 'L-Z'])
+        })
+
+        it('done-without-score renders Analyzed (not Pending)', () => {
+            // Backend inconsistency: state=done but overallRiskScore is null
+            // (e.g., persist step partially failed). The wrapper says done,
+            // so the inner content must NOT fall through to Pending.
+            const doneNoScore: ScanAnalysis = {
+                ...doneAnalysis,
+                overallRiskScore: null,
+                riskTier: null,
+            }
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([doneNoScore], 'complete')} />
+            )
+            expect(container.querySelector('.card[data-state="done"]')).toBeInTheDocument()
+            expect(screen.queryByText('Pending')).not.toBeInTheDocument()
+            // Both card + table show "Analyzed" affordance
+            expect(screen.getAllByText('Analyzed').length).toBe(2)
         })
     })
 
