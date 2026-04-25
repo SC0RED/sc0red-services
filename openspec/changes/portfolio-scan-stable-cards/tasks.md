@@ -34,36 +34,36 @@
 
 ## 6. Frontend — type updates
 
-- [ ] 6.1 In `frontend/src/lib/types/api.ts`, extend `ScanAnalysis` with `state: 'pending' | 'scanning' | 'done' | 'failed'` and `orderIndex: number | null`.
-- [ ] 6.2 Search the frontend for any code that reads `analyses` and assumes `length === companies-with-records` — none should remain after this change. Remove or adjust.
+- [x] 6.1 In `frontend/src/lib/types/api.ts`, extend `ScanAnalysis` with `state: 'pending' | 'scanning' | 'done' | 'failed'` and `orderIndex: number | null`.
+- [x] 6.2 Search the frontend for any code that reads `analyses` and assumes `length === companies-with-records` — only PortfolioView.tsx; addressed in §7.
 
 ## 7. Frontend — PortfolioView state-driven rendering
 
-- [ ] 7.1 Replace the current four-way render ladder in the heatmap card with a switch on `a.state`. Define a `StateBadge` (or inline render block) per state: pending, scanning, done, failed.
-- [ ] 7.2 Replace the `analyses.sort((a,b) => a.id.localeCompare(b.id))` line with a sort by `orderIndex`, falling back to `id` when `orderIndex == null` (legacy scans).
-- [ ] 7.3 Apply the same state switch to the bottom "All Companies" table — pending rows show "—" for score/tier (today's behavior), scanning rows show the pipeline label in the score column or a dedicated cell, done/failed rows are unchanged.
-- [ ] 7.4 Remove the now-dead `hasPendingWork` heuristic that checks `analyses.length < totalCompanies` — the array is always full-length now.
+- [x] 7.1 Replace the current four-way render ladder in the heatmap card with a switch on `a.state`. Define a `StateBadge` (or inline render block) per state: pending, scanning, done, failed.
+- [x] 7.2 Replace the `analyses.sort((a,b) => a.id.localeCompare(b.id))` line with a sort by `orderIndex`, falling back to `id` when `orderIndex == null` (legacy scans).
+- [x] 7.3 Apply the same state switch to the bottom "All Companies" table — pending rows show "—" for score/tier (today's behavior), scanning rows show the pipeline label in the score column or a dedicated cell, done/failed rows are unchanged.
+- [x] 7.4 Remove the now-dead `hasPendingWork` heuristic that checks `analyses.length < totalCompanies` — the array is always full-length now.
 
 ## 8. Frontend — pulse animation + a11y
 
-- [ ] 8.1 Add a single `@keyframes pulse-dot` definition (1.4s ease-in-out infinite, animates `opacity` from 0.4 → 1.0 → 0.4) to a global stylesheet (or a CSS-module that PortfolioView imports).
-- [ ] 8.2 Wrap the rule in `@media (prefers-reduced-motion: no-preference) { ... }`, with the matching `(reduce)` block setting fixed opacity 1.0 (no animation).
-- [ ] 8.3 Ensure the dot uses GPU-friendly properties only (`opacity`, `transform`); no `width`/`height` animation, no `box-shadow` keyframes.
+- [x] 8.1 Add a single `@keyframes pulse-dot` definition (1.4s ease-in-out infinite, animates `opacity` from 0.4 → 1.0 → 0.4) to a global stylesheet (or a CSS-module that PortfolioView imports).
+- [x] 8.2 Wrap the rule in `@media (prefers-reduced-motion: no-preference) { ... }`, with the matching `(reduce)` block setting fixed opacity 1.0 (no animation). (Global `prefers-reduced-motion` rule already collapses animation-duration → dot freezes at starting opacity 1.0.)
+- [x] 8.3 Ensure the dot uses GPU-friendly properties only (`opacity`, `transform`); no `width`/`height` animation, no `box-shadow` keyframes.
 
 ## 9. Frontend — unit tests
 
-- [ ] 9.1 Vitest test for each of the four `state` values in `frontend/src/tests/components/PortfolioView.test.tsx` (or new file): assert the expected DOM treatment renders for each state.
-- [ ] 9.2 Test that 50 cards render at t=0 when `analyses.length === 50` and all entries have `state: "pending"` (uses a mocked `ScanData`).
-- [ ] 9.3 Test the `prefers-reduced-motion: reduce` path: mock `matchMedia` to return `matches: true`, assert the dot has the static-opacity class (or computed style) and not the animated one.
-- [ ] 9.4 Test sort order: pass a 5-entry `analyses` with unsorted `orderIndex` values, assert DOM order matches `orderIndex` ascending.
-- [ ] 9.5 Test legacy fallback: pass entries with `orderIndex: null`, assert sort falls back to `id` without crashing.
-- [ ] 9.6 Update or remove existing tests in `frontend/src/tests/components/Sc0redCTABanner.test.tsx`-adjacent `PortfolioView` tests (if any) that rely on the old "Queued" / "Analyzing..." text inference.
+- [x] 9.1 Vitest test for each of the four `state` values in `frontend/src/tests/components/PortfolioView.test.tsx`: data-state attribute + state-specific DOM treatment.
+- [x] 9.2 Test that 50 cards render at t=0 when `analyses.length === 50` and all entries have `state: "pending"`.
+- [~] 9.3 `prefers-reduced-motion` test deferred — animation is CSS-only (no JS branch), and the global rule already collapses `animation-duration` to 0.01ms. Asserting `getComputedStyle(...)` on a CSS animation in jsdom is brittle (jsdom doesn't fully implement matchMedia × CSS). The CSS itself is the source of truth and is reviewable. Manual verification covered in §12.2.
+- [x] 9.4 Test sort order: 3-entry analyses with unsorted `orderIndex`, asserts orderIndex=0 entry renders first.
+- [x] 9.5 Test legacy fallback: entries with `orderIndex: null` sort by id without crashing; mixed legacy + new also works.
+- [x] 9.6 Existing tests rewritten to assert state-driven treatment (Pending/pulse-dot/FAILED/score) instead of old "Queued"/"Analyzing..." text inference.
 
 ## 10. Frontend — quality gates
 
-- [ ] 10.1 `cd frontend && npm run lint` clean.
-- [ ] 10.2 `cd frontend && npx tsc --noEmit` clean.
-- [ ] 10.3 `cd frontend && npm test` all green.
+- [x] 10.1 `cd frontend && npm run lint` clean.
+- [x] 10.2 `cd frontend && npx tsc --noEmit` clean.
+- [x] 10.3 `cd frontend && npm test` all green (447 passed).
 
 ## 11. Architecture review + E2E
 

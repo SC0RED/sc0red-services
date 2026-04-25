@@ -100,6 +100,16 @@ export interface ScanItem {
     createdAt: string
 }
 
+/**
+ * Lifecycle state of a single company card on the portfolio view.
+ *
+ * Backend collapses two backend-internal states (no record yet vs.
+ * record-but-progress=0) into one UI state called `pending`. Failure
+ * takes precedence over completion: a record with both `error` set and
+ * a stale `analyzedAt` is reported as `failed`.
+ */
+export type ScanAnalysisState = 'pending' | 'scanning' | 'done' | 'failed'
+
 export interface ScanAnalysis {
     id: string
     companyName: string
@@ -111,6 +121,14 @@ export interface ScanAnalysis {
     analyzedAt: string | null
     pipelineProgress?: number
     pipelineLabel?: string
+    /** Explicit lifecycle state — frontend renders directly off this. */
+    state: ScanAnalysisState
+    /**
+     * Zero-based submission position from the scan_company link record.
+     * `null` for legacy link records written before this field was added;
+     * such entries sort after entries with a numeric orderIndex.
+     */
+    orderIndex: number | null
 }
 
 export interface ScanData {
