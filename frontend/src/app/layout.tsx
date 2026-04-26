@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import SessionWrapper from '@/components/SessionWrapper'
+import { ToastProvider } from '@/components/ui'
 import RouteProgress from '@/components/ui/RouteProgress'
 import WebVitals from '@/components/WebVitals'
 
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </a>
                 <RouteProgress />
                 <WebVitals />
-                <SessionWrapper>{children}</SessionWrapper>
+                <SessionWrapper>
+                    <ToastProvider>{children}</ToastProvider>
+                </SessionWrapper>
             </body>
         </html>
     )
