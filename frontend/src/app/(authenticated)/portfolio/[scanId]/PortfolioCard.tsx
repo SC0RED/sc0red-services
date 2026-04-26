@@ -8,16 +8,17 @@ import type { ScanAnalysis } from '@/lib/types/api'
  * analyzedAt / pipelineProgress. The `data-state` attribute is exposed
  * so vitest tests (and visual-regression tooling) can assert by state.
  *
- * Pending and scanning cards link to `#` (no analysis page yet); only
- * `done` cards have an `/analysis/{id}` destination. Failed cards are
- * also non-navigable — there's no successful report to show.
+ * Both `done` and `failed` cards link to `/analysis/{id}` — the failed
+ * detail view shows the error message and a re-analyze affordance, per
+ * the `failed-analysis-detail` spec. Pending and scanning cards link to
+ * `#` because no analysis record exists yet for the user to inspect.
  */
 export default function PortfolioCard({ analysis }: { analysis: ScanAnalysis }): JSX.Element {
     const tier = analysis.riskTier
     const tierColor = tier ? TIER_COLORS[tier] : 'var(--text-tertiary)'
     const isTerminal = analysis.state === 'done' || analysis.state === 'failed'
     const fallbackName = analysis.state === 'failed' ? 'Unknown Company' : ''
-    const href = analysis.state === 'done' ? `/analysis/${analysis.id}` : '#'
+    const href = isTerminal ? `/analysis/${analysis.id}` : '#'
 
     return (
         <Link key={analysis.id} href={href} style={{ textDecoration: 'none' }}>
