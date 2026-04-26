@@ -153,6 +153,82 @@ describe('PortfolioView', () => {
         })
     })
 
+    describe('card navigation by state', () => {
+        // Regression check: failed cards used to navigate to /analysis/{id}
+        // before the state-driven rewrite. The `failed-analysis-detail` spec
+        // requires this behavior so the user can read the error and re-analyze.
+        // These assertions follow the rendered <a href> rather than text so a
+        // future regression that drops the link can't slip through visually.
+        function getCardLink(container: HTMLElement, dataState: string): HTMLAnchorElement | null {
+            const card = container.querySelector(`.card[data-state="${dataState}"]`)
+            return card?.closest('a') ?? null
+        }
+
+        it('DONE card links to /analysis/{id}', () => {
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([doneAnalysis])} />
+            )
+            const link = getCardLink(container, 'done')
+            expect(link).not.toBeNull()
+            expect(link?.getAttribute('href')).toBe(`/analysis/${doneAnalysis.id}`)
+        })
+
+        it('FAILED card links to /analysis/{id} (regression: do not break navigation)', () => {
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([failedAnalysis])} />
+            )
+            const link = getCardLink(container, 'failed')
+            expect(link).not.toBeNull()
+            expect(link?.getAttribute('href')).toBe(`/analysis/${failedAnalysis.id}`)
+        })
+
+        it('PENDING card href is #, not /analysis/...', () => {
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />
+            )
+            const link = getCardLink(container, 'pending')
+            expect(link?.getAttribute('href')).toBe('#')
+        })
+
+        it('SCANNING card href is #, not /analysis/...', () => {
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([scanningAnalysis])} />
+            )
+            const link = getCardLink(container, 'scanning')
+            expect(link?.getAttribute('href')).toBe('#')
+        })
+
+        it('FAILED row shows "View Error" link to /analysis/{id}', () => {
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([failedAnalysis])} />
+            )
+            const row = container.querySelector('tr[data-state="failed"]')
+            expect(row).not.toBeNull()
+            const link = row?.querySelector('a')
+            expect(link?.textContent).toBe('View Error')
+            expect(link?.getAttribute('href')).toBe(`/analysis/${failedAnalysis.id}`)
+        })
+
+        it('DONE row shows "View Report" link to /analysis/{id}', () => {
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([doneAnalysis])} />
+            )
+            const row = container.querySelector('tr[data-state="done"]')
+            expect(row).not.toBeNull()
+            const link = row?.querySelector('a')
+            expect(link?.textContent).toBe('View Report')
+            expect(link?.getAttribute('href')).toBe(`/analysis/${doneAnalysis.id}`)
+        })
+
+        it('PENDING row has no action link', () => {
+            const { container } = render(
+                <PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis])} />
+            )
+            const row = container.querySelector('tr[data-state="pending"]')
+            expect(row?.querySelector('a')).toBeNull()
+        })
+    })
+
     describe('all-cards-from-t=0 stability', () => {
         it('renders 50 pending cards immediately on first render', () => {
             const allPending = Array.from({ length: 50 }, (_, i) => ({

@@ -57,6 +57,11 @@ export default function PortfolioRow({
                         View Report
                     </Link>
                 )}
+                {analysis.state === 'failed' && (
+                    <Link href={`/analysis/${analysis.id}`} className="btn btn-ghost btn-sm">
+                        View Error
+                    </Link>
+                )}
             </td>
         </tr>
     )
