@@ -178,6 +178,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 companyUrl={data.companyUrl}
                 error={data.error}
                 scanId={data.scanId}
+                scanType={data.scanType}
                 documents={documents}
                 documentError={documentError}
                 reanalyzing={reanalyzing}
