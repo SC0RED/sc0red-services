@@ -100,6 +100,13 @@ export interface ScanItem {
     status: string
     progress: number
     completedCount: number
+    /**
+     * Total linked companies at confirm time. Used to size the cascade
+     * scope in the delete-scan toast (deletion touches every linked
+     * company, not just completed ones — `completedCount` would
+     * underreport for in-flight scans).
+     */
+    totalCompanies?: number
     createdAt: string
 }
 

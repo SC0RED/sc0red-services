@@ -378,7 +378,12 @@ export default async function DashboardPage() {
                                                         scan.status !== 'awaiting_confirmation')) && (
                                                     <DeleteScanButton
                                                         scanId={scan.id}
-                                                        companyCount={scan.completedCount}
+                                                        // Prefer totalCompanies (cascade truth) over
+                                                        // completedCount, which would underreport for
+                                                        // in-flight scans where some links are pending.
+                                                        companyCount={
+                                                            scan.totalCompanies || scan.completedCount
+                                                        }
                                                     />
                                                 )}
                                             </td>

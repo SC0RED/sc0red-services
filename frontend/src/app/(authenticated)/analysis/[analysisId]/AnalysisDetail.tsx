@@ -113,7 +113,13 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
 
             for (let attempt = 0; attempt < maxAttempts; attempt++) {
                 await new Promise((resolve) => setTimeout(resolve, intervalMs))
-                if (controller.signal.aborted) return
+                if (controller.signal.aborted) {
+                    // Aborted between intervals — dismiss the loading toast so
+                    // it doesn't leak. The outer catch only sees AbortErrors
+                    // raised by `await fetch`, not signal-checked early exits.
+                    toast.dismiss(reanalysisToastId)
+                    return
+                }
                 try {
                     const pollResponse = await fetch(`/api/analysis/${analysisId}`, {
                         signal: controller.signal,
@@ -148,7 +154,13 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                         return
                     }
                 } catch (error: unknown) {
-                    if (error instanceof DOMException && error.name === 'AbortError') return
+                    if (error instanceof DOMException && error.name === 'AbortError') {
+                        // Inner catch absorbs the AbortError so the loop's
+                        // `return` exits cleanly — but it bypasses the outer
+                        // catch's dismiss path. Dismiss explicitly here.
+                        toast.dismiss(reanalysisToastId)
+                        return
+                    }
                     throw error
                 }
             }
