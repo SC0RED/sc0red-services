@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 
+import { useToast } from '@/components/ui'
+
 interface Member {
     id: string
     email: string
@@ -25,19 +27,16 @@ interface TeamViewProps {
 
 export default function TeamView({ initialMembers, initialInvitations }: TeamViewProps) {
     const { data: session } = useSession()
+    const toast = useToast()
     const [members, setMembers] = useState(initialMembers)
     const [invitations, setInvitations] = useState(initialInvitations)
     const [inviteEmail, setInviteEmail] = useState('')
     const [inviteRole, setInviteRole] = useState<'analyst' | 'viewer'>('analyst')
     const [inviting, setInviting] = useState(false)
-    const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
 
     async function handleInvite(e: React.FormEvent) {
         e.preventDefault()
         setInviting(true)
-        setError('')
-        setSuccess('')
 
         try {
             const res = await fetch('/api/org/invite', {
@@ -48,24 +47,25 @@ export default function TeamView({ initialMembers, initialInvitations }: TeamVie
             const data = await res.json()
 
             if (!res.ok) {
-                setError(data.error || 'Failed to send invitation')
+                toast.error(data.error || 'Failed to send invitation')
                 return
             }
 
-            setSuccess(`Invitation sent to ${inviteEmail}`)
+            toast.success(`Invitation sent to ${inviteEmail}`)
+            const sentTo = inviteEmail
             setInviteEmail('')
             setInvitations((prev) => [
                 ...prev,
                 {
                     id: data.invitationId,
-                    email: inviteEmail,
+                    email: sentTo,
                     role: inviteRole,
                     status: 'pending',
                     invitedAt: new Date().toISOString(),
                 },
             ])
         } catch {
-            setError('Failed to send invitation')
+            toast.error('Failed to send invitation')
         } finally {
             setInviting(false)
         }
@@ -79,42 +79,65 @@ export default function TeamView({ initialMembers, initialInvitations }: TeamVie
                 body: JSON.stringify({ email }),
             })
             if (res.ok) {
-                setSuccess(`Invitation resent to ${email}`)
+                toast.success(`Invitation resent to ${email}`)
             } else {
                 const data = await res.json()
-                setError(data.error || 'Failed to resend invitation')
+                toast.error(data.error || 'Failed to resend invitation')
             }
         } catch {
-            setError('Failed to resend invitation')
+            toast.error('Failed to resend invitation')
         }
     }
 
-    async function handleRevokeInvite(inviteId: string, email: string) {
-        if (!confirm(`Revoke invitation for ${email}?`)) return
-
-        try {
-            const res = await fetch(`/api/org/invite/${inviteId}`, { method: 'DELETE' })
-            if (res.ok) {
-                setInvitations((prev) => prev.filter((inv) => inv.id !== inviteId))
-            } else {
-                setError('Failed to revoke invitation')
-            }
-        } catch {
-            setError('Failed to revoke invitation')
-        }
+    function handleRevokeInvite(inviteId: string, email: string) {
+        // Optimistic-remove with restore-on-undo. Capture the row first so we
+        // can put it back if the user clicks Undo or the API call fails.
+        const target = invitations.find((inv) => inv.id === inviteId)
+        if (!target) return
+        setInvitations((prev) => prev.filter((inv) => inv.id !== inviteId))
+        toast.undo({
+            message: `Revoked invitation for ${email}`,
+            onCommit: async () => {
+                try {
+                    const res = await fetch(`/api/org/invite/${inviteId}`, { method: 'DELETE' })
+                    if (!res.ok) {
+                        toast.error('Failed to revoke invitation')
+                        setInvitations((prev) => [...prev, target])
+                    }
+                } catch {
+                    toast.error('Failed to revoke invitation')
+                    setInvitations((prev) => [...prev, target])
+                }
+            },
+            onUndo: () => {
+                setInvitations((prev) => [...prev, target])
+            },
+        })
     }
 
-    async function handleRemove(userId: string, email: string) {
-        if (!confirm(`Remove ${email} from the team?`)) return
-
-        try {
-            const res = await fetch(`/api/org/members/${userId}`, { method: 'DELETE' })
-            if (res.ok) {
-                setMembers((prev) => prev.filter((m) => m.id !== userId))
-            }
-        } catch {
-            setError('Failed to remove member')
-        }
+    function handleRemove(userId: string, email: string) {
+        // Same optimistic-with-restore pattern as handleRevokeInvite.
+        const target = members.find((m) => m.id === userId)
+        if (!target) return
+        setMembers((prev) => prev.filter((m) => m.id !== userId))
+        toast.undo({
+            message: `Removed ${email} from the team`,
+            onCommit: async () => {
+                try {
+                    const res = await fetch(`/api/org/members/${userId}`, { method: 'DELETE' })
+                    if (!res.ok) {
+                        toast.error('Failed to remove member')
+                        setMembers((prev) => [...prev, target])
+                    }
+                } catch {
+                    toast.error('Failed to remove member')
+                    setMembers((prev) => [...prev, target])
+                }
+            },
+            onUndo: () => {
+                setMembers((prev) => [...prev, target])
+            },
+        })
     }
 
     return (
@@ -172,25 +195,6 @@ export default function TeamView({ initialMembers, initialInvitations }: TeamVie
                         {inviting ? 'Sending...' : 'Send Invite'}
                     </button>
                 </form>
-                {error && (
-                    <div role="alert" className="alert-error" style={{ marginTop: '0.75rem' }}>
-                        {error}
-                    </div>
-                )}
-                {success && (
-                    <div
-                        style={{
-                            marginTop: '0.75rem',
-                            padding: '0.5rem 0.75rem',
-                            background: 'var(--risk-low-bg)',
-                            color: 'var(--risk-low)',
-                            borderRadius: 'var(--radius-md)',
-                            fontSize: '0.875rem',
-                        }}
-                    >
-                        {success}
-                    </div>
-                )}
             </div>
 
             {/* Members list */}

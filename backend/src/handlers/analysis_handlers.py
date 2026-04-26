@@ -233,6 +233,10 @@ def handle_dashboard(
             "status": s.get("status", ""),
             "progress": s.get("progress", 0),
             "completedCount": s.get("completed_count", 0),
+            # Total linked companies at confirm time. Used by the dashboard's
+            # delete-scan toast to spell out the full cascade scope (deletion
+            # touches every linked company, not just the completed ones).
+            "totalCompanies": s.get("total_companies", 0),
             "createdAt": s.get("created_at") or scan_date_fallback.get(s.get("id", ""), ""),
         }
         for s in recent_scans
