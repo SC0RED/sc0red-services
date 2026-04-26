@@ -1,10 +1,10 @@
 ## 1. Provenance link (smallest, ships first)
 
-- [ ] 1.1 Wrap the existing "Portfolio" badge in `frontend/src/components/AnalysisRow.tsx` in a `<Link href={`/portfolio/${scanId}`}>` for portfolio rows; standalone rows render the badge as plain text. Stop click event propagation so the row's own link (if any) doesn't also fire.
-- [ ] 1.2 In `frontend/src/app/(authenticated)/analysis/[analysisId]/AnalysisDetail.tsx`, render a "Part of: {scan_name}" line near the company name when `scanType === 'portfolio'`. Need `scanName` on the API response — check whether `scanId` is enough (lookup) or if backend should expose name.
-- [ ] 1.3 Backend: confirm `scanName` is available on the analysis-detail response (or add it). The data is already in the scan record; this is a join/lookup at the handler level.
-- [ ] 1.4 Vitest tests for the analyses-list badge: assert on rendered `<a href>`, not just text. Include a test for `scanType === 'single'` confirming no link wraps the badge.
-- [ ] 1.5 Vitest tests for the analysis-detail provenance line: assert it renders for portfolio scans with the right link, and does NOT render for standalone.
+- [x] 1.1 Wrapped the existing "Portfolio" badge in `AnalysisRow.tsx` (via a small `ScanTypeBadge` sub-component) in a `<Link href={`/portfolio/${scanId}`}>` for portfolio rows; standalone rows render the badge as plain text; click propagation stopped defensively.
+- [x] 1.2 Added a "Part of: {scan_label}" line below the company name in `AnalysisHeader.tsx` for portfolio analyses; also enhanced the breadcrumb to show the scan label (was just "Portfolio") and gated both on `scanType === 'portfolio'` (fixed pre-existing bug where the breadcrumb showed for any scanId, including standalone scans).
+- [x] 1.3 Backend `handle_get_analysis` now joins to the parent scan record and returns `scanType` (was missing entirely) and `scanSourceUrl`. `handle_list_analyses` now also includes `scanId` on each row so the analyses table can build the badge link.
+- [x] 1.4 Vitest tests for the analyses-list badge: 4 new tests asserting on rendered `<a href>` — portfolio links to /portfolio/{scanId}, standalone has no link, missing-scanId portfolio renders without crash, multiple rows link to their own scans.
+- [x] 1.5 Vitest tests for the analysis-detail provenance: 5 new tests covering portfolio-renders-Part-of, standalone-renders-nothing (regression guard), no-scanId-renders-nothing, fallback-when-scanSourceUrl-empty, URL-prettification-strips-protocol-and-trailing-slash.
 
 ## 2. Toast component foundation
 

@@ -77,6 +77,8 @@ export interface AnalysisData {
     pipelineProgress?: number
     pipelineLabel?: string
     scanId?: string
+    /** The PE-firm URL (or company URL for standalone) the parent scan was started from. */
+    scanSourceUrl?: string
 }
 
 export interface AnalysisItem {
@@ -88,6 +90,7 @@ export interface AnalysisItem {
     riskTier: string | null
     analyzedAt: string | null
     scanType?: string
+    scanId?: string
 }
 
 export interface ScanItem {
