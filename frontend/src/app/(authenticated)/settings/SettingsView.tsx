@@ -1,7 +1,7 @@
 'use client'
 
 import { signOut, useSession } from 'next-auth/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useToast } from '@/components/ui'
 
@@ -23,6 +23,19 @@ export default function SettingsView() {
     const { data: session } = useSession()
     const toast = useToast()
     const [copied, setCopied] = useState(false)
+    // Tracked so we can clear it on rapid second clicks (race-free reset of
+    // the "Copied" flash) and on unmount (no setState after unmount when the
+    // user navigates away within 1.5s of clicking Copy).
+    const copiedTimeoutRef = useRef<number | null>(null)
+
+    useEffect(
+        () => () => {
+            if (copiedTimeoutRef.current !== null) {
+                window.clearTimeout(copiedTimeoutRef.current)
+            }
+        },
+        []
+    )
 
     const userName = session?.user?.name ?? ''
     const userEmail = session?.user?.email ?? ''
@@ -37,7 +50,15 @@ export default function SettingsView() {
             toast.success('Copied org ID')
             // Reset the visual checkmark after a moment so a second copy still
             // animates. The toast handles the audible/announce signal.
-            window.setTimeout(() => setCopied(false), 1500)
+            // Clear any in-flight timer first so a rapid second click resets
+            // the full 1.5s window instead of inheriting the previous one.
+            if (copiedTimeoutRef.current !== null) {
+                window.clearTimeout(copiedTimeoutRef.current)
+            }
+            copiedTimeoutRef.current = window.setTimeout(() => {
+                setCopied(false)
+                copiedTimeoutRef.current = null
+            }, 1500)
         } catch {
             toast.error('Failed to copy. Select the value manually.')
         }
@@ -73,6 +94,12 @@ export default function SettingsView() {
             </Section>
 
             <Section title="Organisation">
+                {/*
+                  Default-deny for unknown role: if the session is missing
+                  `role`, we render `member` (the least-privileged label)
+                  rather than `admin` or an empty string. Display-only — the
+                  backend still gates real privilege checks on the JWT.
+                */}
                 <Field label="Role" value={role || 'member'} badge />
                 <Field
                     label="Organisation ID"

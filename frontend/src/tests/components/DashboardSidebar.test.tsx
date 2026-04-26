@@ -27,6 +27,7 @@ describe('DashboardSidebar', () => {
         expect(screen.getByText('Dashboard')).toBeInTheDocument()
         expect(screen.getAllByText('New Scan').length).toBeGreaterThanOrEqual(1)
         expect(screen.getByText('Analyses')).toBeInTheDocument()
+        expect(screen.getByText('Settings')).toBeInTheDocument()
     })
 
     it('links have correct href values', () => {
@@ -42,6 +43,12 @@ describe('DashboardSidebar', () => {
         const newScanLinks = screen.getAllByText('New Scan')
         const navNewScan = newScanLinks[0].closest('a')
         expect(navNewScan).toHaveAttribute('href', '/scan/new')
+
+        // Settings is the destination for the §4 settings page (and may
+        // accumulate sub-routes later — pin the current href so a future
+        // refactor can't silently drop or rename the entry).
+        const settingsLink = screen.getByText('Settings').closest('a')
+        expect(settingsLink).toHaveAttribute('href', '/settings')
     })
 
     it('sign out button is present and calls signOut', () => {
