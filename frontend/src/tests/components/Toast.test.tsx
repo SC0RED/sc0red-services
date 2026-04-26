@@ -177,6 +177,132 @@ describe('Toast / ToastProvider', () => {
         })
     })
 
+    describe('undo / deferred-commit', () => {
+        it('shows an Undo button and does NOT auto-dismiss before the window expires', () => {
+            const onCommit = vi.fn()
+            const onUndo = vi.fn()
+            renderWithProvider(
+                <ToastTrigger
+                    run={(toast) =>
+                        toast.undo({
+                            message: 'Deleted Acme',
+                            onCommit,
+                            onUndo,
+                        })
+                    }
+                />
+            )
+            fireEvent.click(screen.getByText('fire'))
+            expect(screen.getByText('Deleted Acme')).toBeInTheDocument()
+            expect(screen.getByText('Undo')).toBeInTheDocument()
+
+            // 4 seconds in: not yet committed (default window is 5s for undo).
+            act(() => {
+                vi.advanceTimersByTime(4000)
+            })
+            expect(onCommit).not.toHaveBeenCalled()
+            expect(onUndo).not.toHaveBeenCalled()
+        })
+
+        it('fires onCommit when the 5-second window expires', () => {
+            const onCommit = vi.fn()
+            const onUndo = vi.fn()
+            renderWithProvider(
+                <ToastTrigger
+                    run={(toast) =>
+                        toast.undo({
+                            message: 'Deleted Acme',
+                            onCommit,
+                            onUndo,
+                        })
+                    }
+                />
+            )
+            fireEvent.click(screen.getByText('fire'))
+
+            act(() => {
+                vi.advanceTimersByTime(5000)
+            })
+            expect(onCommit).toHaveBeenCalledTimes(1)
+            expect(onUndo).not.toHaveBeenCalled()
+            expect(screen.queryByText('Deleted Acme')).not.toBeInTheDocument()
+        })
+
+        it('fires onUndo and skips onCommit when Undo is clicked', () => {
+            const onCommit = vi.fn()
+            const onUndo = vi.fn()
+            renderWithProvider(
+                <ToastTrigger
+                    run={(toast) =>
+                        toast.undo({
+                            message: 'Deleted Acme',
+                            onCommit,
+                            onUndo,
+                        })
+                    }
+                />
+            )
+            fireEvent.click(screen.getByText('fire'))
+            fireEvent.click(screen.getByText('Undo'))
+
+            expect(onUndo).toHaveBeenCalledTimes(1)
+            expect(onCommit).not.toHaveBeenCalled()
+            expect(screen.queryByText('Deleted Acme')).not.toBeInTheDocument()
+
+            // Even after the window expires, onCommit must not fire.
+            act(() => {
+                vi.advanceTimersByTime(10_000)
+            })
+            expect(onCommit).not.toHaveBeenCalled()
+        })
+
+        it('treats close button as commit-early (not as undo)', () => {
+            const onCommit = vi.fn()
+            const onUndo = vi.fn()
+            renderWithProvider(
+                <ToastTrigger
+                    run={(toast) =>
+                        toast.undo({
+                            message: 'Deleted Acme',
+                            onCommit,
+                            onUndo,
+                        })
+                    }
+                />
+            )
+            fireEvent.click(screen.getByText('fire'))
+            fireEvent.click(screen.getByLabelText('Dismiss notification'))
+
+            expect(onCommit).toHaveBeenCalledTimes(1)
+            expect(onUndo).not.toHaveBeenCalled()
+        })
+
+        it('respects custom durationMs', () => {
+            const onCommit = vi.fn()
+            renderWithProvider(
+                <ToastTrigger
+                    run={(toast) =>
+                        toast.undo({
+                            message: 'Quick',
+                            onCommit,
+                            onUndo: vi.fn(),
+                            durationMs: 1000,
+                        })
+                    }
+                />
+            )
+            fireEvent.click(screen.getByText('fire'))
+            act(() => {
+                vi.advanceTimersByTime(999)
+            })
+            expect(onCommit).not.toHaveBeenCalled()
+            act(() => {
+                vi.advanceTimersByTime(1)
+            })
+            expect(onCommit).toHaveBeenCalledTimes(1)
+        })
+    })
+
     describe('stacking', () => {
         it('multiple toasts render stacked', () => {
             renderWithProvider(

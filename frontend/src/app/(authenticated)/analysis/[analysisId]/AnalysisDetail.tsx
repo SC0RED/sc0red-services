@@ -14,7 +14,7 @@ import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
 import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
-import { LoadingSpinner } from '@/components/ui'
+import { LoadingSpinner, useToast } from '@/components/ui'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
@@ -31,6 +31,7 @@ const ValueChainDiagram = dynamic(() => import('@/components/ValueChainDiagram')
 
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
     const router = useRouter()
+    const toast = useToast()
     const [activeLever, setActiveLever] = useState<string>('All')
     const [documents, setDocuments] = useState<DocumentInfo[]>(data.documents ?? [])
     const [reanalyzing, setReanalyzing] = useState(false)
@@ -84,6 +85,10 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
         setReanalysisProgress(0)
         setReanalysisLabel('')
         setDocumentError(null)
+        // Loading toast spans the entire re-analysis lifecycle (poll loop +
+        // realtime). Promoted to success/error in place when the polling
+        // resolves so there's never a duplicate toast for the same operation.
+        const reanalysisToastId = toast.loading('Re-analyzing...')
         const controller = new AbortController()
         abortControllerRef.current = controller
         try {
@@ -135,6 +140,10 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
 
                     if (updated.analyzedAt && updated.analyzedAt !== originalAnalyzedAt) {
                         reanalysisRealtime.stop()
+                        toast.update(reanalysisToastId, {
+                            variant: 'success',
+                            message: 'Re-analysis complete',
+                        })
                         router.refresh()
                         return
                     }
@@ -144,11 +153,26 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 }
             }
 
+            // Polling exhausted maxAttempts without observing a fresh
+            // analyzedAt — surface as success-with-caveat. The router
+            // refresh will pull whatever the backend has on next render.
             reanalysisRealtime.stop()
+            toast.update(reanalysisToastId, {
+                variant: 'success',
+                message: 'Re-analysis queued',
+                description: 'Refreshing — results may take a moment to appear.',
+            })
             router.refresh()
         } catch (error: unknown) {
-            if (error instanceof DOMException && error.name === 'AbortError') return
+            if (error instanceof DOMException && error.name === 'AbortError') {
+                toast.dismiss(reanalysisToastId)
+                return
+            }
             const message = error instanceof Error ? error.message : 'Re-analysis failed'
+            toast.update(reanalysisToastId, {
+                variant: 'error',
+                message: `Re-analysis failed: ${message}`,
+            })
             setDocumentError(message)
         } finally {
             setReanalyzing(false)
@@ -156,7 +180,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             setReanalysisLabel('')
             abortControllerRef.current = null
         }
-    }, [analysisId, data.analyzedAt, router, reanalysisRealtime])
+    }, [analysisId, data.analyzedAt, router, reanalysisRealtime, toast])
 
     const riskScores = data.riskScores ?? []
     const opportunities = data.opportunities ?? []

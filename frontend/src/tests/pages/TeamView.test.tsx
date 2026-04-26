@@ -1,5 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
+
+import { renderWithProviders as render } from '@/tests/test-utils'
 
 vi.mock('next-auth/react', () => ({
     useSession: () => ({ data: { user: { id: 'user-1', name: 'Admin', role: 'admin' } } }),

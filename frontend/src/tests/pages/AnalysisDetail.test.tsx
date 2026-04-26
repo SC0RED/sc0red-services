@@ -1,5 +1,7 @@
-import { render, screen, fireEvent, within, act } from '@testing-library/react'
+import { screen, fireEvent, within, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+
+import { renderWithProviders as render } from '@/tests/test-utils'
 
 // Recharts ResponsiveContainer requires ResizeObserver
 global.ResizeObserver = vi.fn().mockImplementation(() => ({

@@ -376,7 +376,10 @@ export default async function DashboardPage() {
                                                     (scan.status !== 'complete' &&
                                                         scan.status !== 'running' &&
                                                         scan.status !== 'awaiting_confirmation')) && (
-                                                    <DeleteScanButton scanId={scan.id} />
+                                                    <DeleteScanButton
+                                                        scanId={scan.id}
+                                                        companyCount={scan.completedCount}
+                                                    />
                                                 )}
                                             </td>
                                         </tr>
