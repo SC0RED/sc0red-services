@@ -744,6 +744,123 @@ class TestAPIGatewayHandler:
         assert len(body["riskScores"]) == 1
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_includes_scan_provenance_for_portfolio(self, mock_authentication):
+        """Happy path: parent scan record provides scanType + scanSourceUrl.
+
+        The frontend reads these to render the "Part of: {scan}" cross-reference
+        on the analysis-detail page. If the join is dropped or fields rename,
+        the provenance line silently disappears — this test pins the contract.
+        """
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_name": "Test",
+            "scan_id": "scan-123",
+            "metadata_json": "",
+        }
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {
+            "id": "scan-123",
+            "type": "portfolio",
+            "source_url": "https://perotjain.com",
+        }
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_scan_repository.return_value = scan_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["scanId"] == "scan-123"
+        assert body["scanType"] == "portfolio"
+        assert body["scanSourceUrl"] == "https://perotjain.com"
+        scan_repo.get_by_id.assert_called_once_with("scan-123")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_degrades_when_scan_record_missing(self, mock_authentication):
+        """Race / cascade-delete: parent scan deleted between company load and
+        scan lookup. The handler MUST NOT 500 — it returns empty strings so the
+        frontend's `scanType === 'portfolio'` check fails-soft to no provenance.
+        """
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_name": "Test",
+            "scan_id": "scan-deleted",
+            "metadata_json": "",
+        }
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = None  # scan was deleted
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_scan_repository.return_value = scan_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["scanId"] == "scan-deleted"
+        # Empty strings — fail-soft. Frontend's portfolio gate will return false.
+        assert body["scanType"] == ""
+        assert body["scanSourceUrl"] == ""
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_get_analysis_skips_scan_lookup_when_scan_id_missing(self, mock_authentication):
+        """Orphan / legacy company record without scan_id. The handler MUST NOT
+        attempt the scan lookup (else KeyError) — it short-circuits via the
+        ``if scan_id:`` guard and returns empty strings.
+        """
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_name": "Test",
+            "metadata_json": "",
+            # No scan_id at all
+        }
+        scan_repo = MagicMock()
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_scan_repository.return_value = scan_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/analysis/a-1",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["scanId"] == ""
+        assert body["scanType"] == ""
+        assert body["scanSourceUrl"] == ""
+        # Crucially: no scan lookup attempted at all
+        scan_repo.get_by_id.assert_not_called()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_get_analysis_with_metadata_json(self, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, storage = self._make_handler()
