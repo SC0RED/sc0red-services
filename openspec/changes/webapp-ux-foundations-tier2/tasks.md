@@ -34,12 +34,12 @@
 
 ## 3. Bulk actions on analyses
 
-- [ ] 3.1 Add a checkbox column to `AnalysesTable.tsx`. Header checkbox toggles all visible. Row checkboxes toggle individual rows.
-- [ ] 3.2 Implement shift-click range selection (track `lastClickedIndex` in selection state).
-- [ ] 3.3 Build `frontend/src/components/ui/BulkActionsBar.tsx` — sticky bottom bar that appears when selection is non-empty. Shows "N selected" and a "Delete N" button, plus a "Clear" affordance.
-- [ ] 3.4 Wire "Delete N" to Toast Undo (Tier 1 dependency): on click, toast appears with "Deleted N analyses. Undo?" and 5s window; rows visually disappear immediately; DELETEs fire after window expires.
-- [ ] 3.5 Selection clears on filter/search change and on navigation away.
-- [ ] 3.6 Vitest: header checkbox toggles all visible, row checkbox toggles individual, shift-click selects range, bulk delete fires DELETE for each id after window, undo cancels (no DELETEs fire), selection clears on filter change.
+- [x] 3.1 Add a checkbox column to `AnalysesTable.tsx`. Header checkbox toggles all visible. Row checkboxes toggle individual rows. — Checkbox column existed pre-§3 but was capped at 3 selections (legacy compare-only flow). The cap is now lifted; header + row checkboxes work without limit. Header shows `indeterminate` when partial.
+- [x] 3.2 Implement shift-click range selection (track `lastClickedIndex` in selection state). — Anchor stored in a `useRef` so it survives re-renders without triggering them. Anchor resets to `null` whenever filter/search/sort changes (so a stale anchor can't span across a re-ordered layout).
+- [x] 3.3 Build `frontend/src/components/ui/BulkActionsBar.tsx` — sticky bottom bar that appears when selection is non-empty. Shows "N selected" and a "Delete N" button, plus a "Clear" affordance. — Also hosts the Compare CTA (when 2-3 selected) — replaces the prior inline sticky "Compare N Selected" button so all bulk actions share one bar. `role="region" aria-live="polite"` so screen readers announce selection count changes.
+- [x] 3.4 Wire "Delete N" to Toast Undo (Tier 1 dependency): on click, toast appears with "Deleted N analyses. Undo?" and 5s window; rows visually disappear immediately; DELETEs fire after window expires. — Optimistic remove + restore on Undo via local state lifted from the `analyses` prop. Commit fan-outs N parallel `DELETE /api/analysis/{id}` requests; partial-failure path restores only the rows that didn't delete and surfaces an error toast.
+- [x] 3.5 Selection clears on filter/search change and on navigation away. — Implemented via a filter-signature memo + effect; selection AND the shift-click anchor both clear. Tested: search filter, tier filter trigger the clear.
+- [x] 3.6 Vitest: header checkbox toggles all visible, row checkbox toggles individual, shift-click selects range, bulk delete fires DELETE for each id after window, undo cancels (no DELETEs fire), selection clears on filter change. — 11 new AnalysesTable tests + 6 new BulkActionsBar tests = 17 total. Includes regression guard against the legacy 3-cap.
 
 ## 4. Relative timestamps
 

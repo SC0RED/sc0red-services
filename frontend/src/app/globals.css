@@ -598,6 +598,65 @@ select {
     outline-offset: 1px;
 }
 
+/* ── Bulk actions bar ─────────────────────────────────────────
+ * Sticky floating bar that appears when one or more rows in the
+ * analyses table are selected. Hosts Clear + Delete N (+ Compare N
+ * when 2-3 selected). Bottom-centered to avoid overlap with the
+ * Toast viewport on bottom-right. Animation honours the global
+ * `prefers-reduced-motion: reduce` rule.
+ */
+@keyframes bulk-actions-bar-slide-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 8px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+.bulk-actions-bar {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.625rem 0.875rem 0.625rem 1.125rem;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.4));
+    z-index: 90;
+    /* Sit above the table but below the toast viewport (z-index 100). */
+    animation: bulk-actions-bar-slide-in 180ms ease-out;
+    max-width: calc(100vw - 2rem);
+}
+
+.bulk-actions-bar-count {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.bulk-actions-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.bulk-actions-bar-delete {
+    color: var(--risk-critical);
+    border-color: var(--risk-critical);
+}
+
+.bulk-actions-bar-delete:hover {
+    background: rgba(239, 68, 68, 0.08);
+}
+
 /* ── Help tooltips (PE-domain explainers) ─────────────────────
  * Small ⓘ icon next to a domain term that reveals a popover with
  * a 1-2 sentence explainer. Hover / focus / tap supported. Hidden
