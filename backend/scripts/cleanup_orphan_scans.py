@@ -57,7 +57,7 @@ from typing import Any
 # without `pip install .` in the local venv.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.repositories.dynamodb.provider import DynamoDBStorageProvider  # noqa: E402
+from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,7 +70,22 @@ def find_orphan_scans(
     storage: DynamoDBStorageProvider,
     org_id: str,
 ) -> list[dict[str, Any]]:
-    """Return every scan in ``org_id`` whose ``get_scan_companies`` is empty.
+    """Return every scan whose linked companies no longer exist.
+
+    Two orphan flavours are detected:
+
+    1. **No-links orphans** — scan record exists but `get_scan_companies`
+       returns []. These are the canonical bulk-delete-cascade-race
+       leftovers (links unlinked, scan record never garbage-collected).
+
+    2. **Stale-links orphans** — `get_scan_companies` returns N link
+       items, but every linked `company_id` resolves to a missing
+       company record. This happens when a code path deleted the
+       company entity but never called `unlink_company` (legacy data
+       corruption, or pre-fix delete paths that skipped the unlink).
+       Functionally equivalent to a no-links orphan — the dashboard
+       still displays the scan and View Portfolio loads empty — but
+       the prior cleanup logic missed them.
 
     Requiring an org filter is intentional — without one the function
     would have to fall back to a table scan (no global index for
@@ -78,6 +93,7 @@ def find_orphan_scans(
     easy to launch by accident. The CLI guards `--org-id` as required.
     """
     scan_repo = storage.create_scan_repository()
+    company_repo = storage.create_company_repository()
     scans = scan_repo.find_recent_by_org(org_id, limit=None)
     logger.info("scanning %d scans for org_id=%s", len(scans), org_id)
 
@@ -87,19 +103,49 @@ def find_orphan_scans(
         if not scan_id:
             logger.warning("scan record without id, skipping: %r", scan)
             continue
+
         links = scan_repo.get_scan_companies(scan_id)
         if not links:
+            scan["_orphan_kind"] = "no_links"
             orphans.append(scan)
+            continue
+
+        # Stale-links case: links exist, but do the companies they point
+        # at? Use BatchGetItem (CLAUDE.md DynamoDB pattern) to resolve in
+        # one call. If every linked company is gone, treat as orphan.
+        link_company_ids = [link["company_id"] for link in links if link.get("company_id")]
+        if not link_company_ids:
+            # Defensive: links exist but none have a company_id field —
+            # shouldn't happen with current writes, but if it does the
+            # links are useless. Treat as no-links orphan.
+            scan["_orphan_kind"] = "no_links"
+            orphans.append(scan)
+            continue
+
+        existing_companies = company_repo.get_by_ids(link_company_ids)
+        existing_ids = {company["id"] for company in existing_companies if company.get("id")}
+        missing = [cid for cid in link_company_ids if cid not in existing_ids]
+        if len(missing) == len(link_company_ids):
+            # All linked companies are gone — orphan.
+            scan["_orphan_kind"] = "stale_links"
+            scan["_stale_link_count"] = len(missing)
+            orphans.append(scan)
+
     return orphans
 
 
 def report_orphan(scan: dict[str, Any]) -> None:
     """Print a one-line summary of an orphan scan."""
+    kind = scan.get("_orphan_kind", "no_links")
+    suffix = ""
+    if kind == "stale_links":
+        suffix = f"  (stale_links={scan.get('_stale_link_count', 0)})"
     print(
         f"{scan.get('id', '?'):40s}  "
         f"{scan.get('created_at', '?'):28s}  "
         f"{scan.get('type', '?'):12s}  "
-        f"{scan.get('source_url', '?')}"
+        f"{kind:12s}  "
+        f"{scan.get('source_url', '?')}{suffix}"
     )
 
 
@@ -137,10 +183,8 @@ def main() -> int:
         return 0
 
     print(f"\nFound {len(orphans)} orphan scan(s) for org {args.org_id}:\n")
-    print(
-        f"  {'scan_id':40s}  {'created_at':28s}  {'type':12s}  source_url"
-    )
-    print(f"  {'-' * 40}  {'-' * 28}  {'-' * 12}  ----------")
+    print(f"  {'scan_id':40s}  {'created_at':28s}  {'type':12s}  {'kind':12s}  source_url")
+    print(f"  {'-' * 40}  {'-' * 28}  {'-' * 12}  {'-' * 12}  ----------")
     for scan in orphans:
         print("  ", end="")
         report_orphan(scan)
