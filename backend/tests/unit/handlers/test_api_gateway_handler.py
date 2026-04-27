@@ -160,6 +160,18 @@ class TestAPIGatewayHandler:
         org_repo.create.assert_called_once()
         user_repo.create.assert_called_once()
 
+        # Pin the `created_at` write that the activity-feed projection
+        # (Tier 2 §5) relies on for `member_joined` events. If a future
+        # refactor drops this field, member_joined silently stops
+        # appearing for new signups — covered here so the regression
+        # surfaces as a test failure, not a behaviour gap.
+        user_record = user_repo.create.call_args[0][0]
+        assert "created_at" in user_record
+        assert user_record["created_at"]
+        # The value parses as ISO 8601 (datetime.now(UTC).isoformat()).
+        from datetime import datetime as _datetime
+        _datetime.fromisoformat(user_record["created_at"])
+
     @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
     @patch("src.handlers.auth_handlers.CognitoClient")
     def test_register_cognito_password_error(self, mock_cognito_cls):
@@ -929,6 +941,220 @@ class TestAPIGatewayHandler:
         company_repo.delete.assert_called_once_with("a-1")
         scan_repo.unlink_company.assert_called_once_with("scan-1", "a-1")
         scan_repo.delete.assert_called_once_with("scan-1")
+
+    # ── Bulk delete analyses (race-immune cascade) ────────────────────────
+    # The single-DELETE endpoint cascades correctly on its own, but the
+    # frontend's prior bulk flow fired N parallel requests via
+    # `Promise.all` — each request's "any companies left on this scan?"
+    # check could read state where peer requests' unlinks hadn't yet
+    # committed, leading to orphan scans. The bulk endpoint collapses
+    # the cascade decision into a single post-delete pass.
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_bulk_delete_rejects_missing_ids(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, _storage = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analyses/bulk-delete",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({}),
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_bulk_delete_rejects_empty_id_list(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, _storage = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analyses/bulk-delete",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"ids": []}),
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_bulk_delete_rejects_non_string_ids(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, _storage = self._make_handler()
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analyses/bulk-delete",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"ids": ["a-1", 42, None]}),
+            }
+        )
+        assert result["statusCode"] == 400
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_bulk_delete_cascades_scan_when_all_companies_deleted(self, mock_authentication):
+        """The race-immunity test: deleting every company on a scan in one
+        call leaves zero remaining links and the scan IS deleted.
+
+        Pre-fix, parallel single-DELETE calls could each read the post-
+        unlink state inconsistently and BOTH conclude "scan still has
+        links" — leading to the orphan scan the user reported.
+        """
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+
+        company_repo = MagicMock()
+        # Bulk path uses BatchGetItem-backed `get_by_ids` (CLAUDE.md
+        # DynamoDB pattern), not per-item `get_by_id`.
+        company_repo.get_by_ids.return_value = [
+            {"id": analysis_id, "org_id": "org-1", "scan_id": "scan-1"}
+            for analysis_id in ("a-1", "a-2", "a-3")
+        ]
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+
+        # The cascade-pass runs after every unlink — `get_scan_companies`
+        # returns empty because the test simulates the realistic
+        # post-bulk-delete state.
+        scan_repo = MagicMock()
+        scan_repo.get_scan_companies.return_value = []
+
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analyses/bulk-delete",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"ids": ["a-1", "a-2", "a-3"]}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert sorted(body["deleted"]) == ["a-1", "a-2", "a-3"]
+        assert body["failed"] == []
+        assert body["deletedScans"] == ["scan-1"]
+
+        # Three deletes + three unlinks for the same scan + one scan delete.
+        assert company_repo.delete.call_count == 3
+        assert scan_repo.unlink_company.call_count == 3
+        scan_repo.delete.assert_called_once_with("scan-1")
+        # `get_scan_companies` is called ONCE (after all unlinks), not per
+        # analysis. This is the race-immunity property.
+        scan_repo.get_scan_companies.assert_called_once_with("scan-1")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_bulk_delete_keeps_scan_when_other_companies_remain(self, mock_authentication):
+        """Cascade does NOT fire if remaining companies exist on the scan."""
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_ids.return_value = [
+            {"id": "a-1", "org_id": "org-1", "scan_id": "scan-1"},
+            {"id": "a-2", "org_id": "org-1", "scan_id": "scan-1"},
+        ]
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        scan_repo = MagicMock()
+        scan_repo.get_scan_companies.return_value = [{"company_id": "untouched"}]
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analyses/bulk-delete",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"ids": ["a-1", "a-2"]}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["deletedScans"] == []
+        scan_repo.delete.assert_not_called()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_bulk_delete_handles_multiple_scans_independently(self, mock_authentication):
+        """Each affected scan's cascade decision is independent."""
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+
+        # Two scans: scan-empty has all its analyses in the batch, scan-keep
+        # has one untouched.
+        scan_for = {"a-1": "scan-empty", "a-2": "scan-empty", "a-3": "scan-keep"}
+        company_repo = MagicMock()
+        company_repo.get_by_ids.return_value = [
+            {"id": analysis_id, "org_id": "org-1", "scan_id": scan_for[analysis_id]}
+            for analysis_id in ("a-1", "a-2", "a-3")
+        ]
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        scan_repo = MagicMock()
+        scan_repo.get_scan_companies.side_effect = lambda scan_id: (
+            [] if scan_id == "scan-empty" else [{"company_id": "remaining"}]
+        )
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analyses/bulk-delete",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"ids": ["a-1", "a-2", "a-3"]}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert sorted(body["deleted"]) == ["a-1", "a-2", "a-3"]
+        assert body["deletedScans"] == ["scan-empty"]
+        scan_repo.delete.assert_called_once_with("scan-empty")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_bulk_delete_skips_records_from_other_orgs(self, mock_authentication):
+        """Org isolation: an id pointing to another org's record is reported
+        in `failed` (as `not_found` to avoid leaking existence) and NOT
+        deleted."""
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+
+        company_repo = MagicMock()
+        # `get_by_ids` returns ONLY the records that exist; missing ids
+        # don't appear in the result. The cross-org record IS returned
+        # by the BatchGet (it exists in the table), but the org-id check
+        # in the handler classifies it as "not_found".
+        company_repo.get_by_ids.return_value = [
+            {"id": "a-1", "org_id": "org-1", "scan_id": "scan-1"},
+            {"id": "a-other", "org_id": "org-OTHER", "scan_id": "scan-other"},
+        ]
+        assessment_repo = MagicMock()
+        assessment_repo.find_by_company.return_value = []
+        scan_repo = MagicMock()
+        scan_repo.get_scan_companies.return_value = []
+        storage.create_company_repository.return_value = company_repo
+        storage.create_assessment_repository.return_value = assessment_repo
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analyses/bulk-delete",
+                "headers": {"Authorization": "Bearer token"},
+                "body": json.dumps({"ids": ["a-1", "a-other", "a-missing"]}),
+            }
+        )
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["deleted"] == ["a-1"]
+        failed_ids = sorted(item["id"] for item in body["failed"])
+        assert failed_ids == ["a-missing", "a-other"]
+        # The cross-org record was never touched.
+        company_repo.delete.assert_called_once_with("a-1")
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_delete_analysis_keeps_scan_with_remaining(self, mock_authentication):

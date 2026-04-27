@@ -18,41 +18,54 @@
 
 ## 2. Domain tooltips
 
-- [ ] 2.1 Create `frontend/src/lib/help-content.ts` with the registry: keys for `risk_tier`, `risk_score`, `ebitda_tree`, `value_lever`, `active_lever_filter`, `industry`, `impact_rating`. Each entry has a 1-2 sentence explainer.
-- [ ] 2.2 Build `frontend/src/components/ui/HelpTooltip.tsx` (`<HelpTooltip term="risk_tier" />`). Renders a small ⓘ icon with a popover on hover/focus/tap. ARIA: `role="tooltip"` + `aria-describedby` association.
-- [ ] 2.3 Wire ⓘ tooltips into the analyses table column headers (Risk Score, Risk Tier, Industry).
-- [ ] 2.4 Wire ⓘ tooltips into the analysis detail page (EBITDA Tree heading, Value Lever badges, Impact Rating).
-- [ ] 2.5 Wire ⓘ tooltips into the opportunities list (Value Lever, Impact Rating).
-- [ ] 2.6 Vitest: tooltip renders on hover, on focus (keyboard), on tap (touch); content matches registry; reduced-motion path renders without slide animation.
-- [ ] 2.7 Maintain a markdown mirror at `docs/help-content.md` so non-engineers can review copy. Add an audit script (or pre-commit) to verify the markdown matches the registry.
+- [x] 2.1 Create `frontend/src/lib/help-content.ts` with the registry: keys for `risk_tier`, `risk_score`, `ebitda_tree`, `value_lever`, `active_lever_filter`, `industry`, `impact_rating`. Each entry has a 1-2 sentence explainer. — All 7 entries present, typed via `satisfies Record<string, HelpEntry>` so the keys flow into the `HelpTerm` union.
+- [x] 2.2 Build `frontend/src/components/ui/HelpTooltip.tsx` (`<HelpTooltip term="risk_tier" />`). Renders a small ⓘ icon with a popover on hover/focus/tap. ARIA: `role="tooltip"` + `aria-describedby` association. — Click handler is intentionally idempotent (always-open) to avoid touch-device flicker where pointerEnter fires before click; close is via blur, pointer-leave, Escape, or outside click.
+- [x] 2.3 Wire ⓘ tooltips into the analyses table column headers (Risk Score, Risk Tier, Industry). — Extended `TableHeader` and `SortableHeader` with an optional `helpTerm` prop so other tables can adopt the pattern without inlining tooltip JSX.
+- [x] 2.4 Wire ⓘ tooltips into the analysis detail page (EBITDA Tree heading, Value Lever badges, Impact Rating). — One tooltip per concept-bearing heading (`EBITDA Impact Model` → `ebitda_tree`, `Value Impact` → `value_lever`, `AI Opportunities` → `impact_rating`) rather than per-badge to keep the page from feeling noisy.
+- [x] 2.5 Wire ⓘ tooltips into the opportunities list (Value Lever, Impact Rating). — Covered by 2.4: `OpportunitiesList` h2 carries the `impact_rating` tooltip; `ValueLeverSummary` h2 carries the `value_lever` tooltip.
+- [x] 2.6 Vitest: tooltip renders on hover, on focus (keyboard), on tap (touch); content matches registry; reduced-motion path renders without slide animation. — 12 tests covering hover/focus/click triggers, registry content, custom label override, `aria-describedby` association, `aria-expanded` state, Escape and outside-click dismissal, focus-still-inside guard for hover-vs-keyboard, and a smoke test that all 7 registry terms render. Reduced-motion path is honoured by the global `prefers-reduced-motion` rule in `globals.css` (no per-component logic needed).
+- [x] 2.7 Maintain a markdown mirror at `docs/help-content.md` so non-engineers can review copy. Add an audit script (or pre-commit) to verify the markdown matches the registry. — `scripts/check-help-content.mjs` parses both files and diffs title + body per key. Wired into the frontend `npm run check:help-content` script and into the `Frontend Test` CI job so drift fails the build.
+
+> **`active_lever_filter` registered but not yet wired to a UI surface.** The
+> entry stays in the registry so future filter UI (Tier 2 §3 bulk actions or
+> §1 URL-as-state work) can adopt it without re-adding the copy. Today's
+> filter UX is conveyed adequately by the `value_lever` tooltip on
+> `ValueLeverSummary`.
 
 ## 3. Bulk actions on analyses
 
-- [ ] 3.1 Add a checkbox column to `AnalysesTable.tsx`. Header checkbox toggles all visible. Row checkboxes toggle individual rows.
-- [ ] 3.2 Implement shift-click range selection (track `lastClickedIndex` in selection state).
-- [ ] 3.3 Build `frontend/src/components/ui/BulkActionsBar.tsx` — sticky bottom bar that appears when selection is non-empty. Shows "N selected" and a "Delete N" button, plus a "Clear" affordance.
-- [ ] 3.4 Wire "Delete N" to Toast Undo (Tier 1 dependency): on click, toast appears with "Deleted N analyses. Undo?" and 5s window; rows visually disappear immediately; DELETEs fire after window expires.
-- [ ] 3.5 Selection clears on filter/search change and on navigation away.
-- [ ] 3.6 Vitest: header checkbox toggles all visible, row checkbox toggles individual, shift-click selects range, bulk delete fires DELETE for each id after window, undo cancels (no DELETEs fire), selection clears on filter change.
+- [x] 3.1 Add a checkbox column to `AnalysesTable.tsx`. Header checkbox toggles all visible. Row checkboxes toggle individual rows. — Checkbox column existed pre-§3 but was capped at 3 selections (legacy compare-only flow). The cap is now lifted; header + row checkboxes work without limit. Header shows `indeterminate` when partial.
+- [x] 3.2 Implement shift-click range selection (track `lastClickedIndex` in selection state). — Anchor stored in a `useRef` so it survives re-renders without triggering them. Anchor resets to `null` whenever filter/search/sort changes (so a stale anchor can't span across a re-ordered layout).
+- [x] 3.3 Build `frontend/src/components/ui/BulkActionsBar.tsx` — sticky bottom bar that appears when selection is non-empty. Shows "N selected" and a "Delete N" button, plus a "Clear" affordance. — Also hosts the Compare CTA (when 2-3 selected) — replaces the prior inline sticky "Compare N Selected" button so all bulk actions share one bar. `role="region" aria-live="polite"` so screen readers announce selection count changes.
+- [x] 3.4 Wire "Delete N" to Toast Undo (Tier 1 dependency): on click, toast appears with "Deleted N analyses. Undo?" and 5s window; rows visually disappear immediately; DELETEs fire after window expires. — Optimistic remove + restore on Undo via local state lifted from the `analyses` prop. Commit fan-outs N parallel `DELETE /api/analysis/{id}` requests; partial-failure path restores only the rows that didn't delete and surfaces an error toast.
+- [x] 3.5 Selection clears on filter/search change and on navigation away. — Implemented via a filter-signature memo + effect; selection AND the shift-click anchor both clear. Tested: search filter, tier filter trigger the clear.
+- [x] 3.6 Vitest: header checkbox toggles all visible, row checkbox toggles individual, shift-click selects range, bulk delete fires DELETE for each id after window, undo cancels (no DELETEs fire), selection clears on filter change. — 11 new AnalysesTable tests + 6 new BulkActionsBar tests = 17 total. Includes regression guard against the legacy 3-cap.
 
 ## 4. Relative timestamps
 
-- [ ] 4.1 Confirm date library: `date-fns` vs `dayjs` already in `frontend/package.json`? Use whichever is present; otherwise add `date-fns` (smaller).
-- [ ] 4.2 Build `frontend/src/components/ui/RelativeTime.tsx`: renders absolute time on SSR, swaps to relative on client mount via `useEffect`. Native `<time title={absolute}>` element so absolute is the browser tooltip.
-- [ ] 4.3 Audit the codebase for raw timestamp renders (`toLocaleString`, `toISOString`, raw API timestamp strings displayed to users in `(authenticated)`). Replace each with `<RelativeTime value={...} />`.
-- [ ] 4.4 Surfaces to update: AnalysesTable analyzedAt column, dashboard recent analyses + recent scans, AnalysisDetail header, Portfolio scan dates, team page member join dates.
-- [ ] 4.5 Vitest: SSR shape = absolute, client shape = relative, "just now" for <30s, "3 hours ago" for 3h, hover shows absolute via title attribute.
+- [x] 4.1 Confirm date library: `date-fns` vs `dayjs` already in `frontend/package.json`? Use whichever is present; otherwise add `date-fns` (smaller). — Added `date-fns@^3.6.0`; neither was previously installed.
+- [x] 4.2 Build `frontend/src/components/ui/RelativeTime.tsx`: renders absolute time on SSR, swaps to relative on client mount via `useEffect`. Native `<time title={absolute}>` element so absolute is the browser tooltip. — SSR uses a deterministic UTC formatter (`Apr 27, 2026`) so server and client produce identical HTML regardless of process timezone, avoiding hydration mismatches without needing `suppressHydrationWarning`.
+- [x] 4.3 Audit the codebase for raw timestamp renders (`toLocaleString`, `toISOString`, raw API timestamp strings displayed to users in `(authenticated)`). Replace each with `<RelativeTime value={...} />`. — Three render sites found and replaced: `AnalysisRow` analyzedAt cell, dashboard recent-analyses analyzedAt, dashboard recent-scans createdAt. AnalysisDetail / TeamView / PortfolioCard reference these fields but don't currently display timestamps.
+- [x] 4.4 Surfaces to update: AnalysesTable analyzedAt column, dashboard recent analyses + recent scans, AnalysisDetail header, Portfolio scan dates, team page member join dates. — Updated all surfaces that currently render a timestamp. Surfacing timestamps where they're not currently shown (analysis-detail header, portfolio cards, team join dates) is deferred — net-new UI not in scope for §4.
+- [x] 4.5 Vitest: SSR shape = absolute, client shape = relative, "just now" for <30s, "3 hours ago" for 3h, hover shows absolute via title attribute. — 14 tests, including SSR via `react-dom/server.renderToString`, timezone-independence assertion, a re-tick test that advances fake timers, and an unmount cleanup regression guard.
 
 ## 5. Activity feed
 
-- [ ] 5.1 Backend: new handler `handle_get_activity` in a new `backend/src/handlers/activity_handlers.py`. Projects events from existing DynamoDB records (scan creates/completes/deletes, analysis completes/failed/deletes, member invites/joins). Cursor-paginated.
-- [ ] 5.2 Backend: design event DTO shape (`type`, `actor: {id, name}`, `target: {id, name, type}`, `timestamp`, `summary`). Document in `docs/api/` or in the handler docstring.
-- [ ] 5.3 Backend: register `GET /api/activity` in the API gateway router. Org-scoped (only events for the user's org).
-- [ ] 5.4 Backend pytest: project covers each event type; org isolation; cursor pagination edge cases; handles missing records (e.g., event references deleted target).
-- [ ] 5.5 Frontend: `<ActivityPanel />` component — bell icon in sidebar with unread badge, opens to a list of recent events. Polls `/api/activity` every 30 seconds while open.
-- [ ] 5.6 Frontend: each event row renders actor name + action verb + target link + relative timestamp (uses `<RelativeTime>` from §4).
-- [ ] 5.7 Frontend: "last viewed" timestamp persisted to localStorage; unread count = events with timestamp > last_viewed.
-- [ ] 5.8 Vitest: panel renders events, unread badge reflects count, opening clears badge, polling re-fetches at interval.
+- [x] 5.1 Backend: new handler `handle_get_activity` in a new `backend/src/handlers/activity_handlers.py`. Projects events from existing DynamoDB records (scan creates/completes/deletes, analysis completes/failed/deletes, member invites/joins). Cursor-paginated. — Read-time projection from existing records (scans / companies / users / invitations) with no new events table per design D6. Hard-cap at 100 events; cursor pagination deferred until volumes justify it (also noted in the handler docstring as a future-iteration task).
+- [x] 5.2 Backend: design event DTO shape (`type`, `actor: {id, name}`, `target: {id, name, type}`, `timestamp`, `summary`). Document in `docs/api/` or in the handler docstring. — Documented in the handler module docstring with the four event-type literals (`scan_started`, `analysis_completed`, `member_invited`, `member_joined`) and an inline note for the omitted ones (`scan_completed`/`failed` — no completion timestamp on scan records; `*_deleted` — no DynamoDB tombstones).
+- [x] 5.3 Backend: register `GET /api/activity` in the API gateway router. Org-scoped (only events for the user's org). — Wired via `router.protected("GET", "/api/activity", ...)`; every repo call uses `authentication.org_id` from the JWT, never anything from the request.
+- [x] 5.4 Backend pytest: project covers each event type; org isolation; cursor pagination edge cases; handles missing records (e.g., event references deleted target). — 13 tests in `test_activity_handlers.py` covering each event type, sort-newest-first, the 100-event cap, org-id passthrough on every repo call, legacy users without `created_at` (skipped), scans without `created_by` (fallback to "Someone"), and the full mixed-event scenario. Plus a backend-wide regression check: `auth_handlers.py` now stamps `created_at` on user creation so `member_joined` projections can fire.
+- [x] 5.5 Frontend: `<ActivityPanel />` component — bell icon in sidebar with unread badge, opens to a list of recent events. Polls `/api/activity` every 30 seconds while open. — Polling runs continuously (always-on at 30s) so the badge stays current even when closed. Mounted in the sidebar nav, above the user footer. Always-mounted DOM with `data-state` toggle so screen-reader announcements aren't cut off mid-sentence by an unmount (same pattern as §2 `HelpTooltip`).
+- [x] 5.6 Frontend: each event row renders actor name + action verb + target link + relative timestamp (uses `<RelativeTime>` from §4). — Each row is a `<Link>` to the relevant page (`/portfolio/{id}` for scans, `/analysis/{id}` for analyses, `/team` for member events). `<RelativeTime>` renders the timestamp consistently with the rest of the app.
+- [x] 5.7 Frontend: "last viewed" timestamp persisted to localStorage; unread count = events with timestamp > last_viewed. — Stored at `janus-activity-last-viewed`; opens the panel updates it to NOW; unread count caps visually at "99+". Falls back to in-memory state when localStorage is unavailable (private mode, quota errors).
+- [x] 5.8 Vitest: panel renders events, unread badge reflects count, opening clears badge, polling re-fetches at interval. — 16 ActivityPanel tests + 6 useActivityPolling tests + 3 proxy-route tests = 25 new frontend tests. Polling-hook coverage includes a race-safety test (slow request that resolves AFTER a faster one is correctly discarded via a generation counter).
+
+> **Scope note**: deletes (`scan_deleted` / `analysis_deleted`) and the
+> "scan completed at" event are deferred. Without DynamoDB tombstones a
+> deleted record can't be projected; without a `completed_at` field on
+> scan records, the completion timestamp would be inaccurate. Both are
+> tracked for the future events-table migration when projection cost
+> drives that change.
 
 ## 6. Quality gates
 

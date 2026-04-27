@@ -9,6 +9,7 @@ import type { DashboardData } from '@/lib/types/api'
 import { TIER_COLORS, TIER_BG_COLORS } from '@/lib/utils/riskUtils'
 import DeleteScanButton from '@/components/DeleteScanButton'
 import { EmptyState } from '@/components/ui'
+import RelativeTime from '@/components/ui/RelativeTime'
 
 export const metadata: Metadata = { title: 'Dashboard — Janus' }
 
@@ -238,9 +239,7 @@ export default async function DashboardPage() {
                                                         whiteSpace: 'nowrap',
                                                     }}
                                                 >
-                                                    {analysis.analyzedAt
-                                                        ? new Date(analysis.analyzedAt).toLocaleDateString()
-                                                        : '—'}
+                                                    <RelativeTime value={analysis.analyzedAt} />
                                                 </td>
                                                 <td style={{ padding: '1rem 1.25rem' }}>
                                                     <Link
@@ -348,9 +347,7 @@ export default async function DashboardPage() {
                                                     whiteSpace: 'nowrap',
                                                 }}
                                             >
-                                                {scan.createdAt
-                                                    ? new Date(scan.createdAt).toLocaleDateString()
-                                                    : '—'}
+                                                <RelativeTime value={scan.createdAt} />
                                             </td>
                                             <td
                                                 style={{

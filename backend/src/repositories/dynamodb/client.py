@@ -68,15 +68,30 @@ class DynamoDBTable:
         index_name: str | None = None,
         limit: int | None = None,
         scan_forward: bool = True,
+        consistent_read: bool = False,
     ) -> list[dict[str, Any]]:
         """Query items by partition key, with optional sort-key prefix.
 
         Automatically paginates through all results using LastEvaluatedKey.
         If limit is specified, returns at most that many items.
+
+        Pass ``consistent_read=True`` for read-after-write consistency on
+        the base table — the default eventually-consistent read can lag by
+        up to ~100ms, which is fine for most reads but breaks workflows
+        that depend on observing prior writes in the same handler run
+        (e.g., the bulk-delete cascade-pass in
+        ``analysis_handlers.handle_bulk_delete_analyses`` after
+        ``unlink_company`` writes). GSI queries (``index_name`` set) cannot
+        use consistent reads — DynamoDB rejects the combination — so this
+        flag is silently ignored when an index is targeted.
         """
         kwargs: dict[str, Any] = {}
         if index_name:
             kwargs["IndexName"] = index_name
+        elif consistent_read:
+            # GSI reads are eventually consistent by DynamoDB design;
+            # ConsistentRead only applies to base-table queries.
+            kwargs["ConsistentRead"] = True
 
         key_condition = Key("pk").eq(pk)
         if sk_prefix:

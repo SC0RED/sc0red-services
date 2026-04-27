@@ -128,8 +128,20 @@ class DynamoDBScanRepository:
             self._table.batch_delete(keys)
 
     def get_scan_companies(self, scan_id: str) -> list[dict[str, Any]]:
-        """Return all company association items linked to the given scan ID."""
-        return self._table.query(pk=f"SCAN#{scan_id}", sk_prefix="COMPANY#")
+        """Return all company association items linked to the given scan ID.
+
+        Uses a strongly-consistent read so callers in the bulk-delete
+        cascade pass observe their own prior `unlink_company` writes
+        within the same handler invocation. The default eventually-
+        consistent read can lag by ~100ms — enough to leave orphan
+        scans on the cascade decision. See
+        `analysis_handlers.handle_bulk_delete_analyses`.
+        """
+        return self._table.query(
+            pk=f"SCAN#{scan_id}",
+            sk_prefix="COMPANY#",
+            consistent_read=True,
+        )
 
     def find_recent_by_org(self, org_id: str, limit: int | None = 10) -> list[dict[str, Any]]:
         """Return scans for the given organisation, sorted by created_at descending.

@@ -137,6 +137,107 @@ def handle_delete_analysis(
     return build_json_response({"ok": True})
 
 
+def handle_bulk_delete_analyses(
+    event: dict[str, Any],
+    authentication: AuthContext,
+    storage: DynamoDBStorageProvider,
+) -> LambdaResponse:
+    """Handle POST /api/analyses/bulk-delete — delete N analyses in one call.
+
+    Race-immune cascade: the single-delete endpoint cascades to the scan
+    when the deleted analysis was its last linked company, but parallel
+    DELETEs on the same scan can each read the post-unlink state before
+    peers' writes commit and ALL conclude "links remain" — leaving an
+    orphan scan. This handler unlinks every analysis first, then makes
+    the cascade decision over each affected scan in a single post-delete
+    pass. One handler run = no race.
+
+    Body: ``{"ids": [...]}``. Response: ``{"deleted", "failed", "deletedScans"}``.
+    """
+    raw_body = event.get("body") or "{}"
+    try:
+        body = json.loads(raw_body)
+    except json.JSONDecodeError as error:
+        return build_error(f"Invalid JSON: {error}", 400, VALIDATION_ERROR)
+
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+        return build_error("Body must include `ids: string[]`", 400, VALIDATION_ERROR)
+    if not ids:
+        return build_error("`ids` must not be empty", 400, VALIDATION_ERROR)
+
+    company_repo = storage.create_company_repository()
+    assessment_repo = storage.create_assessment_repository()
+    scan_repo = storage.create_scan_repository()
+
+    # Single BatchGetItem instead of N GetItem calls (CLAUDE.md
+    # DynamoDB pattern). The result preserves only IDs that exist; we
+    # build a lookup so the loop below can branch on missing/cross-org
+    # cases without re-querying.
+    fetched = company_repo.get_by_ids(ids)
+    company_by_id: dict[str, dict[str, Any]] = {
+        company["id"]: company for company in fetched if company.get("id")
+    }
+
+    deleted: list[str] = []
+    failed: list[dict[str, str]] = []
+    affected_scan_ids: set[str] = set()
+
+    for analysis_id in ids:
+        company = company_by_id.get(analysis_id)
+        if not company or company.get("org_id") != authentication.org_id:
+            # Org-mismatch and missing-record both surface as the same
+            # opaque "not found" — same posture as `check_org_access`.
+            # Bulk-delete continues with the rest of the batch.
+            failed.append({"id": analysis_id, "reason": "not_found"})
+            continue
+
+        # `assessment_repo.find_by_company` is a per-company GSI query;
+        # there's no batch equivalent today. The N queries are bounded by
+        # the user's selection size (typically 1-12) so this is
+        # acceptable for v1; revisit if bulk-delete starts handling
+        # hundreds of rows per call.
+        assessments = assessment_repo.find_by_company(analysis_id)
+        for assessment in assessments:
+            assessment_repo.delete(assessment["id"])
+        company_repo.delete(analysis_id)
+
+        scan_id = company.get("scan_id", "")
+        if scan_id:
+            scan_repo.unlink_company(scan_id, analysis_id)
+            affected_scan_ids.add(scan_id)
+
+        deleted.append(analysis_id)
+
+    # Cascade pass: every requested analysis is unlinked, so each scan's
+    # `get_scan_companies` now returns the post-delete truth. Race-immune
+    # in the happy path. A transient exception mid-loop would leave a
+    # partial orphan that the next retry resolves; `cleanup_orphan_scans.py`
+    # is the catch-all for pre-fix orphans.
+    deleted_scans: list[str] = []
+    for scan_id in affected_scan_ids:
+        if not scan_repo.get_scan_companies(scan_id):
+            scan_repo.delete(scan_id)
+            deleted_scans.append(scan_id)
+
+    logger.info(
+        "bulk_delete_analyses org_id=%s requested=%d deleted=%d failed=%d scans_cascaded=%d",
+        authentication.org_id,
+        len(ids),
+        len(deleted),
+        len(failed),
+        len(deleted_scans),
+    )
+
+    return build_json_response(
+        {
+            "deleted": deleted,
+            "failed": failed,
+            "deletedScans": deleted_scans,
+        }
+    )
+
+
 def handle_list_analyses(
     event: dict[str, Any],
     authentication: AuthContext,
