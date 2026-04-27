@@ -1,3 +1,6 @@
+import HelpTooltip from '@/components/ui/HelpTooltip'
+import type { HelpTerm } from '@/lib/help-content'
+
 export type SortField = 'companyName' | 'overallRiskScore' | 'analyzedAt'
 export type SortDirection = 'asc' | 'desc'
 
@@ -11,8 +14,20 @@ const HEADER_STYLE = {
     letterSpacing: '0.06em',
 }
 
-export function TableHeader({ children }: { children: React.ReactNode }) {
-    return <th style={HEADER_STYLE}>{children}</th>
+export function TableHeader({
+    children,
+    helpTerm,
+}: {
+    children: React.ReactNode
+    /** Optional help-tooltip key — if set, renders a `<HelpTooltip>` after the label. */
+    helpTerm?: HelpTerm
+}) {
+    return (
+        <th style={HEADER_STYLE}>
+            {children}
+            {helpTerm && <HelpTooltip term={helpTerm} />}
+        </th>
+    )
 }
 
 export function SortableHeader({
@@ -21,12 +36,15 @@ export function SortableHeader({
     current,
     direction,
     onSort,
+    helpTerm,
 }: {
     label: string
     field: SortField
     current: SortField
     direction: SortDirection
     onSort: (field: SortField) => void
+    /** Optional help-tooltip key — if set, renders a `<HelpTooltip>` after the sort button. */
+    helpTerm?: HelpTerm
 }) {
     const isActive = current === field
     return (
@@ -52,9 +70,10 @@ export function SortableHeader({
             >
                 {label}
                 <span style={{ fontSize: '0.625rem' }}>
-                    {isActive ? (direction === 'asc' ? '\u25B2' : '\u25BC') : '\u2195'}
+                    {isActive ? (direction === 'asc' ? '▲' : '▼') : '↕'}
                 </span>
             </button>
+            {helpTerm && <HelpTooltip term={helpTerm} />}
         </th>
     )
 }

@@ -14,6 +14,7 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
+        "check:help-content": "node ../scripts/check-help-content.mjs",
         "e2e": "../scripts/playwright.sh",
         "e2e:local": "../scripts/playwright.sh --mode=local",
         "e2e:headed": "../scripts/playwright.sh --mode=local --headed",

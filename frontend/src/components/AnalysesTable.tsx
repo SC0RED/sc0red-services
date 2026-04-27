@@ -208,7 +208,7 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                         direction={sortDirection}
                                         onSort={handleSort}
                                     />
-                                    <TableHeader>Industry</TableHeader>
+                                    <TableHeader helpTerm="industry">Industry</TableHeader>
                                     <TableHeader>Source</TableHeader>
                                     <SortableHeader
                                         label="Risk Score"
@@ -216,8 +216,9 @@ export default function AnalysesTable({ analyses }: AnalysesTableProps) {
                                         current={sortField}
                                         direction={sortDirection}
                                         onSort={handleSort}
+                                        helpTerm="risk_score"
                                     />
-                                    <TableHeader>Tier</TableHeader>
+                                    <TableHeader helpTerm="risk_tier">Tier</TableHeader>
                                     <SortableHeader
                                         label="Date"
                                         field="analyzedAt"

@@ -18,13 +18,19 @@
 
 ## 2. Domain tooltips
 
-- [ ] 2.1 Create `frontend/src/lib/help-content.ts` with the registry: keys for `risk_tier`, `risk_score`, `ebitda_tree`, `value_lever`, `active_lever_filter`, `industry`, `impact_rating`. Each entry has a 1-2 sentence explainer.
-- [ ] 2.2 Build `frontend/src/components/ui/HelpTooltip.tsx` (`<HelpTooltip term="risk_tier" />`). Renders a small ⓘ icon with a popover on hover/focus/tap. ARIA: `role="tooltip"` + `aria-describedby` association.
-- [ ] 2.3 Wire ⓘ tooltips into the analyses table column headers (Risk Score, Risk Tier, Industry).
-- [ ] 2.4 Wire ⓘ tooltips into the analysis detail page (EBITDA Tree heading, Value Lever badges, Impact Rating).
-- [ ] 2.5 Wire ⓘ tooltips into the opportunities list (Value Lever, Impact Rating).
-- [ ] 2.6 Vitest: tooltip renders on hover, on focus (keyboard), on tap (touch); content matches registry; reduced-motion path renders without slide animation.
-- [ ] 2.7 Maintain a markdown mirror at `docs/help-content.md` so non-engineers can review copy. Add an audit script (or pre-commit) to verify the markdown matches the registry.
+- [x] 2.1 Create `frontend/src/lib/help-content.ts` with the registry: keys for `risk_tier`, `risk_score`, `ebitda_tree`, `value_lever`, `active_lever_filter`, `industry`, `impact_rating`. Each entry has a 1-2 sentence explainer. — All 7 entries present, typed via `satisfies Record<string, HelpEntry>` so the keys flow into the `HelpTerm` union.
+- [x] 2.2 Build `frontend/src/components/ui/HelpTooltip.tsx` (`<HelpTooltip term="risk_tier" />`). Renders a small ⓘ icon with a popover on hover/focus/tap. ARIA: `role="tooltip"` + `aria-describedby` association. — Click handler is intentionally idempotent (always-open) to avoid touch-device flicker where pointerEnter fires before click; close is via blur, pointer-leave, Escape, or outside click.
+- [x] 2.3 Wire ⓘ tooltips into the analyses table column headers (Risk Score, Risk Tier, Industry). — Extended `TableHeader` and `SortableHeader` with an optional `helpTerm` prop so other tables can adopt the pattern without inlining tooltip JSX.
+- [x] 2.4 Wire ⓘ tooltips into the analysis detail page (EBITDA Tree heading, Value Lever badges, Impact Rating). — One tooltip per concept-bearing heading (`EBITDA Impact Model` → `ebitda_tree`, `Value Impact` → `value_lever`, `AI Opportunities` → `impact_rating`) rather than per-badge to keep the page from feeling noisy.
+- [x] 2.5 Wire ⓘ tooltips into the opportunities list (Value Lever, Impact Rating). — Covered by 2.4: `OpportunitiesList` h2 carries the `impact_rating` tooltip; `ValueLeverSummary` h2 carries the `value_lever` tooltip.
+- [x] 2.6 Vitest: tooltip renders on hover, on focus (keyboard), on tap (touch); content matches registry; reduced-motion path renders without slide animation. — 12 tests covering hover/focus/click triggers, registry content, custom label override, `aria-describedby` association, `aria-expanded` state, Escape and outside-click dismissal, focus-still-inside guard for hover-vs-keyboard, and a smoke test that all 7 registry terms render. Reduced-motion path is honoured by the global `prefers-reduced-motion` rule in `globals.css` (no per-component logic needed).
+- [x] 2.7 Maintain a markdown mirror at `docs/help-content.md` so non-engineers can review copy. Add an audit script (or pre-commit) to verify the markdown matches the registry. — `scripts/check-help-content.mjs` parses both files and diffs title + body per key. Wired into the frontend `npm run check:help-content` script and into the `Frontend Test` CI job so drift fails the build.
+
+> **`active_lever_filter` registered but not yet wired to a UI surface.** The
+> entry stays in the registry so future filter UI (Tier 2 §3 bulk actions or
+> §1 URL-as-state work) can adopt it without re-adding the copy. Today's
+> filter UX is conveyed adequately by the `value_lever` tooltip on
+> `ValueLeverSummary`.
 
 ## 3. Bulk actions on analyses
 

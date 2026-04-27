@@ -1,5 +1,6 @@
 'use client'
 
+import HelpTooltip from '@/components/ui/HelpTooltip'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -27,7 +28,10 @@ export default function ValueLeverSummary({
 
     return (
         <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>Value Impact</h2>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>
+                Value Impact
+                <HelpTooltip term="value_lever" />
+            </h2>
             <div
                 style={{
                     display: 'grid',

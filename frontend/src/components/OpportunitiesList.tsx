@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 import Sc0redCTABanner from '@/components/Sc0redCTABanner'
+import HelpTooltip from '@/components/ui/HelpTooltip'
 import { getSc0redContactUrl } from '@/lib/config'
 import type { ActiveLeverFilter } from '@/lib/types/analytics'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
@@ -69,6 +70,7 @@ export default function OpportunitiesList({
             >
                 <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>
                     AI Opportunities ({opportunities.length})
+                    <HelpTooltip term="impact_rating" />
                 </h2>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {oppCategories.map((cat) => (
