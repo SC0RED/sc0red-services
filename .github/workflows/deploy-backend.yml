@@ -29,7 +29,14 @@ jobs:
       contents: read
     outputs:
       frontend_url: ${{ steps.outputs.outputs.frontend_url }}
-      user_pool_id: ${{ steps.outputs.outputs.user_pool_id }}
+      # NOTE: we used to expose `user_pool_id` here, but Cognito User Pool
+      # IDs are formatted as `<region>_xxxxx`, and the region prefix gets
+      # masked because `DEV_AWS_REGION` is stored as a GitHub secret.
+      # GitHub Actions then refuses to pass the masked value through
+      # `needs.deploy.outputs` ("Skip output 'user_pool_id' since it may
+      # contain secret"), silently skipping the cleanup job. The cleanup
+      # job now uses the script's auto-discovery (`discover_user_pool_id`
+      # in `scripts/e2e-cleanup.py`) instead of crossing this output.
 
     steps:
       - uses: actions/checkout@v4
@@ -102,9 +109,9 @@ jobs:
                       print(f'Frontend URL: {val}')
                       with open(os.environ['GITHUB_OUTPUT'], 'a') as gh:
                           gh.write(f'frontend_url={val}\n')
-                  if 'UserPoolId' in key and 'Client' not in key and 'Provider' not in key:
-                      with open(os.environ['GITHUB_OUTPUT'], 'a') as gh:
-                          gh.write(f'user_pool_id={val}\n')
+                  # `user_pool_id` is intentionally NOT exported to
+                  # GITHUB_OUTPUT — see the comment on the deploy job's
+                  # `outputs:` block. Cleanup auto-discovers from Cognito.
           except Exception as e:
               print(f'Could not read outputs: {e}', file=sys.stderr)
           "
@@ -145,7 +152,11 @@ jobs:
   smoke-cleanup:
     name: Cleanup Test Data
     needs: [deploy, smoke]
-    if: always() && needs.deploy.outputs.user_pool_id != ''
+    # Run on any deploy outcome — accumulated e2e users need cleanup
+    # whether or not the most recent deploy succeeded. Auto-discovery
+    # in `e2e-cleanup.py` exits cleanly if the pool isn't found (e.g.,
+    # the very first deploy where the stack doesn't exist yet).
+    if: always()
     runs-on: ubuntu-latest
     environment: staging
 
@@ -167,8 +178,10 @@ jobs:
           aws-region: ${{ secrets.DEV_AWS_REGION }}
 
       - name: Run cleanup script
+        # No --user-pool-id: the script auto-discovers via the
+        # `janus-users-*` name pattern. Avoids the secret-masking issue
+        # with cross-job outputs that previously skipped this step.
         run: |
           python3 scripts/e2e-cleanup.py \
-            --user-pool-id "${{ needs.deploy.outputs.user_pool_id }}" \
             --table janus-staging \
             --region "${{ secrets.DEV_AWS_REGION }}"
