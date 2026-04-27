@@ -1,4 +1,5 @@
 import DashboardSidebar from '@/components/DashboardSidebar'
+import GlobalShortcuts from '@/components/GlobalShortcuts'
 import { Breadcrumbs } from '@/components/ui'
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
@@ -9,6 +10,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
                 <Breadcrumbs />
                 {children}
             </main>
+            <GlobalShortcuts />
         </>
     )
 }
