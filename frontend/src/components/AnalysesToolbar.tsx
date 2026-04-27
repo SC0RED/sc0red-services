@@ -68,6 +68,10 @@ export default function AnalysesToolbar({
                         placeholder="Search by company or industry..."
                         value={search}
                         onChange={(e) => onSearchChange(e.target.value)}
+                        // The `/` global keyboard shortcut focuses this input
+                        // via querySelector('[aria-label="Search analyses"]').
+                        // If you rename this aria-label, update the matching
+                        // selector in `frontend/src/components/GlobalShortcuts.tsx`.
                         aria-label="Search analyses"
                         style={{ paddingLeft: '2.5rem', fontSize: '0.8125rem' }}
                     />

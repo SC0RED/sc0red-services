@@ -17,6 +17,7 @@ function makeProps(overrides: Partial<Parameters<typeof FailedAnalysisView>[0]> 
         companyUrl: 'https://endurancelift.com',
         error: 'AI provider timeout',
         scanId: 'scan-1',
+        scanType: 'portfolio',
         documents: [],
         documentError: null,
         reanalyzing: false,
@@ -42,15 +43,20 @@ describe('FailedAnalysisView', () => {
         expect(screen.getByText('Unknown Company')).toBeInTheDocument()
     })
 
-    it('shows Back to Portfolio link when scanId is present', () => {
-        render(<FailedAnalysisView {...makeProps()} />)
-        const link = screen.getByText(/Back to Portfolio/)
+    it('shows Back to Portfolio link for portfolio scans', () => {
+        render(<FailedAnalysisView {...makeProps({ scanType: 'portfolio', scanId: 'scan-1' })} />)
+        const link = screen.getByRole('link', { name: /Back to Portfolio/ })
         expect(link).toHaveAttribute('href', '/portfolio/scan-1')
     })
 
+    it('hides Back to Portfolio link for standalone scans even when scanId is set', () => {
+        render(<FailedAnalysisView {...makeProps({ scanType: 'single', scanId: 'scan-1' })} />)
+        expect(screen.queryByRole('link', { name: /Back to Portfolio/ })).not.toBeInTheDocument()
+    })
+
     it('hides Back to Portfolio link when scanId is absent', () => {
-        render(<FailedAnalysisView {...makeProps({ scanId: undefined })} />)
-        expect(screen.queryByText(/Back to Portfolio/)).not.toBeInTheDocument()
+        render(<FailedAnalysisView {...makeProps({ scanId: undefined, scanType: undefined })} />)
+        expect(screen.queryByRole('link', { name: /Back to Portfolio/ })).not.toBeInTheDocument()
     })
 
     it('renders Retry Analysis button and calls onRetry on click', () => {

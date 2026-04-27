@@ -306,11 +306,6 @@ Retrieve the full AI risk report for a single company.
                 "Audit current competitor tracking workflows",
                 "Deploy LLM-based monitoring on competitor product pages and job postings",
                 "Integrate alerts into existing sales and strategy dashboards"
-            ],
-            "related_services": [
-                "Crayon - Competitive Intelligence",
-                "Klue - Win-Loss Analysis",
-                "Anthropic - LLM Provider"
             ]
         }
     ],

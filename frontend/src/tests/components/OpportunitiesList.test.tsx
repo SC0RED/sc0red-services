@@ -15,7 +15,6 @@ const mockOpportunities: Opportunity[] = [
         implementation_steps: ['Step 1', 'Step 2'],
         investment_range: '$100K-$500K',
         roi_estimate: '30% improvement',
-        related_services: ['Accenture - AI strategy'],
     },
     {
         title: 'Automate Support',
@@ -27,7 +26,6 @@ const mockOpportunities: Opportunity[] = [
         implementation_steps: ['Step A'],
         investment_range: '$50K-$100K',
         roi_estimate: '2x ROI',
-        related_services: [],
     },
     {
         title: 'AI Platform',
@@ -39,13 +37,14 @@ const mockOpportunities: Opportunity[] = [
         implementation_steps: ['Step X'],
         investment_range: '$500K-$1M',
         roi_estimate: 'New revenue stream',
-        related_services: [],
     },
 ]
 
 describe('OpportunitiesList', () => {
     it('renders all opportunities with titles', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
 
         expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
         expect(screen.getByText('Automate Support')).toBeInTheDocument()
@@ -53,7 +52,9 @@ describe('OpportunitiesList', () => {
     })
 
     it('shows category filter buttons', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
 
         expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Competitive Moat' })).toBeInTheDocument()
@@ -61,7 +62,9 @@ describe('OpportunitiesList', () => {
     })
 
     it('clicking a category filter shows only matching opportunities', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
 
         fireEvent.click(screen.getByRole('button', { name: 'Operational Efficiency' }))
 
@@ -71,7 +74,9 @@ describe('OpportunitiesList', () => {
     })
 
     it('clicking "All" shows all opportunities', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
 
         // Filter first
         fireEvent.click(screen.getByRole('button', { name: 'Operational Efficiency' }))
@@ -85,7 +90,9 @@ describe('OpportunitiesList', () => {
     })
 
     it('clicking an opportunity expands details', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
 
         expect(screen.queryByText('Build a chatbot for customer support')).not.toBeInTheDocument()
 
@@ -98,11 +105,35 @@ describe('OpportunitiesList', () => {
         expect(screen.getByText('Step 2')).toBeInTheDocument()
         expect(screen.getByText('$100K-$500K')).toBeInTheDocument()
         expect(screen.getByText('30% improvement')).toBeInTheDocument()
-        expect(screen.getByText('Accenture - AI strategy')).toBeInTheDocument()
+    })
+
+    it('renders the sc0red CTA banner when opportunities are visible', () => {
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
+
+        expect(screen.getByText('sc0red can help you capture these opportunities')).toBeInTheDocument()
+    })
+
+    it('hides the sc0red CTA banner when the filter returns zero opportunities', () => {
+        render(<OpportunitiesList opportunities={[]} activeLever="All" analysisId="assess-1" />)
+
+        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
+    })
+
+    it('hides the sc0red CTA banner when the lever filter matches nothing', () => {
+        const revenueOnly: Opportunity[] = [{ ...mockOpportunities[0]!, value_lever: 'Revenue Side' }]
+        render(
+            <OpportunitiesList opportunities={revenueOnly} activeLever="Cost Side" analysisId="assess-1" />
+        )
+
+        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
     })
 
     it('shows ImpactBadge and TimelineBadge for each opportunity', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
 
         // Two opportunities have "High" impact
         expect(screen.getAllByText('High Impact').length).toBe(2)
@@ -112,7 +143,13 @@ describe('OpportunitiesList', () => {
     })
 
     it('activeLever filter works', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="Cost Side" />)
+        render(
+            <OpportunitiesList
+                opportunities={mockOpportunities}
+                activeLever="Cost Side"
+                analysisId="assess-1"
+            />
+        )
 
         expect(screen.getByText('Automate Support')).toBeInTheDocument()
         expect(screen.queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
@@ -120,12 +157,20 @@ describe('OpportunitiesList', () => {
     })
 
     it('shows opportunity count in heading', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
+        render(
+            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
+        )
         expect(screen.getByText('AI Opportunities (3)')).toBeInTheDocument()
     })
 
     it('combined category and lever filter produces intersection', () => {
-        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="Revenue Side" />)
+        render(
+            <OpportunitiesList
+                opportunities={mockOpportunities}
+                activeLever="Revenue Side"
+                analysisId="assess-1"
+            />
+        )
 
         // activeLever=Revenue Side filters to only Deploy AI Chatbot and the Competitive Moat category
         fireEvent.click(screen.getByRole('button', { name: 'Competitive Moat' }))

@@ -226,7 +226,6 @@ _MOCK_RESPONSES: dict[str, object] = {
         "timeline": "Quick Win (1-3 months)",
         "investment_range": "$50K-$100K",
         "roi_estimate": "2x ROI within 12 months through efficiency gains",
-        "related_services": ["Mock AI Co - Workflow automation"],
     },
 }
 

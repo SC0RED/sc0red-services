@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import (
     VALIDATION_ERROR,
-    build_company_summary,
     build_error,
     build_json_response,
     check_org_access,
 )
 from src.handlers.sqs_messages import build_reanalysis_message
+from src.utilities.scan_summary import build_company_summary
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -34,6 +34,20 @@ def handle_get_analysis(
     company = company_repo.get_by_id(analysis_id)
     if error := check_org_access(company, authentication):
         return error
+
+    # Look up the parent scan to surface scan provenance (type + source URL)
+    # on the analysis detail page. Used by the frontend to render the
+    # "Part of: {scan}" cross-reference for portfolio analyses, and to
+    # avoid showing portfolio-only navigation on standalone analyses.
+    scan_type = ""
+    scan_source_url = ""
+    scan_id = company.get("scan_id", "")
+    if scan_id:
+        scan_repo = storage.create_scan_repository()
+        scan = scan_repo.get_by_id(scan_id)
+        if scan is not None:
+            scan_type = scan.get("type", "")
+            scan_source_url = scan.get("source_url", "")
 
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
@@ -86,7 +100,9 @@ def handle_get_analysis(
             "pipelineLabel": company.get("pipeline_label", ""),
             "analyzedAt": company.get("analyzed_at"),
             "error": company.get("error"),
-            "scanId": company.get("scan_id", ""),
+            "scanId": scan_id,
+            "scanType": scan_type,
+            "scanSourceUrl": scan_source_url,
         }
     )
 
@@ -145,7 +161,11 @@ def handle_list_analyses(
     analyses = []
     for company in companies:
         summary = build_company_summary(company)
-        summary["scanType"] = scan_type_map.get(company.get("scan_id", ""), "")
+        company_scan_id = company.get("scan_id", "")
+        # Surface scan provenance so the analyses table can link the
+        # "Portfolio" badge through to /portfolio/{scanId}.
+        summary["scanId"] = company_scan_id
+        summary["scanType"] = scan_type_map.get(company_scan_id, "")
         analyses.append(summary)
 
     response: dict[str, Any] = {"analyses": analyses}
@@ -213,6 +233,10 @@ def handle_dashboard(
             "status": s.get("status", ""),
             "progress": s.get("progress", 0),
             "completedCount": s.get("completed_count", 0),
+            # Total linked companies at confirm time. Used by the dashboard's
+            # delete-scan toast to spell out the full cascade scope (deletion
+            # touches every linked company, not just the completed ones).
+            "totalCompanies": s.get("total_companies", 0),
             "createdAt": s.get("created_at") or scan_date_fallback.get(s.get("id", ""), ""),
         }
         for s in recent_scans

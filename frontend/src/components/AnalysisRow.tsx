@@ -57,12 +57,7 @@ export default function AnalysisRow({
                 {analysis.industry || '—'}
             </td>
             <td style={{ padding: '1rem 0.75rem' }}>
-                <span
-                    className={`badge badge-${analysis.scanType === 'portfolio' ? 'blue' : 'cyan'}`}
-                    style={{ fontSize: '0.7rem' }}
-                >
-                    {analysis.scanType === 'portfolio' ? 'Portfolio' : 'Standalone'}
-                </span>
+                <ScanTypeBadge scanType={analysis.scanType} scanId={analysis.scanId} />
             </td>
             <td style={{ padding: '1rem 0.75rem' }}>
                 <span style={{ fontWeight: 700, fontSize: '1.1rem', color: TIER_COLORS[tier] }}>
@@ -113,5 +108,39 @@ export default function AnalysisRow({
                 </div>
             </td>
         </tr>
+    )
+}
+
+/**
+ * Renders the scan-type badge for an analysis row.
+ *
+ * Portfolio rows wrap the badge in a `<Link>` to `/portfolio/{scanId}` so the
+ * analyst can jump from the row to the originating scan view. Standalone rows
+ * render the badge as plain text (no link) — a standalone analysis IS its scan,
+ * so there's nowhere to navigate.
+ *
+ * Click propagation is stopped so a future row-level click handler (e.g.,
+ * making the entire row navigate to the analysis detail) won't fire on top of
+ * the badge's own navigation.
+ */
+function ScanTypeBadge({ scanType, scanId }: { scanType?: string; scanId?: string }) {
+    const isPortfolio = scanType === 'portfolio'
+    const badge = (
+        <span className={`badge badge-${isPortfolio ? 'blue' : 'cyan'}`} style={{ fontSize: '0.7rem' }}>
+            {isPortfolio ? 'Portfolio' : 'Standalone'}
+        </span>
+    )
+    if (!isPortfolio || !scanId) {
+        return badge
+    }
+    return (
+        <Link
+            href={`/portfolio/${scanId}`}
+            onClick={(event) => event.stopPropagation()}
+            title="View portfolio scan"
+            style={{ textDecoration: 'none' }}
+        >
+            {badge}
+        </Link>
     )
 }

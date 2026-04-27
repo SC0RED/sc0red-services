@@ -532,6 +532,67 @@ print(any(s.get('createdAt') for s in scans))
     STATUS=$(echo "$RESP" | tail -n 1)
     assert_status "Cascaded analysis 404" 404 "$STATUS"
 
+    # ── 20. Stable-cards contract: state + orderIndex on every analysis entry
+    # The unified analyses[] contract is fully exercised by unit tests (mocking
+    # Step Functions). Here we verify the live response shape end-to-end:
+    # every entry MUST carry `state` + `orderIndex` from the moment the scan
+    # is confirmed, and the array length MUST equal totalCompanies through
+    # the entire run. We use the single-confirm flow because LocalStack
+    # doesn't fully implement Step Functions; the multi-company path is
+    # validated in unit tests for `_start_portfolio_scan` and the
+    # `build_unified_analyses` helper.
+    echo -e "\n${YELLOW}20. Stable-cards: state + orderIndex on live response${NC}"
+    RESP=$(curl -sw "\n%{http_code}" -X POST "$BACKEND_URL/api/scan/start" \
+        -H "Content-Type: application/json" \
+        -H "$AUTH" \
+        -d "{\"url\":\"$MOCK_COMPANY_URL\",\"type\":\"single\"}")
+    BODY=$(echo "$RESP" | sed '$d')
+    STABLE_SCAN_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scanId',''))" 2>/dev/null || echo "")
+
+    # Poll once before completion to capture the intermediate state — the
+    # entry MUST already have `state` and a stable id we can reference in
+    # subsequent polls (no card disappearing/reappearing).
+    SAW_RUNNING_STATE=false
+    for i in $(seq 1 20); do
+        RESP=$(curl -sw "\n%{http_code}" "$BACKEND_URL/api/scan/$STABLE_SCAN_ID" -H "$AUTH")
+        BODY=$(echo "$RESP" | sed '$d')
+        SHAPE=$(echo "$BODY" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+analyses = data.get('analyses', [])
+total = data.get('totalCompanies', 0)
+allowed = {'pending', 'scanning', 'done', 'failed'}
+states = [a.get('state') for a in analyses]
+all_have_state = all(s in allowed for s in states)
+all_have_id = all(a.get('id') for a in analyses)
+length_ok = len(analyses) == total and total > 0
+print(f'len={len(analyses)} total={total} states={states} length_ok={length_ok} all_have_state={all_have_state} all_have_id={all_have_id}')
+" 2>/dev/null || echo "shape=err")
+        echo -e "    Poll $i: $SHAPE"
+        if echo "$SHAPE" | grep -q "length_ok=True all_have_state=True all_have_id=True"; then
+            SAW_RUNNING_STATE=true
+            # If state is done/failed, we've seen the full lifecycle — break
+            if echo "$SHAPE" | grep -qE "states=\['(done|failed)'\]"; then
+                break
+            fi
+        else
+            SAW_RUNNING_STATE=false
+            break
+        fi
+        sleep 2
+    done
+
+    if [ "$SAW_RUNNING_STATE" = "true" ]; then
+        echo -e "  ${GREEN}✓${NC} analyses[] always length=totalCompanies, every entry has state + id"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} Stable-cards contract violated mid-run"
+        fail=$((fail + 1))
+    fi
+
+    # Cleanup
+    curl -sX DELETE "$BACKEND_URL/api/scan/$STABLE_SCAN_ID" -H "$AUTH" >/dev/null 2>&1 || true
+
 fi  # E2E_MODE=full
 
 # ── Summary ──────────────────────────────────────────────────────

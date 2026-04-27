@@ -71,26 +71,59 @@ class DynamoDBScanRepository:
         """Delete the scan metadata item for the given ID."""
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
 
-    def link_company(self, scan_id: str, company_id: str, company_name: str) -> None:
-        """Create a scan→company association item."""
-        self._table.put_item(
-            {
-                "pk": f"SCAN#{scan_id}",
-                "sk": f"COMPANY#{company_id}",
-                "entity_type": "scan_company",
-                "company_id": company_id,
-                "company_name": company_name,
-            }
-        )
+    def link_company(
+        self,
+        scan_id: str,
+        company_id: str,
+        company_name: str,
+        *,
+        company_url: str | None = None,
+        order_index: int | None = None,
+    ) -> None:
+        """Create a scan→company association item.
+
+        ``company_url`` and ``order_index`` are persisted when provided so
+        the portfolio view can render every company card from t=0 in
+        submission order — even before a worker has created the
+        corresponding ``companies`` record. Reads tolerate their absence
+        on records written before this change shipped (see
+        ``get_scan_companies``).
+        """
+        item: dict[str, Any] = {
+            "pk": f"SCAN#{scan_id}",
+            "sk": f"COMPANY#{company_id}",
+            "entity_type": "scan_company",
+            "company_id": company_id,
+            "company_name": company_name,
+        }
+        if company_url is not None:
+            item["company_url"] = company_url
+        if order_index is not None:
+            item["order_index"] = order_index
+        self._table.put_item(item)
 
     def unlink_company(self, scan_id: str, company_id: str) -> None:
         """Delete a single scan→company association item."""
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk=f"COMPANY#{company_id}")
 
     def delete_all_company_links(self, scan_id: str) -> None:
-        """Delete all scan→company association items for the given scan."""
+        """Delete all scan→company association items for the given scan.
+
+        Trade-off: ``link_company`` always writes ``company_id``, so an
+        anomalous link record (direct DynamoDB write or data corruption)
+        is the only path to a missing field. We skip such records rather
+        than ``KeyError``-ing the entire batch — partial corruption
+        shouldn't block the rest of the cascade. This matches the read
+        guard in ``handle_scan_status`` for consistency. Strict
+        fail-fast would raise here; we accept the small drift to keep
+        the delete cascade resilient.
+        """
         links = self.get_scan_companies(scan_id)
-        keys = [{"pk": f"SCAN#{scan_id}", "sk": f"COMPANY#{link['company_id']}"} for link in links]
+        keys = [
+            {"pk": f"SCAN#{scan_id}", "sk": f"COMPANY#{link['company_id']}"}
+            for link in links
+            if link.get("company_id")
+        ]
         if keys:
             self._table.batch_delete(keys)
 
