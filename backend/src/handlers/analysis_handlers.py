@@ -137,6 +137,121 @@ def handle_delete_analysis(
     return build_json_response({"ok": True})
 
 
+def handle_bulk_delete_analyses(
+    event: dict[str, Any],
+    authentication: AuthContext,
+    storage: DynamoDBStorageProvider,
+) -> LambdaResponse:
+    """Handle POST /api/analyses/bulk-delete — delete N analyses in a single call.
+
+    Why this exists (race-immune cascade):
+        The single-delete endpoint cascades to the scan when the deleted
+        analysis was its last linked company. If the frontend issued N
+        parallel DELETEs for analyses on the same scan, each request's
+        "any companies remaining?" check could read state where the
+        OTHER requests' unlinks hadn't yet committed — so multiple
+        requests could each conclude "the scan still has links" and none
+        would delete it. Result: orphan scan with zero linked companies.
+
+        This handler accepts a list of analysis IDs, deletes them all
+        first, THEN inspects each affected scan exactly once. The
+        cascade decision is made on a consistent post-delete snapshot —
+        no race possible.
+
+    Body: ``{"ids": ["analysis-1", "analysis-2", ...]}``
+    Response: ``{"deleted": [...], "failed": [{id, reason}, ...],
+                  "deletedScans": [...]}``
+    """
+    raw_body = event.get("body") or "{}"
+    try:
+        body = json.loads(raw_body)
+    except json.JSONDecodeError as error:
+        return build_error(f"Invalid JSON: {error}", 400, VALIDATION_ERROR)
+
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+        return build_error("Body must include `ids: string[]`", 400, VALIDATION_ERROR)
+    if not ids:
+        return build_error("`ids` must not be empty", 400, VALIDATION_ERROR)
+
+    company_repo = storage.create_company_repository()
+    assessment_repo = storage.create_assessment_repository()
+    scan_repo = storage.create_scan_repository()
+
+    # Single BatchGetItem instead of N GetItem calls (CLAUDE.md
+    # DynamoDB pattern). The result preserves only IDs that exist; we
+    # build a lookup so the loop below can branch on missing/cross-org
+    # cases without re-querying.
+    fetched = company_repo.get_by_ids(ids)
+    company_by_id: dict[str, dict[str, Any]] = {
+        company["id"]: company for company in fetched if company.get("id")
+    }
+
+    deleted: list[str] = []
+    failed: list[dict[str, str]] = []
+    affected_scan_ids: set[str] = set()
+
+    for analysis_id in ids:
+        company = company_by_id.get(analysis_id)
+        if not company or company.get("org_id") != authentication.org_id:
+            # Org-mismatch and missing-record both surface as the same
+            # opaque "not found" — same posture as `check_org_access`.
+            # Bulk-delete continues with the rest of the batch.
+            failed.append({"id": analysis_id, "reason": "not_found"})
+            continue
+
+        # `assessment_repo.find_by_company` is a per-company GSI query;
+        # there's no batch equivalent today. The N queries are bounded by
+        # the user's selection size (typically 1-12) so this is
+        # acceptable for v1; revisit if bulk-delete starts handling
+        # hundreds of rows per call.
+        assessments = assessment_repo.find_by_company(analysis_id)
+        for assessment in assessments:
+            assessment_repo.delete(assessment["id"])
+        company_repo.delete(analysis_id)
+
+        scan_id = company.get("scan_id", "")
+        if scan_id:
+            scan_repo.unlink_company(scan_id, analysis_id)
+            affected_scan_ids.add(scan_id)
+
+        deleted.append(analysis_id)
+
+    # Cascade pass: now that every requested analysis is deleted (and
+    # every link is unlinked), each scan's `get_scan_companies` returns
+    # the post-delete truth. Single-pass = race-immune for the happy
+    # path. If a transient DynamoDB exception aborted the unlink loop
+    # mid-batch, `affected_scan_ids` only covers the analyses that
+    # succeeded so far, so a partial-orphan can briefly exist until the
+    # user retries — at which point the cascade fires correctly because
+    # the residual links from the failed half don't exist (they were
+    # never written). The `cleanup_orphan_scans.py` script catches any
+    # leftovers from before this fix landed.
+    deleted_scans: list[str] = []
+    for scan_id in affected_scan_ids:
+        if not scan_repo.get_scan_companies(scan_id):
+            scan_repo.delete(scan_id)
+            deleted_scans.append(scan_id)
+
+    logger.info(
+        "bulk_delete_analyses org_id=%s requested=%d deleted=%d failed=%d "
+        "scans_cascaded=%d",
+        authentication.org_id,
+        len(ids),
+        len(deleted),
+        len(failed),
+        len(deleted_scans),
+    )
+
+    return build_json_response(
+        {
+            "deleted": deleted,
+            "failed": failed,
+            "deletedScans": deleted_scans,
+        }
+    )
+
+
 def handle_list_analyses(
     event: dict[str, Any],
     authentication: AuthContext,
