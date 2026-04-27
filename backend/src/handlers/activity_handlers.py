@@ -99,6 +99,20 @@ def handle_get_activity(
     users = user_repo.find_by_org(org_id)
     invitations = invitation_repo.find_by_org(org_id)
 
+    # Observability: when an org maxes out the company page, recent
+    # `analysis_completed` events for companies beyond the page boundary
+    # are silently absent. A Logs Insights query on this field flags
+    # affected orgs before users notice. (Architecture-review §5
+    # finding #2 — fix at events-table migration time.)
+    if len(companies) >= _MAX_EVENTS:
+        logger.warning(
+            "activity_feed.company_page_capped org_id=%s limit=%d "
+            "— analysis_completed events for companies beyond the GSI page "
+            "boundary are not projected; consider events-table migration",
+            org_id,
+            _MAX_EVENTS,
+        )
+
     actor_names = {user["id"]: user.get("name") or user.get("email", "") for user in users}
 
     events: list[dict[str, Any]] = []

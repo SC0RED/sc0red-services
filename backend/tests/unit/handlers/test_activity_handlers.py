@@ -207,6 +207,46 @@ def test_response_is_capped_at_100_events() -> None:
     assert len(body["events"]) == 100
 
 
+def test_logs_warning_when_company_page_is_capped(caplog) -> None:
+    """Cap-hit observability — a Logs Insights query on this warning flags
+    orgs that may be silently missing recent `analysis_completed` events.
+
+    Architecture-review #2 mitigation: a one-line log gives us a way to
+    detect the silent-truncation regression class before the events-table
+    migration replaces read-time projection.
+    """
+    import logging as _logging
+
+    companies = [
+        {"id": f"company-{index}", "company_name": f"Co {index}", "analyzed_at": "2026-04-26T00:00:00Z"}
+        for index in range(100)  # exactly _MAX_EVENTS — boundary triggers the warning
+    ]
+    storage = _make_storage(companies=companies)
+    with caplog.at_level(_logging.WARNING, logger="src.handlers.activity_handlers"):
+        handle_get_activity({}, _auth(org_id="org-at-cap"), storage)
+
+    cap_warnings = [r for r in caplog.records if "company_page_capped" in r.getMessage()]
+    assert len(cap_warnings) == 1
+    assert "org-at-cap" in cap_warnings[0].getMessage()
+
+
+def test_does_not_log_warning_below_cap(caplog) -> None:
+    """The cap-hit log is rate-limited to actual cap hits — no log when
+    the page returns fewer than `_MAX_EVENTS` companies."""
+    import logging as _logging
+
+    storage = _make_storage(
+        companies=[
+            {"id": "c-1", "company_name": "C", "analyzed_at": "2026-04-26T00:00:00Z"}
+        ],
+    )
+    with caplog.at_level(_logging.WARNING, logger="src.handlers.activity_handlers"):
+        handle_get_activity({}, _auth(), storage)
+
+    cap_warnings = [r for r in caplog.records if "company_page_capped" in r.getMessage()]
+    assert cap_warnings == []
+
+
 # ── org isolation ─────────────────────────────────────────────────────
 
 
