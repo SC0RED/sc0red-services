@@ -142,25 +142,17 @@ def handle_bulk_delete_analyses(
     authentication: AuthContext,
     storage: DynamoDBStorageProvider,
 ) -> LambdaResponse:
-    """Handle POST /api/analyses/bulk-delete — delete N analyses in a single call.
+    """Handle POST /api/analyses/bulk-delete — delete N analyses in one call.
 
-    Why this exists (race-immune cascade):
-        The single-delete endpoint cascades to the scan when the deleted
-        analysis was its last linked company. If the frontend issued N
-        parallel DELETEs for analyses on the same scan, each request's
-        "any companies remaining?" check could read state where the
-        OTHER requests' unlinks hadn't yet committed — so multiple
-        requests could each conclude "the scan still has links" and none
-        would delete it. Result: orphan scan with zero linked companies.
+    Race-immune cascade: the single-delete endpoint cascades to the scan
+    when the deleted analysis was its last linked company, but parallel
+    DELETEs on the same scan can each read the post-unlink state before
+    peers' writes commit and ALL conclude "links remain" — leaving an
+    orphan scan. This handler unlinks every analysis first, then makes
+    the cascade decision over each affected scan in a single post-delete
+    pass. One handler run = no race.
 
-        This handler accepts a list of analysis IDs, deletes them all
-        first, THEN inspects each affected scan exactly once. The
-        cascade decision is made on a consistent post-delete snapshot —
-        no race possible.
-
-    Body: ``{"ids": ["analysis-1", "analysis-2", ...]}``
-    Response: ``{"deleted": [...], "failed": [{id, reason}, ...],
-                  "deletedScans": [...]}``
+    Body: ``{"ids": [...]}``. Response: ``{"deleted", "failed", "deletedScans"}``.
     """
     raw_body = event.get("body") or "{}"
     try:
@@ -217,16 +209,11 @@ def handle_bulk_delete_analyses(
 
         deleted.append(analysis_id)
 
-    # Cascade pass: now that every requested analysis is deleted (and
-    # every link is unlinked), each scan's `get_scan_companies` returns
-    # the post-delete truth. Single-pass = race-immune for the happy
-    # path. If a transient DynamoDB exception aborted the unlink loop
-    # mid-batch, `affected_scan_ids` only covers the analyses that
-    # succeeded so far, so a partial-orphan can briefly exist until the
-    # user retries — at which point the cascade fires correctly because
-    # the residual links from the failed half don't exist (they were
-    # never written). The `cleanup_orphan_scans.py` script catches any
-    # leftovers from before this fix landed.
+    # Cascade pass: every requested analysis is unlinked, so each scan's
+    # `get_scan_companies` now returns the post-delete truth. Race-immune
+    # in the happy path. A transient exception mid-loop would leave a
+    # partial orphan that the next retry resolves; `cleanup_orphan_scans.py`
+    # is the catch-all for pre-fix orphans.
     deleted_scans: list[str] = []
     for scan_id in affected_scan_ids:
         if not scan_repo.get_scan_companies(scan_id):
@@ -234,8 +221,7 @@ def handle_bulk_delete_analyses(
             deleted_scans.append(scan_id)
 
     logger.info(
-        "bulk_delete_analyses org_id=%s requested=%d deleted=%d failed=%d "
-        "scans_cascaded=%d",
+        "bulk_delete_analyses org_id=%s requested=%d deleted=%d failed=%d scans_cascaded=%d",
         authentication.org_id,
         len(ids),
         len(deleted),
