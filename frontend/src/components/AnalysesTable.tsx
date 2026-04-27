@@ -30,6 +30,16 @@ export default function AnalysesTable({ analyses: initialAnalyses }: AnalysesTab
     // round-trip. After a successful commit `useBulkDeleteAnalyses` calls
     // `router.refresh()` so a subsequent navigation re-flows authoritative
     // server data.
+    //
+    // KNOWN: if the parent server component re-renders during the 5s undo
+    // window from a cause OTHER than this hook's `router.refresh()` (e.g.,
+    // a parallel re-analyze that also calls refresh), the sync effect
+    // below restores the optimistic-removed rows visually for ~16ms before
+    // the commit completes and re-removes them. In today's architecture
+    // the parent only re-renders via router.refresh, and the only call
+    // site for that is from this hook itself — so the race isn't currently
+    // triggerable. Tracked for the future when more surfaces add refresh-
+    // emitting actions. (Self-review minor #1 on PR #196.)
     const [analyses, setAnalyses] = useState<AnalysisItem[]>(initialAnalyses)
     useEffect(() => {
         setAnalyses(initialAnalyses)

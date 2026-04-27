@@ -306,6 +306,19 @@ describe('AnalysesTable', () => {
             expect(screen.queryByRole('link', { name: /compare/i })).not.toBeInTheDocument()
         })
 
+        it('shift-click without a prior anchor falls through to a normal toggle', () => {
+            // Self-review minor #5 on PR #196: explicit coverage for the
+            // no-anchor branch in `toggleSelectionAt`. Without a prior
+            // toggle the shift-click should act like a regular click on
+            // that row and set the anchor going forward.
+            render(<AnalysesTable analyses={mockAnalyses} />)
+            // Shift-click the very first interaction.
+            fireEvent.click(getRowCheckbox('Acme Corp'), { shiftKey: true })
+
+            const bar = screen.getByRole('region', { name: /bulk actions/i })
+            expect(within(bar).getByText('1 selected')).toBeInTheDocument()
+        })
+
         it('shift-click selects the range between the anchor and the clicked row', () => {
             render(<AnalysesTable analyses={mockAnalyses} />)
             // Default sort is analyzedAt desc → Beta Inc (newest), Acme Corp,

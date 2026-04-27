@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 
-import { useMobileMenu } from '@/lib/hooks/useMobileMenu'
+import ActivityPanel from '@/components/ActivityPanel'
 import navItems from '@/components/sidebar/navItems'
+import { useMobileMenu } from '@/lib/hooks/useMobileMenu'
 
 export default function DashboardSidebar() {
     const pathname = usePathname()
@@ -187,6 +188,13 @@ export default function DashboardSidebar() {
                             </svg>
                             New Scan
                         </Link>
+                    </div>
+
+                    {/* Activity feed bell + popover. Polls /api/activity
+                        every 30s (managed inside the component) and
+                        opens above the layout. (Tier 2 §5.) */}
+                    <div style={{ marginTop: '0.75rem' }}>
+                        <ActivityPanel />
                     </div>
                 </nav>
 

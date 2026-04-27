@@ -160,6 +160,18 @@ class TestAPIGatewayHandler:
         org_repo.create.assert_called_once()
         user_repo.create.assert_called_once()
 
+        # Pin the `created_at` write that the activity-feed projection
+        # (Tier 2 §5) relies on for `member_joined` events. If a future
+        # refactor drops this field, member_joined silently stops
+        # appearing for new signups — covered here so the regression
+        # surfaces as a test failure, not a behaviour gap.
+        user_record = user_repo.create.call_args[0][0]
+        assert "created_at" in user_record
+        assert user_record["created_at"]
+        # The value parses as ISO 8601 (datetime.now(UTC).isoformat()).
+        from datetime import datetime as _datetime
+        _datetime.fromisoformat(user_record["created_at"])
+
     @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
     @patch("src.handlers.auth_handlers.CognitoClient")
     def test_register_cognito_password_error(self, mock_cognito_cls):
