@@ -104,6 +104,7 @@ class APIGatewayHandler:
         self._router = self._build_router()
 
     def _build_router(self) -> Router:
+        from src.handlers.activity_handlers import handle_get_activity
         from src.handlers.analysis_handlers import (
             handle_dashboard,
             handle_delete_analysis,
@@ -290,6 +291,13 @@ class APIGatewayHandler:
             "POST",
             "/api/analytics/events",
             handle_post_analytics_event,
+        )
+
+        # ── Activity feed ────────────────────────────────────────────────────
+        router.protected(
+            "GET",
+            "/api/activity",
+            lambda event, authentication: handle_get_activity(event, authentication, self._storage),
         )
 
         return router

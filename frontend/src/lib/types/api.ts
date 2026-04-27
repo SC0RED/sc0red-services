@@ -158,3 +158,40 @@ export interface DashboardData {
     recentAnalyses: AnalysisItem[]
     recentScans: ScanItem[]
 }
+
+/**
+ * Org-level event surfaced in the activity panel.
+ *
+ * Server-projected from existing DynamoDB records — see
+ * `backend/src/handlers/activity_handlers.py` for the source-of-truth
+ * mapping. Each event is identified by a deterministic `id`
+ * (`{type}:{source-record-id}`) so the frontend can dedupe across poll
+ * cycles without server help.
+ */
+export type ActivityEventType = 'scan_started' | 'analysis_completed' | 'member_invited' | 'member_joined'
+
+export interface ActivityActor {
+    id: string
+    name: string
+}
+
+export interface ActivityTarget {
+    id: string
+    name: string
+    /** Logical category — `scan` | `analysis` | `invitation` | `user`. */
+    type: string
+}
+
+export interface ActivityEvent {
+    id: string
+    type: ActivityEventType
+    actor: ActivityActor
+    target: ActivityTarget
+    /** ISO 8601 timestamp; consumed by `<RelativeTime>`. */
+    timestamp: string
+    summary: string
+}
+
+export interface ActivityEventsResponse {
+    events: ActivityEvent[]
+}

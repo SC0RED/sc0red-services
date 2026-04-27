@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.handlers.api_gateway_handler import (
@@ -80,6 +81,12 @@ def handle_register(event: dict[str, Any], storage: DynamoDBStorageProvider) -> 
             "name": name,
             "role": "admin",
             "cognito_sub": cognito_sub,
+            # `created_at` is the user's join timestamp — used by the
+            # activity-feed projection (`webapp-ux-foundations-tier2` §5)
+            # to emit a `member_joined` event. Existing users created
+            # before this field was added simply won't show up as a join
+            # event; new signups will.
+            "created_at": datetime.now(UTC).isoformat(),
         }
     )
 

@@ -51,14 +51,21 @@
 
 ## 5. Activity feed
 
-- [ ] 5.1 Backend: new handler `handle_get_activity` in a new `backend/src/handlers/activity_handlers.py`. Projects events from existing DynamoDB records (scan creates/completes/deletes, analysis completes/failed/deletes, member invites/joins). Cursor-paginated.
-- [ ] 5.2 Backend: design event DTO shape (`type`, `actor: {id, name}`, `target: {id, name, type}`, `timestamp`, `summary`). Document in `docs/api/` or in the handler docstring.
-- [ ] 5.3 Backend: register `GET /api/activity` in the API gateway router. Org-scoped (only events for the user's org).
-- [ ] 5.4 Backend pytest: project covers each event type; org isolation; cursor pagination edge cases; handles missing records (e.g., event references deleted target).
-- [ ] 5.5 Frontend: `<ActivityPanel />` component — bell icon in sidebar with unread badge, opens to a list of recent events. Polls `/api/activity` every 30 seconds while open.
-- [ ] 5.6 Frontend: each event row renders actor name + action verb + target link + relative timestamp (uses `<RelativeTime>` from §4).
-- [ ] 5.7 Frontend: "last viewed" timestamp persisted to localStorage; unread count = events with timestamp > last_viewed.
-- [ ] 5.8 Vitest: panel renders events, unread badge reflects count, opening clears badge, polling re-fetches at interval.
+- [x] 5.1 Backend: new handler `handle_get_activity` in a new `backend/src/handlers/activity_handlers.py`. Projects events from existing DynamoDB records (scan creates/completes/deletes, analysis completes/failed/deletes, member invites/joins). Cursor-paginated. — Read-time projection from existing records (scans / companies / users / invitations) with no new events table per design D6. Hard-cap at 100 events; cursor pagination deferred until volumes justify it (also noted in the handler docstring as a future-iteration task).
+- [x] 5.2 Backend: design event DTO shape (`type`, `actor: {id, name}`, `target: {id, name, type}`, `timestamp`, `summary`). Document in `docs/api/` or in the handler docstring. — Documented in the handler module docstring with the four event-type literals (`scan_started`, `analysis_completed`, `member_invited`, `member_joined`) and an inline note for the omitted ones (`scan_completed`/`failed` — no completion timestamp on scan records; `*_deleted` — no DynamoDB tombstones).
+- [x] 5.3 Backend: register `GET /api/activity` in the API gateway router. Org-scoped (only events for the user's org). — Wired via `router.protected("GET", "/api/activity", ...)`; every repo call uses `authentication.org_id` from the JWT, never anything from the request.
+- [x] 5.4 Backend pytest: project covers each event type; org isolation; cursor pagination edge cases; handles missing records (e.g., event references deleted target). — 13 tests in `test_activity_handlers.py` covering each event type, sort-newest-first, the 100-event cap, org-id passthrough on every repo call, legacy users without `created_at` (skipped), scans without `created_by` (fallback to "Someone"), and the full mixed-event scenario. Plus a backend-wide regression check: `auth_handlers.py` now stamps `created_at` on user creation so `member_joined` projections can fire.
+- [x] 5.5 Frontend: `<ActivityPanel />` component — bell icon in sidebar with unread badge, opens to a list of recent events. Polls `/api/activity` every 30 seconds while open. — Polling runs continuously (always-on at 30s) so the badge stays current even when closed. Mounted in the sidebar nav, above the user footer. Always-mounted DOM with `data-state` toggle so screen-reader announcements aren't cut off mid-sentence by an unmount (same pattern as §2 `HelpTooltip`).
+- [x] 5.6 Frontend: each event row renders actor name + action verb + target link + relative timestamp (uses `<RelativeTime>` from §4). — Each row is a `<Link>` to the relevant page (`/portfolio/{id}` for scans, `/analysis/{id}` for analyses, `/team` for member events). `<RelativeTime>` renders the timestamp consistently with the rest of the app.
+- [x] 5.7 Frontend: "last viewed" timestamp persisted to localStorage; unread count = events with timestamp > last_viewed. — Stored at `janus-activity-last-viewed`; opens the panel updates it to NOW; unread count caps visually at "99+". Falls back to in-memory state when localStorage is unavailable (private mode, quota errors).
+- [x] 5.8 Vitest: panel renders events, unread badge reflects count, opening clears badge, polling re-fetches at interval. — 16 ActivityPanel tests + 6 useActivityPolling tests + 3 proxy-route tests = 25 new frontend tests. Polling-hook coverage includes a race-safety test (slow request that resolves AFTER a faster one is correctly discarded via a generation counter).
+
+> **Scope note**: deletes (`scan_deleted` / `analysis_deleted`) and the
+> "scan completed at" event are deferred. Without DynamoDB tombstones a
+> deleted record can't be projected; without a `completed_at` field on
+> scan records, the completion timestamp would be inaccurate. Both are
+> tracked for the future events-table migration when projection cost
+> drives that change.
 
 ## 6. Quality gates
 
