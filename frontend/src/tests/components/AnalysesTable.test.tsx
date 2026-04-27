@@ -431,9 +431,19 @@ describe('AnalysesTable', () => {
                 vi.useRealTimers()
             })
 
-            it('fires DELETE for every selected id once the window expires', async () => {
+            // Helper: build an OK Response for the bulk-delete endpoint
+            // with explicit deleted/failed lists.
+            function bulkOk(deleted: string[], failed: { id: string; reason: string }[] = []): Response {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ deleted, failed, deletedScans: [] }),
+                } as Response
+            }
+
+            it('fires a single bulk POST after the window expires', async () => {
                 vi.useFakeTimers()
-                const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response)
+                const fetchMock = vi.fn().mockResolvedValue(bulkOk(['1', '2']))
                 global.fetch = fetchMock as unknown as typeof fetch
 
                 render(<AnalysesTable analyses={mockAnalyses} />)
@@ -443,20 +453,20 @@ describe('AnalysesTable', () => {
 
                 await vi.advanceTimersByTimeAsync(5001)
 
-                expect(fetchMock).toHaveBeenCalledTimes(2)
-                expect(fetchMock).toHaveBeenCalledWith(
-                    '/api/analysis/1',
-                    expect.objectContaining({ method: 'DELETE' })
-                )
-                expect(fetchMock).toHaveBeenCalledWith(
-                    '/api/analysis/2',
-                    expect.objectContaining({ method: 'DELETE' })
-                )
+                // ONE bulk request, not N parallel single-deletes. The
+                // backend handler does a single race-immune cascade pass.
+                expect(fetchMock).toHaveBeenCalledTimes(1)
+                const [url, init] = fetchMock.mock.calls[0]
+                expect(url).toBe('/api/analyses/bulk-delete')
+                expect((init as RequestInit).method).toBe('POST')
+                expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+                    ids: ['1', '2'],
+                })
             })
 
-            it('Undo cancels the commit — no DELETE fires', async () => {
+            it('Undo cancels the commit — no bulk POST fires', async () => {
                 vi.useFakeTimers()
-                const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response)
+                const fetchMock = vi.fn().mockResolvedValue(bulkOk(['1']))
                 global.fetch = fetchMock as unknown as typeof fetch
 
                 render(<AnalysesTable analyses={mockAnalyses} />)
@@ -473,10 +483,7 @@ describe('AnalysesTable', () => {
             it('partial failure: only the failed rows reappear, error toast surfaces', async () => {
                 vi.useFakeTimers()
                 // Acme (id 1) fails; Beta (id 2) succeeds.
-                const fetchMock = vi.fn((url: RequestInfo | URL) => {
-                    const ok = String(url).endsWith('/api/analysis/2')
-                    return Promise.resolve({ ok } as Response)
-                })
+                const fetchMock = vi.fn().mockResolvedValue(bulkOk(['2'], [{ id: '1', reason: 'not_found' }]))
                 global.fetch = fetchMock as unknown as typeof fetch
 
                 render(<AnalysesTable analyses={mockAnalyses} />)
@@ -509,22 +516,30 @@ describe('AnalysesTable', () => {
                 expect(screen.getByText(/Network error deleting 2 analyses — restored/)).toBeInTheDocument()
             })
 
-            it('rapid double-click of Delete N fires DELETEs only once (re-entry guard)', async () => {
+            it('full failure (5xx): all rows restored, error toast surfaces', async () => {
+                vi.useFakeTimers()
+                const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 } as Response)
+                global.fetch = fetchMock as unknown as typeof fetch
+
+                render(<AnalysesTable analyses={mockAnalyses} />)
+                fireEvent.click(getRowCheckbox('Acme Corp'))
+                fireEvent.click(getRowCheckbox('Beta Inc'))
+                fireEvent.click(screen.getByRole('button', { name: /delete 2 selected analyses/i }))
+
+                await vi.advanceTimersByTimeAsync(5001)
+
+                expect(screen.getByText('Acme Corp')).toBeInTheDocument()
+                expect(screen.getByText('Beta Inc')).toBeInTheDocument()
+                expect(screen.getByText(/Network error deleting 2 analyses — restored/)).toBeInTheDocument()
+            })
+
+            it('rapid double-click of Delete N fires the bulk POST only once (re-entry guard)', async () => {
                 // Regression guard against the architecture-review CRITICAL
                 // finding: without a `deleting` flag, two rapid Delete
                 // clicks would both fire `onCommit` independently, racing
                 // on setRows and producing duplicate restored rows on Undo.
-                //
-                // In practice the UI bar self-unmounts on the first click
-                // (selection clears → count=0 → bar returns null), so a
-                // second click can't reach the same button. This test
-                // verifies the *hook's* guard separately by triggering the
-                // first click, capturing the button reference (now stale
-                // post-unmount), and re-firing on it. The guard inside
-                // `useBulkDeleteAnalyses` returns early; only one set of
-                // DELETEs lands.
                 vi.useFakeTimers()
-                const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response)
+                const fetchMock = vi.fn().mockResolvedValue(bulkOk(['1', '2']))
                 global.fetch = fetchMock as unknown as typeof fetch
 
                 render(<AnalysesTable analyses={mockAnalyses} />)
@@ -535,17 +550,12 @@ describe('AnalysesTable', () => {
                     name: /delete 2 selected analyses/i,
                 })
                 fireEvent.click(deleteButton)
-                // Second click is on the now-detached node — represents a
-                // queued event from a fast keypress / double-tap. Without
-                // the hook's `if (deleting) return` guard this would
-                // double-fire. (The detached node still has its handlers
-                // attached, so React dispatches the click.)
                 fireEvent.click(deleteButton)
 
                 await vi.advanceTimersByTimeAsync(5001)
 
-                // Exactly 2 DELETEs (one per row), not 4.
-                expect(fetchMock).toHaveBeenCalledTimes(2)
+                // Exactly one bulk POST, not two.
+                expect(fetchMock).toHaveBeenCalledTimes(1)
             })
         })
     })
