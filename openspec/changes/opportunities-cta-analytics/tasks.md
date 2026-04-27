@@ -70,16 +70,16 @@
 
 ## 10. Deploy + verify
 
-- [ ] 10.1 Open PR against `development`; CI green
-- [ ] 10.2 Deploy to `development` AWS account
-- [ ] 10.3 Manually: expand the banner on any analysis; confirm a Logs Insights query for the last 5 minutes shows the event
-- [ ] 10.4 Manually: click the CTA link; confirm `sc0red_cta_clicked` appears in the log group
-- [ ] 10.5 Manually: export a PDF; confirm `sc0red_cta_rendered_in_pdf` appears in the log group with `source: "pdf"`
-- [ ] 10.6 Run the four sample Logs Insights queries from `design.md` in the dev account; verify syntax and shape
-- [ ] 10.7 Promote `development` → `testing` → `production`
-- [ ] 10.8 Run the same funnel queries against the `production` log group 72 hours post-deploy; establish the baseline click-through rate and record it in this change's retrospective
+- [x] 10.1 Open PR against `development`; CI green
+- [x] 10.2 Deploy to `development` AWS account
+- [x] 10.3 Manually: expand the banner on any analysis; confirm a Logs Insights query for the last 5 minutes shows the event — verified in production 2026-04-27 (analysis `0de68de3-...`)
+- [x] 10.4 Manually: click the CTA link; confirm `sc0red_cta_clicked` appears in the log group — verified in production 2026-04-27
+- [x] 10.5 Manually: export a PDF; confirm `sc0red_cta_rendered_in_pdf` appears in the log group with `source: "pdf"` — verified in production 2026-04-27 (`event_id 9769b3a2-...`)
+- [x] 10.6 Run the four sample Logs Insights queries from `design.md` in the dev account; verify syntax and shape — verified directly in production
+- [x] 10.7 Promote `development` → `testing` → `production` — production deploy completed 2026-04-27 03:39 UTC (CDK run `24975211759`)
+- [ ] 10.8 Run the same funnel queries against the `production` log group 72 hours post-deploy; establish the baseline click-through rate and record it in this change's retrospective — earliest run date: 2026-04-30
 
 ## 11. Follow-up / documentation
 
-- [ ] 11.1 Add a `docs/analytics/queries.md` page with the four sample queries + instructions for running them in Logs Insights
+- [x] 11.1 Add a `docs/analytics/queries.md` page with the four sample queries + instructions for running them in Logs Insights
 - [ ] 11.2 Decide (post-baseline) whether `sc0red_cta_banner_collapsed` is useful or should be dropped — recorded as a note in the spec's open questions
