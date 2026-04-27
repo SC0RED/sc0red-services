@@ -1,4 +1,4 @@
-"""Find + optionally delete orphan scans (scans with zero linked companies).
+"""Find + optionally delete orphan scans.
 
 Why this exists:
     Before the bulk-delete-cascade-race fix landed, the frontend's bulk
@@ -51,6 +51,7 @@ import argparse
 import logging
 import os
 import sys
+from datetime import UTC, datetime
 from typing import Any
 
 # Mirror the sqs_worker.py path-insert so `from src.…` resolves when run
@@ -66,13 +67,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _scan_age_hours(scan: dict[str, Any]) -> float:
+    """Hours since `created_at`. Returns infinity for records missing the field.
+
+    Pre-`created_at` legacy records always count as "old" — they're
+    definitely not in-flight today. The infinity sentinel makes the
+    `--min-age-hours` filter naturally pass them through.
+    """
+    created_at = scan.get("created_at")
+    if not created_at:
+        return float("inf")
+    try:
+        ts = datetime.fromisoformat(created_at)
+    except (ValueError, TypeError):
+        return float("inf")
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - ts).total_seconds() / 3600.0
+
+
 def find_orphan_scans(
     storage: DynamoDBStorageProvider,
     org_id: str,
+    *,
+    include_unanalyzed: bool = False,
+    min_age_hours: float = 0,
 ) -> list[dict[str, Any]]:
-    """Return every scan whose linked companies no longer exist.
+    """Return every scan that should be cleaned up.
 
-    Two orphan flavours are detected:
+    Three orphan flavours are detected:
 
     1. **No-links orphans** — scan record exists but `get_scan_companies`
        returns []. These are the canonical bulk-delete-cascade-race
@@ -80,12 +103,22 @@ def find_orphan_scans(
 
     2. **Stale-links orphans** — `get_scan_companies` returns N link
        items, but every linked `company_id` resolves to a missing
-       company record. This happens when a code path deleted the
-       company entity but never called `unlink_company` (legacy data
-       corruption, or pre-fix delete paths that skipped the unlink).
-       Functionally equivalent to a no-links orphan — the dashboard
-       still displays the scan and View Portfolio loads empty — but
-       the prior cleanup logic missed them.
+       company record. The companies got deleted but the scan and
+       link records persisted (legacy data corruption, or pre-fix
+       delete paths).
+
+    3. **Unanalyzed orphans** (only when ``include_unanalyzed=True``) —
+       scan + linked companies all exist, but every company has no
+       `overall_risk_score` (analysis never produced a result).
+       Functionally a "ghost scan" — appears in Recent Scans + Activity
+       feed but has no value. CAUTION: this also matches a freshly-
+       started scan, so this flag MUST be combined with
+       ``min_age_hours`` in production to avoid killing in-flight
+       work. The CLI flag pairing is enforced by `main()`.
+
+    The ``min_age_hours`` filter applies to every flavour. Records
+    without a parseable `created_at` are treated as infinitely old
+    (pre-field legacy data is definitely not in-flight today).
 
     Requiring an org filter is intentional — without one the function
     would have to fall back to a table scan (no global index for
@@ -104,32 +137,49 @@ def find_orphan_scans(
             logger.warning("scan record without id, skipping: %r", scan)
             continue
 
+        if _scan_age_hours(scan) < min_age_hours:
+            # Too young — skip even if it would otherwise match. Protects
+            # in-flight scans from being wiped out by an over-eager
+            # `--include-unanalyzed` run.
+            continue
+
         links = scan_repo.get_scan_companies(scan_id)
         if not links:
             scan["_orphan_kind"] = "no_links"
             orphans.append(scan)
             continue
 
-        # Stale-links case: links exist, but do the companies they point
-        # at? Use BatchGetItem (CLAUDE.md DynamoDB pattern) to resolve in
-        # one call. If every linked company is gone, treat as orphan.
+        # Resolve linked companies in one BatchGetItem (CLAUDE.md pattern).
         link_company_ids = [link["company_id"] for link in links if link.get("company_id")]
         if not link_company_ids:
-            # Defensive: links exist but none have a company_id field —
-            # shouldn't happen with current writes, but if it does the
-            # links are useless. Treat as no-links orphan.
             scan["_orphan_kind"] = "no_links"
             orphans.append(scan)
             continue
 
         existing_companies = company_repo.get_by_ids(link_company_ids)
-        existing_ids = {company["id"] for company in existing_companies if company.get("id")}
-        missing = [cid for cid in link_company_ids if cid not in existing_ids]
-        if len(missing) == len(link_company_ids):
-            # All linked companies are gone — orphan.
+        existing_by_id = {
+            company["id"]: company for company in existing_companies if company.get("id")
+        }
+        missing_count = sum(1 for cid in link_company_ids if cid not in existing_by_id)
+
+        if missing_count == len(link_company_ids):
+            # All linked companies are gone — stale-links orphan.
             scan["_orphan_kind"] = "stale_links"
-            scan["_stale_link_count"] = len(missing)
+            scan["_stale_link_count"] = missing_count
             orphans.append(scan)
+            continue
+
+        if include_unanalyzed:
+            # Every company exists; check whether any have produced a
+            # risk score. Zero analyzed = unanalyzed orphan.
+            analyzed = sum(
+                1 for c in existing_by_id.values() if c.get("overall_risk_score") is not None
+            )
+            if analyzed == 0:
+                scan["_orphan_kind"] = "unanalyzed"
+                scan["_link_count"] = len(link_company_ids)
+                scan["_status"] = scan.get("status", "?")
+                orphans.append(scan)
 
     return orphans
 
@@ -140,6 +190,10 @@ def report_orphan(scan: dict[str, Any]) -> None:
     suffix = ""
     if kind == "stale_links":
         suffix = f"  (stale_links={scan.get('_stale_link_count', 0)})"
+    elif kind == "unanalyzed":
+        suffix = (
+            f"  (status={scan.get('_status', '?')}, links={scan.get('_link_count', 0)}, analyzed=0)"
+        )
     print(
         f"{scan.get('id', '?'):40s}  "
         f"{scan.get('created_at', '?'):28s}  "
@@ -173,10 +227,44 @@ def main() -> int:
         action="store_true",
         help="Actually delete orphan scans. Default: dry-run.",
     )
+    parser.add_argument(
+        "--include-unanalyzed",
+        action="store_true",
+        help=(
+            "Also flag scans whose linked companies all exist but none "
+            "have been analyzed (no overall_risk_score). Useful for "
+            "abandoned/stuck scans whose analysis pipeline never "
+            "produced a result. CAUTION: a freshly-started scan also "
+            "matches this — combine with --min-age-hours in production "
+            "to avoid killing in-flight work."
+        ),
+    )
+    parser.add_argument(
+        "--min-age-hours",
+        type=float,
+        default=0,
+        help=(
+            "Only flag scans whose created_at is older than this many "
+            "hours. Records without a parseable created_at always pass "
+            "(legacy data). Default 0 (no age filter). Recommended >=24 "
+            "when --include-unanalyzed is on."
+        ),
+    )
     args = parser.parse_args()
 
+    if args.include_unanalyzed and args.min_age_hours == 0:
+        logger.warning(
+            "--include-unanalyzed without --min-age-hours will also flag in-flight "
+            "scans. Set --min-age-hours >=24 in production environments."
+        )
+
     storage = DynamoDBStorageProvider()
-    orphans = find_orphan_scans(storage, args.org_id)
+    orphans = find_orphan_scans(
+        storage,
+        args.org_id,
+        include_unanalyzed=args.include_unanalyzed,
+        min_age_hours=args.min_age_hours,
+    )
 
     if not orphans:
         print(f"No orphan scans found for org {args.org_id}.")
