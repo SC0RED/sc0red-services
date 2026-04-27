@@ -3,67 +3,72 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-export default function DeleteScanButton({ scanId }: { scanId: string }) {
-    const router = useRouter()
-    const [confirming, setConfirming] = useState(false)
-    const [deleting, setDeleting] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+import { useToast } from '@/components/ui'
 
-    async function handleDelete() {
-        setError(null)
-        setDeleting(true)
-        try {
-            const response = await fetch(`/api/scan/${scanId}`, { method: 'DELETE' })
-            if (!response.ok) {
-                setError('Delete failed. Please try again.')
-                return
-            }
-            router.refresh()
-        } catch {
-            setError('Network error. Please try again.')
-        } finally {
-            setDeleting(false)
-            setConfirming(false)
+/**
+ * Delete a scan with a 5-second Undo window via toast. Same deferred-
+ * commit pattern as `DeleteAnalysisButton`. The cascade message is
+ * explicit about what's being deleted ("scan + N analyses") so the
+ * user can recognize the scope of the action before the window closes.
+ */
+export default function DeleteScanButton({
+    scanId,
+    companyCount,
+}: {
+    scanId: string
+    /** Number of analyses that will be deleted with the scan. */
+    companyCount?: number
+}) {
+    const router = useRouter()
+    const toast = useToast()
+    const [deleting, setDeleting] = useState(false)
+
+    function buildMessage(): string {
+        if (typeof companyCount === 'number' && companyCount > 0) {
+            const noun = companyCount === 1 ? 'analysis' : 'analyses'
+            return `Deleted scan + ${companyCount} ${noun}`
         }
+        return 'Deleted scan'
     }
 
-    if (confirming) {
-        return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="btn btn-sm"
-                    style={{
-                        background: 'var(--risk-critical)',
-                        color: '#fff',
-                        border: 'none',
-                        fontSize: '0.75rem',
-                        padding: '0.25rem 0.625rem',
-                        opacity: deleting ? 0.6 : 1,
-                    }}
-                >
-                    {deleting ? 'Deleting...' : 'Delete'}
-                </button>
-                <button
-                    onClick={() => setConfirming(false)}
-                    disabled={deleting}
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}
-                >
-                    Cancel
-                </button>
-                {error && <span style={{ fontSize: '0.75rem', color: 'var(--risk-critical)' }}>{error}</span>}
-            </div>
-        )
+    function handleDeleteClick() {
+        if (deleting) return
+        setDeleting(true)
+        toast.undo({
+            message: buildMessage(),
+            onCommit: async () => {
+                try {
+                    const response = await fetch(`/api/scan/${scanId}`, { method: 'DELETE' })
+                    if (!response.ok) {
+                        toast.error('Failed to delete scan')
+                        setDeleting(false)
+                        return
+                    }
+                    router.refresh()
+                } catch {
+                    toast.error('Network error deleting scan')
+                    setDeleting(false)
+                }
+            },
+            onUndo: () => {
+                setDeleting(false)
+            },
+        })
     }
 
     return (
         <button
-            onClick={() => setConfirming(true)}
+            onClick={handleDeleteClick}
+            disabled={deleting}
             className="btn btn-ghost btn-sm"
-            title="Delete scan"
-            style={{ color: 'var(--text-tertiary)', padding: '0.25rem 0.5rem' }}
+            title={deleting ? 'Deleting...' : 'Delete scan'}
+            aria-label="Delete scan"
+            style={{
+                color: 'var(--text-tertiary)',
+                padding: '0.25rem 0.5rem',
+                opacity: deleting ? 0.5 : 1,
+                cursor: deleting ? 'not-allowed' : 'pointer',
+            }}
         >
             <svg
                 width="14"

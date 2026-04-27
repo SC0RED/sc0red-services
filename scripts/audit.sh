@@ -89,19 +89,19 @@ fi
 # ── Infrastructure defaults ──────────────────────────────────────────────────
 section "Infrastructure security guards"
 
-if grep -q "raise ValueError" infrastructure/stacks/janus_stack.py 2>/dev/null; then
+if grep -rq "raise ValueError" infrastructure/stacks/ 2>/dev/null; then
     pass "CDK stack has fail-fast guards for non-dev deployments"
 else
     fail "CDK stack missing fail-fast guards for CORS/NEXTAUTH_SECRET"
 fi
 
-if grep -q "point_in_time_recovery" infrastructure/stacks/janus_stack.py 2>/dev/null; then
+if grep -rq "point_in_time_recovery" infrastructure/stacks/ 2>/dev/null; then
     pass "PITR configuration present in CDK stack"
 else
     fail "PITR not configured in CDK stack"
 fi
 
-if grep -q "throttling_rate_limit" infrastructure/stacks/janus_stack.py 2>/dev/null; then
+if grep -rq "throttling_rate_limit" infrastructure/stacks/ 2>/dev/null; then
     pass "API rate limiting configured in CDK stack"
 else
     fail "API rate limiting (throttling_rate_limit) not configured in CDK stack"

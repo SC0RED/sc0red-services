@@ -4,17 +4,6 @@ export interface RiskScore {
     rationale?: string
 }
 
-export interface Vendor {
-    name: string
-    url: string
-    specialty: string
-}
-
-export interface RelatedService {
-    service_type: string
-    vendors: Vendor[]
-}
-
 export interface Opportunity {
     title: string
     description: string
@@ -24,7 +13,6 @@ export interface Opportunity {
     implementation_steps?: string[]
     investment_range?: string
     roi_estimate?: string
-    related_services?: string[]
     value_lever?: 'Revenue Side' | 'Cost Side' | 'Both'
 }
 
@@ -89,6 +77,8 @@ export interface AnalysisData {
     pipelineProgress?: number
     pipelineLabel?: string
     scanId?: string
+    /** The PE-firm URL (or company URL for standalone) the parent scan was started from. */
+    scanSourceUrl?: string
 }
 
 export interface AnalysisItem {
@@ -100,6 +90,7 @@ export interface AnalysisItem {
     riskTier: string | null
     analyzedAt: string | null
     scanType?: string
+    scanId?: string
 }
 
 export interface ScanItem {
@@ -109,8 +100,25 @@ export interface ScanItem {
     status: string
     progress: number
     completedCount: number
+    /**
+     * Total linked companies at confirm time. Used to size the cascade
+     * scope in the delete-scan toast (deletion touches every linked
+     * company, not just completed ones — `completedCount` would
+     * underreport for in-flight scans).
+     */
+    totalCompanies?: number
     createdAt: string
 }
+
+/**
+ * Lifecycle state of a single company card on the portfolio view.
+ *
+ * Backend collapses two backend-internal states (no record yet vs.
+ * record-but-progress=0) into one UI state called `pending`. Failure
+ * takes precedence over completion: a record with both `error` set and
+ * a stale `analyzedAt` is reported as `failed`.
+ */
+export type ScanAnalysisState = 'pending' | 'scanning' | 'done' | 'failed'
 
 export interface ScanAnalysis {
     id: string
@@ -123,6 +131,14 @@ export interface ScanAnalysis {
     analyzedAt: string | null
     pipelineProgress?: number
     pipelineLabel?: string
+    /** Explicit lifecycle state — frontend renders directly off this. */
+    state: ScanAnalysisState
+    /**
+     * Zero-based submission position from the scan_company link record.
+     * `null` for legacy link records written before this field was added;
+     * such entries sort after entries with a numeric orderIndex.
+     */
+    orderIndex: number | null
 }
 
 export interface ScanData {

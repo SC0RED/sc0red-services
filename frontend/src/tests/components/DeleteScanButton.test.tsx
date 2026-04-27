@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { screen, fireEvent, act } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 import DeleteScanButton from '@/components/DeleteScanButton'
+import { renderWithProviders } from '@/tests/test-utils'
 
 const mockRefresh = vi.fn()
 
@@ -13,49 +14,85 @@ vi.mock('next/navigation', () => ({
 
 describe('DeleteScanButton', () => {
     beforeEach(() => {
+        vi.useFakeTimers()
         vi.clearAllMocks()
         global.fetch = vi.fn().mockResolvedValue({ ok: true })
     })
 
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     it('renders trash icon button by default', () => {
-        render(<DeleteScanButton scanId="scan-1" />)
+        renderWithProviders(<DeleteScanButton scanId="scan-1" />)
         expect(screen.getByTitle('Delete scan')).toBeInTheDocument()
     })
 
-    it('shows confirm UI after clicking icon', () => {
-        render(<DeleteScanButton scanId="scan-1" />)
+    it('clicking shows toast with cascade scope when companyCount provided', () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" companyCount={8} />)
         fireEvent.click(screen.getByTitle('Delete scan'))
-        expect(screen.getByText('Delete')).toBeInTheDocument()
-        expect(screen.getByText('Cancel')).toBeInTheDocument()
+
+        expect(screen.getByText('Deleted scan + 8 analyses')).toBeInTheDocument()
+        expect(screen.getByText('Undo')).toBeInTheDocument()
     })
 
-    it('returns to initial icon state when Cancel is clicked', () => {
-        render(<DeleteScanButton scanId="scan-1" />)
+    it('uses singular "analysis" for 1 company', () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" companyCount={1} />)
         fireEvent.click(screen.getByTitle('Delete scan'))
-        fireEvent.click(screen.getByText('Cancel'))
-        expect(screen.getByTitle('Delete scan')).toBeInTheDocument()
+
+        expect(screen.getByText('Deleted scan + 1 analysis')).toBeInTheDocument()
     })
 
-    it('calls fetch DELETE and router.refresh on confirm', async () => {
-        render(<DeleteScanButton scanId="scan-1" />)
+    it('falls back to plain "Deleted scan" when companyCount is missing or zero', () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" />)
         fireEvent.click(screen.getByTitle('Delete scan'))
-        fireEvent.click(screen.getByText('Delete'))
+        expect(screen.getByText('Deleted scan')).toBeInTheDocument()
+    })
 
-        await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith('/api/scan/scan-1', { method: 'DELETE' })
-            expect(mockRefresh).toHaveBeenCalled()
+    it('does NOT call DELETE before the 5-second window expires', () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" />)
+        fireEvent.click(screen.getByTitle('Delete scan'))
+
+        act(() => {
+            vi.advanceTimersByTime(4999)
         })
+        expect(global.fetch).not.toHaveBeenCalled()
     })
 
-    it('shows "Deleting..." text while the request is in-flight', async () => {
-        global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}))
-
-        render(<DeleteScanButton scanId="scan-1" />)
+    it('calls DELETE + router.refresh after the 5-second window expires', async () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" />)
         fireEvent.click(screen.getByTitle('Delete scan'))
-        fireEvent.click(screen.getByText('Delete'))
 
-        await waitFor(() => {
-            expect(screen.getByText('Deleting...')).toBeInTheDocument()
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5000)
         })
+
+        expect(global.fetch).toHaveBeenCalledWith('/api/scan/scan-1', { method: 'DELETE' })
+        expect(mockRefresh).toHaveBeenCalled()
+    })
+
+    it('clicking Undo cancels — no DELETE fires', () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" companyCount={3} />)
+        fireEvent.click(screen.getByTitle('Delete scan'))
+        fireEvent.click(screen.getByText('Undo'))
+
+        act(() => {
+            vi.advanceTimersByTime(10_000)
+        })
+        expect(global.fetch).not.toHaveBeenCalled()
+        expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
+    it('shows error toast on DELETE failure', async () => {
+        global.fetch = vi.fn().mockResolvedValue({ ok: false })
+        renderWithProviders(<DeleteScanButton scanId="scan-1" />)
+        fireEvent.click(screen.getByTitle('Delete scan'))
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5000)
+        })
+
+        expect(screen.getByText('Failed to delete scan')).toBeInTheDocument()
+        expect(mockRefresh).not.toHaveBeenCalled()
     })
 })

@@ -3,24 +3,40 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import PortfolioProgressStrip from '@/components/scan/PortfolioProgressStrip'
-import { getRiskTierLabel, getRiskTier, TIER_COLORS } from '@/lib/utils/riskUtils'
+import { TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { ScanAnalysis, ScanData } from '@/lib/types/api'
+import PortfolioCard from './PortfolioCard'
+import PortfolioRow from './PortfolioRow'
 
 const POLL_INTERVAL_MS = 4000
 
-function hasPendingWork(analyses: ScanAnalysis[], totalCompanies: number): boolean {
-    // Keep polling if any analysis is unresolved OR if fewer records exist
-    // than the total (some companies haven't been picked up by the worker yet).
-    if (analyses.length < totalCompanies) return true
-    return analyses.some((a) => a.overallRiskScore === null && !a.error)
+/**
+ * Sort key for stable card ordering. Entries with a numeric `orderIndex`
+ * sort by submission order; legacy entries (`null`) fall back to id —
+ * matches the pre-change behavior so an in-flight scan deployed across
+ * a deploy boundary doesn't crash.
+ */
+function compareByOrder(a: ScanAnalysis, b: ScanAnalysis): number {
+    const ai = a.orderIndex
+    const bi = b.orderIndex
+    if (ai !== null && bi !== null) return ai - bi
+    if (ai !== null) return -1
+    if (bi !== null) return 1
+    return a.id.localeCompare(b.id)
+}
+
+function hasPendingWork(analyses: ScanAnalysis[]): boolean {
+    // The unified analyses array always has length === total_companies,
+    // so the only thing to check is whether any entry is still in a
+    // non-terminal state.
+    return analyses.some((a) => a.state === 'pending' || a.state === 'scanning')
 }
 
 export default function PortfolioView({ scanId, initialScan }: { scanId: string; initialScan: ScanData }) {
     const [scan, setScan] = useState<ScanData>(initialScan)
 
     useEffect(() => {
-        const total = scan.totalCompanies || scan.analyses.length
-        if (!hasPendingWork(scan.analyses, total) || scan.status === 'complete') return
+        if (!hasPendingWork(scan.analyses) || scan.status === 'complete') return
 
         const interval = setInterval(async () => {
             try {
@@ -28,8 +44,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                 if (!res.ok) return
                 const updated: ScanData = await res.json()
                 setScan(updated)
-                const updatedTotal = updated.totalCompanies || updated.analyses.length
-                if (!hasPendingWork(updated.analyses, updatedTotal) || updated.status === 'complete') {
+                if (!hasPendingWork(updated.analyses) || updated.status === 'complete') {
                     clearInterval(interval)
                 }
             } catch {
@@ -38,16 +53,13 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         }, POLL_INTERVAL_MS)
 
         return () => clearInterval(interval)
-    }, [scanId, scan.analyses, scan.status, scan.totalCompanies])
+    }, [scanId, scan.analyses, scan.status])
 
-    // Sort by id for stable ordering — DynamoDB BatchGetItem returns items in
-    // arbitrary order, so each poll cycle would otherwise shuffle the cards.
-    // IDs are UUIDs assigned at confirm time; sorting by them is deterministic.
-    const analyses = [...scan.analyses].sort((a, b) => a.id.localeCompare(b.id))
-    // totalCompanies from the scan record is the true count (set at confirm time).
-    // analyses.length only reflects companies with DynamoDB records (grows as workers pick up messages).
+    // Backend already returns analyses sorted by orderIndex ascending,
+    // but apply defensively in case of a future client-side merge.
+    const analyses = [...scan.analyses].sort(compareByOrder)
     const totalCompanies = scan.totalCompanies || analyses.length
-    const completed = analyses.filter((a) => a.overallRiskScore !== null)
+    const completed = analyses.filter((a) => a.state === 'done')
     const avgScore = completed.length
         ? completed.reduce((s, a) => s + Number(a.overallRiskScore), 0) / completed.length
         : 0
@@ -56,15 +68,8 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
         if (a.riskTier) tierCounts[a.riskTier as keyof typeof tierCounts]++
     })
 
-    // Show progress strip until scan is complete OR all analyses are resolved
-    // (analyzedAt or error). The scan.status can lag behind individual completions
-    // because _update_scan_progress runs after each company finishes.
-    const resolvedCount = analyses.filter((a) => a.analyzedAt || a.error).length
-    // All companies must have records AND be resolved. If analyses.length < totalCompanies,
-    // some companies haven't been picked up by the worker yet — not truly complete.
-    const allResolved =
-        analyses.length >= totalCompanies && resolvedCount >= totalCompanies && totalCompanies > 0
-    const isRunning = scan.status !== 'complete' && !allResolved
+    const resolvedCount = analyses.filter((a) => a.state === 'done' || a.state === 'failed').length
+    const isRunning = scan.status !== 'complete' && resolvedCount < totalCompanies
 
     return (
         <>
@@ -103,14 +108,12 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                 </p>
             </div>
 
-            {/* Progress strip — visible while scan is running */}
             <PortfolioProgressStrip
                 completedCount={resolvedCount}
                 totalCount={totalCompanies}
                 visible={isRunning}
             />
 
-            {/* Stats Row — only after scan completes (partial stats are misleading) */}
             {!isRunning && (
                 <div
                     style={{
@@ -129,28 +132,19 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                         </div>
                     </div>
                     {[
-                        {
-                            tier: 'critical',
-                            label: 'Critical',
-                            color: 'var(--risk-critical)',
-                            count: tierCounts.critical,
-                        },
-                        {
-                            tier: 'high',
-                            label: 'High Risk',
-                            color: 'var(--risk-high)',
-                            count: tierCounts.high,
-                        },
-                        {
-                            tier: 'moderate',
-                            label: 'Moderate',
-                            color: 'var(--risk-moderate)',
-                            count: tierCounts.moderate,
-                        },
-                        { tier: 'low', label: 'Low Risk', color: 'var(--risk-low)', count: tierCounts.low },
+                        { tier: 'critical', label: 'Critical', count: tierCounts.critical },
+                        { tier: 'high', label: 'High Risk', count: tierCounts.high },
+                        { tier: 'moderate', label: 'Moderate', count: tierCounts.moderate },
+                        { tier: 'low', label: 'Low Risk', count: tierCounts.low },
                     ].map((s) => (
                         <div key={s.tier} className="card" style={{ padding: '1.25rem' }}>
-                            <div style={{ fontSize: '1.625rem', fontWeight: 800, color: s.color }}>
+                            <div
+                                style={{
+                                    fontSize: '1.625rem',
+                                    fontWeight: 800,
+                                    color: TIER_COLORS[s.tier] || 'var(--text-secondary)',
+                                }}
+                            >
                                 {s.count}
                             </div>
                             <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
@@ -161,7 +155,6 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                 </div>
             )}
 
-            {/* Heatmap */}
             <div style={{ marginBottom: '2rem' }}>
                 <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>Risk Heatmap</h2>
                 <div
@@ -171,122 +164,19 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                         gap: '0.875rem',
                     }}
                 >
-                    {analyses.map((a) => {
-                        const tier = (a.riskTier ||
-                            (a.overallRiskScore ? getRiskTier(Number(a.overallRiskScore)) : null)) as
-                            | string
-                            | null
-                        const color = tier ? TIER_COLORS[tier] : 'var(--text-tertiary)'
-                        const isAnalyzed = a.overallRiskScore !== null
-                        return (
-                            <Link key={a.id} href={`/analysis/${a.id}`} style={{ textDecoration: 'none' }}>
-                                <div
-                                    className="card"
-                                    style={{
-                                        padding: '1.125rem',
-                                        borderTop: tier
-                                            ? `3px solid ${color}`
-                                            : '3px solid var(--border-subtle)',
-                                        opacity: isAnalyzed ? 1 : 0.6,
-                                    }}
-                                >
-                                    <div
-                                        className="truncate"
-                                        style={{
-                                            fontWeight: 600,
-                                            fontSize: '0.9rem',
-                                            marginBottom: '0.375rem',
-                                        }}
-                                    >
-                                        {a.companyName || (a.error ? 'Unknown Company' : 'Analyzing...')}
-                                    </div>
-                                    {a.industry && (
-                                        <div
-                                            className="truncate"
-                                            style={{
-                                                fontSize: '0.75rem',
-                                                color: 'var(--text-tertiary)',
-                                                marginBottom: '0.625rem',
-                                            }}
-                                        >
-                                            {a.industry}
-                                        </div>
-                                    )}
-                                    {isAnalyzed ? (
-                                        <div
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'space-between',
-                                            }}
-                                        >
-                                            <span
-                                                style={{
-                                                    fontSize: '1.5rem',
-                                                    fontWeight: 800,
-                                                    color,
-                                                }}
-                                            >
-                                                {Number(a.overallRiskScore).toFixed(1)}
-                                            </span>
-                                            {tier && (
-                                                <span
-                                                    className={`badge badge-${tier}`}
-                                                    style={{ fontSize: '0.7rem' }}
-                                                >
-                                                    {getRiskTierLabel(tier)}
-                                                </span>
-                                            )}
-                                        </div>
-                                    ) : a.error ? (
-                                        <span
-                                            style={{
-                                                display: 'inline-block',
-                                                fontSize: '0.7rem',
-                                                fontWeight: 600,
-                                                padding: '0.2rem 0.5rem',
-                                                borderRadius: '4px',
-                                                backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                                                color: 'var(--risk-critical)',
-                                            }}
-                                        >
-                                            FAILED
-                                        </span>
-                                    ) : (a.pipelineProgress ?? 0) > 0 ? (
-                                        <span
-                                            style={{
-                                                fontSize: '0.75rem',
-                                                color: 'var(--accent-blue)',
-                                            }}
-                                        >
-                                            Analyzing...
-                                        </span>
-                                    ) : (
-                                        <span
-                                            style={{
-                                                fontSize: '0.75rem',
-                                                color: 'var(--text-tertiary)',
-                                                opacity: 0.6,
-                                            }}
-                                        >
-                                            Queued
-                                        </span>
-                                    )}
-                                </div>
-                            </Link>
-                        )
-                    })}
+                    {analyses.map((a) => (
+                        <PortfolioCard key={a.id} analysis={a} />
+                    ))}
                 </div>
             </div>
 
-            {/* Table */}
             <div>
                 <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>All Companies</h2>
                 <div className="card" style={{ overflow: 'hidden' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                                {['Company', 'Industry', 'Risk Score', 'Tier', ''].map((h) => (
+                                {['Company', 'Industry', 'Status / Score', 'Tier', ''].map((h) => (
                                     <th
                                         key={h}
                                         style={{
@@ -305,80 +195,9 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                             </tr>
                         </thead>
                         <tbody>
-                            {analyses.map((a, i: number) => {
-                                const tier = (a.riskTier ||
-                                    (a.overallRiskScore ? getRiskTier(Number(a.overallRiskScore)) : null)) as
-                                    | string
-                                    | null
-                                return (
-                                    <tr
-                                        key={a.id}
-                                        style={{
-                                            borderBottom:
-                                                i < analyses.length - 1
-                                                    ? '1px solid var(--border-subtle)'
-                                                    : 'none',
-                                        }}
-                                    >
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            <div style={{ fontWeight: 500 }}>{a.companyName || '—'}</div>
-                                            {a.companyUrl && (
-                                                <div
-                                                    style={{
-                                                        fontSize: '0.8125rem',
-                                                        color: 'var(--text-tertiary)',
-                                                    }}
-                                                >
-                                                    {a.companyUrl}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td
-                                            style={{
-                                                padding: '1rem 1.25rem',
-                                                color: 'var(--text-secondary)',
-                                                fontSize: '0.875rem',
-                                            }}
-                                        >
-                                            {a.industry || '—'}
-                                        </td>
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            {a.overallRiskScore ? (
-                                                <span
-                                                    style={{
-                                                        fontWeight: 700,
-                                                        fontSize: '1.1rem',
-                                                        color: tier
-                                                            ? TIER_COLORS[tier]
-                                                            : 'var(--text-secondary)',
-                                                    }}
-                                                >
-                                                    {Number(a.overallRiskScore).toFixed(1)}
-                                                </span>
-                                            ) : (
-                                                <span style={{ color: 'var(--text-tertiary)' }}>—</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            {tier && (
-                                                <span className={`badge badge-${tier}`}>
-                                                    {getRiskTierLabel(tier)}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '1rem 1.25rem' }}>
-                                            {a.overallRiskScore && (
-                                                <Link
-                                                    href={`/analysis/${a.id}`}
-                                                    className="btn btn-ghost btn-sm"
-                                                >
-                                                    View Report
-                                                </Link>
-                                            )}
-                                        </td>
-                                    </tr>
-                                )
-                            })}
+                            {analyses.map((a, i) => (
+                                <PortfolioRow key={a.id} analysis={a} isLast={i === analyses.length - 1} />
+                            ))}
                         </tbody>
                     </table>
                 </div>

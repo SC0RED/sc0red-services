@@ -3,6 +3,24 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { useToast } from '@/components/ui'
+
+/**
+ * Delete an analysis with a 5-second Undo window via toast.
+ *
+ * Flow:
+ *   1. User clicks delete → button enters "deleting" state.
+ *   2. Toast appears with "Deleted {company}. Undo?" + 5s timer.
+ *   3a. User clicks Undo within 5s → no API call; button re-enables.
+ *   3b. User waits 5s (or closes the toast) → DELETE fires; on success
+ *       the page is refreshed (or the user is redirected); on failure
+ *       an error toast surfaces and the analysis remains.
+ *
+ * The deferred-commit pattern (DELETE not fired until window expires)
+ * means a quick ⌘R refresh during the window cancels the deletion
+ * silently — acceptable for v1 per the design doc; server-side
+ * soft-delete is a future improvement.
+ */
 export default function DeleteAnalysisButton({
     analysisId,
     companyName,
@@ -15,104 +33,67 @@ export default function DeleteAnalysisButton({
     redirectTo?: string
 }) {
     const router = useRouter()
-    const [confirming, setConfirming] = useState(false)
+    const toast = useToast()
     const [deleting, setDeleting] = useState(false)
-    const [error, setError] = useState<string | null>(null)
 
-    async function handleDelete() {
-        setError(null)
+    function handleDeleteClick() {
+        if (deleting) return
         setDeleting(true)
-        try {
-            const res = await fetch(`/api/analysis/${analysisId}`, { method: 'DELETE' })
-            if (!res.ok) {
-                setError('Delete failed. Please try again.')
-                return
-            }
-            if (redirectTo) {
-                router.push(redirectTo)
-            } else {
-                router.refresh()
-            }
-        } catch {
-            setError('Network error. Please try again.')
-        } finally {
-            setDeleting(false)
-            setConfirming(false)
-        }
-    }
-
-    if (confirming) {
-        return (
-            <div
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.375rem',
-                    whiteSpace: 'nowrap',
-                }}
-            >
-                <span
-                    style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--risk-critical)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: '120px',
-                    }}
-                >
-                    Delete {companyName}?
-                </span>
-                <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="btn btn-sm"
-                    style={{
-                        background: 'var(--risk-critical)',
-                        color: '#fff',
-                        border: 'none',
-                        fontSize: '0.75rem',
-                        padding: '0.25rem 0.625rem',
-                        opacity: deleting ? 0.6 : 1,
-                    }}
-                >
-                    {deleting ? '...' : 'Yes'}
-                </button>
-                <button
-                    onClick={() => setConfirming(false)}
-                    disabled={deleting}
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}
-                >
-                    No
-                </button>
-                {error && <span style={{ fontSize: '0.75rem', color: 'var(--risk-critical)' }}>{error}</span>}
-            </div>
-        )
+        toast.undo({
+            message: `Deleted ${companyName}`,
+            onCommit: async () => {
+                try {
+                    const response = await fetch(`/api/analysis/${analysisId}`, {
+                        method: 'DELETE',
+                    })
+                    if (!response.ok) {
+                        toast.error(`Failed to delete ${companyName}`)
+                        setDeleting(false)
+                        return
+                    }
+                    if (redirectTo) {
+                        router.push(redirectTo)
+                    } else {
+                        router.refresh()
+                    }
+                } catch {
+                    toast.error(`Network error deleting ${companyName}`)
+                    setDeleting(false)
+                }
+            },
+            onUndo: () => {
+                setDeleting(false)
+            },
+        })
     }
 
     if (variant === 'button') {
         return (
             <button
-                onClick={() => setConfirming(true)}
+                onClick={handleDeleteClick}
+                disabled={deleting}
                 className="btn btn-ghost btn-sm"
-                style={{ color: 'var(--risk-critical)' }}
+                style={{ color: 'var(--risk-critical)', opacity: deleting ? 0.5 : 1 }}
             >
-                Delete Analysis
+                {deleting ? 'Deleting...' : 'Delete Analysis'}
             </button>
         )
     }
 
     return (
         <button
-            onClick={() => setConfirming(true)}
-            title="Delete analysis"
+            onClick={handleDeleteClick}
+            disabled={deleting}
+            title={deleting ? 'Deleting...' : 'Delete analysis'}
+            aria-label={`Delete ${companyName}`}
             style={{
                 background: 'none',
                 border: 'none',
                 color: 'var(--text-primary)',
                 padding: '0.375rem',
                 borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
+                cursor: deleting ? 'not-allowed' : 'pointer',
+                opacity: deleting ? 0.5 : 1,
                 display: 'inline-flex',
                 alignItems: 'center',
             }}

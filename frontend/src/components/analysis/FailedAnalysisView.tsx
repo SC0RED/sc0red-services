@@ -10,6 +10,7 @@ interface FailedAnalysisViewProps {
     companyUrl?: string
     error: string
     scanId?: string
+    scanType?: string
     documents: DocumentInfo[]
     documentError: string | null
     reanalyzing: boolean
@@ -25,6 +26,7 @@ export default function FailedAnalysisView({
     companyUrl,
     error,
     scanId,
+    scanType,
     documents,
     documentError,
     reanalyzing,
@@ -33,9 +35,10 @@ export default function FailedAnalysisView({
     onRetry,
     onDocumentsChange,
 }: FailedAnalysisViewProps) {
+    const isPortfolio = scanType === 'portfolio' && Boolean(scanId)
     return (
         <div style={{ maxWidth: '680px' }}>
-            {scanId && (
+            {isPortfolio && (
                 <a
                     href={`/portfolio/${scanId}`}
                     style={{

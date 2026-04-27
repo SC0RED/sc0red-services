@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import RiskBadge from '@/components/RiskBadge'
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+import { prettifyUrl } from '@/lib/utils/url'
 
 interface AnalysisHeaderProps {
     analysisId: string
@@ -10,6 +11,8 @@ interface AnalysisHeaderProps {
     industry?: string
     tier: string
     scanId?: string
+    scanType?: string
+    scanSourceUrl?: string
     onExportCsv?: () => void
 }
 
@@ -20,8 +23,12 @@ export default function AnalysisHeader({
     industry,
     tier,
     scanId,
+    scanType,
+    scanSourceUrl,
     onExportCsv,
 }: AnalysisHeaderProps) {
+    const isPortfolio = scanType === 'portfolio' && Boolean(scanId)
+    const scanLabel = scanSourceUrl ? prettifyUrl(scanSourceUrl) : 'portfolio scan'
     return (
         <div
             style={{
@@ -66,11 +73,11 @@ export default function AnalysisHeader({
                         </svg>
                         Dashboard
                     </Link>
-                    {scanId && (
+                    {isPortfolio && (
                         <>
                             <span style={{ color: 'var(--text-tertiary)' }}>/</span>
                             <Link href={`/portfolio/${scanId}`} style={{ color: 'var(--text-tertiary)' }}>
-                                Portfolio
+                                {scanLabel}
                             </Link>
                         </>
                     )}
@@ -78,6 +85,28 @@ export default function AnalysisHeader({
                 <h1 style={{ fontSize: '1.625rem', fontWeight: 700, marginBottom: '0.375rem' }}>
                     {companyName}
                 </h1>
+                {isPortfolio && (
+                    <div
+                        style={{
+                            fontSize: '0.8125rem',
+                            color: 'var(--text-tertiary)',
+                            marginBottom: '0.5rem',
+                        }}
+                    >
+                        Part of:{' '}
+                        <Link
+                            href={`/portfolio/${scanId}`}
+                            style={{
+                                color: 'var(--text-secondary)',
+                                textDecoration: 'underline',
+                                textDecorationStyle: 'dotted',
+                                textUnderlineOffset: '2px',
+                            }}
+                        >
+                            {scanLabel}
+                        </Link>
+                    </div>
+                )}
                 <div
                     style={{
                         display: 'flex',

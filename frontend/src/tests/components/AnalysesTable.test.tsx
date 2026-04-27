@@ -1,5 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent, within } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
+
+import { renderWithProviders as render } from '@/tests/test-utils'
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -24,6 +26,7 @@ const mockAnalyses: AnalysisItem[] = [
         riskTier: 'critical',
         analyzedAt: '2026-03-20T00:00:00Z',
         scanType: 'portfolio',
+        scanId: 'scan-port-1',
     },
     {
         id: '2',
@@ -34,6 +37,7 @@ const mockAnalyses: AnalysisItem[] = [
         riskTier: 'moderate',
         analyzedAt: '2026-03-22T00:00:00Z',
         scanType: 'standalone',
+        scanId: 'scan-single-1',
     },
     {
         id: '3',
@@ -44,6 +48,7 @@ const mockAnalyses: AnalysisItem[] = [
         riskTier: 'high',
         analyzedAt: '2026-03-18T00:00:00Z',
         scanType: 'portfolio',
+        scanId: 'scan-port-2',
     },
 ]
 
@@ -235,5 +240,45 @@ describe('AnalysesTable', () => {
         render(<AnalysesTable analyses={[]} />)
         expect(screen.getByText('No analyses yet. Run your first scan to get started.')).toBeInTheDocument()
         expect(screen.getByText('Start a Scan')).toBeInTheDocument()
+    })
+
+    describe('scan-type badge navigation', () => {
+        // Asserts on the rendered <a href>, not just text — the failure-mode
+        // that #182's failed-card regression had was tests checking only text.
+        // Use `within(table)` so we don't accidentally match the toolbar's
+        // "Portfolio" filter chip.
+        function getBadgeInTable(label: 'Portfolio' | 'Standalone'): HTMLElement {
+            const table = screen.getByRole('table')
+            return within(table).getByText(label)
+        }
+
+        it('Portfolio badge wraps in a link to /portfolio/{scanId}', () => {
+            render(<AnalysesTable analyses={[mockAnalyses[0]]} />)
+            const link = getBadgeInTable('Portfolio').closest('a')
+            expect(link).not.toBeNull()
+            expect(link).toHaveAttribute('href', '/portfolio/scan-port-1')
+        })
+
+        it('Standalone badge is plain text (no link)', () => {
+            render(<AnalysesTable analyses={[mockAnalyses[1]]} />)
+            expect(getBadgeInTable('Standalone').closest('a')).toBeNull()
+        })
+
+        it('Portfolio badge renders without link when scanId is missing (legacy data)', () => {
+            // Defensive: a portfolio analysis missing scanId in older data
+            // should not crash and should not produce a broken link.
+            const legacyPortfolio: AnalysisItem = { ...mockAnalyses[0], scanId: undefined }
+            render(<AnalysesTable analyses={[legacyPortfolio]} />)
+            expect(getBadgeInTable('Portfolio').closest('a')).toBeNull()
+        })
+
+        it('Each portfolio row links to its own scan', () => {
+            render(<AnalysesTable analyses={mockAnalyses} />)
+            const table = screen.getByRole('table')
+            const allBadges = within(table).getAllByText('Portfolio')
+            expect(allBadges).toHaveLength(2)
+            const hrefs = allBadges.map((badge) => badge.closest('a')?.getAttribute('href'))
+            expect(hrefs).toEqual(['/portfolio/scan-port-1', '/portfolio/scan-port-2'])
+        })
     })
 })

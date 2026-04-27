@@ -1,5 +1,7 @@
-import { render, screen, fireEvent, within, act } from '@testing-library/react'
+import { screen, fireEvent, within, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+
+import { renderWithProviders as render } from '@/tests/test-utils'
 
 // Recharts ResponsiveContainer requires ResizeObserver
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -88,7 +90,6 @@ function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData 
                 implementation_steps: ['Step 1', 'Step 2'],
                 investment_range: '$100K-$500K',
                 roi_estimate: '30% improvement',
-                related_services: ['Accenture - AI strategy'],
             },
             {
                 title: 'Automate Support',
@@ -100,7 +101,6 @@ function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData 
                 implementation_steps: ['Step A'],
                 investment_range: '$50K-$100K',
                 roi_estimate: '2x ROI',
-                related_services: [],
             },
             {
                 title: 'AI Platform',
@@ -112,7 +112,6 @@ function buildAnalysisData(overrides: Partial<AnalysisData> = {}): AnalysisData 
                 implementation_steps: ['Step X'],
                 investment_range: '$500K-$1M',
                 roi_estimate: 'New revenue stream',
-                related_services: [],
             },
         ],
         topActions: ['Action 1', 'Action 2', 'Action 3'],
@@ -414,6 +413,44 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
 
         // Should NOT have called refresh — error should be set
         expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
+    it('dismisses the loading toast when fetch is aborted mid-flight', async () => {
+        // The re-analyze flow's only `toast.dismiss` call sits on the
+        // AbortError catch path. Pinning it here so a future refactor that
+        // accidentally drops the dismiss leaves the loading toast leaked
+        // on screen.
+        const data = buildAnalysisData({ analyzedAt: '2026-03-01T00:00:00Z' })
+
+        // POST returns 200, then the polling fetch rejects with AbortError
+        // — simulates the user navigating away or some other cancellation.
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ status: 'queued', scanId: 'scan-1' }),
+        })
+        const abortError = new DOMException('aborted', 'AbortError')
+        fetchMock.mockRejectedValueOnce(abortError)
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('reanalyze-trigger'))
+        })
+
+        // Loading toast is up
+        expect(screen.getByText('Re-analyzing...')).toBeInTheDocument()
+
+        // Advance through one poll → AbortError thrown → catch path runs
+        await act(async () => {
+            vi.advanceTimersByTime(3000)
+        })
+        await act(async () => {
+            await Promise.resolve()
+        })
+
+        // Toast was dismissed (not promoted to error — abort is silent)
+        expect(screen.queryByText('Re-analyzing...')).not.toBeInTheDocument()
+        // And no error toast surfaced
+        expect(screen.queryByText(/Re-analysis failed/)).not.toBeInTheDocument()
     })
 
     it('cleans up polling on component unmount', async () => {

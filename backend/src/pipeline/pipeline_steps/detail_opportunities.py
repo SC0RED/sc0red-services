@@ -2,7 +2,7 @@
 
 Takes the ranked ideations from Level 1 and runs N parallel AI calls
 (one per ideation) to add implementation steps, timeline, investment
-range, ROI estimate, and vendor recommendations.
+range, and ROI estimate.
 """
 
 from __future__ import annotations

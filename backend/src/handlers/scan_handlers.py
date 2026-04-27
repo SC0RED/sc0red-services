@@ -14,7 +14,6 @@ import boto3
 from src.handlers.api_gateway_handler import (
     NOT_FOUND,
     VALIDATION_ERROR,
-    build_company_summary,
     build_error,
     build_json_response,
     check_org_access,
@@ -23,6 +22,7 @@ from src.handlers.sqs_messages import (
     build_analysis_message,
     build_portfolio_discovery_message,
 )
+from src.utilities.scan_summary import build_unified_analyses
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -155,18 +155,19 @@ def _compute_scan_progress(
     """Return (done_count, computed_progress) from per-company pipeline progress.
 
     Uses ``total_companies`` (from the scan record, set at confirm time) as the
-    denominator — not ``len(analyses)``, which only counts companies that have
-    DynamoDB records. Companies still queued in SQS have no record yet and would
-    be invisible, making progress appear 100% prematurely.
+    denominator. Drives terminal-state detection off the explicit ``state``
+    field set by ``build_unified_analyses`` rather than re-deriving from
+    ``analyzedAt``/``error`` — the contract that ``state`` is authoritative
+    means downstream logic should not duplicate the derivation.
     """
     if not analyses:
         return 0, scan_progress
     # Use the true total; fall back to len(analyses) for standalone scans
     # where total_companies may be 0 or absent.
     total = max(total_companies, len(analyses))
-    done_count = sum(1 for a in analyses if a.get("analyzedAt") or a.get("error"))
+    done_count = sum(1 for a in analyses if a.get("state") in ("done", "failed"))
     company_progress_sum = sum(
-        100 if (a.get("analyzedAt") or a.get("error")) else a.get("pipelineProgress", 0)
+        100 if a.get("state") in ("done", "failed") else a.get("pipelineProgress", 0)
         for a in analyses
     )
     return done_count, company_progress_sum // total
@@ -177,11 +178,7 @@ def _derive_progress_label(
     fallback_label: str,
 ) -> str:
     """Return the progress label from the most advanced in-progress company."""
-    in_progress = [
-        a
-        for a in analyses
-        if not a.get("analyzedAt") and not a.get("error") and a.get("pipelineProgress")
-    ]
+    in_progress = [a for a in analyses if a.get("state") == "scanning"]
     if in_progress:
         furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
         return str(furthest.get("pipelineLabel", fallback_label))
@@ -208,7 +205,11 @@ def handle_scan_status(
     scan_companies = scan_repo.get_scan_companies(scan_id)
     company_ids = [link["company_id"] for link in scan_companies if link.get("company_id")]
     companies_batch = company_repo.get_by_ids(company_ids) if company_ids else []
-    analyses = [build_company_summary(c) for c in companies_batch]
+    # Build one analysis entry per scan_company link — pending entries
+    # are synthesized from links for companies that have not yet been
+    # picked up by a worker. The frontend renders state-driven cards
+    # off the explicit `state` field on each entry.
+    analyses = build_unified_analyses(scan_companies, companies_batch)
 
     status = scan.get("status")
     total_companies = scan.get("total_companies", 0)
@@ -283,14 +284,23 @@ def handle_scan_confirm(
         {"status": "running", "progress": 10, "total_companies": len(valid_companies)},
     )
 
-    # Create scan→company links and build the company list for dispatch
+    # Create scan→company links and build the company list for dispatch.
+    # The link record persists company_url + order_index so the portfolio
+    # view can render every card from t=0 in submission order, even
+    # before a worker has picked up the SQS message.
     queued = []
     company_payloads = []
-    for company in valid_companies:
+    for index, company in enumerate(valid_companies):
         company_name = company.get("name", "")
         company_url = company["url"]
         analysis_id = str(uuid.uuid4())
-        scan_repo.link_company(scan_id, analysis_id, company_name)
+        scan_repo.link_company(
+            scan_id,
+            analysis_id,
+            company_name,
+            company_url=company_url,
+            order_index=index,
+        )
         queued.append({"name": company_name, "analysisId": analysis_id})
         company_payloads.append(
             {

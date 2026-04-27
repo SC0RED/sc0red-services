@@ -58,7 +58,6 @@ class Opportunity(BaseModel):
     timeline: str = ""
     investment_range: str = ""
     roi_estimate: str = ""
-    related_services: list[str] = Field(default_factory=list)
     value_lever: Literal["Revenue Side", "Cost Side", "Both"] | None = None
 
 

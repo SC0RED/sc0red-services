@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { emitFromServer } from '@/lib/analytics/emitEvent.server'
 import { BackendError } from '@/lib/api/errors'
 import { backendFetch } from '@/lib/api/serverToken'
+import { getSc0redContactUrl } from '@/lib/config'
 import type { AnalysisData, Opportunity, RiskScore } from '@/lib/types/api'
 import { TIER_COLORS_HEX } from '@/lib/utils/riskUtils'
 
@@ -49,7 +51,10 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
     .callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0; }
     .callout { padding: 0.875rem; border-radius: 6px; }
     .label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8B9AC4; margin-bottom: 0.25rem; }
-    .vendor-chip { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(139,154,196,0.1); border: 1px solid rgba(139,154,196,0.2); font-size: 0.75rem; color: #8B9AC4; margin: 0.2rem; text-decoration: none; }
+    .sc0red-cta { margin-top: 2rem; padding: 1.5rem 1.75rem; border-top: 3px solid #3B7BF6; background: rgba(59,123,246,0.06); border-radius: 8px; }
+    .sc0red-cta-heading { font-size: 1rem; font-weight: 700; color: #EEF2FF; margin: 0 0 0.75rem; }
+    .sc0red-cta-body { font-size: 0.9rem; line-height: 1.7; color: #c4cde8; margin: 0 0 1rem; }
+    .sc0red-cta-link { display: block; font-size: 0.85rem; font-weight: 600; color: #3B7BF6; word-break: break-all; }
     p { line-height: 1.7; margin: 0 0 0.75rem; color: #c4cde8; }
     .meta { color: #4D5B7F; font-size: 0.875rem; }
     @media print { body { background: white; color: #111; } }
@@ -142,17 +147,20 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
         <div style="font-weight:600;color:#22C55E;font-size:0.875rem;">${escapeHtml(opp.roi_estimate)}</div>
       </div>
     </div>
-    ${
-        opp.related_services?.length
-            ? `<div style="margin-top:0.75rem;">
-        <div class="label">Implementation Partners</div>
-        ${opp.related_services.map((svc: string) => `<span class="vendor-chip">${escapeHtml(svc)}</span>`).join('')}
-      </div>`
-            : ''
-    }
   </div>`
       )
       .join('')}
+
+  ${
+      opportunities.length
+          ? `
+  <div class="sc0red-cta">
+    <div class="sc0red-cta-heading">sc0red can help you capture these opportunities</div>
+    <p class="sc0red-cta-body">Our AI specialists implement opportunities like these end-to-end — from strategy through production deployment — moving faster than traditional enterprise timelines.</p>
+    <a class="sc0red-cta-link" href="${escapeHtml(getSc0redContactUrl())}" target="_blank" rel="noopener noreferrer">Start the conversation: ${escapeHtml(getSc0redContactUrl())}</a>
+  </div>`
+          : ''
+  }
 
   <!-- EBITDA Impact Model -->
   ${
@@ -171,6 +179,19 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
 </div>
 </body>
 </html>`
+
+        // Fire the PDF-render analytics event without blocking the response.
+        // `emitFromServer` already swallows its own failures, so we cast the
+        // promise to `void` — the PDF download returns immediately while the
+        // emit's fetch runs in the background. Only fire when the CTA is
+        // actually rendered (opportunities exist), otherwise the event
+        // would pollute funnel queries with impressions that never happened.
+        if (opportunities.length > 0) {
+            void emitFromServer('sc0red_cta_rendered_in_pdf', {
+                analysisId: params.analysisId,
+                opportunityCount: opportunities.length,
+            })
+        }
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
