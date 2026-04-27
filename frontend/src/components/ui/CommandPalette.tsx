@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import type { AnalysisItem, ScanItem } from '@/lib/types/api'
+import { prettifyUrl } from '@/lib/utils/url'
 
 /**
  * Cmd-K command palette — Tier 1 §5.
@@ -32,32 +33,73 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
-        if (!open || loaded || loading) return
+        // Re-run only when `open` or `loaded` change. Excluding `loading`
+        // from the deps prevents a re-render loop with the .finally below
+        // (loading→false triggers re-render → re-effect → re-fetch).
+        if (!open || loaded) return
         let cancelled = false
+        let analysesFailed = false
+        let dashboardFailed = false
         setLoading(true)
         Promise.all([
             fetch('/api/analyses')
-                .then((r) => (r.ok ? r.json() : { analyses: [] }))
-                .catch(() => ({ analyses: [] })),
+                .then((r) => {
+                    if (!r.ok) {
+                        analysesFailed = true
+                        return { analyses: [] }
+                    }
+                    return r.json()
+                })
+                .catch(() => {
+                    analysesFailed = true
+                    return { analyses: [] }
+                }),
             fetch('/api/dashboard')
-                .then((r) => (r.ok ? r.json() : { recentScans: [] }))
-                .catch(() => ({ recentScans: [] })),
-        ]).then(
-            ([analysesData, dashboardData]: [
-                { analyses?: AnalysisItem[] },
-                { recentScans?: ScanItem[] },
-            ]) => {
-                if (cancelled) return
-                setAnalyses(analysesData.analyses ?? [])
-                setScans((dashboardData.recentScans ?? []).filter((s: ScanItem) => s.type === 'portfolio'))
-                setLoaded(true)
+                .then((r) => {
+                    if (!r.ok) {
+                        dashboardFailed = true
+                        return { recentScans: [] }
+                    }
+                    return r.json()
+                })
+                .catch(() => {
+                    dashboardFailed = true
+                    return { recentScans: [] }
+                }),
+        ])
+            .then(
+                ([analysesData, dashboardData]: [
+                    { analyses?: AnalysisItem[] },
+                    { recentScans?: ScanItem[] },
+                ]) => {
+                    if (cancelled) return
+                    setAnalyses(analysesData.analyses ?? [])
+                    setScans(
+                        (dashboardData.recentScans ?? []).filter((s: ScanItem) => s.type === 'portfolio')
+                    )
+                    // Only mark the cache populated when at least one source
+                    // returned successfully. If BOTH failed, leave `loaded`
+                    // false so the next palette open re-attempts the fetch
+                    // (transient network failures recover) instead of being
+                    // stuck on an empty cache for the rest of the session.
+                    // (Self-review MEDIUM 2 on PR #189.)
+                    if (!analysesFailed || !dashboardFailed) {
+                        setLoaded(true)
+                    }
+                }
+            )
+            .finally(() => {
+                // Reset `loading` whether or not the fetch was cancelled.
+                // If we skipped this on cancel, closing the palette mid-
+                // fetch would leave loading=true forever; once `loading`
+                // was a guard in the deps array it caused a stuck-state
+                // bug for the rest of the session. (Self-review MEDIUM 1.)
                 setLoading(false)
-            }
-        )
+            })
         return () => {
             cancelled = true
         }
-    }, [open, loaded, loading])
+    }, [open, loaded])
 
     function navigate(href: string) {
         onOpenChange(false)
@@ -178,19 +220,4 @@ function PaletteAction({
             {hint && <span className="cmdk-item-meta">{hint}</span>}
         </Command.Item>
     )
-}
-
-/**
- * Strip protocol + trailing slash for a compact label
- * (`https://perotjain.com/` → `perotjain.com`). Same shape as
- * AnalysisHeader's prettifyScanUrl; copied here to keep the palette
- * self-contained. If a third caller needs it, lift to a util.
- */
-function prettifyUrl(url: string): string {
-    try {
-        const parsed = new URL(url)
-        return (parsed.host + parsed.pathname).replace(/\/$/, '')
-    } catch {
-        return url
-    }
 }

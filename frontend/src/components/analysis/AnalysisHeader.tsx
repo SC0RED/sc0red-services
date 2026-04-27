@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import RiskBadge from '@/components/RiskBadge'
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+import { prettifyUrl } from '@/lib/utils/url'
 
 interface AnalysisHeaderProps {
     analysisId: string
@@ -13,20 +14,6 @@ interface AnalysisHeaderProps {
     scanType?: string
     scanSourceUrl?: string
     onExportCsv?: () => void
-}
-
-/**
- * Strip protocol and trailing slash for a compact, human-readable scan
- * label. ``https://perotjain.com/`` → ``perotjain.com``. Falls back to
- * the original URL when stripping fails.
- */
-function prettifyScanUrl(url: string): string {
-    try {
-        const parsed = new URL(url)
-        return (parsed.host + parsed.pathname).replace(/\/$/, '')
-    } catch {
-        return url
-    }
 }
 
 export default function AnalysisHeader({
@@ -41,7 +28,7 @@ export default function AnalysisHeader({
     onExportCsv,
 }: AnalysisHeaderProps) {
     const isPortfolio = scanType === 'portfolio' && Boolean(scanId)
-    const scanLabel = scanSourceUrl ? prettifyScanUrl(scanSourceUrl) : 'portfolio scan'
+    const scanLabel = scanSourceUrl ? prettifyUrl(scanSourceUrl) : 'portfolio scan'
     return (
         <div
             style={{
