@@ -45,6 +45,11 @@ jobs:
         run: cd frontend && npm test
       - name: Run coverage
         run: cd frontend && npx vitest run --coverage
+      - name: Verify help-content registry mirror
+        # Fails if `frontend/src/lib/help-content.ts` and
+        # `docs/help-content.md` disagree on title/body for any term.
+        # See `scripts/check-help-content.mjs`.
+        run: cd frontend && npm run check:help-content
 
   audit:
     runs-on: ubuntu-latest

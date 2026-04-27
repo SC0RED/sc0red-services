@@ -598,6 +598,105 @@ select {
     outline-offset: 1px;
 }
 
+/* ── Help tooltips (PE-domain explainers) ─────────────────────
+ * Small ⓘ icon next to a domain term that reveals a popover with
+ * a 1-2 sentence explainer. Hover / focus / tap supported. Hidden
+ * popover removed from the DOM (open === false) — appearing toggles
+ * the React-rendered children. Animation honours the global
+ * `prefers-reduced-motion: reduce` rule (collapses to instant).
+ */
+@keyframes help-tooltip-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.help-tooltip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin-left: 0.25rem;
+}
+
+.help-tooltip-trigger {
+    background: transparent;
+    border: none;
+    padding: 0.125rem;
+    border-radius: 50%;
+    color: var(--text-tertiary);
+    cursor: help;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    transition: color var(--transition-fast);
+}
+.help-tooltip-trigger:hover {
+    color: var(--text-secondary);
+}
+.help-tooltip-trigger:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 1px;
+    color: var(--text-secondary);
+}
+
+.help-tooltip-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 220px;
+    max-width: 280px;
+    padding: 0.625rem 0.75rem;
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    z-index: 50;
+    pointer-events: none;
+    /* Stack title above body. */
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    /* Plain-text content — preserve whitespace folding (no rich layout). */
+    white-space: normal;
+}
+
+/* Closed: visually hidden but stays in the DOM so a screen reader that
+ * began announcing the description on focus is not interrupted by a
+ * mid-announcement unmount when the user Tabs away. `visibility: hidden`
+ * (rather than `display: none`) preserves layout calculations and
+ * cooperates with the fade transition.
+ */
+.help-tooltip-popover[data-state='closed'] {
+    visibility: hidden;
+    opacity: 0;
+}
+
+.help-tooltip-popover[data-state='open'] {
+    visibility: visible;
+    opacity: 1;
+    animation: help-tooltip-fade-in 120ms ease-out;
+}
+
+.help-tooltip-title {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.help-tooltip-body {
+    color: var(--text-secondary);
+}
+
 /* ── Command palette + shortcuts modal ────────────────────────
  * Backdrop is shared by both modals (same dim layer, same focus
  * trap convention). The palette uses `cmdk` primitives — we style

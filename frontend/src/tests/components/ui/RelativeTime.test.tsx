@@ -57,7 +57,9 @@ describe('RelativeTime', () => {
         // client's first paint, React logs a hydration warning.
         const html = renderToString(<RelativeTime value="2026-04-20T08:30:00Z" />)
         expect(html).toContain('Apr 20, 2026')
-        // React serialises `dateTime` JSX attribute as camelCase in dev SSR.
+        // React serialises the JSX `dateTime` prop as the lowercase HTML
+        // attribute `datetime`. Case-insensitive regex flag is defensive —
+        // not strictly needed today but harmless.
         expect(html).toMatch(/datetime="2026-04-20T08:30:00\.000Z"/i)
     })
 

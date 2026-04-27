@@ -52,7 +52,10 @@ export default function RelativeTime({ value, fallback = '—' }: RelativeTimePr
 
     // Seed `label` with the deterministic absolute on SSR / first paint.
     // After mount, the effect overwrites it with the relative phrase.
-    const [label, setLabel] = useState(date ? formatAbsoluteUTC(date) : '')
+    // Lazy initializer so `formatAbsoluteUTC` only runs on the first render
+    // — `useState(value)` evaluates `value` on every render but only uses
+    // the result once.
+    const [label, setLabel] = useState(() => (date ? formatAbsoluteUTC(date) : ''))
 
     useEffect(() => {
         if (!date) return
