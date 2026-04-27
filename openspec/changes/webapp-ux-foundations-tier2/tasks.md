@@ -37,11 +37,11 @@
 
 ## 4. Relative timestamps
 
-- [ ] 4.1 Confirm date library: `date-fns` vs `dayjs` already in `frontend/package.json`? Use whichever is present; otherwise add `date-fns` (smaller).
-- [ ] 4.2 Build `frontend/src/components/ui/RelativeTime.tsx`: renders absolute time on SSR, swaps to relative on client mount via `useEffect`. Native `<time title={absolute}>` element so absolute is the browser tooltip.
-- [ ] 4.3 Audit the codebase for raw timestamp renders (`toLocaleString`, `toISOString`, raw API timestamp strings displayed to users in `(authenticated)`). Replace each with `<RelativeTime value={...} />`.
-- [ ] 4.4 Surfaces to update: AnalysesTable analyzedAt column, dashboard recent analyses + recent scans, AnalysisDetail header, Portfolio scan dates, team page member join dates.
-- [ ] 4.5 Vitest: SSR shape = absolute, client shape = relative, "just now" for <30s, "3 hours ago" for 3h, hover shows absolute via title attribute.
+- [x] 4.1 Confirm date library: `date-fns` vs `dayjs` already in `frontend/package.json`? Use whichever is present; otherwise add `date-fns` (smaller). — Added `date-fns@^3.6.0`; neither was previously installed.
+- [x] 4.2 Build `frontend/src/components/ui/RelativeTime.tsx`: renders absolute time on SSR, swaps to relative on client mount via `useEffect`. Native `<time title={absolute}>` element so absolute is the browser tooltip. — SSR uses a deterministic UTC formatter (`Apr 27, 2026`) so server and client produce identical HTML regardless of process timezone, avoiding hydration mismatches without needing `suppressHydrationWarning`.
+- [x] 4.3 Audit the codebase for raw timestamp renders (`toLocaleString`, `toISOString`, raw API timestamp strings displayed to users in `(authenticated)`). Replace each with `<RelativeTime value={...} />`. — Three render sites found and replaced: `AnalysisRow` analyzedAt cell, dashboard recent-analyses analyzedAt, dashboard recent-scans createdAt. AnalysisDetail / TeamView / PortfolioCard reference these fields but don't currently display timestamps.
+- [x] 4.4 Surfaces to update: AnalysesTable analyzedAt column, dashboard recent analyses + recent scans, AnalysisDetail header, Portfolio scan dates, team page member join dates. — Updated all surfaces that currently render a timestamp. Surfacing timestamps where they're not currently shown (analysis-detail header, portfolio cards, team join dates) is deferred — net-new UI not in scope for §4.
+- [x] 4.5 Vitest: SSR shape = absolute, client shape = relative, "just now" for <30s, "3 hours ago" for 3h, hover shows absolute via title attribute. — 13 tests, including SSR via `react-dom/server.renderToString`, timezone-independence assertion, and a re-tick test that advances fake timers.
 
 ## 5. Activity feed
 

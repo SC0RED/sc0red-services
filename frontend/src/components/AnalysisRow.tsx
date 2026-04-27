@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+import RelativeTime from '@/components/ui/RelativeTime'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
@@ -75,7 +76,7 @@ export default function AnalysisRow({
                     whiteSpace: 'nowrap',
                 }}
             >
-                {analysis.analyzedAt ? new Date(analysis.analyzedAt).toLocaleDateString() : '—'}
+                <RelativeTime value={analysis.analyzedAt} />
             </td>
             <td style={{ padding: '1rem 0.5rem', whiteSpace: 'nowrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
