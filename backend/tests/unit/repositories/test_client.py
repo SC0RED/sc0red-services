@@ -98,6 +98,55 @@ class TestDynamoDBTable:
         call_kwargs = mock_table.query.call_args[1]
         assert call_kwargs["IndexName"] == "GSI1"
 
+    def test_query_default_does_not_request_consistent_read(self):
+        """Default query is eventually consistent — `ConsistentRead` is absent."""
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+
+        with patch("src.repositories.dynamodb.client.boto3") as mock_boto3:
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+            table = DynamoDBTable(table_name="test-table")
+
+        table.query(pk="X")
+
+        call_kwargs = mock_table.query.call_args[1]
+        assert "ConsistentRead" not in call_kwargs
+
+    def test_query_with_consistent_read_passes_kwarg(self):
+        """`consistent_read=True` propagates to ``ConsistentRead=True`` for base-table reads.
+
+        Required for the bulk-delete cascade pass — the cascade decision
+        must observe in-loop unlinks within the same handler run.
+        """
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+
+        with patch("src.repositories.dynamodb.client.boto3") as mock_boto3:
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+            table = DynamoDBTable(table_name="test-table")
+
+        table.query(pk="SCAN#x", sk_prefix="COMPANY#", consistent_read=True)
+
+        call_kwargs = mock_table.query.call_args[1]
+        assert call_kwargs["ConsistentRead"] is True
+
+    def test_query_consistent_read_silently_dropped_for_gsi(self):
+        """DynamoDB GSI reads are inherently eventually consistent — passing
+        `consistent_read=True` alongside `index_name` must NOT send
+        ``ConsistentRead=True`` to boto3 (it would 400)."""
+        mock_table = MagicMock()
+        mock_table.query.return_value = {"Items": []}
+
+        with patch("src.repositories.dynamodb.client.boto3") as mock_boto3:
+            mock_boto3.resource.return_value.Table.return_value = mock_table
+            table = DynamoDBTable(table_name="test-table")
+
+        table.query(pk="ORG#x", index_name="GSI1", consistent_read=True)
+
+        call_kwargs = mock_table.query.call_args[1]
+        assert "ConsistentRead" not in call_kwargs
+        assert call_kwargs["IndexName"] == "GSI1"
+
     @mock_aws
     def test_query_with_limit(self, dynamodb_table):
         """query() respects limit parameter."""
