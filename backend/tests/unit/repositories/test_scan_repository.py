@@ -5,6 +5,10 @@ import json
 import pytest
 from moto import mock_aws
 
+from src.repositories.dynamodb._tombstones import (
+    DELETED_AT_FIELD,
+    TTL_FIELD,
+)
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 
 
@@ -235,3 +239,116 @@ class TestScanRepository:
         repo.delete_all_company_links(scan_id)
 
         assert repo.get_scan_companies(scan_id) == []
+
+    # ── Soft-delete (tombstone) tests ────────────────────────────────
+
+    @mock_aws
+    def test_tombstone_hides_from_get_by_id(self, dynamodb_table):
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-A", "status": "complete"})
+        assert repo.get_by_id(scan_id) is not None
+
+        repo.tombstone(scan_id)
+        assert repo.get_by_id(scan_id) is None
+
+    @mock_aws
+    def test_tombstone_hides_from_find_recent_by_org(self, dynamodb_table):
+        repo = DynamoDBScanRepository(dynamodb_table)
+        live_id = repo.create(
+            {"org_id": "org-A", "status": "complete", "created_at": "2026-01-02"}
+        )
+        doomed_id = repo.create(
+            {"org_id": "org-A", "status": "complete", "created_at": "2026-01-01"}
+        )
+        repo.tombstone(doomed_id)
+
+        results = repo.find_recent_by_org("org-A", limit=None)
+        assert [scan["id"] for scan in results] == [live_id]
+
+    @mock_aws
+    def test_get_by_id_with_deleted_returns_tombstoned(self, dynamodb_table):
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-A", "status": "complete"})
+        repo.tombstone(scan_id)
+
+        item = repo.get_by_id_with_deleted(scan_id)
+        assert item is not None
+        assert item["id"] == scan_id
+        assert item.get(DELETED_AT_FIELD)
+
+    @mock_aws
+    def test_restore_clears_tombstone(self, dynamodb_table):
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-A", "status": "complete"})
+        repo.tombstone(scan_id)
+        assert repo.get_by_id(scan_id) is None
+
+        repo.restore(scan_id)
+        item = repo.get_by_id(scan_id)
+        assert item is not None
+        assert DELETED_AT_FIELD not in item
+        assert TTL_FIELD not in item
+
+    @mock_aws
+    def test_tombstone_link_hides_from_get_scan_companies(self, dynamodb_table):
+        """Tombstoned link records are filtered out of the live cascade read."""
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-A", "status": "running"})
+        repo.link_company(scan_id, "c-1", "Company One")
+        repo.link_company(scan_id, "c-2", "Company Two")
+
+        repo.tombstone_link(scan_id, "c-1")
+
+        live = repo.get_scan_companies(scan_id)
+        assert [link["company_id"] for link in live] == ["c-2"]
+
+        # The recovery-aware variant still surfaces the tombstoned link.
+        all_links = repo.get_scan_companies_with_deleted(scan_id)
+        ids = sorted(link["company_id"] for link in all_links)
+        assert ids == ["c-1", "c-2"]
+
+    @mock_aws
+    def test_restore_link_clears_tombstone(self, dynamodb_table):
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-A", "status": "running"})
+        repo.link_company(scan_id, "c-1", "Company One")
+        repo.tombstone_link(scan_id, "c-1")
+        assert repo.get_scan_companies(scan_id) == []
+
+        repo.restore_link(scan_id, "c-1")
+        live = repo.get_scan_companies(scan_id)
+        assert [link["company_id"] for link in live] == ["c-1"]
+
+    @mock_aws
+    def test_find_tombstoned_by_org_returns_only_deleted(self, dynamodb_table):
+        repo = DynamoDBScanRepository(dynamodb_table)
+        live_id = repo.create({"org_id": "org-A", "status": "complete"})
+        doomed_id = repo.create({"org_id": "org-A", "status": "complete"})
+        other_id = repo.create({"org_id": "org-B", "status": "complete"})
+        repo.tombstone(doomed_id)
+        repo.tombstone(other_id)  # different org — must NOT surface
+
+        results = repo.find_tombstoned_by_org("org-A")
+        ids = [scan["id"] for scan in results]
+        assert ids == [doomed_id]
+        assert live_id not in ids
+
+    @mock_aws
+    def test_delete_all_company_links_drains_tombstoned_links(self, dynamodb_table):
+        """The hard-delete sweeper must catch tombstoned links too.
+
+        Cleanup scripts (and post-TTL housekeeping) need to be able to
+        drain a scan completely. If `delete_all_company_links` only saw
+        live links, tombstoned ones would survive forever as orphan
+        records pinned to a parent scan that's already gone.
+        """
+        repo = DynamoDBScanRepository(dynamodb_table)
+        scan_id = repo.create({"org_id": "org-A", "status": "running"})
+        repo.link_company(scan_id, "c-live", "Company Live")
+        repo.link_company(scan_id, "c-tomb", "Company Tomb")
+        repo.tombstone_link(scan_id, "c-tomb")
+
+        repo.delete_all_company_links(scan_id)
+
+        assert repo.get_scan_companies(scan_id) == []
+        assert repo.get_scan_companies_with_deleted(scan_id) == []

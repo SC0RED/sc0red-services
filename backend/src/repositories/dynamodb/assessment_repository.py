@@ -7,6 +7,17 @@ Single-table keys:
   EbitdaTree:  pk=ASSESSMENT#{id}  sk=EBITDA_TREE
   Document:    pk=ASSESSMENT#{id}  sk=DOC#{doc_id}
   GSI3: pk=COMPANY#{company_id}  (for company→assessment lookup)
+
+Soft-delete contract (see `soft-delete-recovery` change):
+  Read methods filter out tombstoned records (where `deleted_at` is
+  set) by default. Methods that intentionally surface tombstoned
+  records — used by the engineer-assisted recovery path and by the
+  Phase 2 admin UI — carry a `_with_deleted` suffix. Sub-record
+  getters (risk scores, opportunities, EBITDA tree, value chain,
+  documents) inherit the parent assessment's tombstone — once the
+  metadata item is tombstoned, the whole assessment is invisible
+  to live reads. We do NOT tombstone every child item individually;
+  it would multiply the write volume with no behavioural gain.
 """
 
 from __future__ import annotations
@@ -16,6 +27,13 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from src.documents.extract_text import join_document_texts
+from src.repositories.dynamodb._tombstones import (
+    DELETED_AT_FIELD,
+    TTL_FIELD,
+    filter_live,
+    is_live,
+    tombstone_attributes,
+)
 
 if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
@@ -30,7 +48,24 @@ class DynamoDBAssessmentRepository:
     # ── Assessment operations ────────────────────────────────────────
 
     def get_by_id(self, assessment_id: str) -> dict[str, Any] | None:
-        """Return the assessment metadata item for the given ID, or None if not found."""
+        """Return the assessment metadata item, or None if not found OR tombstoned.
+
+        Treats tombstoned and not-found identically — callers that need
+        to inspect tombstoned records (recovery flows) use
+        `get_by_id_with_deleted`.
+        """
+        item = self._table.get_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="ASSESSMENT#METADATA",
+        )
+        return item if is_live(item) else None
+
+    def get_by_id_with_deleted(self, assessment_id: str) -> dict[str, Any] | None:
+        """Return the assessment metadata item EVEN IF tombstoned.
+
+        Recovery-aware variant for the restore path. Returns None only
+        when the record genuinely doesn't exist.
+        """
         return self._table.get_item(
             pk=f"ASSESSMENT#{assessment_id}",
             sk="ASSESSMENT#METADATA",
@@ -62,7 +97,21 @@ class DynamoDBAssessmentRepository:
         return assessment_id
 
     def find_by_company(self, company_id: str) -> list[dict[str, Any]]:
-        """Return all assessments associated with the given company ID."""
+        """Return live (non-tombstoned) assessments for the given company ID."""
+        items, _cursor = self._table.query_gsi(
+            index_name="GSI3",
+            pk_attr="GSI3PK",
+            pk_value=f"COMPANY#{company_id}",
+        )
+        return filter_live(items)
+
+    def find_by_company_with_deleted(self, company_id: str) -> list[dict[str, Any]]:
+        """Return ALL assessments (including tombstoned) for the given company ID.
+
+        Recovery-aware variant. Used by the engineer-assisted recovery
+        path to surface every assessment that needs restoring when a
+        company is restored.
+        """
         items, _cursor = self._table.query_gsi(
             index_name="GSI3",
             pk_attr="GSI3PK",
@@ -71,11 +120,48 @@ class DynamoDBAssessmentRepository:
         return items
 
     def delete(self, assessment_id: str) -> None:
-        """Delete an assessment and all its child items (risk scores, opportunities)."""
+        """Hard-delete an assessment and all its child items.
+
+        Reserved for cleanup-script and test paths; production handlers
+        use `tombstone()` so the record is recoverable for 90 days.
+        """
         # Delete all items under this assessment (metadata, risk scores, opportunities)
         items = self._table.query(pk=f"ASSESSMENT#{assessment_id}")
         keys = [{"pk": item["pk"], "sk": item["sk"]} for item in items]
         self._table.batch_delete(keys)
+
+    def tombstone(self, assessment_id: str) -> None:
+        """Mark the assessment metadata as soft-deleted with a 90-day TTL.
+
+        Only the metadata item is tombstoned — risk scores,
+        opportunities, EBITDA tree, value chain, and documents remain
+        in the table untouched. Reads of those sub-records are gated
+        through `get_by_id` (callers fetch the assessment first); once
+        the metadata is tombstoned, the assessment is invisible to
+        live traffic.
+
+        DynamoDB TTL evicts the metadata row 90 days after `deleted_at`.
+        We rely on a follow-up cleanup pass to drain orphan child
+        items after TTL eviction; the cleanup script's existing
+        orphan-detection logic catches them.
+        """
+        self._table.update_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="ASSESSMENT#METADATA",
+            updates=tombstone_attributes(),
+        )
+
+    def restore(self, assessment_id: str) -> None:
+        """Clear the tombstone markers, making the assessment live again.
+
+        Sub-records (risk scores, opportunities, etc.) are unaffected by
+        tombstone/restore — they were never tombstoned.
+        """
+        self._table.remove_attributes(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="ASSESSMENT#METADATA",
+            attribute_names=[DELETED_AT_FIELD, TTL_FIELD],
+        )
 
     # ── Risk score operations ────────────────────────────────────────
 

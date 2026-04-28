@@ -182,3 +182,41 @@ class TestDynamoDBTable:
 
         result = dynamodb_table.get_item(pk="UPD#1", sk="META")
         assert result["val"] == "original"
+
+    @mock_aws
+    def test_remove_attributes_drops_named_fields(self, dynamodb_table):
+        """remove_attributes issues a REMOVE expression so the attributes
+        are actually absent (not None) — required by the soft-delete
+        recovery path so DynamoDB TTL doesn't see a None ttl value."""
+        dynamodb_table.put_item(
+            {
+                "pk": "REM#1",
+                "sk": "META",
+                "value": "kept",
+                "deleted_at": "2026-04-27T12:00:00+00:00",
+                "ttl": 1234567890,
+            }
+        )
+
+        dynamodb_table.remove_attributes(
+            pk="REM#1",
+            sk="META",
+            attribute_names=["deleted_at", "ttl"],
+        )
+
+        result = dynamodb_table.get_item(pk="REM#1", sk="META")
+        assert result is not None
+        assert "deleted_at" not in result
+        assert "ttl" not in result
+        # Untouched attributes survive.
+        assert result["value"] == "kept"
+
+    @mock_aws
+    def test_remove_attributes_empty_list_is_noop(self, dynamodb_table):
+        """remove_attributes with [] short-circuits — no DynamoDB call."""
+        dynamodb_table.put_item({"pk": "REM#0", "sk": "META", "value": "kept"})
+
+        dynamodb_table.remove_attributes(pk="REM#0", sk="META", attribute_names=[])
+
+        result = dynamodb_table.get_item(pk="REM#0", sk="META")
+        assert result["value"] == "kept"

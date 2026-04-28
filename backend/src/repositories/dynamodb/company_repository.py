@@ -3,6 +3,14 @@
 Single-table keys:
   pk = COMPANY#{id}    sk = COMPANY#METADATA
   GSI1: pk=ORG#{org_id}  sk=COMPANY#{id}
+
+Soft-delete contract (see `soft-delete-recovery` change):
+  All read methods filter out tombstoned records (where `deleted_at`
+  is set) by default. Methods that intentionally return tombstoned
+  records — used by the engineer-assisted recovery path and by the
+  Phase 2 admin UI — carry a `_with_deleted` suffix. New methods
+  that bypass the filter MUST follow that naming convention so the
+  filter behaviour is grep-able.
 """
 
 from __future__ import annotations
@@ -10,6 +18,14 @@ from __future__ import annotations
 import json
 import uuid
 from typing import TYPE_CHECKING, Any
+
+from src.repositories.dynamodb._tombstones import (
+    DELETED_AT_FIELD,
+    TTL_FIELD,
+    filter_live,
+    is_live,
+    tombstone_attributes,
+)
 
 if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
@@ -24,18 +40,35 @@ class DynamoDBCompanyRepository:
     # ── EntityRepository-style methods ───────────────────────────────
 
     def get_by_id(self, company_id: str) -> dict[str, Any] | None:
-        """Return the company metadata item for the given ID, or None if not found."""
+        """Return the company metadata item, or None if not found OR tombstoned.
+
+        Treats tombstoned and not-found identically — callers that need
+        to inspect tombstoned records (recovery flows) use
+        `get_by_id_with_deleted`.
+        """
+        item = self._table.get_item(
+            pk=f"COMPANY#{company_id}",
+            sk="COMPANY#METADATA",
+        )
+        return item if is_live(item) else None
+
+    def get_by_id_with_deleted(self, company_id: str) -> dict[str, Any] | None:
+        """Return the company metadata item EVEN IF tombstoned.
+
+        Recovery-aware variant for the restore path. Returns None only
+        when the record genuinely doesn't exist.
+        """
         return self._table.get_item(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
         )
 
     def get_by_ids(self, company_ids: list[str]) -> list[dict[str, Any]]:
-        """Fetch multiple companies in a single BatchGetItem call."""
+        """Fetch multiple companies in a single BatchGetItem call. Filters tombstones."""
         if not company_ids:
             return []
         keys = [{"pk": f"COMPANY#{cid}", "sk": "COMPANY#METADATA"} for cid in company_ids]
-        return self._table.batch_get(keys)
+        return filter_live(self._table.batch_get(keys))
 
     def save(self, entity: dict[str, Any]) -> str:
         """Persist a full company entity document and return its ID."""
@@ -70,10 +103,36 @@ class DynamoDBCompanyRepository:
         self.update(company_id, {"metadata_json": json.dumps(metadata)})
 
     def delete(self, company_id: str) -> None:
-        """Delete the company metadata item for the given ID."""
+        """Hard-delete the company metadata item.
+
+        Reserved for cleanup-script and test paths; production handlers
+        use `tombstone()` so the record is recoverable for 90 days.
+        """
         self._table.delete_item(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
+        )
+
+    def tombstone(self, company_id: str) -> None:
+        """Mark the company as soft-deleted with a 90-day TTL.
+
+        Reads through `get_by_id` / `get_by_ids` / `find_by_org` will
+        no longer return this record. DynamoDB TTL evicts the row 90
+        days after `deleted_at`. Recovery via `restore()` clears the
+        markers.
+        """
+        self._table.update_item(
+            pk=f"COMPANY#{company_id}",
+            sk="COMPANY#METADATA",
+            updates=tombstone_attributes(),
+        )
+
+    def restore(self, company_id: str) -> None:
+        """Clear the tombstone markers, making the company live again."""
+        self._table.remove_attributes(
+            pk=f"COMPANY#{company_id}",
+            sk="COMPANY#METADATA",
+            attribute_names=[DELETED_AT_FIELD, TTL_FIELD],
         )
 
     def find_by_org(
@@ -82,8 +141,18 @@ class DynamoDBCompanyRepository:
         limit: int | None = None,
         cursor: dict[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
-        """Return companies belonging to the given org, with optional pagination."""
-        return self._table.query_gsi(
+        """Return live (non-tombstoned) companies for the given org.
+
+        Pagination caveat: ``limit`` is the DynamoDB page cap, applied
+        BEFORE tombstones are filtered. A page can therefore return
+        fewer than ``limit`` items even when more live records exist on
+        subsequent pages — callers must drive pagination off
+        ``next_cursor``, not off the size of the returned slice. At
+        Janus volumes (low tombstone density) page rag is negligible;
+        revisit with a server-side ``FilterExpression`` if heavy
+        tombstone density distorts pagination.
+        """
+        items, next_cursor = self._table.query_gsi(
             index_name="GSI1",
             pk_attr="GSI1PK",
             pk_value=f"ORG#{org_id}",
@@ -92,3 +161,25 @@ class DynamoDBCompanyRepository:
             limit=limit,
             cursor=cursor,
         )
+        return filter_live(items), next_cursor
+
+    def find_tombstoned_by_org(
+        self,
+        org_id: str,
+    ) -> list[dict[str, Any]]:
+        """Return ONLY tombstoned companies for the given org.
+
+        Used by the Phase 2 admin recovery UI. Phase 1 ships this so
+        engineer-assisted recovery has a quick listing path. Filters
+        in-memory after the GSI query — at Janus volumes the filter
+        cost is negligible; revisit with a `deleted_at` GSI if volumes
+        ever justify it.
+        """
+        items, _cursor = self._table.query_gsi(
+            index_name="GSI1",
+            pk_attr="GSI1PK",
+            pk_value=f"ORG#{org_id}",
+            sk_attr="GSI1SK",
+            sk_prefix="COMPANY#",
+        )
+        return [item for item in items if item.get(DELETED_AT_FIELD)]

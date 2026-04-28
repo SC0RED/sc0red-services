@@ -213,6 +213,39 @@ class DynamoDBTable:
             ExpressionAttributeValues=values,
         )
 
+    def remove_attributes(
+        self,
+        pk: str,
+        sk: str,
+        attribute_names: list[str],
+    ) -> None:
+        """Remove the given attributes from an item via a REMOVE expression.
+
+        Used by the soft-delete recovery path — tombstoned records carry
+        `deleted_at` + `ttl` attributes; restoring a record means
+        REMOVING (not just nulling) those attributes so the item is
+        indistinguishable from one that was never deleted. SET-to-None
+        wouldn't work: DynamoDB still considers the attribute present,
+        and the read filter (`if not item.get('deleted_at')`) would
+        also miss it (None is falsy), but `ttl` set to None breaks the
+        TTL service which expects either absent-or-numeric.
+        """
+        if not attribute_names:
+            return
+
+        expressions: list[str] = []
+        names: dict[str, str] = {}
+        for index, name in enumerate(attribute_names):
+            attr_name = f"#attr{index}"
+            expressions.append(attr_name)
+            names[attr_name] = name
+
+        self._table.update_item(
+            Key={"pk": pk, "sk": sk},
+            UpdateExpression="REMOVE " + ", ".join(expressions),
+            ExpressionAttributeNames=names,
+        )
+
     def batch_write(self, items: list[dict[str, Any]]) -> None:
         """Write multiple items using a batch writer (max 25 per request, auto-batched)."""
         with self._table.batch_writer() as batch:
