@@ -2,6 +2,8 @@
 
 import time
 
+import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from src.repositories.dynamodb._tombstones import (
@@ -200,6 +202,27 @@ class TestCompanyRepository:
         assert ids == ["tomb-1", "tomb-2"]
         for item in results:
             assert item.get(DELETED_AT_FIELD)
+
+    @mock_aws
+    def test_restore_raises_when_row_was_ttl_evicted(self, dynamodb_table):
+        """Recovery flow reads the tombstoned row, then TTL evicts it
+        before the `restore()` UpdateItem lands. Without the guard,
+        DynamoDB would create an empty `{pk, sk}` shell that looks
+        restored but has lost every data field. With the guard the
+        call raises ConditionalCheckFailedException — recovery
+        callers translate that to `ttl_expired`.
+        """
+        repo = DynamoDBCompanyRepository(dynamodb_table)
+        # Note: never `save`d. Simulates the post-eviction state where
+        # the recovery flow had a snapshot but the row is now gone.
+        with pytest.raises(ClientError) as error_info:
+            repo.restore("ghost-company")
+        assert (
+            error_info.value.response["Error"]["Code"] == "ConditionalCheckFailedException"
+        )
+
+        # And the ghost-company shell was NOT created.
+        assert dynamodb_table.get_item(pk="COMPANY#ghost-company", sk="COMPANY#METADATA") is None
 
     @mock_aws
     def test_legacy_records_without_deleted_at_treated_as_live(self, dynamodb_table):

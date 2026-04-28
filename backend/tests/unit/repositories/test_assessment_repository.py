@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from src.repositories.dynamodb._tombstones import (
@@ -371,6 +373,24 @@ class TestAssessmentRepository:
         assert item is not None
         assert DELETED_AT_FIELD not in item
         assert TTL_FIELD not in item
+
+    @mock_aws
+    def test_restore_raises_when_row_was_ttl_evicted(self, dynamodb_table):
+        """Eviction-race guard: see the matching company-repo test for
+        the full rationale.
+        """
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        with pytest.raises(ClientError) as error_info:
+            repo.restore("ghost-assessment")
+        assert (
+            error_info.value.response["Error"]["Code"] == "ConditionalCheckFailedException"
+        )
+        assert (
+            dynamodb_table.get_item(
+                pk="ASSESSMENT#ghost-assessment", sk="ASSESSMENT#METADATA"
+            )
+            is None
+        )
 
     @mock_aws
     def test_tombstone_does_not_touch_child_items(self, dynamodb_table):

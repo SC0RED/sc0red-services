@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from src.repositories.dynamodb._tombstones import (
@@ -332,6 +333,34 @@ class TestScanRepository:
         ids = [scan["id"] for scan in results]
         assert ids == [doomed_id]
         assert live_id not in ids
+
+    @mock_aws
+    def test_restore_raises_when_row_was_ttl_evicted(self, dynamodb_table):
+        """Eviction-race guard: see the matching company-repo test for
+        the full rationale.
+        """
+        repo = DynamoDBScanRepository(dynamodb_table)
+        with pytest.raises(ClientError) as error_info:
+            repo.restore("ghost-scan")
+        assert (
+            error_info.value.response["Error"]["Code"] == "ConditionalCheckFailedException"
+        )
+        assert dynamodb_table.get_item(pk="SCAN#ghost-scan", sk="SCAN#METADATA") is None
+
+    @mock_aws
+    def test_restore_link_raises_when_row_was_ttl_evicted(self, dynamodb_table):
+        """Eviction-race guard for link records — same posture as
+        `test_restore_raises_when_row_was_ttl_evicted`.
+        """
+        repo = DynamoDBScanRepository(dynamodb_table)
+        with pytest.raises(ClientError) as error_info:
+            repo.restore_link("ghost-scan", "ghost-company")
+        assert (
+            error_info.value.response["Error"]["Code"] == "ConditionalCheckFailedException"
+        )
+        assert (
+            dynamodb_table.get_item(pk="SCAN#ghost-scan", sk="COMPANY#ghost-company") is None
+        )
 
     @mock_aws
     def test_delete_all_company_links_drains_tombstoned_links(self, dynamodb_table):

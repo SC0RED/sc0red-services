@@ -128,11 +128,21 @@ class DynamoDBCompanyRepository:
         )
 
     def restore(self, company_id: str) -> None:
-        """Clear the tombstone markers, making the company live again."""
+        """Clear the tombstone markers, making the company live again.
+
+        Guarded by ``require_exists=True`` to surface the TTL-eviction
+        race: if the row was hard-evicted by DynamoDB TTL between the
+        recovery flow's read and this write, the conditional check
+        fails and ``ClientError(Code=ConditionalCheckFailedException)``
+        propagates — recovery callers translate that to a
+        ``ttl_expired`` outcome rather than silently writing an empty
+        ``{pk, sk}`` shell that looks restored but has lost all data.
+        """
         self._table.remove_attributes(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
             attribute_names=[DELETED_AT_FIELD, TTL_FIELD],
+            require_exists=True,
         )
 
     def find_by_org(

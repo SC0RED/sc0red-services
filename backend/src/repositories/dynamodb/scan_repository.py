@@ -135,11 +135,16 @@ class DynamoDBScanRepository:
         Counterpart of `tombstone()`. Does NOT auto-restore link
         records or linked companies/assessments — callers re-stitch
         whatever the recovery flow demands.
+
+        Guarded by ``require_exists=True`` to surface the TTL-eviction
+        race (see `DynamoDBCompanyRepository.restore` for the full
+        rationale).
         """
         self._table.remove_attributes(
             pk=f"SCAN#{scan_id}",
             sk="SCAN#METADATA",
             attribute_names=[DELETED_AT_FIELD, TTL_FIELD],
+            require_exists=True,
         )
 
     def link_company(
@@ -198,11 +203,17 @@ class DynamoDBScanRepository:
         )
 
     def restore_link(self, scan_id: str, company_id: str) -> None:
-        """Clear tombstone markers on a scan→company link record."""
+        """Clear tombstone markers on a scan→company link record.
+
+        Guarded by ``require_exists=True`` to surface the TTL-eviction
+        race (see `DynamoDBCompanyRepository.restore` for the full
+        rationale).
+        """
         self._table.remove_attributes(
             pk=f"SCAN#{scan_id}",
             sk=f"COMPANY#{company_id}",
             attribute_names=[DELETED_AT_FIELD, TTL_FIELD],
+            require_exists=True,
         )
 
     def delete_all_company_links(self, scan_id: str) -> None:

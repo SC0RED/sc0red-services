@@ -156,11 +156,16 @@ class DynamoDBAssessmentRepository:
 
         Sub-records (risk scores, opportunities, etc.) are unaffected by
         tombstone/restore — they were never tombstoned.
+
+        Guarded by ``require_exists=True`` to surface the TTL-eviction
+        race (see `DynamoDBCompanyRepository.restore` for the full
+        rationale).
         """
         self._table.remove_attributes(
             pk=f"ASSESSMENT#{assessment_id}",
             sk="ASSESSMENT#METADATA",
             attribute_names=[DELETED_AT_FIELD, TTL_FIELD],
+            require_exists=True,
         )
 
     # ── Risk score operations ────────────────────────────────────────

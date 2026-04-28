@@ -218,6 +218,8 @@ class DynamoDBTable:
         pk: str,
         sk: str,
         attribute_names: list[str],
+        *,
+        require_exists: bool = False,
     ) -> None:
         """Remove the given attributes from an item via a REMOVE expression.
 
@@ -229,6 +231,16 @@ class DynamoDBTable:
         and the read filter (`if not item.get('deleted_at')`) would
         also miss it (None is falsy), but `ttl` set to None breaks the
         TTL service which expects either absent-or-numeric.
+
+        Pass ``require_exists=True`` to gate the update on the row
+        already existing — DynamoDB ``UpdateItem`` with no
+        ``ConditionExpression`` happily creates a `{pk, sk}` shell when
+        the row is gone, which is *exactly* what happens when TTL
+        evicts a tombstoned record between the recovery flow's read
+        and write. Restore callers MUST set this flag so that an
+        eviction race surfaces as a ``ClientError`` (code
+        ``ConditionalCheckFailedException``) instead of a silent
+        empty-shell write that looks restored but has lost all data.
         """
         if not attribute_names:
             return
@@ -240,11 +252,15 @@ class DynamoDBTable:
             expressions.append(attr_name)
             names[attr_name] = name
 
-        self._table.update_item(
-            Key={"pk": pk, "sk": sk},
-            UpdateExpression="REMOVE " + ", ".join(expressions),
-            ExpressionAttributeNames=names,
-        )
+        kwargs: dict[str, Any] = {
+            "Key": {"pk": pk, "sk": sk},
+            "UpdateExpression": "REMOVE " + ", ".join(expressions),
+            "ExpressionAttributeNames": names,
+        }
+        if require_exists:
+            kwargs["ConditionExpression"] = "attribute_exists(pk)"
+
+        self._table.update_item(**kwargs)
 
     def batch_write(self, items: list[dict[str, Any]]) -> None:
         """Write multiple items using a batch writer (max 25 per request, auto-batched)."""

@@ -144,10 +144,12 @@
       it reappears on the dashboard.
 - [ ] 9.2 Deploy to testing.
 - [ ] 9.3 Deploy to production.
-- [ ] 9.4 Post-deploy: document the engineer-assisted recovery
-      runbook (how to find a tombstoned record, how to restore via
-      UpdateItem). Save in `docs/runbooks/` so on-call engineers
-      can use it without paging the original author.
+- [x] 9.4 Engineer-assisted recovery runbook published at
+      `docs/runbooks/recover-tombstoned-scan.md`. Covers the
+      identify-record / check-TTL / restore-in-dependency-order
+      flow plus verification + escalation paths. Pulled forward from
+      post-deploy because the cascade-restore order is non-obvious
+      and the runbook needs to ship alongside the recovery API.
 
 ## 10. Closeout
 
