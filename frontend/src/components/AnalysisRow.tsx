@@ -1,24 +1,24 @@
 import Link from 'next/link'
 
 import DeleteAnalysisButton from '@/components/DeleteAnalysisButton'
+import RelativeTime from '@/components/ui/RelativeTime'
 import { getRiskTierLabel, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { AnalysisItem } from '@/lib/types/api'
 
 interface AnalysisRowProps {
     analysis: AnalysisItem
     selected: boolean
-    selectionDisabled: boolean
-    onToggleSelection: () => void
+    /**
+     * Selection toggle. Receives `shiftKey` so the parent can implement
+     * shift-click range selection (Linear/Gmail pattern). Keyboard space
+     * activations pass `false` (mouse-event shiftKey is unset on synthetic
+     * keyboard activations) — that's the desired behaviour.
+     */
+    onToggleSelection: (shiftKey: boolean) => void
     showBorder: boolean
 }
 
-export default function AnalysisRow({
-    analysis,
-    selected,
-    selectionDisabled,
-    onToggleSelection,
-    showBorder,
-}: AnalysisRowProps) {
+export default function AnalysisRow({ analysis, selected, onToggleSelection, showBorder }: AnalysisRowProps) {
     const tier = analysis.riskTier ?? ''
 
     return (
@@ -27,14 +27,18 @@ export default function AnalysisRow({
                 <input
                     type="checkbox"
                     checked={selected}
-                    onChange={onToggleSelection}
-                    disabled={selectionDisabled}
+                    // `onClick` carries `shiftKey`; `onChange` is only retained
+                    // to keep React's controlled-input invariant. The actual
+                    // toggle is dispatched from `onClick` so we can capture
+                    // shift-click for range selection.
+                    onClick={(event) => onToggleSelection(event.shiftKey)}
+                    onChange={() => {}}
                     aria-label={`Select ${analysis.companyName}`}
                     style={{
                         width: '16px',
                         height: '16px',
                         accentColor: 'var(--accent-blue)',
-                        cursor: selectionDisabled ? 'not-allowed' : 'pointer',
+                        cursor: 'pointer',
                     }}
                 />
             </td>
@@ -75,7 +79,7 @@ export default function AnalysisRow({
                     whiteSpace: 'nowrap',
                 }}
             >
-                {analysis.analyzedAt ? new Date(analysis.analyzedAt).toLocaleDateString() : '—'}
+                <RelativeTime value={analysis.analyzedAt} />
             </td>
             <td style={{ padding: '1rem 0.5rem', whiteSpace: 'nowrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.125rem' }}>

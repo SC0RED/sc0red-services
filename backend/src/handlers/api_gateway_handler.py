@@ -104,7 +104,9 @@ class APIGatewayHandler:
         self._router = self._build_router()
 
     def _build_router(self) -> Router:
+        from src.handlers.activity_handlers import handle_get_activity
         from src.handlers.analysis_handlers import (
+            handle_bulk_delete_analyses,
             handle_dashboard,
             handle_delete_analysis,
             handle_get_analysis,
@@ -241,6 +243,17 @@ class APIGatewayHandler:
                 event, authentication, self._storage
             ),
         )
+        # Bulk delete: race-immune cascade. See `handle_bulk_delete_analyses`
+        # for why parallel `DELETE /api/analysis/{id}` calls leave orphan
+        # scans, which this endpoint fixes by collapsing N deletes into
+        # one handler run.
+        router.protected(
+            "POST",
+            "/api/analyses/bulk-delete",
+            lambda event, authentication: handle_bulk_delete_analyses(
+                event, authentication, self._storage
+            ),
+        )
         router.protected(
             "GET",
             "/api/dashboard",
@@ -290,6 +303,13 @@ class APIGatewayHandler:
             "POST",
             "/api/analytics/events",
             handle_post_analytics_event,
+        )
+
+        # ── Activity feed ────────────────────────────────────────────────────
+        router.protected(
+            "GET",
+            "/api/activity",
+            lambda event, authentication: handle_get_activity(event, authentication, self._storage),
         )
 
         return router

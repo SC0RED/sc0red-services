@@ -52,6 +52,27 @@ def setup_table(table_name: str, endpoint: str) -> None:
     except ddb.exceptions.ResourceInUseException:
         print(f"Table '{table_name}' already exists")
 
+    # Soft-delete recovery: tombstoned rows carry a `ttl` epoch-seconds
+    # attribute set to deleted_at + 90 days. DynamoDB TTL evicts them
+    # automatically. Mirrors the prod CDK config in
+    # infrastructure/stacks/stack_resources.py:create_table — local dev
+    # MUST match production infrastructure (see CLAUDE.md
+    # "Local Dev = Production Parity").
+    try:
+        ddb.update_time_to_live(
+            TableName=table_name,
+            TimeToLiveSpecification={"Enabled": True, "AttributeName": "ttl"},
+        )
+        print(f"TTL enabled on '{table_name}' (attribute=ttl)")
+    except ddb.exceptions.ClientError as error:
+        # LocalStack returns ValidationException when TTL is already
+        # enabled with the same attribute; treat as idempotent.
+        message = str(error)
+        if "TimeToLive is already enabled" in message or "already enabled" in message:
+            print(f"TTL already enabled on '{table_name}'")
+        else:
+            raise
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Setup DynamoDB table")

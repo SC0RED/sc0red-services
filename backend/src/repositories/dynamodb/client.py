@@ -68,15 +68,30 @@ class DynamoDBTable:
         index_name: str | None = None,
         limit: int | None = None,
         scan_forward: bool = True,
+        consistent_read: bool = False,
     ) -> list[dict[str, Any]]:
         """Query items by partition key, with optional sort-key prefix.
 
         Automatically paginates through all results using LastEvaluatedKey.
         If limit is specified, returns at most that many items.
+
+        Pass ``consistent_read=True`` for read-after-write consistency on
+        the base table — the default eventually-consistent read can lag by
+        up to ~100ms, which is fine for most reads but breaks workflows
+        that depend on observing prior writes in the same handler run
+        (e.g., the bulk-delete cascade-pass in
+        ``analysis_handlers.handle_bulk_delete_analyses`` after
+        ``unlink_company`` writes). GSI queries (``index_name`` set) cannot
+        use consistent reads — DynamoDB rejects the combination — so this
+        flag is silently ignored when an index is targeted.
         """
         kwargs: dict[str, Any] = {}
         if index_name:
             kwargs["IndexName"] = index_name
+        elif consistent_read:
+            # GSI reads are eventually consistent by DynamoDB design;
+            # ConsistentRead only applies to base-table queries.
+            kwargs["ConsistentRead"] = True
 
         key_condition = Key("pk").eq(pk)
         if sk_prefix:
@@ -197,6 +212,55 @@ class DynamoDBTable:
             ExpressionAttributeNames=names,
             ExpressionAttributeValues=values,
         )
+
+    def remove_attributes(
+        self,
+        pk: str,
+        sk: str,
+        attribute_names: list[str],
+        *,
+        require_exists: bool = False,
+    ) -> None:
+        """Remove the given attributes from an item via a REMOVE expression.
+
+        Used by the soft-delete recovery path — tombstoned records carry
+        `deleted_at` + `ttl` attributes; restoring a record means
+        REMOVING (not just nulling) those attributes so the item is
+        indistinguishable from one that was never deleted. SET-to-None
+        wouldn't work: DynamoDB still considers the attribute present,
+        and the read filter (`if not item.get('deleted_at')`) would
+        also miss it (None is falsy), but `ttl` set to None breaks the
+        TTL service which expects either absent-or-numeric.
+
+        Pass ``require_exists=True`` to gate the update on the row
+        already existing — DynamoDB ``UpdateItem`` with no
+        ``ConditionExpression`` happily creates a `{pk, sk}` shell when
+        the row is gone, which is *exactly* what happens when TTL
+        evicts a tombstoned record between the recovery flow's read
+        and write. Restore callers MUST set this flag so that an
+        eviction race surfaces as a ``ClientError`` (code
+        ``ConditionalCheckFailedException``) instead of a silent
+        empty-shell write that looks restored but has lost all data.
+        """
+        if not attribute_names:
+            return
+
+        expressions: list[str] = []
+        names: dict[str, str] = {}
+        for index, name in enumerate(attribute_names):
+            attr_name = f"#attr{index}"
+            expressions.append(attr_name)
+            names[attr_name] = name
+
+        kwargs: dict[str, Any] = {
+            "Key": {"pk": pk, "sk": sk},
+            "UpdateExpression": "REMOVE " + ", ".join(expressions),
+            "ExpressionAttributeNames": names,
+        }
+        if require_exists:
+            kwargs["ConditionExpression"] = "attribute_exists(pk)"
+
+        self._table.update_item(**kwargs)
 
     def batch_write(self, items: list[dict[str, Any]]) -> None:
         """Write multiple items using a batch writer (max 25 per request, auto-batched)."""

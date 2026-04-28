@@ -18,3 +18,34 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = vi.fn()
 }
+
+// jsdom's `localStorage` shim in this vitest version is missing
+// `getItem` / `setItem` / `removeItem` / `clear`. The activity panel
+// (Tier 2 §5) persists "last viewed" to localStorage; without a real
+// stub the test file can't exercise it.
+if (typeof window !== 'undefined') {
+    const needsStub =
+        typeof window.localStorage === 'undefined' || typeof window.localStorage.getItem !== 'function'
+    if (needsStub) {
+        const storage = new Map<string, string>()
+        Object.defineProperty(window, 'localStorage', {
+            configurable: true,
+            value: {
+                getItem: (key: string) => storage.get(key) ?? null,
+                setItem: (key: string, value: string) => {
+                    storage.set(key, value)
+                },
+                removeItem: (key: string) => {
+                    storage.delete(key)
+                },
+                clear: () => {
+                    storage.clear()
+                },
+                key: (index: number) => Array.from(storage.keys())[index] ?? null,
+                get length() {
+                    return storage.size
+                },
+            },
+        })
+    }
+}
