@@ -351,7 +351,15 @@ def handle_delete_scan(
     storage: DynamoDBStorageProvider,
     scan_id: str,
 ) -> LambdaResponse:
-    """Handle DELETE /api/scan/{scan_id}."""
+    """Handle DELETE /api/scan/{scan_id}.
+
+    Soft-deletes (tombstones) the scan, every linked company, every
+    company's assessments, and every scan→company link record. Records
+    become invisible to live reads immediately and are hard-evicted by
+    DynamoDB TTL after 90 days. Recovery within that window goes through
+    the engineer-assisted path (Phase 1) or the admin Recently Deleted
+    UI (Phase 2).
+    """
     scan_repo = storage.create_scan_repository()
     scan = scan_repo.get_by_id(scan_id)
     if error := check_org_access(scan, authentication):
@@ -366,9 +374,9 @@ def handle_delete_scan(
         if company_id:
             assessments = assessment_repo.find_by_company(company_id)
             for assessment in assessments:
-                assessment_repo.delete(assessment["id"])
-            company_repo.delete(company_id)
+                assessment_repo.tombstone(assessment["id"])
+            company_repo.tombstone(company_id)
+            scan_repo.tombstone_link(scan_id, company_id)
 
-    scan_repo.delete_all_company_links(scan_id)
-    scan_repo.delete(scan_id)
+    scan_repo.tombstone(scan_id)
     return build_json_response({"ok": True})

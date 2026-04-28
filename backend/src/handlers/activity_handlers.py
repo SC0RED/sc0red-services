@@ -23,9 +23,15 @@ What CANNOT be projected (no source-of-truth timestamp on existing records):
       status flips from "running" → "complete" but the time isn't recorded.
     - **scan_failed / analysis_failed** — same gap; failures are recorded
       but not timestamped distinctly from creation.
-    - **deletes** — DynamoDB doesn't keep tombstones. Projecting deletes
-      would require either an audit-log-on-write or a separate events
-      table — both deferred.
+
+Deletes ARE now projectable as of `soft-delete-recovery` — every soft-
+deleted record carries a `deleted_at` ISO timestamp until DynamoDB TTL
+evicts it 90 days later. Emission of `*_deleted` / `*_restored` events
+into this feed is deferred to a follow-up change (`activity-deleted-
+events`) so the soft-delete change itself stays read-only on the feed
+side. Until that ships, tombstoned records simply disappear from the
+projected feed (the read methods filter them out — see the soft-delete
+contract on `src/repositories/dynamodb/_tombstones.py`).
 
 The omitted event types are tracked for the future events-table iteration.
 

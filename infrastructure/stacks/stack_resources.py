@@ -39,6 +39,12 @@ def create_table(
         removal_policy=removal_policy,
         point_in_time_recovery=point_in_time_recovery,
         encryption=dynamodb.TableEncryption.AWS_MANAGED,
+        # Soft-delete recovery (see openspec change `soft-delete-recovery`):
+        # tombstoned items carry a `ttl` epoch-seconds attribute set to
+        # `deleted_at + 90 days`. DynamoDB TTL hard-evicts the row after
+        # that window so we don't accumulate dead records forever.
+        # The attribute name MUST match `_tombstones.TTL_FIELD`.
+        time_to_live_attribute="ttl",
     )
 
     for i in range(1, 5):

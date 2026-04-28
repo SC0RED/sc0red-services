@@ -15,6 +15,17 @@ Why this exists:
     the same PR. This script cleans up the orphans created by the old
     code path. Safe to re-run; idempotent.
 
+Soft-delete interaction (post `soft-delete-recovery`):
+    Tombstoned scans are invisible to `find_recent_by_org` (the read
+    is filtered at the repo layer). They will not surface here. They
+    are evicted by DynamoDB TTL 90 days after `deleted_at`; child link
+    records are evicted together when the parent's TTL fires.
+
+    Engineer-assisted recovery of a tombstoned record (within the
+    90-day window) goes through the runbook in `docs/runbooks/`, not
+    this script. This script only ever hard-deletes records — never
+    use it as a recovery tool.
+
 Modes:
     Default: dry-run. Lists candidate orphan scans without deleting.
     --commit: actually deletes the orphans (and any leftover link

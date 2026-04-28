@@ -3,6 +3,7 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+import pytest
 from moto import mock_aws
 
 from src.repositories.dynamodb.client import DynamoDBTable, _convert_floats
@@ -182,3 +183,109 @@ class TestDynamoDBTable:
 
         result = dynamodb_table.get_item(pk="UPD#1", sk="META")
         assert result["val"] == "original"
+
+    @mock_aws
+    def test_remove_attributes_drops_named_fields(self, dynamodb_table):
+        """remove_attributes issues a REMOVE expression so the attributes
+        are actually absent (not None) — required by the soft-delete
+        recovery path so DynamoDB TTL doesn't see a None ttl value."""
+        dynamodb_table.put_item(
+            {
+                "pk": "REM#1",
+                "sk": "META",
+                "value": "kept",
+                "deleted_at": "2026-04-27T12:00:00+00:00",
+                "ttl": 1234567890,
+            }
+        )
+
+        dynamodb_table.remove_attributes(
+            pk="REM#1",
+            sk="META",
+            attribute_names=["deleted_at", "ttl"],
+        )
+
+        result = dynamodb_table.get_item(pk="REM#1", sk="META")
+        assert result is not None
+        assert "deleted_at" not in result
+        assert "ttl" not in result
+        # Untouched attributes survive.
+        assert result["value"] == "kept"
+
+    @mock_aws
+    def test_remove_attributes_empty_list_is_noop(self, dynamodb_table):
+        """remove_attributes with [] short-circuits — no DynamoDB call."""
+        dynamodb_table.put_item({"pk": "REM#0", "sk": "META", "value": "kept"})
+
+        dynamodb_table.remove_attributes(pk="REM#0", sk="META", attribute_names=[])
+
+        result = dynamodb_table.get_item(pk="REM#0", sk="META")
+        assert result["value"] == "kept"
+
+    @mock_aws
+    def test_remove_attributes_default_creates_shell_on_missing_row(self, dynamodb_table):
+        """Without ``require_exists``, UpdateItem creates an empty {pk, sk}
+        shell when the row is gone. This is exactly the silent-data-loss
+        behaviour the soft-delete restore path must guard against — we
+        pin it here so any future change to the default makes the
+        guarantee re-evaluated explicitly.
+        """
+        dynamodb_table.remove_attributes(
+            pk="REM#missing",
+            sk="META",
+            attribute_names=["deleted_at"],
+        )
+        # The shell is created — empty data, just keys.
+        result = dynamodb_table.get_item(pk="REM#missing", sk="META")
+        assert result is not None
+        assert set(result.keys()) == {"pk", "sk"}
+
+    @mock_aws
+    def test_remove_attributes_require_exists_raises_when_row_missing(self, dynamodb_table):
+        """With ``require_exists=True``, ``ConditionalCheckFailedException``
+        propagates when the row is gone — restore callers see this as
+        ``ttl_expired`` and surface a clean error rather than silently
+        writing an empty shell.
+        """
+        from botocore.exceptions import ClientError
+
+        with pytest.raises(ClientError) as error_info:
+            dynamodb_table.remove_attributes(
+                pk="REM#missing",
+                sk="META",
+                attribute_names=["deleted_at"],
+                require_exists=True,
+            )
+        assert error_info.value.response["Error"]["Code"] == "ConditionalCheckFailedException"
+
+        # And nothing was written.
+        result = dynamodb_table.get_item(pk="REM#missing", sk="META")
+        assert result is None
+
+    @mock_aws
+    def test_remove_attributes_require_exists_succeeds_when_row_present(self, dynamodb_table):
+        """The conditional check is satisfied when the row exists — the
+        live restore path keeps working.
+        """
+        dynamodb_table.put_item(
+            {
+                "pk": "REM#live",
+                "sk": "META",
+                "value": "kept",
+                "deleted_at": "2026-04-27T12:00:00+00:00",
+                "ttl": 1234567890,
+            }
+        )
+
+        dynamodb_table.remove_attributes(
+            pk="REM#live",
+            sk="META",
+            attribute_names=["deleted_at", "ttl"],
+            require_exists=True,
+        )
+
+        result = dynamodb_table.get_item(pk="REM#live", sk="META")
+        assert result is not None
+        assert "deleted_at" not in result
+        assert "ttl" not in result
+        assert result["value"] == "kept"
