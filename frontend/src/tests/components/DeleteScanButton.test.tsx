@@ -5,10 +5,12 @@ import DeleteScanButton from '@/components/DeleteScanButton'
 import { renderWithProviders } from '@/tests/test-utils'
 
 const mockRefresh = vi.fn()
+const mockPush = vi.fn()
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
         refresh: mockRefresh,
+        push: mockPush,
     }),
 }))
 
@@ -94,5 +96,28 @@ describe('DeleteScanButton', () => {
 
         expect(screen.getByText('Failed to delete scan')).toBeInTheDocument()
         expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
+    it('navigates to redirectTo on success instead of refreshing', async () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-9" redirectTo="/dashboard" />)
+        fireEvent.click(screen.getByTitle('Delete scan'))
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5000)
+        })
+
+        expect(global.fetch).toHaveBeenCalledWith('/api/scan/scan-9', { method: 'DELETE' })
+        expect(mockPush).toHaveBeenCalledWith('/dashboard')
+        expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
+    it('renders the primary variant with a label and stays a single button', () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" variant="primary" label="Delete portfolio" />)
+        // The variant exposes the label text in the button itself —
+        // critical for the portfolio-page header where the icon-only
+        // ghost would be too subtle for a top-level destructive action.
+        const buttons = screen.getAllByRole('button', { name: 'Delete portfolio' })
+        expect(buttons).toHaveLength(1)
+        expect(buttons[0]).toHaveTextContent('Delete portfolio')
     })
 })

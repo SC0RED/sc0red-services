@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import DeleteScanButton from '@/components/DeleteScanButton'
 import PortfolioProgressStrip from '@/components/scan/PortfolioProgressStrip'
 import { TIER_COLORS } from '@/lib/utils/riskUtils'
+import { canDeleteScan } from '@/lib/utils/scanStatus'
 import type { ScanAnalysis, ScanData } from '@/lib/types/api'
 import PortfolioCard from './PortfolioCard'
 import PortfolioRow from './PortfolioRow'
@@ -100,12 +102,35 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                         Dashboard
                     </Link>
                 </div>
-                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                    Portfolio Analysis
-                </h1>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
-                    {totalCompanies} companies
-                </p>
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                    }}
+                >
+                    <div>
+                        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                            Portfolio Analysis
+                        </h1>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
+                            {totalCompanies} companies
+                        </p>
+                    </div>
+                    {canDeleteScan(scan.status) && (
+                        // Bounce to /dashboard on success — `router.refresh()`
+                        // would re-fetch this page after its scan was just
+                        // tombstoned, which 404s.
+                        <DeleteScanButton
+                            scanId={scanId}
+                            companyCount={totalCompanies}
+                            redirectTo="/dashboard"
+                            label="Delete portfolio"
+                            variant="primary"
+                        />
+                    )}
+                </div>
             </div>
 
             <PortfolioProgressStrip

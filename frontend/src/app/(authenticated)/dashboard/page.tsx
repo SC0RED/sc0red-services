@@ -10,6 +10,7 @@ import { TIER_COLORS, TIER_BG_COLORS } from '@/lib/utils/riskUtils'
 import DeleteScanButton from '@/components/DeleteScanButton'
 import { EmptyState } from '@/components/ui'
 import RelativeTime from '@/components/ui/RelativeTime'
+import { canDeleteScan } from '@/lib/utils/scanStatus'
 
 export const metadata: Metadata = { title: 'Dashboard — Janus' }
 
@@ -369,10 +370,7 @@ export default async function DashboardPage() {
                                                         View
                                                     </Link>
                                                 ) : null}
-                                                {(scan.status === 'failed' ||
-                                                    (scan.status !== 'complete' &&
-                                                        scan.status !== 'running' &&
-                                                        scan.status !== 'awaiting_confirmation')) && (
+                                                {canDeleteScan(scan.status) && (
                                                     <DeleteScanButton
                                                         scanId={scan.id}
                                                         // Prefer totalCompanies (cascade truth) over

@@ -20,6 +20,35 @@ vi.mock('next/link', () => ({
     ),
 }))
 
+// `DeleteScanButton` is exhaustively tested in DeleteScanButton.test.tsx
+// (Toast undo flow, redirectTo, error states). Here we only need to
+// assert that PortfolioView wires the component in for terminal scans
+// and hides it for in-flight scans — so we render a minimal stub that
+// surfaces its `label` and key props for the assertions below.
+vi.mock('@/components/DeleteScanButton', () => ({
+    default: ({
+        scanId,
+        companyCount,
+        redirectTo,
+        label,
+    }: {
+        scanId: string
+        companyCount?: number
+        redirectTo?: string
+        label?: string
+    }) => (
+        <button
+            type="button"
+            data-testid="delete-scan-button"
+            data-scan-id={scanId}
+            data-company-count={companyCount}
+            data-redirect-to={redirectTo}
+        >
+            {label ?? 'Delete scan'}
+        </button>
+    ),
+}))
+
 const doneAnalysis: ScanAnalysis = {
     id: 'a-1',
     companyName: 'Acme Corp',
@@ -364,6 +393,37 @@ describe('PortfolioView', () => {
 
             // Still showing pending — not crashed
             expect(screen.getAllByText('Pending').length).toBeGreaterThan(0)
+        })
+    })
+
+    describe('Delete portfolio header button', () => {
+        // Closes the gap that surfaced in production after #206/#204
+        // landed: completed portfolio scans had no UI delete path,
+        // forcing users into the per-row bulk-delete which left orphan
+        // link records when some rows were already tombstoned.
+        it('renders the Delete portfolio button when the scan is complete', () => {
+            render(<PortfolioView scanId="scan-9" initialScan={makeScan([doneAnalysis], 'complete', 4)} />)
+            const button = screen.getByTestId('delete-scan-button')
+            expect(button).toBeInTheDocument()
+            expect(button).toHaveTextContent('Delete portfolio')
+            // Wires the right props through — scanId, totalCompanies for
+            // the cascade message, and the post-delete redirect target.
+            expect(button.getAttribute('data-scan-id')).toBe('scan-9')
+            expect(button.getAttribute('data-company-count')).toBe('4')
+            expect(button.getAttribute('data-redirect-to')).toBe('/dashboard')
+        })
+
+        it('renders the Delete portfolio button when the scan is failed', () => {
+            render(<PortfolioView scanId="scan-1" initialScan={makeScan([failedAnalysis], 'failed')} />)
+            expect(screen.getByTestId('delete-scan-button')).toBeInTheDocument()
+        })
+
+        it('hides the Delete portfolio button while the scan is in flight', () => {
+            // Running is the canonical in-flight status — gates out the
+            // button so users can't trigger a delete mid-pipeline and
+            // race the SQS worker.
+            render(<PortfolioView scanId="scan-1" initialScan={makeScan([pendingAnalysis], 'running')} />)
+            expect(screen.queryByTestId('delete-scan-button')).not.toBeInTheDocument()
         })
     })
 })
