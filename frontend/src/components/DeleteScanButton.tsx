@@ -17,10 +17,12 @@ import { useToast } from '@/components/ui'
  * `redirectTo`, the default is `router.refresh()` to re-fetch the
  * current view (correct for the dashboard's Recent Scans table).
  *
- * Optional `label` and `variant='primary'` switch the visual treatment
+ * Optional `label` and `variant='labelled'` switch the visual treatment
  * for surfaces where the icon-only ghost button is too subtle (e.g.
  * the portfolio page header, where a "Delete portfolio" call-to-action
- * is the right primary action).
+ * is the right primary action). Both variants use the same ghost-button
+ * shell — `labelled` adds the text next to the icon, the icon variant
+ * keeps the row-level subtlety used in tables.
  */
 export default function DeleteScanButton({
     scanId,
@@ -34,10 +36,10 @@ export default function DeleteScanButton({
     companyCount?: number
     /** Path to navigate to after a successful delete. Default: refresh current page. */
     redirectTo?: string
-    /** Label rendered next to (or instead of) the icon. Required when variant='primary'. */
+    /** Label rendered next to the icon. Required when variant='labelled'. */
     label?: string
-    /** Visual variant. `icon` is the dashboard table style; `primary` is for top-level CTAs. */
-    variant?: 'icon' | 'primary'
+    /** Visual variant. `icon` is the dashboard table style; `labelled` adds visible text for top-level CTAs. */
+    variant?: 'icon' | 'labelled'
 }) {
     const router = useRouter()
     const toast = useToast()
@@ -80,7 +82,7 @@ export default function DeleteScanButton({
         })
     }
 
-    if (variant === 'primary') {
+    if (variant === 'labelled') {
         return (
             <button
                 onClick={handleDeleteClick}
@@ -89,7 +91,11 @@ export default function DeleteScanButton({
                 title={deleting ? 'Deleting...' : 'Delete scan'}
                 aria-label={label ?? 'Delete scan'}
                 style={{
-                    color: 'var(--accent-red, #c1432a)',
+                    // Match the rest of the codebase's destructive UI
+                    // (DeleteAnalysisButton, the icon variant below) on
+                    // the same risk-critical token so a future theme
+                    // refresh updates everything in lock-step.
+                    color: 'var(--risk-critical)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '0.4rem',

@@ -127,7 +127,7 @@ export default function PortfolioView({ scanId, initialScan }: { scanId: string;
                             companyCount={totalCompanies}
                             redirectTo="/dashboard"
                             label="Delete portfolio"
-                            variant="primary"
+                            variant="labelled"
                         />
                     )}
                 </div>

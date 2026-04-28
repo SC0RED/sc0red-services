@@ -31,11 +31,13 @@ vi.mock('@/components/DeleteScanButton', () => ({
         companyCount,
         redirectTo,
         label,
+        variant,
     }: {
         scanId: string
         companyCount?: number
         redirectTo?: string
         label?: string
+        variant?: string
     }) => (
         <button
             type="button"
@@ -43,6 +45,7 @@ vi.mock('@/components/DeleteScanButton', () => ({
             data-scan-id={scanId}
             data-company-count={companyCount}
             data-redirect-to={redirectTo}
+            data-variant={variant}
         >
             {label ?? 'Delete scan'}
         </button>
@@ -407,10 +410,13 @@ describe('PortfolioView', () => {
             expect(button).toBeInTheDocument()
             expect(button).toHaveTextContent('Delete portfolio')
             // Wires the right props through — scanId, totalCompanies for
-            // the cascade message, and the post-delete redirect target.
+            // the cascade message, the post-delete redirect target, and
+            // the labelled variant so the icon-only ghost from the
+            // dashboard table doesn't accidentally surface here.
             expect(button.getAttribute('data-scan-id')).toBe('scan-9')
             expect(button.getAttribute('data-company-count')).toBe('4')
             expect(button.getAttribute('data-redirect-to')).toBe('/dashboard')
+            expect(button.getAttribute('data-variant')).toBe('labelled')
         })
 
         it('renders the Delete portfolio button when the scan is failed', () => {

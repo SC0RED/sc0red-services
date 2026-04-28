@@ -111,11 +111,12 @@ describe('DeleteScanButton', () => {
         expect(mockRefresh).not.toHaveBeenCalled()
     })
 
-    it('renders the primary variant with a label and stays a single button', () => {
-        renderWithProviders(<DeleteScanButton scanId="scan-1" variant="primary" label="Delete portfolio" />)
-        // The variant exposes the label text in the button itself —
-        // critical for the portfolio-page header where the icon-only
-        // ghost would be too subtle for a top-level destructive action.
+    it('renders the labelled variant with a label and stays a single button', () => {
+        renderWithProviders(<DeleteScanButton scanId="scan-1" variant="labelled" label="Delete portfolio" />)
+        // The labelled variant exposes the label text in the button
+        // itself — critical for the portfolio-page header where the
+        // icon-only ghost would be too subtle for a top-level
+        // destructive action.
         const buttons = screen.getAllByRole('button', { name: 'Delete portfolio' })
         expect(buttons).toHaveLength(1)
         expect(buttons[0]).toHaveTextContent('Delete portfolio')
