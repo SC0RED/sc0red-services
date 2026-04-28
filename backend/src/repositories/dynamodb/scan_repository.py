@@ -24,7 +24,6 @@ from src.repositories.dynamodb._tombstones import (
     DELETED_AT_FIELD,
     TTL_FIELD,
     filter_live,
-    is_live,
     tombstone_attributes,
 )
 
@@ -70,10 +69,11 @@ class DynamoDBScanRepository:
         `get_by_id_with_deleted`.
         """
         item = self._table.get_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
-        if not is_live(item):
+        # Inline the live check (rather than calling `is_live`) so the
+        # type checker narrows `item` to `dict` for the `_deserialize`
+        # call. Equivalent semantically.
+        if item is None or item.get(DELETED_AT_FIELD):
             return None
-        # mypy/pyright: is_live ensures item is not None.
-        assert item is not None
         self._deserialize(item)
         return item
 
