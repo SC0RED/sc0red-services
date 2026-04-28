@@ -2,8 +2,14 @@
 
 import json
 
+import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
+from src.repositories.dynamodb._tombstones import (
+    DELETED_AT_FIELD,
+    TTL_FIELD,
+)
 from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
 
 
@@ -316,3 +322,96 @@ class TestAssessmentRepository:
         # Metadata and documents are preserved
         assert repo.get_by_id("assess-partial") is not None
         assert len(repo.get_documents("assess-partial")) == 1
+
+    # ── Soft-delete (tombstone) tests ────────────────────────────────
+
+    @mock_aws
+    def test_tombstone_hides_from_get_by_id(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-tomb", "company_id": "comp-1"})
+        assert repo.get_by_id("assess-tomb") is not None
+
+        repo.tombstone("assess-tomb")
+        assert repo.get_by_id("assess-tomb") is None
+
+    @mock_aws
+    def test_tombstone_hides_from_find_by_company(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "live", "company_id": "comp-X"})
+        repo.save({"id": "doomed", "company_id": "comp-X"})
+        repo.tombstone("doomed")
+
+        results = repo.find_by_company("comp-X")
+        ids = sorted(item["id"] for item in results)
+        assert ids == ["live"]
+
+        # Recovery-aware variant still surfaces both.
+        all_results = repo.find_by_company_with_deleted("comp-X")
+        all_ids = sorted(item["id"] for item in all_results)
+        assert all_ids == ["doomed", "live"]
+
+    @mock_aws
+    def test_get_by_id_with_deleted_returns_tombstoned(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-rec", "company_id": "comp-1"})
+        repo.tombstone("assess-rec")
+
+        item = repo.get_by_id_with_deleted("assess-rec")
+        assert item is not None
+        assert item["id"] == "assess-rec"
+        assert item.get(DELETED_AT_FIELD)
+
+    @mock_aws
+    def test_restore_clears_tombstone(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-restore", "company_id": "comp-1"})
+        repo.tombstone("assess-restore")
+        assert repo.get_by_id("assess-restore") is None
+
+        repo.restore("assess-restore")
+        item = repo.get_by_id("assess-restore")
+        assert item is not None
+        assert DELETED_AT_FIELD not in item
+        assert TTL_FIELD not in item
+
+    @mock_aws
+    def test_restore_raises_when_row_was_ttl_evicted(self, dynamodb_table):
+        """Eviction-race guard: see the matching company-repo test for
+        the full rationale.
+        """
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        with pytest.raises(ClientError) as error_info:
+            repo.restore("ghost-assessment")
+        assert (
+            error_info.value.response["Error"]["Code"] == "ConditionalCheckFailedException"
+        )
+        assert (
+            dynamodb_table.get_item(
+                pk="ASSESSMENT#ghost-assessment", sk="ASSESSMENT#METADATA"
+            )
+            is None
+        )
+
+    @mock_aws
+    def test_tombstone_does_not_touch_child_items(self, dynamodb_table):
+        """Tombstoning the metadata leaves risk/opp/etc. children intact.
+
+        Once metadata is tombstoned the assessment is invisible to live
+        reads, so callers never reach the children. We rely on TTL +
+        the cleanup script to drain children after the metadata evicts.
+        """
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-c", "company_id": "comp-1"})
+        repo.save_risk_score("assess-c", "data_ip", {"score": 5})
+        repo.save_opportunity("assess-c", 0, {"title": "Opp"})
+
+        repo.tombstone("assess-c")
+
+        # Children are still in the table — only the metadata is hidden.
+        assert repo.get_risk_scores("assess-c") != []
+        assert repo.get_opportunities("assess-c") != []
+
+        # And the parent metadata is hidden from live reads but not
+        # actually removed.
+        assert repo.get_by_id("assess-c") is None
+        assert repo.get_by_id_with_deleted("assess-c") is not None

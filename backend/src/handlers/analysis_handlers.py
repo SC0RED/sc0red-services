@@ -113,7 +113,15 @@ def handle_delete_analysis(
     storage: DynamoDBStorageProvider,
     analysis_id: str,
 ) -> LambdaResponse:
-    """Handle DELETE /api/analysis/{analysis_id}."""
+    """Handle DELETE /api/analysis/{analysis_id}.
+
+    Soft-deletes (tombstones) the analysis, its assessments, and the
+    scan→company link. Cascades to the parent scan when this was its
+    last live link. Records become invisible to live reads immediately
+    and are hard-evicted by DynamoDB TTL after 90 days. Recovery within
+    that window goes through the engineer-assisted path (Phase 1) or
+    the admin Recently Deleted UI (Phase 2).
+    """
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if error := check_org_access(company, authentication):
@@ -122,17 +130,17 @@ def handle_delete_analysis(
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
     for assessment in assessments:
-        assessment_repo.delete(assessment["id"])
+        assessment_repo.tombstone(assessment["id"])
 
-    company_repo.delete(analysis_id)
+    company_repo.tombstone(analysis_id)
 
     scan_id = company.get("scan_id", "")
     if scan_id:
         scan_repo = storage.create_scan_repository()
-        scan_repo.unlink_company(scan_id, analysis_id)
+        scan_repo.tombstone_link(scan_id, analysis_id)
         remaining = scan_repo.get_scan_companies(scan_id)
         if not remaining:
-            scan_repo.delete(scan_id)
+            scan_repo.tombstone(scan_id)
 
     return build_json_response({"ok": True})
 
@@ -199,25 +207,27 @@ def handle_bulk_delete_analyses(
         # hundreds of rows per call.
         assessments = assessment_repo.find_by_company(analysis_id)
         for assessment in assessments:
-            assessment_repo.delete(assessment["id"])
-        company_repo.delete(analysis_id)
+            assessment_repo.tombstone(assessment["id"])
+        company_repo.tombstone(analysis_id)
 
         scan_id = company.get("scan_id", "")
         if scan_id:
-            scan_repo.unlink_company(scan_id, analysis_id)
+            scan_repo.tombstone_link(scan_id, analysis_id)
             affected_scan_ids.add(scan_id)
 
         deleted.append(analysis_id)
 
-    # Cascade pass: every requested analysis is unlinked, so each scan's
-    # `get_scan_companies` now returns the post-delete truth. Race-immune
+    # Cascade pass: every requested analysis is tombstoned (link records
+    # included), so each scan's `get_scan_companies` — which filters
+    # tombstoned links via the strongly-consistent read in
+    # `scan_repository` — now returns the post-delete truth. Race-immune
     # in the happy path. A transient exception mid-loop would leave a
     # partial orphan that the next retry resolves; `cleanup_orphan_scans.py`
     # is the catch-all for pre-fix orphans.
     deleted_scans: list[str] = []
     for scan_id in affected_scan_ids:
         if not scan_repo.get_scan_companies(scan_id):
-            scan_repo.delete(scan_id)
+            scan_repo.tombstone(scan_id)
             deleted_scans.append(scan_id)
 
     logger.info(
