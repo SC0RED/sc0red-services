@@ -5,7 +5,7 @@ import argparse
 
 import boto3
 
-GSI_COUNT = 4
+GSI_COUNT = 5
 
 
 def setup_table(table_name: str, endpoint: str) -> None:

@@ -2,6 +2,21 @@
 
 Validates JWTs issued by the Cognito User Pool against its JWKS public keys.
 Supports COGNITO_JWKS_URL override for testing with mock JWKS endpoints.
+
+User-id resolution (`fix-actor-attribution` boundary fix):
+After validating the JWT we resolve `AuthContext.user_id` to the
+internal `user["id"]` so handlers can store / read actor attribution
+without per-call-site translation. Resolution priority:
+
+  1. `custom:legacy_user_id` claim (preferred when Cognito emits it)
+  2. `find_by_cognito_sub(token.sub)` via GSI5
+  3. `find_by_email(token.email)` via GSI4 (legacy / unbackfilled
+     records)
+
+If all three fail we raise `ValueError` with the same
+"Token missing user identifier" semantics that the JWT-only path
+used previously — better to fail loudly than to surface a stranger's
+id downstream.
 """
 
 from __future__ import annotations
@@ -9,10 +24,13 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jwt
 from jwt import PyJWKClient
+
+if TYPE_CHECKING:
+    from src.repositories.dynamodb.user_repository import DynamoDBUserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +70,25 @@ class AuthContext:
     name: str = ""
 
 
-def validate_token(authorization: str) -> AuthContext:
+def validate_token(
+    authorization: str,
+    user_repo: DynamoDBUserRepository | None = None,
+) -> AuthContext:
     """Validate an RS256 Bearer token and return the auth context.
 
+    Pass ``user_repo`` to enable the cognito_sub / email fallback chain
+    for resolving ``AuthContext.user_id`` to the internal
+    ``user["id"]``. When omitted (older callers, tests that don't need
+    the lookup), the function falls back to the JWT-only resolution
+    that returns whatever the token carries — the legacy behaviour.
+    Production callers MUST pass a repo so the actor-id stored on
+    records is always the internal id, never the Cognito sub. See
+    `openspec/changes/fix-actor-attribution/`.
+
     Raises:
-        ValueError: If the token is missing, invalid, or expired.
+        ValueError: If the token is missing, invalid, expired, or no
+            user can be resolved (when ``user_repo`` is provided and
+            all three resolution paths fail).
     """
     if not authorization or not authorization.startswith("Bearer "):
         message = "Missing or invalid Authorization header"
@@ -79,7 +111,7 @@ def validate_token(authorization: str) -> AuthContext:
         message = "Token missing required org_id claim"
         raise ValueError(message)
 
-    user_id = payload.get("custom:legacy_user_id") or payload.get("sub") or payload.get("id", "")
+    user_id = _resolve_user_id(payload, user_repo)
     if not user_id:
         message = "Token missing user identifier"
         raise ValueError(message)
@@ -91,6 +123,57 @@ def validate_token(authorization: str) -> AuthContext:
         role=payload.get("custom:role") or payload.get("role", "analyst"),
         name=payload.get("name", ""),
     )
+
+
+def _resolve_user_id(
+    payload: dict[str, Any],
+    user_repo: DynamoDBUserRepository | None,
+) -> str:
+    """Resolve `AuthContext.user_id` to the internal user id.
+
+    Resolution chain:
+    1. ``custom:legacy_user_id`` claim — preferred when Cognito emits it.
+    2. ``user_repo.find_by_cognito_sub(token.sub)`` — primary fallback,
+       single-item GSI5 query. Returns None for records that haven't
+       been backfilled yet (the user-cognito-keys backfill populates
+       `cognito_sub` + `GSI5PK` post-deploy).
+    3. ``user_repo.find_by_email(token.email)`` — secondary fallback,
+       covers the GSI5-still-CREATING window and any record whose
+       `cognito_sub` was never written. Existing GSI4 has every
+       user record indexed by email since day 0.
+
+    Returns the empty string if no resolution succeeds AND no
+    `user_repo` is provided AND the token has no `sub` (legacy
+    behaviour). Production callers should treat empty string as a
+    failure and raise `ValueError` upstream.
+    """
+    legacy_id = payload.get("custom:legacy_user_id", "")
+    if legacy_id:
+        return legacy_id
+
+    sub = payload.get("sub", "") or payload.get("id", "")
+    email = payload.get("email", "")
+
+    # No repo passed (older callers / tests) — fall back to whatever
+    # the token carries. Matches the pre-`fix-actor-attribution`
+    # behaviour exactly.
+    if user_repo is None:
+        return sub
+
+    if sub:
+        user = user_repo.find_by_cognito_sub(sub)
+        if user and user.get("id"):
+            return user["id"]
+
+    if email:
+        user = user_repo.find_by_email(email)
+        if user and user.get("id"):
+            return user["id"]
+
+    # No resolution path succeeded. Caller raises `ValueError` —
+    # better to fail loudly than to surface a stranger's id (or a
+    # raw Cognito sub) on stored actor fields downstream.
+    return ""
 
 
 def _decode_rs256_token(token: str) -> dict[str, Any]:
@@ -132,7 +215,18 @@ def _decode_rs256_token(token: str) -> dict[str, Any]:
     )
 
 
-def require_authentication(headers: dict[str, str]) -> AuthContext:
-    """Extract and validate authentication from request headers."""
+def require_authentication(
+    headers: dict[str, str],
+    user_repo: DynamoDBUserRepository | None = None,
+) -> AuthContext:
+    """Extract and validate authentication from request headers.
+
+    Production callers SHOULD pass ``user_repo`` so `AuthContext.user_id`
+    is resolved to the internal user id (see `validate_token` docstring
+    + `openspec/changes/fix-actor-attribution/`). When omitted, the
+    function falls back to the JWT-only behaviour that returns whatever
+    the token carries — preserved for legacy/test callers that don't
+    need translation.
+    """
     authentication_header = headers.get("Authorization") or headers.get("authorization", "")
-    return validate_token(authentication_header)
+    return validate_token(authentication_header, user_repo=user_repo)

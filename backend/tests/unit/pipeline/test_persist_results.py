@@ -79,6 +79,56 @@ class TestPersistResults:
 
         step._request_executor.mark_question_complete.assert_called_with("persist_results")
 
+    def test_persist_writes_created_by_when_user_id_present(self):
+        """`created_by` is written on the company doc when the JanusEvent
+        carried a user_id through to the pipeline. Read by the activity
+        feed for `analysis_completed` events. See
+        `openspec/changes/fix-actor-attribution/`.
+        """
+        company = self._make_full_company()
+        company.user_id = "u-alice"
+        accessor = CompanyAccessor(company)
+
+        mock_company_repo = MagicMock()
+        mock_assessment_repo = MagicMock()
+
+        step = PersistResults(
+            company_repo=mock_company_repo,
+            assessment_repo=mock_assessment_repo,
+        )
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        saved_doc = mock_company_repo.save.call_args[0][0]
+        assert saved_doc.get("created_by") == "u-alice"
+
+    def test_persist_skips_created_by_when_user_id_absent(self):
+        """Defensive: pipelines triggered without a user context (e.g.
+        engineer-run scripts) do not write a `created_by` field. The
+        activity feed renders "An analyst" for these records, which is
+        the right placeholder.
+        """
+        company = self._make_full_company()
+        # company.user_id stays at its default ""
+        accessor = CompanyAccessor(company)
+
+        mock_company_repo = MagicMock()
+        mock_assessment_repo = MagicMock()
+
+        step = PersistResults(
+            company_repo=mock_company_repo,
+            assessment_repo=mock_assessment_repo,
+        )
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        saved_doc = mock_company_repo.save.call_args[0][0]
+        assert "created_by" not in saved_doc
+
     def test_persist_company_id_none_raises(self):
         company = Company(
             id="",

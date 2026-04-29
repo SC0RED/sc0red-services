@@ -175,22 +175,25 @@ def handle_get_recently_deleted(
 def _resolve_actor(
     actor_id: str | None, user_by_id: dict[str, dict[str, Any]]
 ) -> dict[str, str] | None:
-    """Look up the actor's display name; return None when unknown.
+    """Look up the actor's display name; return None when no actor id.
 
     Pre-tombstone records (deleted before `deleted_by` was tracked) and
     deletes initiated outside the user surface (engineer-assisted
     recovery, scripts) won't have an actor id. The frontend renders
     "Unknown actor" for `null`.
+
+    When an actor id is present but no matching user record is in the
+    org (off-boarded user, or — pre-fix — a Cognito sub stored on the
+    record), surface the id with `name = "Unknown"`. Pre-fix this path
+    rendered the raw id as the name, leaking a UUID into the UI. See
+    `openspec/changes/fix-actor-attribution/` D3.
     """
     if not actor_id:
         return None
     user = user_by_id.get(actor_id)
     if not user:
-        # Actor isn't in the org's user list anymore (off-boarded, or
-        # cross-org admin recovery). Surface the id without a name so
-        # the UI can still attribute the action to *something*.
-        return {"id": actor_id, "name": actor_id}
-    return {"id": actor_id, "name": user.get("name", "") or user.get("email", "") or actor_id}
+        return {"id": actor_id, "name": "Unknown"}
+    return {"id": actor_id, "name": user.get("name", "") or user.get("email", "") or "Unknown"}
 
 
 def handle_admin_restore(

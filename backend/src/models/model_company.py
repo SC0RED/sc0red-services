@@ -116,6 +116,11 @@ class Company(BaseModel):
     id: str = ""
     scan_id: str = ""
     org_id: str = ""
+    # Internal user id of the actor who triggered this company analysis.
+    # Persisted as `created_by` on the company record; the activity feed
+    # reads it for `analysis_completed` events. See
+    # `openspec/changes/fix-actor-attribution/`.
+    user_id: str = ""
     company_name: str = ""
     url: str = ""
     actual_url: str = ""
