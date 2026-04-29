@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
@@ -49,7 +49,7 @@ class PersistResults(RequestStep):
         risk_assessment = company.risk_assessment
         opportunity_result = company.opportunity_result
 
-        company_doc = {
+        company_doc: dict[str, Any] = {
             "company_name": profile.company_name if profile else "",
             "company_url": company.actual_url or company.url,
             "industry": profile.industry if profile else "",
@@ -60,6 +60,12 @@ class PersistResults(RequestStep):
             "org_id": company.org_id,
             "analyzed_at": datetime.now(UTC).isoformat(),
         }
+        # `created_by` attributes the analysis to the user who triggered
+        # the scan/re-analyze. Read by the activity-feed handler for
+        # `analysis_completed` events. See
+        # `openspec/changes/fix-actor-attribution/`.
+        if company.user_id:
+            company_doc["created_by"] = company.user_id
         company_doc["id"] = company_id
         self._company_repo.save(company_doc)
 

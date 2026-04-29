@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 from src.repositories.dynamodb._tombstones import (
     DELETED_AT_FIELD,
+    DELETED_BY_FIELD,
     TOMBSTONE_TTL_DAYS,
     TTL_FIELD,
     filter_live,
@@ -92,3 +93,27 @@ class TestTombstoneAttributes:
         attrs = tombstone_attributes(now=when)
         delta_seconds = attrs[TTL_FIELD] - int(when.timestamp())
         assert delta_seconds == TOMBSTONE_TTL_DAYS * 86_400
+
+    def test_actor_id_writes_deleted_by_field(self):
+        """`actor_id` flows through to a `deleted_by` attribute that the
+        Phase 2 admin recovery UI reads back as "Deleted by Alice".
+        """
+        attrs = tombstone_attributes(actor_id="user-1")
+        assert attrs[DELETED_BY_FIELD] == "user-1"
+
+    def test_actor_id_omitted_keeps_deleted_by_absent(self):
+        """When the actor is unknown (engineer-assisted recovery,
+        scripts), the field is OMITTED — not written as None or empty.
+        Read-side `_resolve_actor` then surfaces the row as null →
+        "Unknown" in the UI column.
+        """
+        attrs = tombstone_attributes()
+        assert DELETED_BY_FIELD not in attrs
+
+    def test_empty_string_actor_id_treated_as_unknown(self):
+        """Empty string is treated as "unknown" — same as None/missing
+        — so callers can pass `actor_id=user_id` without guarding when
+        `user_id` might be empty.
+        """
+        attrs = tombstone_attributes(actor_id="")
+        assert DELETED_BY_FIELD not in attrs

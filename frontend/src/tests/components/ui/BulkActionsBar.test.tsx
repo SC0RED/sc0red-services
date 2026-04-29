@@ -61,4 +61,33 @@ describe('BulkActionsBar', () => {
         const region = screen.getByRole('region', { name: /bulk actions/i })
         expect(region.getAttribute('aria-live')).toBe('polite')
     })
+
+    // ── Restore variant (Phase 2 of soft-delete recovery) ─────────────
+
+    it('renders a Restore button when onRestore is provided, no Delete when onDelete is omitted', () => {
+        render(<BulkActionsBar count={3} onClear={vi.fn()} onRestore={vi.fn()} />)
+        expect(screen.getByRole('button', { name: /restore 3 selected records/i })).toBeInTheDocument()
+        // Recently Deleted page passes onRestore but not onDelete — the
+        // Delete button must not surface there.
+        expect(screen.queryByRole('button', { name: /delete 3/i })).not.toBeInTheDocument()
+    })
+
+    it('fires onRestore when the Restore button is clicked', () => {
+        const onRestore = vi.fn()
+        render(<BulkActionsBar count={2} onClear={vi.fn()} onRestore={onRestore} />)
+        fireEvent.click(screen.getByRole('button', { name: /restore 2 selected records/i }))
+        expect(onRestore).toHaveBeenCalledTimes(1)
+    })
+
+    it('disables the Restore button while restoreDisabled is true', () => {
+        render(<BulkActionsBar count={2} onClear={vi.fn()} onRestore={vi.fn()} restoreDisabled />)
+        expect(screen.getByRole('button', { name: /restore 2 selected records/i })).toBeDisabled()
+    })
+
+    it('honours a custom restoreLabel override', () => {
+        render(<BulkActionsBar count={4} onClear={vi.fn()} onRestore={vi.fn()} restoreLabel="Recover" />)
+        expect(screen.getByRole('button', { name: /recover 4 selected records/i })).toHaveTextContent(
+            'Recover 4'
+        )
+    })
 })

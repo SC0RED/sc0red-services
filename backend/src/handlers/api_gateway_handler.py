@@ -105,6 +105,7 @@ class APIGatewayHandler:
 
     def _build_router(self) -> Router:
         from src.handlers.activity_handlers import handle_get_activity
+        from src.handlers.admin_handlers import register_routes as register_admin_routes
         from src.handlers.analysis_handlers import (
             handle_bulk_delete_analyses,
             handle_dashboard,
@@ -312,6 +313,11 @@ class APIGatewayHandler:
             lambda event, authentication: handle_get_activity(event, authentication, self._storage),
         )
 
+        # Admin-only surface for browsing + restoring tombstoned records.
+        # Route wiring lives in `admin_handlers.register_routes` so future
+        # admin endpoints don't require a gateway edit.
+        register_admin_routes(router, self._storage)
+
         return router
 
     def handle(self, event: dict[str, Any]) -> LambdaResponse:
@@ -344,7 +350,13 @@ class APIGatewayHandler:
             return self._finalize(response, method, path, request_id, start_time)
 
         try:
-            authentication = require_authentication(headers)
+            # Pass the user repo so the middleware resolves
+            # `authentication.user_id` to the internal user id via the
+            # cognito_sub / email fallback chain. See
+            # `openspec/changes/fix-actor-attribution/`.
+            authentication = require_authentication(
+                headers, user_repo=self._storage.create_user_repository()
+            )
         except ValueError as e:
             return self._finalize(
                 build_error(str(e), 401, UNAUTHORIZED),

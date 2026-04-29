@@ -335,6 +335,34 @@ class TestScanRepository:
         assert live_id not in ids
 
     @mock_aws
+    def test_find_tombstoned_by_org_respects_window_start(self, dynamodb_table):
+        """`window_start` filters scans the same way `find_tombstoned_by_org`
+        on the company repo does. Mirrors the test on
+        `test_company_repository.py`.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        repo = DynamoDBScanRepository(dynamodb_table)
+        recent_id = repo.create({"org_id": "org-A", "status": "complete"})
+        ancient_id = repo.create({"org_id": "org-A", "status": "complete"})
+        repo.tombstone(recent_id)
+        ancient_when = (datetime.now(UTC) - timedelta(days=365)).isoformat()
+        dynamodb_table.update_item(
+            pk=f"SCAN#{ancient_id}",
+            sk="SCAN#METADATA",
+            updates={"deleted_at": ancient_when, "ttl": 0},
+        )
+
+        cutoff = datetime.now(UTC) - timedelta(days=30)
+        results = repo.find_tombstoned_by_org("org-A", window_start=cutoff)
+        ids = [scan["id"] for scan in results]
+        assert ids == [recent_id]
+
+        all_results = repo.find_tombstoned_by_org("org-A")
+        all_ids = sorted(scan["id"] for scan in all_results)
+        assert all_ids == sorted([ancient_id, recent_id])
+
+    @mock_aws
     def test_restore_raises_when_row_was_ttl_evicted(self, dynamodb_table):
         """Eviction-race guard: see the matching company-repo test for
         the full rationale.

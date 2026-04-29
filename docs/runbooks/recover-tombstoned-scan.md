@@ -2,7 +2,11 @@
 
 > **Audience:** on-call engineers responding to a "user accidentally deleted X, can we restore it?" support ticket.
 >
-> **Window:** 90 days from `deleted_at`. After that, DynamoDB TTL has hard-evicted the row and recovery is impossible — escalate to the data-replay procedure (separate runbook, future).
+> **Window:** 90 days from `deleted_at` (user-facing recovery window).
+> The underlying DynamoDB TTL is set to 95 days, so records at the edge
+> of the window often survive a few extra days — but treat 90 days as
+> the contract. After 90 days, escalate to the data-replay procedure
+> (separate runbook, future).
 
 This runbook applies to records soft-deleted after the
 `soft-delete-recovery` change shipped (PR #206 onward). Older deletes

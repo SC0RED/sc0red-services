@@ -130,7 +130,7 @@ class DynamoDBAssessmentRepository:
         keys = [{"pk": item["pk"], "sk": item["sk"]} for item in items]
         self._table.batch_delete(keys)
 
-    def tombstone(self, assessment_id: str) -> None:
+    def tombstone(self, assessment_id: str, *, actor_id: str | None = None) -> None:
         """Mark the assessment metadata as soft-deleted with a 90-day TTL.
 
         Only the metadata item is tombstoned — risk scores,
@@ -140,6 +140,9 @@ class DynamoDBAssessmentRepository:
         the metadata is tombstoned, the assessment is invisible to
         live traffic.
 
+        Pass ``actor_id`` to attribute the delete to a user — see
+        `DynamoDBCompanyRepository.tombstone` for full semantics.
+
         DynamoDB TTL evicts the metadata row 90 days after `deleted_at`.
         We rely on a follow-up cleanup pass to drain orphan child
         items after TTL eviction; the cleanup script's existing
@@ -148,7 +151,7 @@ class DynamoDBAssessmentRepository:
         self._table.update_item(
             pk=f"ASSESSMENT#{assessment_id}",
             sk="ASSESSMENT#METADATA",
-            updates=tombstone_attributes(),
+            updates=tombstone_attributes(actor_id=actor_id),
         )
 
     def restore(self, assessment_id: str) -> None:

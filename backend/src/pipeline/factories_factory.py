@@ -70,6 +70,7 @@ class JanusFactoriesFactory:
             url=event.url,
             scan_id=event.scan_id,
             org_id=event.org_id,
+            user_id=event.user_id,
             company_name=event.company_name,
             document_text=document_text,
         )

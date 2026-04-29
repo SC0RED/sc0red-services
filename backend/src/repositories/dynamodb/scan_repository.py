@@ -28,6 +28,8 @@ from src.repositories.dynamodb._tombstones import (
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from src.repositories.dynamodb.client import DynamoDBTable
 
 
@@ -111,12 +113,15 @@ class DynamoDBScanRepository:
         """
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk="SCAN#METADATA")
 
-    def tombstone(self, scan_id: str) -> None:
+    def tombstone(self, scan_id: str, *, actor_id: str | None = None) -> None:
         """Mark the scan metadata as soft-deleted with a 90-day TTL.
 
         Reads through `get_by_id` / `find_recent_by_org` will no longer
         return this record. DynamoDB TTL evicts the row 90 days after
         `deleted_at`. Use `restore()` to clear the markers.
+
+        Pass ``actor_id`` to attribute the delete to a user — see
+        `DynamoDBCompanyRepository.tombstone` for full semantics.
 
         Note: this does NOT cascade to scan→company link records or to
         the linked companies/assessments. Callers that want a full
@@ -126,7 +131,7 @@ class DynamoDBScanRepository:
         self._table.update_item(
             pk=f"SCAN#{scan_id}",
             sk="SCAN#METADATA",
-            updates=tombstone_attributes(),
+            updates=tombstone_attributes(actor_id=actor_id),
         )
 
     def restore(self, scan_id: str) -> None:
@@ -186,7 +191,7 @@ class DynamoDBScanRepository:
         """
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk=f"COMPANY#{company_id}")
 
-    def tombstone_link(self, scan_id: str, company_id: str) -> None:
+    def tombstone_link(self, scan_id: str, company_id: str, *, actor_id: str | None = None) -> None:
         """Soft-delete a scan→company link with a 90-day TTL.
 
         The cascade-decision read in `analysis_handlers` (whether all
@@ -195,11 +200,14 @@ class DynamoDBScanRepository:
         tombstoned link looks identical to a hard-deleted one for
         live-traffic purposes, and recovery is a REMOVE on the same
         attributes.
+
+        Pass ``actor_id`` to attribute the delete to a user — see
+        `DynamoDBCompanyRepository.tombstone` for full semantics.
         """
         self._table.update_item(
             pk=f"SCAN#{scan_id}",
             sk=f"COMPANY#{company_id}",
-            updates=tombstone_attributes(),
+            updates=tombstone_attributes(actor_id=actor_id),
         )
 
     def restore_link(self, scan_id: str, company_id: str) -> None:
@@ -294,12 +302,20 @@ class DynamoDBScanRepository:
         live.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return live[:limit] if limit is not None else live
 
-    def find_tombstoned_by_org(self, org_id: str) -> list[dict[str, Any]]:
+    def find_tombstoned_by_org(
+        self,
+        org_id: str,
+        window_start: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Return ONLY tombstoned scans for the given org.
 
         Used by the Phase 2 admin recovery UI. Filters in-memory after
         the GSI query — at Janus volumes the filter cost is negligible;
         revisit with a `deleted_at` GSI if volumes ever justify it.
+
+        Pass ``window_start`` to filter records to those tombstoned
+        ON OR AFTER that timestamp. See the matching method on
+        ``DynamoDBCompanyRepository`` for the same window semantics.
         """
         items, _cursor = self._table.query_gsi(
             index_name="GSI2",
@@ -307,6 +323,9 @@ class DynamoDBScanRepository:
             pk_value=f"ORG#{org_id}",
         )
         tombstoned = [item for item in items if item.get(DELETED_AT_FIELD)]
+        if window_start is not None:
+            cutoff = window_start.isoformat()
+            tombstoned = [item for item in tombstoned if item[DELETED_AT_FIELD] >= cutoff]
         for item in tombstoned:
             self._deserialize(item)
         return tombstoned
