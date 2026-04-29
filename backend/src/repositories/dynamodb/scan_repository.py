@@ -191,9 +191,7 @@ class DynamoDBScanRepository:
         """
         self._table.delete_item(pk=f"SCAN#{scan_id}", sk=f"COMPANY#{company_id}")
 
-    def tombstone_link(
-        self, scan_id: str, company_id: str, *, actor_id: str | None = None
-    ) -> None:
+    def tombstone_link(self, scan_id: str, company_id: str, *, actor_id: str | None = None) -> None:
         """Soft-delete a scan→company link with a 90-day TTL.
 
         The cascade-decision read in `analysis_handlers` (whether all
