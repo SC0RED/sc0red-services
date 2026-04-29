@@ -115,18 +115,23 @@ class DynamoDBCompanyRepository:
             sk="COMPANY#METADATA",
         )
 
-    def tombstone(self, company_id: str) -> None:
+    def tombstone(self, company_id: str, *, actor_id: str | None = None) -> None:
         """Mark the company as soft-deleted with a 90-day TTL.
 
         Reads through `get_by_id` / `get_by_ids` / `find_by_org` will
         no longer return this record. DynamoDB TTL evicts the row 90
         days after `deleted_at`. Recovery via `restore()` clears the
         markers.
+
+        Pass ``actor_id`` to attribute the delete to a user — the
+        Phase 2 admin recovery UI surfaces this as "Deleted by Alice"
+        on the recently-deleted page. Omit for engineer-assisted
+        deletes (scripts, runbooks) that have no human actor.
         """
         self._table.update_item(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
-            updates=tombstone_attributes(),
+            updates=tombstone_attributes(actor_id=actor_id),
         )
 
     def restore(self, company_id: str) -> None:

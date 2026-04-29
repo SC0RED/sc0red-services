@@ -27,6 +27,7 @@ from typing import Any
 # Field names — single source of truth for grep + refactor.
 DELETED_AT_FIELD = "deleted_at"
 TTL_FIELD = "ttl"
+DELETED_BY_FIELD = "deleted_by"
 
 # 90 days matches the analytics-events log retention pattern. After
 # this window DynamoDB TTL hard-evicts the record automatically;
@@ -56,8 +57,10 @@ def filter_live(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [item for item in items if not item.get(DELETED_AT_FIELD)]
 
 
-def tombstone_attributes(now: datetime | None = None) -> dict[str, Any]:
-    """Return the `{deleted_at, ttl}` attribute pair for marking a record deleted.
+def tombstone_attributes(
+    now: datetime | None = None, actor_id: str | None = None
+) -> dict[str, Any]:
+    """Return the `{deleted_at, ttl, [deleted_by]}` attribute set for marking a record deleted.
 
     `deleted_at`: ISO 8601 string (timezone-aware UTC) for the
     timestamp. Human-readable; sortable lexicographically.
@@ -66,12 +69,23 @@ def tombstone_attributes(now: datetime | None = None) -> dict[str, Any]:
     expects a numeric epoch value, not an ISO string, so this is a
     paired attribute.
 
+    `deleted_by`: optional actor user_id. Set when the delete was
+    initiated by an authenticated user — the Phase 2 admin recovery UI
+    surfaces this as "Deleted by Alice" on each row. Omitted (key not
+    written) when the deleter is unknown — engineer-assisted recovery
+    or scripts that don't carry an actor identity. Read-side fallback
+    in `admin_handlers._resolve_actor` renders missing/unknown actors
+    as null → "Unknown" in the column.
+
     `now` parameter exists only for tests that want a deterministic
     timestamp; production calls omit it.
     """
     when = now or datetime.now(UTC)
     expires_at = when + timedelta(days=TOMBSTONE_TTL_DAYS)
-    return {
+    attributes: dict[str, Any] = {
         DELETED_AT_FIELD: when.isoformat(),
         TTL_FIELD: int(expires_at.timestamp()),
     }
+    if actor_id:
+        attributes[DELETED_BY_FIELD] = actor_id
+    return attributes

@@ -8,6 +8,7 @@ from moto import mock_aws
 
 from src.repositories.dynamodb._tombstones import (
     DELETED_AT_FIELD,
+    DELETED_BY_FIELD,
     TOMBSTONE_TTL_DAYS,
     TTL_FIELD,
 )
@@ -156,6 +157,36 @@ class TestCompanyRepository:
         expected_min = before + TOMBSTONE_TTL_DAYS * 86_400 - 5
         expected_max = after + TOMBSTONE_TTL_DAYS * 86_400 + 5
         assert expected_min <= ttl_seconds <= expected_max
+
+    @mock_aws
+    def test_tombstone_writes_deleted_by_when_actor_provided(self, dynamodb_table):
+        """`actor_id` flows through to a `deleted_by` attribute on the
+        row, which the Phase 2 admin recovery UI reads back as
+        "Deleted by Alice" on each record.
+        """
+        repo = DynamoDBCompanyRepository(dynamodb_table)
+        repo.save({"id": "c-actor", "company_name": "Actor Co", "org_id": "org-A"})
+
+        repo.tombstone("c-actor", actor_id="user-alice")
+
+        item = repo.get_by_id_with_deleted("c-actor")
+        assert item is not None
+        assert item.get(DELETED_BY_FIELD) == "user-alice"
+
+    @mock_aws
+    def test_tombstone_omits_deleted_by_when_no_actor(self, dynamodb_table):
+        """Engineer-assisted deletes (scripts, no auth context) don't
+        write `deleted_by` — the read-side fallback then renders the
+        record as "Unknown".
+        """
+        repo = DynamoDBCompanyRepository(dynamodb_table)
+        repo.save({"id": "c-noactor", "company_name": "No Actor", "org_id": "org-A"})
+
+        repo.tombstone("c-noactor")  # No actor_id passed.
+
+        item = repo.get_by_id_with_deleted("c-noactor")
+        assert item is not None
+        assert DELETED_BY_FIELD not in item
 
     @mock_aws
     def test_get_by_id_with_deleted_returns_tombstoned_records(self, dynamodb_table):
