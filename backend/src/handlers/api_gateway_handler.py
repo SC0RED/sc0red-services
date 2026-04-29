@@ -105,6 +105,10 @@ class APIGatewayHandler:
 
     def _build_router(self) -> Router:
         from src.handlers.activity_handlers import handle_get_activity
+        from src.handlers.admin_handlers import (
+            handle_admin_restore,
+            handle_get_recently_deleted,
+        )
         from src.handlers.analysis_handlers import (
             handle_bulk_delete_analyses,
             handle_dashboard,
@@ -310,6 +314,26 @@ class APIGatewayHandler:
             "GET",
             "/api/activity",
             lambda event, authentication: handle_get_activity(event, authentication, self._storage),
+        )
+
+        # ── Admin (Phase 2 of soft-delete recovery) ──────────────────────────
+        # Admin-only surface for browsing + restoring tombstoned records.
+        # Both handlers gate on `authentication.role == "admin"` and 403
+        # for analysts. Live alongside `/api/admin/*` for any future
+        # admin tooling.
+        router.protected(
+            "GET",
+            "/api/admin/recently-deleted",
+            lambda event, authentication: handle_get_recently_deleted(
+                event, authentication, self._storage
+            ),
+        )
+        router.protected(
+            "POST",
+            "/api/admin/restore",
+            lambda event, authentication: handle_admin_restore(
+                event, authentication, self._storage
+            ),
         )
 
         return router

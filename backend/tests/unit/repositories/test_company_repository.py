@@ -204,6 +204,40 @@ class TestCompanyRepository:
             assert item.get(DELETED_AT_FIELD)
 
     @mock_aws
+    def test_find_tombstoned_by_org_respects_window_start(self, dynamodb_table):
+        """`window_start` filters tombstones to those deleted ON OR AFTER it.
+
+        Phase 2 admin UI uses this to power the 24h/7d/30d/90d window
+        chips. We back-date one row's `deleted_at` to a year ago and
+        verify it falls outside any in-window query.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        repo = DynamoDBCompanyRepository(dynamodb_table)
+        repo.save({"id": "recent", "company_name": "Recent", "org_id": "org-A"})
+        repo.save({"id": "ancient", "company_name": "Ancient", "org_id": "org-A"})
+        repo.tombstone("recent")  # `deleted_at` ~ now
+        # Force `ancient`'s tombstone to a year ago via a direct write —
+        # `tombstone()` always writes the current timestamp.
+        ancient_when = (datetime.now(UTC) - timedelta(days=365)).isoformat()
+        dynamodb_table.update_item(
+            pk="COMPANY#ancient",
+            sk="COMPANY#METADATA",
+            updates={"deleted_at": ancient_when, "ttl": 0},
+        )
+
+        # Window of 30 days catches the recent one only.
+        cutoff = datetime.now(UTC) - timedelta(days=30)
+        results = repo.find_tombstoned_by_org("org-A", window_start=cutoff)
+        ids = [item["id"] for item in results]
+        assert ids == ["recent"]
+
+        # Default (no window) sees both — backward compatible.
+        all_results = repo.find_tombstoned_by_org("org-A")
+        all_ids = sorted(item["id"] for item in all_results)
+        assert all_ids == ["ancient", "recent"]
+
+    @mock_aws
     def test_restore_raises_when_row_was_ttl_evicted(self, dynamodb_table):
         """Recovery flow reads the tombstoned row, then TTL evicts it
         before the `restore()` UpdateItem lands. Without the guard,

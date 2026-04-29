@@ -28,6 +28,8 @@ from src.repositories.dynamodb._tombstones import (
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from src.repositories.dynamodb.client import DynamoDBTable
 
 
@@ -294,12 +296,20 @@ class DynamoDBScanRepository:
         live.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return live[:limit] if limit is not None else live
 
-    def find_tombstoned_by_org(self, org_id: str) -> list[dict[str, Any]]:
+    def find_tombstoned_by_org(
+        self,
+        org_id: str,
+        window_start: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Return ONLY tombstoned scans for the given org.
 
         Used by the Phase 2 admin recovery UI. Filters in-memory after
         the GSI query — at Janus volumes the filter cost is negligible;
         revisit with a `deleted_at` GSI if volumes ever justify it.
+
+        Pass ``window_start`` to filter records to those tombstoned
+        ON OR AFTER that timestamp. See the matching method on
+        ``DynamoDBCompanyRepository`` for the same window semantics.
         """
         items, _cursor = self._table.query_gsi(
             index_name="GSI2",
@@ -307,6 +317,9 @@ class DynamoDBScanRepository:
             pk_value=f"ORG#{org_id}",
         )
         tombstoned = [item for item in items if item.get(DELETED_AT_FIELD)]
+        if window_start is not None:
+            cutoff = window_start.isoformat()
+            tombstoned = [item for item in tombstoned if item[DELETED_AT_FIELD] >= cutoff]
         for item in tombstoned:
             self._deserialize(item)
         return tombstoned
