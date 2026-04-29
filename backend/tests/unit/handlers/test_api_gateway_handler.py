@@ -678,13 +678,15 @@ class TestAPIGatewayHandler:
         body = json.loads(result["body"])
         assert body["ok"] is True
         # Soft-delete: tombstone the assessment, the two companies, both
-        # link records, and finally the scan itself. No hard deletes.
-        assessment_repo.tombstone.assert_called_once_with("assess-1")
+        # link records, and finally the scan itself — every call carries
+        # `actor_id` so the recently-deleted UI can attribute the delete
+        # to the right user. No hard deletes.
+        assessment_repo.tombstone.assert_called_once_with("assess-1", actor_id="user-1")
         assert company_repo.tombstone.call_count == 2
         assert scan_repo.tombstone_link.call_count == 2
-        scan_repo.tombstone_link.assert_any_call("scan-123", "c-1")
-        scan_repo.tombstone_link.assert_any_call("scan-123", "c-2")
-        scan_repo.tombstone.assert_called_once_with("scan-123")
+        scan_repo.tombstone_link.assert_any_call("scan-123", "c-1", actor_id="user-1")
+        scan_repo.tombstone_link.assert_any_call("scan-123", "c-2", actor_id="user-1")
+        scan_repo.tombstone.assert_called_once_with("scan-123", actor_id="user-1")
         # Hard-delete paths must NOT be invoked from the soft-delete handler.
         assessment_repo.delete.assert_not_called()
         company_repo.delete.assert_not_called()
@@ -710,7 +712,7 @@ class TestAPIGatewayHandler:
             }
         )
         assert result["statusCode"] == 200
-        scan_repo.tombstone.assert_called_once_with("scan-123")
+        scan_repo.tombstone.assert_called_once_with("scan-123", actor_id="user-1")
         scan_repo.delete.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
@@ -948,12 +950,14 @@ class TestAPIGatewayHandler:
         )
         assert result["statusCode"] == 200
         # Soft-delete: tombstone the assessment, the company, the link,
-        # and (because no live links remain) the scan itself. Hard-delete
-        # paths must not be invoked.
-        assessment_repo.tombstone.assert_called_once_with("assess-1")
-        company_repo.tombstone.assert_called_once_with("a-1")
-        scan_repo.tombstone_link.assert_called_once_with("scan-1", "a-1")
-        scan_repo.tombstone.assert_called_once_with("scan-1")
+        # and (because no live links remain) the scan itself — every
+        # call carries `actor_id` (Phase 2 admin recovery feed reads
+        # this back as "Deleted by Alice"). Hard-delete paths must not
+        # be invoked.
+        assessment_repo.tombstone.assert_called_once_with("assess-1", actor_id="user-1")
+        company_repo.tombstone.assert_called_once_with("a-1", actor_id="user-1")
+        scan_repo.tombstone_link.assert_called_once_with("scan-1", "a-1", actor_id="user-1")
+        scan_repo.tombstone.assert_called_once_with("scan-1", actor_id="user-1")
         assessment_repo.delete.assert_not_called()
         company_repo.delete.assert_not_called()
         scan_repo.unlink_company.assert_not_called()
@@ -1056,10 +1060,19 @@ class TestAPIGatewayHandler:
         assert body["deletedScans"] == ["scan-1"]
 
         # Three tombstones + three link-tombstones for the same scan + one
-        # scan tombstone. Hard-delete paths must remain untouched.
+        # scan tombstone — every call attributes the actor. Hard-delete
+        # paths must remain untouched.
         assert company_repo.tombstone.call_count == 3
+        assert all(
+            call.kwargs == {"actor_id": "user-1"}
+            for call in company_repo.tombstone.mock_calls
+        )
         assert scan_repo.tombstone_link.call_count == 3
-        scan_repo.tombstone.assert_called_once_with("scan-1")
+        assert all(
+            call.kwargs == {"actor_id": "user-1"}
+            for call in scan_repo.tombstone_link.mock_calls
+        )
+        scan_repo.tombstone.assert_called_once_with("scan-1", actor_id="user-1")
         company_repo.delete.assert_not_called()
         scan_repo.unlink_company.assert_not_called()
         scan_repo.delete.assert_not_called()
@@ -1135,7 +1148,7 @@ class TestAPIGatewayHandler:
         body = json.loads(result["body"])
         assert sorted(body["deleted"]) == ["a-1", "a-2", "a-3"]
         assert body["deletedScans"] == ["scan-empty"]
-        scan_repo.tombstone.assert_called_once_with("scan-empty")
+        scan_repo.tombstone.assert_called_once_with("scan-empty", actor_id="user-1")
         scan_repo.delete.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
@@ -1177,7 +1190,7 @@ class TestAPIGatewayHandler:
         failed_ids = sorted(item["id"] for item in body["failed"])
         assert failed_ids == ["a-missing", "a-other"]
         # The cross-org record was never tombstoned (or hard-deleted).
-        company_repo.tombstone.assert_called_once_with("a-1")
+        company_repo.tombstone.assert_called_once_with("a-1", actor_id="user-1")
         company_repo.delete.assert_not_called()
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
@@ -1202,7 +1215,7 @@ class TestAPIGatewayHandler:
             }
         )
         assert result["statusCode"] == 200
-        scan_repo.tombstone_link.assert_called_once_with("scan-1", "a-1")
+        scan_repo.tombstone_link.assert_called_once_with("scan-1", "a-1", actor_id="user-1")
         scan_repo.unlink_company.assert_not_called()
         scan_repo.tombstone.assert_not_called()
         scan_repo.delete.assert_not_called()

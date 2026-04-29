@@ -195,6 +195,43 @@ records (e.g., for support tickets) via the same tooling.
 direct path is the escape hatch when the UI itself is broken or
 the admin is locked out.
 
+### D9. TTL window is 5 days longer than the user-facing recovery window
+
+**Decision:** `TOMBSTONE_TTL_DAYS = 95` (was originally 90 in Phase 1).
+The user-facing recovery window stays 90 days — the UI's `90d` chip
+is the largest selectable, the docstrings still promise "90 days
+recoverable", and admins never see records older than 90 days. The
+extra 5 days exist purely as internal margin.
+
+**Why this matters:** without the buffer, a record at the very edge
+of the 90-day window can be TTL-evicted in the milliseconds between
+the recovery flow's read and the `restore()` `UpdateItem`. With the
+buffer, every record visible in the UI has at least 5 days before
+TTL can fire — eliminating the same-session race for any normal use
+(open page → click Restore within minutes / hours / a long weekend).
+
+**Why 5 days specifically:** covers the realistic upper bound of a
+user dwell session — Friday-evening tab left open through Monday
+morning, plus a couple of days of buffer. 1 day (TTL=91) would
+work for most cases but feels tight; 30 days would be over-cautious
+storage waste. 5 days is the sweet spot — clearly "more than a long
+weekend" without being meaningfully expensive.
+
+**Why we still keep `require_exists=True`:** the buffer eliminates
+the common-case race but doesn't replace the guard. Residual cases
+(tab open >5 days, TTL eviction lag, future window/TTL constants
+drifting independently) are still caught cleanly by the guard's
+`ConditionalCheckFailedException` → `ttl_expired` translation.
+Belt-and-braces; the guard is free.
+
+**Storage cost:** +5.5% relative to a flat 90-day TTL. Negligible at
+Janus volumes.
+
+**User-facing copy:** still "90 days recoverable" everywhere — the
+extra 5 days are internal, never surfaced. If a record happens to
+exist at day 91-94 (post-window but pre-TTL), it's invisible to the
+UI's window filter and unreachable.
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |

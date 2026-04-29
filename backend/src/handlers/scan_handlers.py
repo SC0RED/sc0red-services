@@ -367,6 +367,7 @@ def handle_delete_scan(
 
     company_repo = storage.create_company_repository()
     assessment_repo = storage.create_assessment_repository()
+    actor_id = authentication.user_id
 
     scan_companies = scan_repo.get_scan_companies(scan_id)
     for link in scan_companies:
@@ -374,9 +375,9 @@ def handle_delete_scan(
         if company_id:
             assessments = assessment_repo.find_by_company(company_id)
             for assessment in assessments:
-                assessment_repo.tombstone(assessment["id"])
-            company_repo.tombstone(company_id)
-            scan_repo.tombstone_link(scan_id, company_id)
+                assessment_repo.tombstone(assessment["id"], actor_id=actor_id)
+            company_repo.tombstone(company_id, actor_id=actor_id)
+            scan_repo.tombstone_link(scan_id, company_id, actor_id=actor_id)
 
-    scan_repo.tombstone(scan_id)
+    scan_repo.tombstone(scan_id, actor_id=actor_id)
     return build_json_response({"ok": True})

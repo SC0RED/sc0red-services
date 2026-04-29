@@ -1,7 +1,13 @@
 """DynamoDB user and organization repositories.
 
 Single-table keys:
-  User: pk=USER#{id}  sk=USER#METADATA  GSI4: pk=EMAIL#{email}
+  User: pk=USER#{id}  sk=USER#METADATA
+        GSI1: pk=ORG#{org_id}        (per-org listing)
+        GSI4: pk=EMAIL#{email}       (lookup by email)
+        GSI5: pk=COGNITO_SUB#{sub}   (lookup by Cognito sub — see
+              `openspec/changes/fix-actor-attribution`. Sparse on day 0
+              for legacy records that pre-date this field; populated by
+              `scripts/backfill_user_cognito_keys.py` post-deploy.)
   Organization: pk=ORG#{id}  sk=ORG#METADATA
 """
 
@@ -33,10 +39,33 @@ class DynamoDBUserRepository:
         )
         return items[0] if items else None
 
+    def find_by_cognito_sub(self, cognito_sub: str) -> dict[str, Any] | None:
+        """Return the user item matching the given Cognito sub, or None.
+
+        Used by the auth-middleware translation in
+        `auth_middleware._resolve_user_id` to resolve
+        `authentication.user_id` to the internal `user["id"]` when the
+        JWT lacks `custom:legacy_user_id`. Single-item GSI5 query.
+
+        Returns `None` for legacy user records that haven't been
+        backfilled yet — `scripts/backfill_user_cognito_keys.py`
+        populates `cognito_sub` + `GSI5PK` on existing records
+        post-deploy. Until that runs, the email-fallback path in
+        `extract_auth_context` covers the resolution.
+        """
+        if not cognito_sub:
+            return None
+        items, _cursor = self._table.query_gsi(
+            index_name="GSI5",
+            pk_attr="GSI5PK",
+            pk_value=f"COGNITO_SUB#{cognito_sub}",
+        )
+        return items[0] if items else None
+
     def create(self, user: dict[str, Any]) -> str:
         """Persist a new user document and return its ID."""
         user_id = user.get("id") or str(uuid.uuid4())
-        item = {
+        item: dict[str, Any] = {
             "pk": f"USER#{user_id}",
             "sk": "USER#METADATA",
             "id": user_id,
@@ -50,6 +79,13 @@ class DynamoDBUserRepository:
         if org_id:
             item["GSI1PK"] = f"ORG#{org_id}"
             item["GSI1SK"] = f"USER#{user_id}"
+        # GSI5 for Cognito-sub lookup. Only write when a sub is provided
+        # — legacy callers / test fixtures that don't carry one stay
+        # queryable by email only until the backfill runs.
+        cognito_sub = user.get("cognito_sub", "")
+        if cognito_sub:
+            item["GSI5PK"] = f"COGNITO_SUB#{cognito_sub}"
+            item["GSI5SK"] = f"USER#{user_id}"
         self._table.put_item(item)
         return user_id
 

@@ -130,17 +130,17 @@ def handle_delete_analysis(
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
     for assessment in assessments:
-        assessment_repo.tombstone(assessment["id"])
+        assessment_repo.tombstone(assessment["id"], actor_id=authentication.user_id)
 
-    company_repo.tombstone(analysis_id)
+    company_repo.tombstone(analysis_id, actor_id=authentication.user_id)
 
     scan_id = company.get("scan_id", "")
     if scan_id:
         scan_repo = storage.create_scan_repository()
-        scan_repo.tombstone_link(scan_id, analysis_id)
+        scan_repo.tombstone_link(scan_id, analysis_id, actor_id=authentication.user_id)
         remaining = scan_repo.get_scan_companies(scan_id)
         if not remaining:
-            scan_repo.tombstone(scan_id)
+            scan_repo.tombstone(scan_id, actor_id=authentication.user_id)
 
     return build_json_response({"ok": True})
 
@@ -187,6 +187,8 @@ def handle_bulk_delete_analyses(
         company["id"]: company for company in fetched if company.get("id")
     }
 
+    actor_id = authentication.user_id
+
     deleted: list[str] = []
     failed: list[dict[str, str]] = []
     affected_scan_ids: set[str] = set()
@@ -196,7 +198,6 @@ def handle_bulk_delete_analyses(
         if not company or company.get("org_id") != authentication.org_id:
             # Org-mismatch and missing-record both surface as the same
             # opaque "not found" — same posture as `check_org_access`.
-            # Bulk-delete continues with the rest of the batch.
             failed.append({"id": analysis_id, "reason": "not_found"})
             continue
 
@@ -207,27 +208,24 @@ def handle_bulk_delete_analyses(
         # hundreds of rows per call.
         assessments = assessment_repo.find_by_company(analysis_id)
         for assessment in assessments:
-            assessment_repo.tombstone(assessment["id"])
-        company_repo.tombstone(analysis_id)
+            assessment_repo.tombstone(assessment["id"], actor_id=actor_id)
+        company_repo.tombstone(analysis_id, actor_id=actor_id)
 
         scan_id = company.get("scan_id", "")
         if scan_id:
-            scan_repo.tombstone_link(scan_id, analysis_id)
+            scan_repo.tombstone_link(scan_id, analysis_id, actor_id=actor_id)
             affected_scan_ids.add(scan_id)
 
         deleted.append(analysis_id)
 
     # Cascade pass: every requested analysis is tombstoned (link records
-    # included), so each scan's `get_scan_companies` — which filters
-    # tombstoned links via the strongly-consistent read in
-    # `scan_repository` — now returns the post-delete truth. Race-immune
-    # in the happy path. A transient exception mid-loop would leave a
-    # partial orphan that the next retry resolves; `cleanup_orphan_scans.py`
-    # is the catch-all for pre-fix orphans.
+    # included), so `get_scan_companies` returns the post-delete truth.
+    # Race-immune in the happy path; transient exceptions are picked up
+    # by `cleanup_orphan_scans.py` on the next sweep.
     deleted_scans: list[str] = []
     for scan_id in affected_scan_ids:
         if not scan_repo.get_scan_companies(scan_id):
-            scan_repo.tombstone(scan_id)
+            scan_repo.tombstone(scan_id, actor_id=actor_id)
             deleted_scans.append(scan_id)
 
     logger.info(
