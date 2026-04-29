@@ -30,7 +30,10 @@ on the user record). Analysts don't see the page or the routes.
 
 - **New `GET /api/admin/recently-deleted?window=24h|7d|30d|90d`** —
   returns tombstoned records for the user's org within the window.
-  Default window: `30d`. Max window: `90d` (matches the TTL ceiling).
+  Default window: `30d`. Max window: `90d`. The user-facing window
+  stays 90 days even though the underlying TTL is 95 days (5-day
+  internal margin to eliminate the same-session eviction race —
+  see design D9).
   Authorisation: admin role required; returns 403 otherwise.
   Response shape:
 
