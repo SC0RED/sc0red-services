@@ -137,13 +137,20 @@
 
 ## 9. Rollout
 
-- [ ] 9.1 Deploy to development. Smoke-test the bulk-delete flow:
-      delete 5 analyses → verify the dashboard reflects deletion →
-      query DynamoDB directly to verify records are tombstoned (not
-      hard-deleted) → restore one via direct UpdateItem → verify
-      it reappears on the dashboard.
-- [ ] 9.2 Deploy to testing.
-- [ ] 9.3 Deploy to production.
+- [x] 9.1 Deployed to development (PR #206 → development @
+      `0c432d5`, Deploy Development @ 10:27Z, 10m16s). Smoke-tested:
+      bulk-delete tombstoned the records (not hard-deleted) and
+      direct `UpdateItem REMOVE deleted_at, ttl` restored a row
+      cleanly. Pre-fix orphan rows drained via `cleanup_orphan_scans.py`.
+- [x] 9.2 Deployed to testing (PR #208 → testing @ `148d70b`,
+      Deploy Testing @ 11:08Z, 12m11s, including E2E + cleanup).
+- [x] 9.3 Deployed to production (PR #204 → production @
+      `771a53c`, Deploy Production @ 11:24Z, 8m18s). Post-deploy:
+      one stale orphan portfolio (`c1731dfd-...`) cleaned up via
+      `DELETE /api/scan/{id}` from devtools, then the underlying
+      "no UI delete path for completed scans" gap was fixed in #210
+      and rolled through dev → testing → prod (commits `142be90`,
+      `a250b1a`, `7ba6981`).
 - [x] 9.4 Engineer-assisted recovery runbook published at
       `docs/runbooks/recover-tombstoned-scan.md`. Covers the
       identify-record / check-TTL / restore-in-dependency-order
@@ -162,7 +169,8 @@
       projectable (was previously listed as a v1 limitation).
 - [x] 10.3 Open follow-up change `recently-deleted-admin-ui` (Phase
       2) — admin self-serve recovery UI.
-- [ ] 10.4 Open follow-up change `activity-deleted-events` —
-      project `*_deleted` events into the activity feed.
+- [x] 10.4 Follow-up tracker opened as #213 — project `*_deleted`
+      events into the activity feed. P2; will land after Phase 2
+      admin UI is in production and exercising the tombstone reads.
 - [ ] 10.5 Archive this change via `/opsx:archive` once production
       is stable for 1 week.
