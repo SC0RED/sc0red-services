@@ -40,6 +40,7 @@ from src.handlers.api_gateway_handler import (
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
     from src.handlers.auth_middleware import AuthContext
+    from src.handlers.router import Router
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logger = logging.getLogger(__name__)
@@ -289,3 +290,22 @@ def _attempt_restore(repo: Any, record_id: str, *, kind: str) -> str:
             return "ttl_expired"
         raise
     return "restored"
+
+
+def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
+    """Wire `/api/admin/*` onto the gateway router.
+
+    Co-locating route registration with the handlers keeps the gateway
+    module under the 400-line limit and means future admin routes don't
+    require a gateway edit.
+    """
+    router.protected(
+        "GET",
+        "/api/admin/recently-deleted",
+        lambda event, authentication: handle_get_recently_deleted(event, authentication, storage),
+    )
+    router.protected(
+        "POST",
+        "/api/admin/restore",
+        lambda event, authentication: handle_admin_restore(event, authentication, storage),
+    )
