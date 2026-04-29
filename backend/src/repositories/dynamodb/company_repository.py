@@ -28,6 +28,8 @@ from src.repositories.dynamodb._tombstones import (
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from src.repositories.dynamodb.client import DynamoDBTable
 
 
@@ -113,18 +115,23 @@ class DynamoDBCompanyRepository:
             sk="COMPANY#METADATA",
         )
 
-    def tombstone(self, company_id: str) -> None:
+    def tombstone(self, company_id: str, *, actor_id: str | None = None) -> None:
         """Mark the company as soft-deleted with a 90-day TTL.
 
         Reads through `get_by_id` / `get_by_ids` / `find_by_org` will
         no longer return this record. DynamoDB TTL evicts the row 90
         days after `deleted_at`. Recovery via `restore()` clears the
         markers.
+
+        Pass ``actor_id`` to attribute the delete to a user — the
+        Phase 2 admin recovery UI surfaces this as "Deleted by Alice"
+        on the recently-deleted page. Omit for engineer-assisted
+        deletes (scripts, runbooks) that have no human actor.
         """
         self._table.update_item(
             pk=f"COMPANY#{company_id}",
             sk="COMPANY#METADATA",
-            updates=tombstone_attributes(),
+            updates=tombstone_attributes(actor_id=actor_id),
         )
 
     def restore(self, company_id: str) -> None:
@@ -176,6 +183,7 @@ class DynamoDBCompanyRepository:
     def find_tombstoned_by_org(
         self,
         org_id: str,
+        window_start: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """Return ONLY tombstoned companies for the given org.
 
@@ -184,6 +192,12 @@ class DynamoDBCompanyRepository:
         in-memory after the GSI query — at Janus volumes the filter
         cost is negligible; revisit with a `deleted_at` GSI if volumes
         ever justify it.
+
+        Pass ``window_start`` to filter records to those tombstoned
+        ON OR AFTER that timestamp. ``deleted_at`` is an ISO 8601
+        string with timezone, so string comparison is lexically
+        correct against the supplied datetime's ISO form. Records
+        without a ``deleted_at`` (live) are filtered out regardless.
         """
         items, _cursor = self._table.query_gsi(
             index_name="GSI1",
@@ -192,4 +206,8 @@ class DynamoDBCompanyRepository:
             sk_attr="GSI1SK",
             sk_prefix="COMPANY#",
         )
-        return [item for item in items if item.get(DELETED_AT_FIELD)]
+        tombstoned = [item for item in items if item.get(DELETED_AT_FIELD)]
+        if window_start is None:
+            return tombstoned
+        cutoff = window_start.isoformat()
+        return [item for item in tombstoned if item[DELETED_AT_FIELD] >= cutoff]

@@ -195,3 +195,59 @@ export interface ActivityEvent {
 export interface ActivityEventsResponse {
     events: ActivityEvent[]
 }
+
+/**
+ * Recently-Deleted admin UI types (Phase 2 of soft-delete recovery).
+ *
+ * The `/api/admin/recently-deleted` endpoint returns a flat list of
+ * tombstoned scans + analyses for the caller's org within a time
+ * window. The backend denormalises actor name and parent-tombstone
+ * status at read time so the client renders without joining.
+ *
+ * The `/api/admin/restore` endpoint accepts a mixed-type id list and
+ * returns a `restored` / `failed` breakdown per id.
+ */
+export type RecentlyDeletedRecordType = 'analysis' | 'scan'
+
+/** Reasons a restore attempt can fail per-id. */
+export type RestoreFailureReason = 'not_found' | 'ttl_expired'
+
+export interface RecentlyDeletedActor {
+    id: string
+    name: string
+}
+
+export interface RecentlyDeletedRecord {
+    id: string
+    type: RecentlyDeletedRecordType
+    /** Company name for analyses; source URL for scans. */
+    displayName: string
+    /** Set on analyses; null for scans (which have no parent). */
+    scanId: string | null
+    /** ISO 8601; consumed by `<RelativeTime>`. */
+    deletedAt: string
+    /** null when the actor is unknown (pre-tombstone records or missing). */
+    deletedBy: RecentlyDeletedActor | null
+    /**
+     * True when this is an analysis whose parent scan is also
+     * tombstoned. UI surfaces a warning + "restore parent too?" hint.
+     */
+    parentTombstoned: boolean
+}
+
+export interface RecentlyDeletedResponse {
+    records: RecentlyDeletedRecord[]
+}
+
+export interface RestoreFailure {
+    id: string
+    reason: RestoreFailureReason
+}
+
+export interface RestoreResponse {
+    restored: string[]
+    failed: RestoreFailure[]
+}
+
+/** Time-window literal that maps to the backend's `?window=` query param. */
+export type RecentlyDeletedWindow = '24h' | '7d' | '30d' | '90d'

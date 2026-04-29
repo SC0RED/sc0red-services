@@ -105,6 +105,7 @@ class APIGatewayHandler:
 
     def _build_router(self) -> Router:
         from src.handlers.activity_handlers import handle_get_activity
+        from src.handlers.admin_handlers import register_routes as register_admin_routes
         from src.handlers.analysis_handlers import (
             handle_bulk_delete_analyses,
             handle_dashboard,
@@ -311,6 +312,11 @@ class APIGatewayHandler:
             "/api/activity",
             lambda event, authentication: handle_get_activity(event, authentication, self._storage),
         )
+
+        # Admin-only surface for browsing + restoring tombstoned records.
+        # Route wiring lives in `admin_handlers.register_routes` so future
+        # admin endpoints don't require a gateway edit.
+        register_admin_routes(router, self._storage)
 
         return router
 
