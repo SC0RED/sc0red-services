@@ -10,7 +10,7 @@ import { TIER_COLORS, TIER_BG_COLORS } from '@/lib/utils/riskUtils'
 import DeleteScanButton from '@/components/DeleteScanButton'
 import { EmptyState } from '@/components/ui'
 import RelativeTime from '@/components/ui/RelativeTime'
-import { canDeleteScan } from '@/lib/utils/scanStatus'
+import { canDeleteScan, displayedCompanyCount } from '@/lib/utils/scanStatus'
 
 export const metadata: Metadata = { title: 'Dashboard — Janus' }
 
@@ -338,7 +338,7 @@ export default async function DashboardPage() {
                                                     fontSize: '0.875rem',
                                                 }}
                                             >
-                                                {scan.completedCount || 0}
+                                                {displayedCompanyCount(scan)}
                                             </td>
                                             <td
                                                 style={{
@@ -373,12 +373,10 @@ export default async function DashboardPage() {
                                                 {canDeleteScan(scan.status) && (
                                                     <DeleteScanButton
                                                         scanId={scan.id}
-                                                        // Prefer totalCompanies (cascade truth) over
-                                                        // completedCount, which would underreport for
-                                                        // in-flight scans where some links are pending.
-                                                        companyCount={
-                                                            scan.totalCompanies || scan.completedCount
-                                                        }
+                                                        // Shared helper — keeps the cascade-message
+                                                        // scope and the Companies-cell count from
+                                                        // drifting (the bug this fix is closing).
+                                                        companyCount={displayedCompanyCount(scan)}
                                                     />
                                                 )}
                                             </td>
