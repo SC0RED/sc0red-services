@@ -350,7 +350,13 @@ class APIGatewayHandler:
             return self._finalize(response, method, path, request_id, start_time)
 
         try:
-            authentication = require_authentication(headers)
+            # Pass the user repo so the middleware resolves
+            # `authentication.user_id` to the internal user id via the
+            # cognito_sub / email fallback chain. See
+            # `openspec/changes/fix-actor-attribution/`.
+            authentication = require_authentication(
+                headers, user_repo=self._storage.create_user_repository()
+            )
         except ValueError as e:
             return self._finalize(
                 build_error(str(e), 401, UNAUTHORIZED),

@@ -216,7 +216,10 @@ def test_admin_recently_deleted_resolves_actor_names() -> None:
     assert by_id["c-known"]["deletedBy"] == {"id": "user-1", "name": "Alice"}
     # Off-boarded user — id surfaces, name falls back to the id so the
     # UI can still attribute the action.
-    assert by_id["c-unknown-actor"]["deletedBy"] == {"id": "user-MISSING", "name": "user-MISSING"}
+    # Off-boarded actor: surface the id with `name = "Unknown"` rather
+    # than the raw id (which would leak a UUID into the UI). See
+    # `openspec/changes/fix-actor-attribution/` D3.
+    assert by_id["c-unknown-actor"]["deletedBy"] == {"id": "user-MISSING", "name": "Unknown"}
     # Pre-tombstone records (no `deleted_by`) surface as null.
     assert by_id["c-no-actor"]["deletedBy"] is None
 

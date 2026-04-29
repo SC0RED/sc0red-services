@@ -28,7 +28,17 @@ def create_table(
     removal_policy: RemovalPolicy,
     point_in_time_recovery: bool,
 ) -> dynamodb.Table:
-    """Create the single-table DynamoDB design with 4 GSIs."""
+    """Create the single-table DynamoDB design with 5 GSIs.
+
+    GSI roster:
+      - GSI1: ORG#{org_id}            (companies + users by org)
+      - GSI2: ORG#{org_id}            (scans by org; different SK pattern)
+      - GSI3: COMPANY#{company_id}    (assessments by company)
+      - GSI4: EMAIL#{email}           (users by email)
+      - GSI5: COGNITO_SUB#{sub}       (users by Cognito sub) — see
+        `openspec/changes/fix-actor-attribution` for the auth-boundary
+        translation that uses this index.
+    """
     table = dynamodb.Table(
         scope,
         "JanusTable",
@@ -47,7 +57,8 @@ def create_table(
         time_to_live_attribute="ttl",
     )
 
-    for i in range(1, 5):
+    # 5 GSIs total — see docstring for what each is keyed on.
+    for i in range(1, 6):
         table.add_global_secondary_index(
             index_name=f"GSI{i}",
             partition_key=dynamodb.Attribute(
