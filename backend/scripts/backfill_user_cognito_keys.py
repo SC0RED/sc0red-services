@@ -1,24 +1,33 @@
-"""Backfill `cognito_sub` and `GSI5PK` on legacy user records.
+"""Backfill `cognito_sub`, `GSI1PK`, and `GSI5PK` on legacy user records.
 
 Why this exists
 ---------------
-The `fix-actor-attribution` change adds GSI5 (`COGNITO_SUB#{sub}`) so
-the auth-middleware can translate `authentication.user_id` from the
-JWT's `sub` to the internal `user["id"]`. Records written via the
-existing register flow already store `cognito_sub` as a plain
-attribute, but:
+Two distinct backfill needs converged into one script:
 
-  1. Records registered before the field was tracked don't have
-     `cognito_sub` at all.
-  2. Even records that have `cognito_sub` lack `GSI5PK` / `GSI5SK`
-     until they are explicitly written (the GSI is sparse on day 0).
+1. **`fix-actor-attribution`** added GSI5 (`COGNITO_SUB#{sub}`) so the
+   auth-middleware can resolve `authentication.user_id` to internal
+   ids. Pre-existing records lack `GSI5PK` (sparse on day 0) and may
+   also lack `cognito_sub` itself if they were registered before that
+   field started being tracked.
+2. **GSI1PK on user records was missing on legacy data.** Even with
+   `org_id` populated, user records written before
+   `user_repository.create()` started writing `GSI1PK` / `GSI1SK`
+   aren't queryable via `find_by_org` — which broke every actor-name
+   lookup in the codebase (Recently Deleted, activity feed, team page).
+   This script repairs that gap too.
 
-This script repairs both. It pages through every user record (via
-GSI1 by org), resolves the missing `cognito_sub` from Cognito by
-email if needed, and writes `GSI5PK` + `GSI5SK` so the record becomes
-queryable via `find_by_cognito_sub`.
+Discovery via Scan, not GSI1
+----------------------------
+Earlier draft used `user_repo.find_by_org` to discover users to fix.
+That has a chicken-and-egg problem: legacy users lack `GSI1PK`, so
+`find_by_org` returns empty, so the script processes zero records.
+Switched to a table-scan with `entity_type = "user"` filter, which
+finds every user regardless of GSI population. At Janus volumes
+(low hundreds of users per org) this is fine; the alternative is
+unrecoverable.
 
-Idempotent. Safe to re-run.
+Idempotent. Safe to re-run. Records that already have all three
+fields set are counted as `already_complete` and skipped.
 
 Required environment
 --------------------
@@ -42,6 +51,7 @@ import argparse
 import logging
 import os
 import sys
+from typing import Any
 
 import boto3
 
@@ -79,6 +89,36 @@ def lookup_cognito_sub_by_email(cognito_client, user_pool_id: str, email: str) -
     return None
 
 
+def discover_users_for_org(
+    storage: DynamoDBStorageProvider, org_id: str
+) -> list[dict[str, Any]]:
+    """Return every user record matching `org_id`, via a table-scan.
+
+    Cannot use `user_repo.find_by_org` because legacy records lack
+    `GSI1PK` — the entire reason this script exists. We page through
+    the table with `entity_type = "user"` filter and match `org_id`
+    in memory.
+    """
+    table = storage.table._table
+    users: list[dict[str, Any]] = []
+    last_evaluated_key: dict[str, Any] | None = None
+    while True:
+        kwargs: dict[str, Any] = {
+            "FilterExpression": "entity_type = :t",
+            "ExpressionAttributeValues": {":t": "user"},
+        }
+        if last_evaluated_key:
+            kwargs["ExclusiveStartKey"] = last_evaluated_key
+        response = table.scan(**kwargs)
+        users.extend(
+            item for item in response.get("Items", []) if item.get("org_id") == org_id
+        )
+        last_evaluated_key = response.get("LastEvaluatedKey")
+        if not last_evaluated_key:
+            break
+    return users
+
+
 def backfill_org(
     storage: DynamoDBStorageProvider,
     cognito_client,
@@ -87,15 +127,15 @@ def backfill_org(
     *,
     apply: bool,
 ) -> dict[str, int]:
-    """Walk every user in the org; write `cognito_sub` + GSI5 keys as needed."""
-    user_repo = storage.create_user_repository()
-    users = user_repo.find_by_org(org_id)
-    logger.info("scanning %d users for org_id=%s", len(users), org_id)
+    """Walk every user in the org; write `cognito_sub` + GSI1 + GSI5 keys as needed."""
+    users = discover_users_for_org(storage, org_id)
+    logger.info("found %d users for org_id=%s (scan-based discovery)", len(users), org_id)
 
     counts = {
         "already_complete": 0,
         "missing_sub_resolved": 0,
         "missing_sub_unresolved": 0,
+        "gsi1_added": 0,
         "gsi5_added": 0,
     }
 
@@ -106,32 +146,46 @@ def backfill_org(
             continue
 
         existing_sub = user.get("cognito_sub", "")
+        has_gsi1 = bool(user.get("GSI1PK"))
         has_gsi5 = bool(user.get("GSI5PK"))
 
-        if existing_sub and has_gsi5:
+        if existing_sub and has_gsi1 and has_gsi5:
             counts["already_complete"] += 1
             continue
 
+        # Resolve `cognito_sub` if missing — needed for GSI5 keys.
         new_sub = existing_sub
         if not existing_sub:
             email = user.get("email", "")
             new_sub = lookup_cognito_sub_by_email(cognito_client, user_pool_id, email)
             if not new_sub:
                 logger.warning(
-                    "user_id=%s email=%s — no Cognito record found, skipping",
+                    "user_id=%s email=%s — no Cognito record found, skipping sub+GSI5; "
+                    "will still attempt GSI1 backfill if missing",
                     user_id,
                     email,
                 )
                 counts["missing_sub_unresolved"] += 1
-                continue
-            counts["missing_sub_resolved"] += 1
+            else:
+                counts["missing_sub_resolved"] += 1
 
         updates: dict[str, str] = {}
-        if not existing_sub:
+        if new_sub and not existing_sub:
             updates["cognito_sub"] = new_sub
-        if not has_gsi5:
+        if not has_gsi1 and user.get("org_id"):
+            # The original gap: legacy records lack GSI1PK so
+            # `find_by_org` can't find them. Without this, no actor
+            # name resolves anywhere in the app.
+            updates["GSI1PK"] = f"ORG#{user['org_id']}"
+            updates["GSI1SK"] = f"USER#{user_id}"
+            counts["gsi1_added"] += 1
+        if new_sub and not has_gsi5:
             updates["GSI5PK"] = f"COGNITO_SUB#{new_sub}"
             updates["GSI5SK"] = f"USER#{user_id}"
+            counts["gsi5_added"] += 1
+
+        if not updates:
+            continue
 
         action = "WOULD WRITE" if not apply else "WRITING"
         logger.info("%s user_id=%s updates=%s", action, user_id, list(updates))
@@ -141,7 +195,6 @@ def backfill_org(
                 sk="USER#METADATA",
                 updates=updates,
             )
-        counts["gsi5_added"] += 1
 
     return counts
 
@@ -180,6 +233,7 @@ def main() -> int:
     print(f"  already_complete:        {counts['already_complete']}")
     print(f"  missing_sub_resolved:    {counts['missing_sub_resolved']}")
     print(f"  missing_sub_unresolved:  {counts['missing_sub_unresolved']}  (left untouched)")
+    print(f"  gsi1_added:              {counts['gsi1_added']}  (find_by_org now works)")
     print(f"  gsi5_added:              {counts['gsi5_added']}")
 
     if not args.apply:
