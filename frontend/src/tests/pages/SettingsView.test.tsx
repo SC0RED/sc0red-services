@@ -129,4 +129,16 @@ describe('SettingsView', () => {
             expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: '/login' })
         })
     })
+
+    describe('Appearance section', () => {
+        it('renders the Appearance section with the theme toggle', () => {
+            render(<SettingsView />)
+            expect(screen.getByText('Appearance')).toBeInTheDocument()
+            const group = screen.getByRole('radiogroup', { name: 'Theme preference' })
+            expect(group).toBeInTheDocument()
+            // Three options
+            const radios = group.querySelectorAll('input[type="radio"]')
+            expect(radios).toHaveLength(3)
+        })
+    })
 })
