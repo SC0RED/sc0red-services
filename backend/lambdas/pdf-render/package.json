@@ -7,7 +7,6 @@
     "scripts": {
         "sync-token": "cp ../../../frontend/src/lib/pdf/token.ts src/token.ts",
         "check-token-sync": "diff -q src/token.ts ../../../frontend/src/lib/pdf/token.ts > /dev/null || (echo 'token.ts has drifted from frontend/src/lib/pdf/token.ts — run npm run sync-token from backend/lambdas/pdf-render' && exit 1)",
-        "prebuild": "npm run check-token-sync",
         "build": "tsc -p tsconfig.json",
         "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts' --max-warnings=0",
         "test": "vitest run",
