@@ -23,18 +23,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def handle_get_analysis(
-    _event: dict[str, Any],
-    authentication: AuthContext,
+def build_analysis_payload(
     storage: DynamoDBStorageProvider,
+    company: dict[str, Any],
     analysis_id: str,
-) -> LambdaResponse:
-    """Handle GET /api/analysis/{analysis_id}."""
-    company_repo = storage.create_company_repository()
-    company = company_repo.get_by_id(analysis_id)
-    if error := check_org_access(company, authentication):
-        return error
+) -> dict[str, Any]:
+    """Assemble the JSON payload for a fully-loaded analysis.
 
+    Pulled out of `handle_get_analysis` so the same payload shape can be
+    served by the internal-key endpoint that powers the headless
+    PDF-render flow (see `internal_handlers.handle_internal_get_analysis`).
+    Caller is responsible for the org-scoping check.
+    """
     # Look up the parent scan to surface scan provenance (type + source URL)
     # on the analysis detail page. Used by the frontend to render the
     # "Part of: {scan}" cross-reference for portfolio analyses, and to
@@ -52,13 +52,12 @@ def handle_get_analysis(
     assessment_repo = storage.create_assessment_repository()
     assessments = assessment_repo.find_by_company(analysis_id)
 
-    risk_scores = []
-    opportunities = []
+    risk_scores: list[dict[str, Any]] = []
+    opportunities: list[dict[str, Any]] = []
     analysis_summary = ""
     top_actions: list[str] = []
-    ebitda_tree = None
-    value_chain = None
-
+    ebitda_tree: dict[str, Any] | None = None
+    value_chain: dict[str, Any] | None = None
     documents: list[dict[str, Any]] = []
 
     if assessments:
@@ -82,29 +81,41 @@ def handle_get_analysis(
         analysis_summary = meta.get("analysis_summary", "")
         top_actions = meta.get("top_actions", [])
 
-    return build_json_response(
-        {
-            "companyName": company.get("company_name", ""),
-            "companyUrl": company.get("company_url", ""),
-            "industry": company.get("industry", ""),
-            "overallRiskScore": company.get("overall_risk_score"),
-            "riskTier": company.get("risk_tier"),
-            "analysisSummary": analysis_summary,
-            "topActions": top_actions,
-            "riskScores": risk_scores,
-            "opportunities": opportunities,
-            "ebitdaTree": ebitda_tree,
-            "valueChain": value_chain,
-            "documents": documents,
-            "pipelineProgress": company.get("pipeline_progress", 0),
-            "pipelineLabel": company.get("pipeline_label", ""),
-            "analyzedAt": company.get("analyzed_at"),
-            "error": company.get("error"),
-            "scanId": scan_id,
-            "scanType": scan_type,
-            "scanSourceUrl": scan_source_url,
-        }
-    )
+    return {
+        "companyName": company.get("company_name", ""),
+        "companyUrl": company.get("company_url", ""),
+        "industry": company.get("industry", ""),
+        "overallRiskScore": company.get("overall_risk_score"),
+        "riskTier": company.get("risk_tier"),
+        "analysisSummary": analysis_summary,
+        "topActions": top_actions,
+        "riskScores": risk_scores,
+        "opportunities": opportunities,
+        "ebitdaTree": ebitda_tree,
+        "valueChain": value_chain,
+        "documents": documents,
+        "pipelineProgress": company.get("pipeline_progress", 0),
+        "pipelineLabel": company.get("pipeline_label", ""),
+        "analyzedAt": company.get("analyzed_at"),
+        "error": company.get("error"),
+        "scanId": scan_id,
+        "scanType": scan_type,
+        "scanSourceUrl": scan_source_url,
+    }
+
+
+def handle_get_analysis(
+    _event: dict[str, Any],
+    authentication: AuthContext,
+    storage: DynamoDBStorageProvider,
+    analysis_id: str,
+) -> LambdaResponse:
+    """Handle GET /api/analysis/{analysis_id}."""
+    company_repo = storage.create_company_repository()
+    company = company_repo.get_by_id(analysis_id)
+    if error := check_org_access(company, authentication):
+        return error
+    return build_json_response(build_analysis_payload(storage, company, analysis_id))
 
 
 def handle_delete_analysis(

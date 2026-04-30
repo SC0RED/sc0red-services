@@ -17,6 +17,7 @@ from stacks.lambda_factory import (
 )
 from stacks.mcp_construct import MCPConstruct
 from stacks.observability_construct import ObservabilityConstruct
+from stacks.pdf_render_construct import PdfRenderConstruct
 from stacks.stack_resources import (
     create_analytics_log_group,
     create_api,
@@ -140,6 +141,27 @@ class JanusStack(Stack):
             config=config,
             handler=api_handler,
             frontend_domain=frontend_domain,
+        )
+
+        # PDF render Lambda — Node.js + headless Chromium. The API Lambda
+        # invokes it via boto3 from `handle_render_pdf` to produce the
+        # binary PDF that backs the Export PDF button. Construct also
+        # provisions the per-environment HMAC secret used by the URL
+        # tokens that authorise navigation to /print/{analysisId}.
+        pdf_render = PdfRenderConstruct(
+            self,
+            "PdfRender",
+            environment=environment,
+            config=config,
+            frontend_base_url=frontend_domain,
+        )
+        pdf_render.grant_invoke(api_handler)
+        pdf_render.token_secret.grant_read(api_handler)
+        api_handler.add_environment(
+            "PDF_RENDER_LAMBDA_ARN", pdf_render.function.function_arn
+        )
+        api_handler.add_environment(
+            "PDF_TOKEN_SECRET", pdf_render.token_secret.secret_value.to_string()
         )
 
         # Phase 2: Create Amplify branch now that API URL exists

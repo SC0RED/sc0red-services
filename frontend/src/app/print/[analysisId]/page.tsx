@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 
 import { BackendError } from '@/lib/api/errors'
-import { backendFetch } from '@/lib/api/serverToken'
+import { BACKEND_URL } from '@/lib/config'
 import { readSigningSecret, verifyToken } from '@/lib/pdf/token'
 import type { AnalysisData } from '@/lib/types/api'
 
 import PrintReport from './PrintReport'
+
+const INTERNAL_API_KEY_ENV = 'INTERNAL_API_KEY'
 
 /**
  * Print-optimised view of an analysis. Headless Chromium running in the PDF
@@ -32,16 +34,42 @@ interface PrintPageProps {
 }
 
 /**
- * `backendFetch` reuses the caller's NextAuth session token. That works for
- * a developer hitting `/print/{id}?t=...` in their own browser, but the PDF
- * render Lambda's headless Chromium has no cookies — so the production path
- * needs a service-account or internal-key auth approach. That's wired up in
- * §3 of the polished-pdf-export change. For now the route is functionally
- * complete for browser-based smoke testing; the Lambda integration will
- * extend the data-fetch helper in a follow-up commit.
+ * Headless Chromium has no NextAuth cookies, so the print route can't reuse
+ * `backendFetch`. Instead we hit the internal-key endpoint
+ * `GET /api/internal/analysis/{id}` with the per-environment shared secret
+ * + the org id from the verified URL token. The endpoint validates the key
+ * (constant-time) + scopes the read by orgId, returning the same payload
+ * shape as the user-facing `/api/analysis/{id}`.
+ *
+ * The shared secret comes from `INTERNAL_API_KEY` (Secrets Manager-managed)
+ * and MUST agree with the same env var on the backend Lambda. Failure mode
+ * here is fail-fast: if the key is missing the route 500s rather than
+ * silently 401-ing on the backend.
  */
-async function fetchAnalysisForPrint(analysisId: string): Promise<AnalysisData> {
-    return backendFetch<AnalysisData>(`/api/analysis/${analysisId}`)
+async function fetchAnalysisForPrint(analysisId: string, orgId: string): Promise<AnalysisData> {
+    const internalKey = process.env[INTERNAL_API_KEY_ENV]
+    if (!internalKey) {
+        throw new Error(`${INTERNAL_API_KEY_ENV} is not set on the print route runtime`)
+    }
+    const response = await fetch(`${BACKEND_URL}/api/internal/analysis/${analysisId}`, {
+        method: 'GET',
+        headers: {
+            'X-Internal-Api-Key': internalKey,
+            'X-Org-Id': orgId,
+            'Content-Type': 'application/json',
+        },
+    })
+    if (!response.ok) {
+        let message = `Backend internal endpoint returned ${response.status}`
+        try {
+            const body = (await response.json()) as { error?: string }
+            if (body.error) message = body.error
+        } catch {
+            // Response wasn't JSON — keep the generic message.
+        }
+        throw new BackendError(message, response.status)
+    }
+    return response.json() as Promise<AnalysisData>
 }
 
 export default async function PrintPage({ params, searchParams }: PrintPageProps) {
@@ -67,7 +95,7 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
 
     let analysis: AnalysisData
     try {
-        analysis = await fetchAnalysisForPrint(params.analysisId)
+        analysis = await fetchAnalysisForPrint(params.analysisId, verification.payload.orgId)
     } catch (error) {
         if (error instanceof BackendError && error.status === 404) {
             return <UnauthorizedView reason="not_found" />
@@ -75,11 +103,6 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
         throw error
     }
 
-    // Defensive cross-check: the backend should already have rejected a
-    // mismatched org via its own auth, but if a token was issued for org A
-    // and somehow reaches a session for org B, refuse to render.
-    // (Once the Lambda flow lands and uses internal auth, this is the only
-    // boundary that catches an org mismatch.)
     return <PrintReport analysis={analysis} />
 }
 

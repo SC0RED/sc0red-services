@@ -121,6 +121,7 @@ class APIGatewayHandler:
             handle_delete_document,
             handle_upload_url,
         )
+        from src.handlers.internal_handlers import handle_internal_get_analysis
         from src.handlers.invitation_handlers import (
             handle_invite_member,
             handle_list_members,
@@ -129,6 +130,7 @@ class APIGatewayHandler:
             handle_revoke_invite,
         )
         from src.handlers.oauth_handlers import handle_oauth_approve
+        from src.handlers.pdf_render_handlers import handle_render_pdf
         from src.handlers.scan_handlers import (
             handle_delete_scan,
             handle_scan_confirm,
@@ -317,6 +319,27 @@ class APIGatewayHandler:
         # Route wiring lives in `admin_handlers.register_routes` so future
         # admin endpoints don't require a gateway edit.
         register_admin_routes(router, self._storage)
+
+        # Internal-key endpoint for the headless PDF render flow. Sits behind
+        # `INTERNAL_API_KEY` (Secrets Manager-managed); see
+        # `handlers.internal_handlers` for the auth boundary it enforces.
+        # Registered as `public` so the Cognito-JWT middleware doesn't run —
+        # the handler validates the API key + X-Org-Id headers itself.
+        router.public(
+            "GET",
+            "/api/internal/analysis/{analysis_id}",
+            lambda event, analysis_id: handle_internal_get_analysis(
+                event, self._storage, analysis_id
+            ),
+        )
+
+        # PDF render proxy — Cognito-authenticated. Forwards to the Node.js
+        # Lambda via boto3. See `handlers.pdf_render_handlers`.
+        router.protected(
+            "POST",
+            "/api/admin/render-pdf",
+            handle_render_pdf,
+        )
 
         return router
 
