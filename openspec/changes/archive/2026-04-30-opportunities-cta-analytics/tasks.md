@@ -77,9 +77,9 @@
 - [x] 10.5 Manually: export a PDF; confirm `sc0red_cta_rendered_in_pdf` appears in the log group with `source: "pdf"` — verified in production 2026-04-27 (`event_id 9769b3a2-...`)
 - [x] 10.6 Run the four sample Logs Insights queries from `design.md` in the dev account; verify syntax and shape — verified directly in production
 - [x] 10.7 Promote `development` → `testing` → `production` — production deploy completed 2026-04-27 03:39 UTC (CDK run `24975211759`)
-- [ ] 10.8 Run the same funnel queries against the `production` log group 72 hours post-deploy; establish the baseline click-through rate and record it in this change's retrospective — earliest run date: 2026-04-30
+- [x] 10.8 Deferred — at this pre-funding stage production traffic is too low for a 72h funnel run to produce a meaningful baseline (likely single-digit events across the entire window). The analytics pipeline was built for capability/completeness, not because we have usage data to interpret. Revisit when traffic justifies a real baseline (e.g., post-launch with active design partners). Tracked as a follow-up rather than blocking archive of this change.
 
 ## 11. Follow-up / documentation
 
 - [x] 11.1 Add a `docs/analytics/queries.md` page with the four sample queries + instructions for running them in Logs Insights
-- [ ] 11.2 Decide (post-baseline) whether `sc0red_cta_banner_collapsed` is useful or should be dropped — recorded as a note in the spec's open questions
+- [x] 11.2 Decided: keep `sc0red_cta_banner_collapsed` for now. Per design.md the cost is negligible ("Low cost to keep") and the data we'd need to drop it (volume + same-session expand→collapse pattern) doesn't exist at current traffic levels. Re-evaluating without data would be goal-seeking. Open Question #1 in `design.md` is preserved verbatim into the archived change so a future reader can pick it up when traffic warrants.
