@@ -4,7 +4,7 @@
         "module": "commonjs",
         "lib": ["ES2022"],
         "outDir": "./dist",
-        "rootDir": ".",
+        "rootDir": "./src",
         "strict": true,
         "noImplicitAny": true,
         "strictNullChecks": true,
@@ -15,6 +15,7 @@
         "declaration": false,
         "sourceMap": true
     },
-    "include": ["src/**/*", "tests/**/*"],
-    "exclude": ["node_modules", "dist"]
+    "//": "rootDir is ./src so the compiled layout is dist/handler.js (not dist/src/handler.js). The Lambda handler config 'dist/handler.handler' depends on this. Tests are NOT in this tsconfig — vitest transforms them at runtime, no separate build needed.",
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist", "tests"]
 }

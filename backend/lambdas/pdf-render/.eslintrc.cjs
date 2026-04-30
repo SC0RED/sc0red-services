@@ -5,7 +5,11 @@ module.exports = {
     parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module',
-        project: './tsconfig.json',
+        // Lints both src/ and tests/ — must use the wider tsconfig that
+        // includes tests, since the build tsconfig deliberately excludes
+        // them (vitest transforms tests at runtime; we don't ship them
+        // in the Lambda asset).
+        project: './tsconfig.eslint.json',
     },
     plugins: ['@typescript-eslint'],
     extends: ['eslint:recommended', 'plugin:@typescript-eslint/recommended'],
