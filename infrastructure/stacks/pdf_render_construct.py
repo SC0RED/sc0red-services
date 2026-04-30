@@ -17,6 +17,7 @@ from typing import Any
 
 import aws_cdk as cdk
 from aws_cdk import CfnOutput, Duration
+from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
@@ -57,6 +58,7 @@ class PdfRenderConstruct(Construct):
         self._token_secret = self._build_token_secret()
         self._internal_api_key = self._build_internal_api_key()
         self._function = self._build_function(frontend_base_url)
+        self._build_metrics(self._function.log_group)
 
         # Surface the Lambda ARN so the API Lambda's environment can pick
         # it up in `janus_stack.py` and `lambda:InvokeFunction` can be
@@ -203,6 +205,127 @@ class PdfRenderConstruct(Construct):
         # (after a Secrets Manager rotation, env vars can be re-resolved).
         self._token_secret.grant_read(function)
         return function
+
+    def _build_metrics(self, log_group: logs.ILogGroup) -> None:
+        """Extract `durationMs`, `pageCount`, `pdfSizeBytes` from the Lambda's
+        structured JSON log lines and publish them as CloudWatch metrics.
+
+        The handler emits one log line per render of the form
+        `{"event":"pdf_render","status":"ok","durationMs":1234,"pageCount":5,
+         "pdfSizeBytes":67890,...}`. The metric filter pattern matches only
+        successful renders so failures don't pollute capacity numbers.
+        """
+        metric_namespace = f"Janus/{self._environment.capitalize()}/PdfRender"
+
+        # Successful-render filter: matches `event=pdf_render` AND `status=ok`.
+        ok_pattern = logs.FilterPattern.all(
+            logs.FilterPattern.string_value("$.event", "=", "pdf_render"),
+            logs.FilterPattern.string_value("$.status", "=", "ok"),
+        )
+
+        for metric_name, json_path in (
+            ("RenderDurationMs", "$.durationMs"),
+            ("RenderPageCount", "$.pageCount"),
+            ("RenderPdfSizeBytes", "$.pdfSizeBytes"),
+        ):
+            logs.MetricFilter(
+                self,
+                f"{metric_name}Filter",
+                log_group=log_group,
+                metric_namespace=metric_namespace,
+                metric_name=metric_name,
+                filter_pattern=ok_pattern,
+                metric_value=json_path,
+            )
+
+        # Failure counters. The handler emits `status: 'error'` for
+        # render crashes / misconfiguration AND `status: 'reject'` for
+        # parse failures + invalid tokens. Both are real operational
+        # signals worth alerting on independently — an `error` is a
+        # server-side failure that needs ops attention; sustained
+        # `reject` events suggest a token-expiry bug or abuse traffic.
+        # Two separate metrics so alarm thresholds can target the right
+        # severity (errors: page on any; rejects: alert on rate).
+        for failure_status, metric_name in (
+            ("error", "RenderErrorCount"),
+            ("reject", "RenderRejectCount"),
+        ):
+            logs.MetricFilter(
+                self,
+                f"{metric_name}Filter",
+                log_group=log_group,
+                metric_namespace=metric_namespace,
+                metric_name=metric_name,
+                filter_pattern=logs.FilterPattern.all(
+                    logs.FilterPattern.string_value("$.event", "=", "pdf_render"),
+                    logs.FilterPattern.string_value("$.status", "=", failure_status),
+                ),
+                metric_value="1",
+                default_value=0,
+            )
+
+        # Dashboard widget — only created in monitored environments.
+        if not self._config.get("enable_monitoring"):
+            return
+
+        cloudwatch.Dashboard(
+            self,
+            "PdfRenderDashboard",
+            dashboard_name=f"janus-pdf-render-{self._environment}",
+            widgets=[[
+                cloudwatch.GraphWidget(
+                    title="Render duration (ms)",
+                    left=[cloudwatch.Metric(
+                        namespace=metric_namespace,
+                        metric_name="RenderDurationMs",
+                        statistic="p95",
+                        period=Duration.minutes(5),
+                    )],
+                    width=12,
+                ),
+                cloudwatch.GraphWidget(
+                    title="PDF size (bytes)",
+                    left=[cloudwatch.Metric(
+                        namespace=metric_namespace,
+                        metric_name="RenderPdfSizeBytes",
+                        statistic="Average",
+                        period=Duration.minutes(5),
+                    )],
+                    width=12,
+                ),
+            ], [
+                cloudwatch.GraphWidget(
+                    title="Pages per render",
+                    left=[cloudwatch.Metric(
+                        namespace=metric_namespace,
+                        metric_name="RenderPageCount",
+                        statistic="Average",
+                        period=Duration.minutes(5),
+                    )],
+                    width=12,
+                ),
+                cloudwatch.GraphWidget(
+                    title="Failures (5-min)",
+                    left=[
+                        cloudwatch.Metric(
+                            namespace=metric_namespace,
+                            metric_name="RenderErrorCount",
+                            label="Errors (server-side)",
+                            statistic="Sum",
+                            period=Duration.minutes(5),
+                        ),
+                        cloudwatch.Metric(
+                            namespace=metric_namespace,
+                            metric_name="RenderRejectCount",
+                            label="Rejects (token / parse)",
+                            statistic="Sum",
+                            period=Duration.minutes(5),
+                        ),
+                    ],
+                    width=12,
+                ),
+            ]],
+        )
 
     def _resolve_log_retention(self) -> logs.RetentionDays:
         # Match `lambda_factory`'s strict contract: every environment

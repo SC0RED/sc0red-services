@@ -63,9 +63,27 @@ def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
     )
 
 
+class InternalKeyNotConfiguredError(RuntimeError):
+    """Raised when the `INTERNAL_API_KEY` env var is not set.
+
+    The handler catches this and returns a 500 — surfaces the misconfig
+    to ops without a misleading 401 (which would imply a client problem).
+    """
+
+
 def _read_internal_key() -> str:
-    """Resolve the shared secret. Empty string disables the path entirely."""
-    return os.environ.get(INTERNAL_API_KEY_ENV, "")
+    """Resolve the shared secret.
+
+    Raises `InternalKeyNotConfiguredError` when the env var is unset —
+    matches the fail-fast pattern used in the TypeScript
+    `readSigningSecret()`.
+    """
+    secret = os.environ.get(INTERNAL_API_KEY_ENV, "")
+    if not secret:
+        raise InternalKeyNotConfiguredError(
+            f"{INTERNAL_API_KEY_ENV} is not set on the API Lambda runtime",
+        )
+    return secret
 
 
 def _get_header(headers: dict[str, str], name: str) -> str:
@@ -85,12 +103,13 @@ def handle_internal_get_analysis(
     (mirrors the user-facing endpoint's behaviour to avoid leaking the
     existence of cross-org resources).
     """
-    expected_key = _read_internal_key()
-    if not expected_key:
+    try:
+        expected_key = _read_internal_key()
+    except InternalKeyNotConfiguredError:
         # The env var is not set in this environment. Surface as 500 so
         # ops sees the misconfiguration; do NOT 401 (a 401 would imply a
         # client-fixable problem, which it isn't).
-        logger.error("internal_get_analysis: %s not set", INTERNAL_API_KEY_ENV)
+        logger.exception("internal_get_analysis: misconfigured")
         return build_error("Internal endpoint not configured", 500, NOT_CONFIGURED)
 
     headers = event.get("headers") or {}
