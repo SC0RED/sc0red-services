@@ -172,6 +172,14 @@ class PdfRenderConstruct(Construct):
                 "../backend/lambdas/pdf-render",
                 bundling=cdk.BundlingOptions(
                     image=lambda_.Runtime.NODEJS_20_X.bundling_image,
+                    # Run as root inside the bundling container — without
+                    # this, CDK passes `-u 1001:1001` (the GitHub Actions
+                    # runner UID) and `npm ci` fails to write node_modules
+                    # into the mounted source dir (owned by root from the
+                    # runner's perspective). Container exits in ~14ms with
+                    # status 243. Matches the pattern in `lambda_factory.
+                    # build_bundling_options` for the Python Lambda.
+                    user="root",
                     command=[
                         "bash",
                         "-c",
