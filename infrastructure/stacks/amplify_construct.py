@@ -84,8 +84,25 @@ class AmplifyConstruct(Construct):
         nextauth_secret: str,
         cognito_user_pool_id: str,
         cognito_client_id: str,
+        pdf_token_secret: str,
+        internal_api_key: str,
     ) -> None:
-        """Phase 2: create the branch after API Gateway exists."""
+        """Phase 2: create the branch after API Gateway exists.
+
+        `pdf_token_secret` and `internal_api_key` are server-side env vars
+        consumed by the Next.js Lambda runtime (the `/api/export/pdf/[id]`
+        token-mint flow and the `/print/[id]` server component, respectively).
+        Both MUST agree with the same env vars on the API Lambda — they
+        come from the same Secrets Manager secret in `janus_stack.py`.
+
+        `FRONTEND_BASE_URL` is the public origin the headless Chromium
+        Lambda navigates to (`${BASE}/print/{id}?t=...`). On Amplify SSR
+        the Next.js process binds to `localhost:3000` internally, so
+        `req.nextUrl.origin` returns the wrong URL — we have to set this
+        explicitly. Value is the Amplify-default branch URL (Amplify
+        routes the custom domain `dev.janus.sc0red.com` to the same
+        SSR Lambda, so headless navigation against either works).
+        """
         branch = amplify.CfnBranch(
             self,
             "Branch",
@@ -114,6 +131,18 @@ class AmplifyConstruct(Construct):
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="NEXT_PUBLIC_COGNITO_CLIENT_ID",
                     value=cognito_client_id,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="PDF_TOKEN_SECRET",
+                    value=pdf_token_secret,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="INTERNAL_API_KEY",
+                    value=internal_api_key,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="FRONTEND_BASE_URL",
+                    value=self.branch_url,
                 ),
             ],
         )
@@ -154,8 +183,24 @@ class AmplifyConstruct(Construct):
                                 "commands": ["npm ci --legacy-peer-deps"],
                             },
                             "build": {
+                                # Amplify branch env vars are NOT exposed to
+                                # the Next.js SSR Lambda runtime by default —
+                                # they're only available at build time. The
+                                # workaround is to write them to
+                                # `.env.production` during the build so Next.js
+                                # bundles them into the server runtime. The
+                                # grep filter MUST cover every server-side env
+                                # var the SSR runtime reads. Entries:
+                                #   - PDF_TOKEN_SECRET — HMAC signing for the
+                                #     /api/export/pdf URL token
+                                #   - INTERNAL_API_KEY — auth for the print
+                                #     route's call to /api/internal/analysis
+                                #   - FRONTEND_BASE_URL — public origin the
+                                #     PDF render Lambda navigates to (without
+                                #     this, `req.nextUrl.origin` falls to
+                                #     `localhost:3000` on Amplify SSR)
                                 "commands": [
-                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_)' >> .env.production",
+                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_|PDF_TOKEN_SECRET|INTERNAL_API_KEY|FRONTEND_BASE_URL)' >> .env.production",
                                     "npm run build",
                                 ],
                             },

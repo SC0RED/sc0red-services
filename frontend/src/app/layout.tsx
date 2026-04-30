@@ -14,11 +14,18 @@ export const metadata: Metadata = {
 /**
  * Synchronous theme bootstrap. Runs before React hydrates so the user never
  * sees a flash of the wrong palette. Reads the persisted preference from
- * localStorage, falls back to `prefers-color-scheme`, and writes
- * `data-theme="dark"` or `data-theme="light"` to <html>.
+ * localStorage; defaults to dark when nothing is persisted.
  *
  * Safari private mode throws on localStorage access — the try/catch falls
- * through to OS preference. The toggle in Settings still works in-memory.
+ * through to dark. The toggle in Settings still works in-memory.
+ *
+ * The default is intentionally dark (NOT `prefers-color-scheme`) — sc0red
+ * is dark-first by design, and a light-mode laptop user shouldn't land on
+ * a light webapp on first paint. Users who want OS-followed behaviour can
+ * pick "System" in Settings → Appearance; that path is handled by the
+ * `useTheme` hook's `mode === 'system'` branch (which DOES consult
+ * `prefers-color-scheme` live). See
+ * `openspec/changes/dark-default-theme/proposal.md`.
  *
  * Keep this in lockstep with `useTheme` (frontend/src/lib/hooks/useTheme.ts);
  * both must agree on the storage key (`janus.theme`) and the resolution rules.
@@ -31,9 +38,12 @@ const THEME_INIT_SCRIPT = `
     var resolved;
     if (stored === 'dark' || stored === 'light') {
       resolved = stored;
+    } else if (stored === 'system' && window.matchMedia) {
+      // Explicit "system" mode resolves OS pref live.
+      resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     } else {
-      var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-      resolved = prefersLight ? 'light' : 'dark';
+      // No stored preference (or malformed value) → dark default.
+      resolved = 'dark';
     }
     document.documentElement.setAttribute('data-theme', resolved);
   } catch (_) {

@@ -177,6 +177,10 @@ def create_api(
         handler=handler,
         rest_api_name=f"janus-api-{environment}",
         description=f"Janus PE Risk Assessment API — {environment}",
+        # Binary content types — `application/pdf` is forwarded verbatim
+        # (base64-encoded) from the API Lambda so the Export PDF flow can
+        # stream binary to the browser without text-encoding corruption.
+        binary_media_types=["application/pdf"],
         default_cors_preflight_options=apigw.CorsOptions(
             allow_origins=cors_origins,
             allow_methods=apigw.Cors.ALL_METHODS,

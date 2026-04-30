@@ -2,190 +2,131 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { emitFromServer } from '@/lib/analytics/emitEvent.server'
 import { BackendError } from '@/lib/api/errors'
-import { backendFetch } from '@/lib/api/serverToken'
-import { getSc0redContactUrl } from '@/lib/config'
-import type { AnalysisData, Opportunity, RiskScore } from '@/lib/types/api'
-import { TIER_COLORS_HEX } from '@/lib/utils/riskUtils'
+import { backendFetch, getBackendToken } from '@/lib/api/serverToken'
+import { BACKEND_URL } from '@/lib/config'
+import { buildContentDisposition, buildPdfFilename } from '@/lib/pdf/filename'
+import { readSigningSecret } from '@/lib/pdf/secretSource'
+import { signToken } from '@/lib/pdf/token'
+import type { AnalysisData } from '@/lib/types/api'
 
-function escapeHtml(text: string | null | undefined): string {
-    if (!text) return ''
-    return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;')
+/**
+ * Server-side PDF export endpoint.
+ *
+ *   1. Auth check — Cognito session via NextAuth (raises 401 if absent).
+ *   2. Fetch the analysis to derive the filename + opportunity count for
+ *      the analytics event. The analysis fetch also serves as the org-
+ *      scoping check: backendFetch returns 404 if the user can't see this
+ *      analysis, and we propagate that to the caller.
+ *   3. Mint a 60-second HMAC URL token scoped to {analysisId, orgId}.
+ *   4. Invoke the PDF render endpoint at `${BACKEND_URL}/api/admin/render-pdf`
+ *      (mounted on the Node.js Puppeteer Lambda via API Gateway, gated by
+ *      the same Cognito JWT). Returns the binary PDF.
+ *   5. Stream the PDF back with `Content-Disposition: attachment; …` so the
+ *      browser saves it instead of opening it inline.
+ *   6. Emit `sc0red_cta_rendered_in_pdf` when the analysis has at least one
+ *      opportunity. Matches the prior route's behaviour for funnel parity.
+ *
+ * Replaces the prior HTML-pretending-to-be-PDF route. The only behavioural
+ * change visible to existing analytics is the `Content-Type` flip from
+ * `text/html` to `application/pdf`.
+ */
+
+const RENDER_TIMEOUT_MS = 30_000
+const RENDER_PATH = '/api/admin/render-pdf'
+
+interface RenderRequestBody {
+    analysisId: string
+    token: string
+    frontendBaseUrl: string
+    companyName: string
+}
+
+function readFrontendBaseUrl(req: NextRequest): string {
+    // 1. Prefer the explicit env var (set per-environment in CDK so the
+    //    Lambda's headless browser hits the right Amplify URL).
+    const explicit = process.env.FRONTEND_BASE_URL
+    if (explicit) return explicit.replace(/\/$/, '')
+
+    // 2. Fall back to `X-Forwarded-Host` if the proxy set it. On Amplify
+    //    SSR, Next.js binds to `localhost:3000` internally, so
+    //    `req.nextUrl.origin` returns the wrong URL. CloudFront sets
+    //    `X-Forwarded-Host` + `X-Forwarded-Proto` to the public origin
+    //    when forwarding to the Lambda — use those if present.
+    const forwardedHost = req.headers.get('x-forwarded-host')
+    if (forwardedHost) {
+        const forwardedProto = req.headers.get('x-forwarded-proto') ?? 'https'
+        return `${forwardedProto}://${forwardedHost}`
+    }
+
+    // 3. Last resort: `req.nextUrl.origin` — works for `npm run dev` on
+    //    the developer's laptop where the request actually originates
+    //    on `localhost:3000`. Should NEVER hit on Amplify SSR if step 1
+    //    or 2 fired correctly.
+    return req.nextUrl.origin
+}
+
+async function invokeRenderLambda(body: RenderRequestBody): Promise<Response> {
+    const token = await getBackendToken()
+    if (!token) throw new BackendError('Not authenticated', 401)
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), RENDER_TIMEOUT_MS)
+    try {
+        return await fetch(`${BACKEND_URL}${RENDER_PATH}`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                Accept: 'application/pdf',
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        })
+    } finally {
+        clearTimeout(timeout)
+    }
 }
 
 export async function GET(req: NextRequest, { params }: { params: { analysisId: string } }) {
     try {
+        // (1)+(2): Fetch the analysis. backendFetch handles auth + 401 +
+        // org scoping; if the analysis isn't visible to the caller we
+        // propagate the same 404 the underlying endpoint returns.
         const analysis = await backendFetch<AnalysisData>(`/api/analysis/${params.analysisId}`)
+        const orgId = await resolveOrgId()
 
-        const tierColor = (analysis.riskTier && TIER_COLORS_HEX[analysis.riskTier]) || '#8B9AC4'
+        // (3): Mint the URL token. The PDF Lambda passes this to the print
+        // route via `?t=`; the print route validates HMAC + expiry +
+        // analysisId match before rendering.
+        const token = signToken({ analysisId: params.analysisId, orgId }, readSigningSecret())
 
-        const riskScores: RiskScore[] = analysis.riskScores || []
-        const opportunities: Opportunity[] = analysis.opportunities || []
-        const topActions: string[] = analysis.topActions || []
-        const analysisSummary = analysis.analysisSummary || ''
+        // (4): Invoke the render Lambda.
+        const response = await invokeRenderLambda({
+            analysisId: params.analysisId,
+            token,
+            frontendBaseUrl: readFrontendBaseUrl(req),
+            companyName: analysis.companyName,
+        })
 
-        const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>AI Risk Report — ${escapeHtml(analysis.companyName)}</title>
-  <style>
-    body { font-family: -apple-system, Inter, sans-serif; margin: 0; padding: 0; background: #060A12; color: #EEF2FF; }
-    .page { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
-    .cover { min-height: 90vh; display: flex; flex-direction: column; justify-content: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 3rem; margin-bottom: 3rem;}
-    h1 { font-size: 2.5rem; font-weight: 800; margin: 0 0 0.5rem; letter-spacing: -0.03em; }
-    h2 { font-size: 1.25rem; font-weight: 700; margin: 2rem 0 1rem; color: #EEF2FF; }
-    h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
-    .badge { display: inline-block; padding: 0.3rem 0.9rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
-    .score-box { display: inline-flex; align-items: center; justify-content: center; width: 90px; height: 90px; border-radius: 50%; border: 5px solid ${tierColor}; font-size: 2rem; font-weight: 800; color: ${tierColor}; margin-bottom: 1rem; }
-    .risk-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; }
-    .bar { flex: 1; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
-    .bar-fill { height: 100%; border-radius: 3px; }
-    .opp-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-    .step { display: flex; gap: 0.75rem; margin-bottom: 0.5rem; align-items: flex-start; }
-    .step-num { min-width: 24px; height: 24px; border-radius: 50%; background: rgba(59,123,246,0.15); color: #3B7BF6; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
-    .callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0; }
-    .callout { padding: 0.875rem; border-radius: 6px; }
-    .label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #8B9AC4; margin-bottom: 0.25rem; }
-    .sc0red-cta { margin-top: 2rem; padding: 1.5rem 1.75rem; border-top: 3px solid #3B7BF6; background: rgba(59,123,246,0.06); border-radius: 8px; }
-    .sc0red-cta-heading { font-size: 1rem; font-weight: 700; color: #EEF2FF; margin: 0 0 0.75rem; }
-    .sc0red-cta-body { font-size: 0.9rem; line-height: 1.7; color: #c4cde8; margin: 0 0 1rem; }
-    .sc0red-cta-link { display: block; font-size: 0.85rem; font-weight: 600; color: #3B7BF6; word-break: break-all; }
-    p { line-height: 1.7; margin: 0 0 0.75rem; color: #c4cde8; }
-    .meta { color: #4D5B7F; font-size: 0.875rem; }
-    @media print { body { background: white; color: #111; } }
-  </style>
-</head>
-<body>
-<div class="page">
-  <!-- Cover -->
-  <div class="cover">
-    <div style="font-size:0.875rem;color:#3B7BF6;font-weight:600;margin-bottom:1rem;">PE SCAN · AI RISK REPORT</div>
-    <h1>${escapeHtml(analysis.companyName)}</h1>
-    ${analysis.companyUrl ? `<p class="meta">${escapeHtml(analysis.companyUrl)}</p>` : ''}
-    ${analysis.industry ? `<p class="meta">${escapeHtml(analysis.industry)}</p>` : ''}
-    <div style="margin-top:2rem;">
-      <div class="score-box">${analysis.overallRiskScore?.toFixed(1)}</div>
-      <div>
-        <span class="badge" style="background:${tierColor}20;color:${tierColor};border:1px solid ${tierColor}40;">
-          ${escapeHtml(analysis.riskTier?.toUpperCase())} RISK
-        </span>
-      </div>
-    </div>
-    ${analysisSummary ? `<p style="margin-top:1.5rem;max-width:600px;">${escapeHtml(analysisSummary)}</p>` : ''}
-    <p class="meta" style="margin-top:2rem;">Generated ${new Date().toLocaleDateString()} · Powered by AI</p>
-  </div>
+        if (!response.ok) {
+            // LOW-priority review nit: the rest of the API returns
+            // `{error, code}` JSON. This route returns plain text because
+            // the frontend caller (`ExportPDFButton`) never displays the
+            // body — it shows `"PDF export failed (HTTP ${status})"` from
+            // the response code alone. Migrating to JSON here would
+            // change zero observable behaviour today; deferred until a
+            // future caller surfaces the body.
+            const message = `PDF render failed (HTTP ${response.status})`
+            return new NextResponse(message, { status: response.status })
+        }
 
-  <!-- Top Actions -->
-  ${
-      topActions.length
-          ? `
-  <h2>Top 3 Immediate Actions</h2>
-  ${topActions
-      .map(
-          (a, i) => `
-    <div class="step">
-      <div class="step-num">${i + 1}</div>
-      <p>${escapeHtml(a)}</p>
-    </div>`
-      )
-      .join('')}
-  `
-          : ''
-  }
+        const pdfBuffer = await response.arrayBuffer()
 
-  <!-- Risk Scores -->
-  <h2>Risk Assessment</h2>
-  ${riskScores
-      .map((rs: RiskScore) => {
-          const sc =
-              rs.score <= 3 ? '#22C55E' : rs.score <= 6 ? '#F59E0B' : rs.score <= 8 ? '#F97316' : '#EF4444'
-          return `
-    <div>
-      <div class="risk-row">
-        <div style="width:180px;font-size:0.875rem;font-weight:500;">${escapeHtml(rs.category?.replace(/_/g, ' '))}</div>
-        <div class="bar"><div class="bar-fill" style="width:${(rs.score / 10) * 100}%;background:${sc};"></div></div>
-        <div style="width:30px;font-weight:700;color:${sc};text-align:right;">${rs.score}</div>
-      </div>
-      ${rs.rationale ? `<p style="font-size:0.85rem;margin-left:196px;margin-top:-0.5rem;">${escapeHtml(rs.rationale)}</p>` : ''}
-    </div>`
-      })
-      .join('')}
-
-  <!-- Opportunities -->
-  <h2 style="margin-top:3rem;">AI Opportunity Roadmap</h2>
-  ${opportunities
-      .map(
-          (opp: Opportunity) => `
-  <div class="opp-card">
-    <h3>${escapeHtml(opp.title)}</h3>
-    <div style="margin-bottom:0.875rem;">
-      <span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);margin-right:0.5rem;">${escapeHtml(opp.impact_rating)} Impact</span>
-      <span class="badge" style="background:rgba(139,154,196,0.08);color:#8B9AC4;border:1px solid rgba(139,154,196,0.15);">${escapeHtml(opp.timeline)}</span>
-      ${opp.value_lever ? `<span class="badge" style="background:rgba(${opp.value_lever === 'Revenue Side' ? '34,197,94' : opp.value_lever === 'Cost Side' ? '167,139,250' : '6,182,212'},0.1);color:${opp.value_lever === 'Revenue Side' ? '#22C55E' : opp.value_lever === 'Cost Side' ? '#A78BFA' : '#06B6D4'};border:1px solid rgba(${opp.value_lever === 'Revenue Side' ? '34,197,94' : opp.value_lever === 'Cost Side' ? '167,139,250' : '6,182,212'},0.2);margin-left:0.5rem;">${escapeHtml(opp.value_lever)}</span>` : ''}
-    </div>
-    <p>${escapeHtml(opp.description)}</p>
-    ${
-        opp.implementation_steps?.length
-            ? `
-      <div style="margin-top:0.875rem;">
-        ${opp.implementation_steps.map((s, i) => `<div class="step"><div class="step-num">${i + 1}</div><p style="margin:0;">${escapeHtml(s)}</p></div>`).join('')}
-      </div>`
-            : ''
-    }
-    <div class="callouts">
-      <div class="callout" style="background:rgba(245,158,11,0.08);border-left:3px solid #F59E0B;">
-        <div class="label">Investment</div>
-        <div style="font-weight:700;color:#F59E0B;">${escapeHtml(opp.investment_range)}</div>
-      </div>
-      <div class="callout" style="background:rgba(34,197,94,0.08);border-left:3px solid #22C55E;">
-        <div class="label">Potential ROI</div>
-        <div style="font-weight:600;color:#22C55E;font-size:0.875rem;">${escapeHtml(opp.roi_estimate)}</div>
-      </div>
-    </div>
-  </div>`
-      )
-      .join('')}
-
-  ${
-      opportunities.length
-          ? `
-  <div class="sc0red-cta">
-    <div class="sc0red-cta-heading">sc0red can help you capture these opportunities</div>
-    <p class="sc0red-cta-body">Our AI specialists implement opportunities like these end-to-end — from strategy through production deployment — moving faster than traditional enterprise timelines.</p>
-    <a class="sc0red-cta-link" href="${escapeHtml(getSc0redContactUrl())}" target="_blank" rel="noopener noreferrer">Start the conversation: ${escapeHtml(getSc0redContactUrl())}</a>
-  </div>`
-          : ''
-  }
-
-  <!-- EBITDA Impact Model -->
-  ${
-      analysis.ebitdaTree
-          ? `
-  <h2 style="margin-top:3rem;">EBITDA Impact Model</h2>
-  <div style="margin-bottom:1rem;">
-    ${analysis.ebitdaTree.revenueEstimate ? `<span class="badge" style="background:rgba(34,197,94,0.1);color:#22C55E;border:1px solid rgba(34,197,94,0.2);margin-right:0.5rem;">Revenue: ${escapeHtml(analysis.ebitdaTree.revenueEstimate)}</span>` : ''}
-    ${analysis.ebitdaTree.ebitdaEstimate ? `<span class="badge" style="background:rgba(59,123,246,0.1);color:#3B7BF6;border:1px solid rgba(59,123,246,0.2);">EBITDA: ${escapeHtml(analysis.ebitdaTree.ebitdaEstimate)}</span>` : ''}
-  </div>
-  ${analysis.ebitdaTree.businessModelSummary ? `<p>${escapeHtml(analysis.ebitdaTree.businessModelSummary)}</p>` : ''}
-  <p class="meta" style="font-style:italic;">Interactive EBITDA tree visualisation available in the web application.</p>
-  `
-          : ''
-  }
-</div>
-</body>
-</html>`
-
-        // Fire the PDF-render analytics event without blocking the response.
-        // `emitFromServer` already swallows its own failures, so we cast the
-        // promise to `void` — the PDF download returns immediately while the
-        // emit's fetch runs in the background. Only fire when the CTA is
-        // actually rendered (opportunities exist), otherwise the event
-        // would pollute funnel queries with impressions that never happened.
+        // (6): Fire the analytics event AFTER the render succeeded — we
+        // only count "actually delivered" PDFs, not requests-that-erred.
+        // Matches the prior route's gating: opportunities-zero analyses
+        // do NOT emit (avoids polluting funnel queries).
+        const opportunities = analysis.opportunities ?? []
         if (opportunities.length > 0) {
             void emitFromServer('sc0red_cta_rendered_in_pdf', {
                 analysisId: params.analysisId,
@@ -193,12 +134,45 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
             })
         }
 
-        return new NextResponse(html, {
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        // (5): Return the PDF with the user-facing filename.
+        const filename = buildPdfFilename(analysis.companyName, analysis.analyzedAt)
+        return new NextResponse(pdfBuffer, {
+            status: 200,
+            headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': buildContentDisposition(filename),
+                'Cache-Control': 'no-store',
+            },
         })
     } catch (error: unknown) {
         const status = error instanceof BackendError ? error.status : 500
-        const message = error instanceof Error ? error.message : 'Not found'
+        const message = error instanceof Error ? error.message : 'PDF export failed'
         return new NextResponse(message, { status })
     }
+}
+
+/**
+ * Pulls the user's `orgId` claim from the NextAuth JWT. Done as a separate
+ * helper because the `getBackendToken` path returns the raw idToken we
+ * forward to the backend, while this returns the JWT payload's org_id.
+ */
+async function resolveOrgId(): Promise<string> {
+    // The user's session-level `orgId` is on the NextAuth JWT under the
+    // standard NextAuth/JWT layout. We import here (not at module top)
+    // so the test of `signToken` doesn't require a session mock.
+    const { getToken } = await import('next-auth/jwt')
+    const { cookies, headers } = await import('next/headers')
+
+    const cookieStore = await cookies()
+    const headerStore = await headers()
+    const token = await getToken({
+        req: {
+            cookies: Object.fromEntries(cookieStore.getAll().map((c) => [c.name, c.value])),
+            headers: Object.fromEntries(headerStore.entries()),
+        } as never,
+        secret: process.env.NEXTAUTH_SECRET,
+    })
+    const orgId = (token as { orgId?: string } | null)?.orgId
+    if (!orgId) throw new BackendError('Session missing org id', 401)
+    return orgId
 }
