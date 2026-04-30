@@ -28,8 +28,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from botocore.exceptions import ClientError
-
+from src.handlers.admin_restore import restore_analysis, restore_scan
 from src.handlers.api_gateway_handler import (
     FORBIDDEN,
     VALIDATION_ERROR,
@@ -237,17 +236,18 @@ def handle_admin_restore(
     restored: list[str] = []
     failed: list[dict[str, str]] = []
 
+    assessment_repo = storage.create_assessment_repository()
     for record_id in ids:
         # Try the company first (analyses are the more common case),
         # then fall back to the scan repo. Both reads use the recovery-
         # aware variant so tombstoned records are visible.
         company = company_repo.get_by_id_with_deleted(record_id)
         if company and company.get("org_id") == authentication.org_id:
-            outcome = _attempt_restore(company_repo, record_id, kind="analysis")
+            outcome = restore_analysis(company_repo, assessment_repo, record_id)
         else:
             scan = scan_repo.get_by_id_with_deleted(record_id)
             if scan and scan.get("org_id") == authentication.org_id:
-                outcome = _attempt_restore(scan_repo, record_id, kind="scan")
+                outcome = restore_scan(scan_repo, company_repo, assessment_repo, record_id)
             else:
                 # Neither repo returned a record we own. "not_found"
                 # covers missing records, cross-org records, and ids of
@@ -269,30 +269,6 @@ def handle_admin_restore(
     )
 
     return build_json_response({"restored": restored, "failed": failed})
-
-
-def _attempt_restore(repo: Any, record_id: str, *, kind: str) -> str:
-    """Call ``repo.restore(record_id)`` and translate eviction-race failures.
-
-    Phase 1 added ``require_exists=True`` on every restore call site so
-    a TTL-evicted row surfaces as ``ConditionalCheckFailedException``
-    instead of silently writing an empty shell. Re-translating that
-    here keeps the boto3 error shape from leaking past the handler;
-    callers see a clean ``ttl_expired`` outcome string.
-    """
-    try:
-        repo.restore(record_id)
-    except ClientError as error:
-        code = error.response.get("Error", {}).get("Code", "")
-        if code == "ConditionalCheckFailedException":
-            logger.info(
-                "admin_restore ttl_expired record_id=%s kind=%s",
-                record_id,
-                kind,
-            )
-            return "ttl_expired"
-        raise
-    return "restored"
 
 
 def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
