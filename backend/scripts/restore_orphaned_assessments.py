@@ -71,6 +71,7 @@ import logging
 import os
 import sys
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,21 @@ logger = logging.getLogger(__name__)
 # summarising. Operators don't need the full list to decide whether
 # the count looks reasonable.
 EVICTED_LOG_LIMIT = 10
+
+
+def _json_default(value: Any) -> Any:
+    """JSON serializer for boto3 return values.
+
+    DynamoDB returns numeric fields as ``Decimal``. The diff log
+    captures `ttl` (an epoch-seconds Decimal) so the operator can spot
+    rows close to TTL eviction — without this serializer hook
+    `json.dumps` would raise `TypeError`. Mirrors the pattern in
+    ``api_gateway_handler.serialize_decimal``.
+    """
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    msg = f"Object of type {type(value).__name__} is not JSON serializable"
+    raise TypeError(msg)
 
 
 def find_orphaned_assessments(
@@ -124,7 +140,7 @@ def write_diff_log(diff: list[dict[str, Any]], env: str) -> Path:
     out_dir = Path("out")
     out_dir.mkdir(exist_ok=True)
     path = out_dir / f"restore_orphaned_assessments_{env}_{timestamp}.json"
-    path.write_text(json.dumps(diff, indent=2))
+    path.write_text(json.dumps(diff, indent=2, default=_json_default))
     return path
 
 
@@ -139,6 +155,15 @@ def main() -> int:
         "--apply",
         action="store_true",
         help="Restore the orphaned assessments. Default: dry-run.",
+    )
+    # Accept `--dry-run` as a no-op so operators following the docstring
+    # don't hit a parse error. The actual dry-run/apply switch is the
+    # `--apply` flag above (absent → dry-run, present → apply).
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="_dry_run_explicit",
+        help="Explicit dry-run flag (no-op; default behaviour without --apply).",
     )
     parser.add_argument(
         "--env",
