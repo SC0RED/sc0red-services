@@ -157,12 +157,19 @@ class JanusStack(Stack):
         )
         pdf_render.grant_invoke(api_handler)
         pdf_render.token_secret.grant_read(api_handler)
+        pdf_render.internal_api_key.grant_read(api_handler)
+        # Resolve the secrets ONCE — both the API Lambda env and the
+        # Amplify branch env need the same plaintext value, and CDK's
+        # `secret_value.to_string()` returns a token that resolves at
+        # deploy time. Reusing the same token across the two consumers
+        # ensures Cognito-Lambda + Next.js-Lambda agree on the secret.
+        pdf_token_secret_value = pdf_render.token_secret.secret_value.to_string()
+        internal_api_key_value = pdf_render.internal_api_key.secret_value.to_string()
         api_handler.add_environment(
             "PDF_RENDER_LAMBDA_ARN", pdf_render.function.function_arn
         )
-        api_handler.add_environment(
-            "PDF_TOKEN_SECRET", pdf_render.token_secret.secret_value.to_string()
-        )
+        api_handler.add_environment("PDF_TOKEN_SECRET", pdf_token_secret_value)
+        api_handler.add_environment("INTERNAL_API_KEY", internal_api_key_value)
 
         # Phase 2: Create Amplify branch now that API URL exists
         if amplify:
@@ -175,6 +182,8 @@ class JanusStack(Stack):
                 nextauth_secret=nextauth_secret,
                 cognito_user_pool_id=cognito.user_pool_id,
                 cognito_client_id=cognito.app_client_id,
+                pdf_token_secret=pdf_token_secret_value,
+                internal_api_key=internal_api_key_value,
             )
 
         _mcp = MCPConstruct(

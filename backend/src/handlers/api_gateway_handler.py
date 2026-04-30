@@ -16,6 +16,7 @@ from typing import Any
 
 import boto3
 
+from src.handlers.api_response_logger import finalize_response
 from src.handlers.auth_middleware import require_authentication
 from src.handlers.factory_manager import FactoryManager
 from src.handlers.router import Router
@@ -121,7 +122,7 @@ class APIGatewayHandler:
             handle_delete_document,
             handle_upload_url,
         )
-        from src.handlers.internal_handlers import handle_internal_get_analysis
+        from src.handlers.internal_handlers import register_routes as register_internal_routes
         from src.handlers.invitation_handlers import (
             handle_invite_member,
             handle_list_members,
@@ -130,7 +131,7 @@ class APIGatewayHandler:
             handle_revoke_invite,
         )
         from src.handlers.oauth_handlers import handle_oauth_approve
-        from src.handlers.pdf_render_handlers import handle_render_pdf
+        from src.handlers.pdf_render_handlers import register_routes as register_pdf_render_routes
         from src.handlers.scan_handlers import (
             handle_delete_scan,
             handle_scan_confirm,
@@ -320,26 +321,11 @@ class APIGatewayHandler:
         # admin endpoints don't require a gateway edit.
         register_admin_routes(router, self._storage)
 
-        # Internal-key endpoint for the headless PDF render flow. Sits behind
-        # `INTERNAL_API_KEY` (Secrets Manager-managed); see
-        # `handlers.internal_handlers` for the auth boundary it enforces.
-        # Registered as `public` so the Cognito-JWT middleware doesn't run —
-        # the handler validates the API key + X-Org-Id headers itself.
-        router.public(
-            "GET",
-            "/api/internal/analysis/{analysis_id}",
-            lambda event, analysis_id: handle_internal_get_analysis(
-                event, self._storage, analysis_id
-            ),
-        )
+        # Internal-key endpoints for the headless PDF render flow.
+        register_internal_routes(router, self._storage)
 
-        # PDF render proxy — Cognito-authenticated. Forwards to the Node.js
-        # Lambda via boto3. See `handlers.pdf_render_handlers`.
-        router.protected(
-            "POST",
-            "/api/admin/render-pdf",
-            handle_render_pdf,
-        )
+        # PDF render proxy — Cognito-auth, boto3-invokes the Node.js Lambda.
+        register_pdf_render_routes(router)
 
         return router
 
@@ -357,20 +343,23 @@ class APIGatewayHandler:
         if method == "OPTIONS":
             return build_json_response({}, 200)
 
+        finalize_args = {
+            "method": method,
+            "path": path,
+            "request_id": request_id,
+            "start_time": start_time,
+        }
+
         result = self._router.dispatch(method, path)
         if result is None:
-            return self._finalize(
-                build_error("Not found", 404, ROUTE_NOT_FOUND),
-                method,
-                path,
-                request_id,
-                start_time,
+            return finalize_response(
+                build_error("Not found", 404, ROUTE_NOT_FOUND), **finalize_args
             )
 
         handler, path_params, authenticated = result
         if not authenticated:
             response = handler(event, **path_params)
-            return self._finalize(response, method, path, request_id, start_time)
+            return finalize_response(response, **finalize_args)
 
         try:
             # Pass the user repo so the middleware resolves
@@ -381,40 +370,9 @@ class APIGatewayHandler:
                 headers, user_repo=self._storage.create_user_repository()
             )
         except ValueError as e:
-            return self._finalize(
-                build_error(str(e), 401, UNAUTHORIZED),
-                method,
-                path,
-                request_id,
-                start_time,
+            return finalize_response(
+                build_error(str(e), 401, UNAUTHORIZED), **finalize_args
             )
 
         response = handler(event, authentication, **path_params)
-        return self._finalize(response, method, path, request_id, start_time)
-
-    @staticmethod
-    def _finalize(
-        response: LambdaResponse,
-        method: str,
-        path: str,
-        request_id: str,
-        start_time: float,
-    ) -> LambdaResponse:
-        """Add correlation ID header and log the request."""
-        duration_ms = int((time.monotonic() - start_time) * 1000)
-        status = response.get("statusCode", 0)
-
-        # Add correlation ID to response headers
-        response_headers = response.get("headers") or {}
-        response_headers["X-Request-Id"] = request_id
-        response["headers"] = response_headers
-
-        logger.info(
-            "%s %s → %d (%dms) request_id=%s",
-            method,
-            path,
-            status,
-            duration_ms,
-            request_id,
-        )
-        return response
+        return finalize_response(response, **finalize_args)

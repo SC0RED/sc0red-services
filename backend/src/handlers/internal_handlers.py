@@ -26,7 +26,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
-from src.handlers.analysis_handlers import build_analysis_payload
+from src.handlers.analysis_payload import build_analysis_payload
 from src.handlers.api_gateway_handler import (
     NOT_CONFIGURED,
     NOT_FOUND,
@@ -38,11 +38,29 @@ from src.handlers.api_gateway_handler import (
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
+    from src.handlers.router import Router
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logger = logging.getLogger(__name__)
 
 INTERNAL_API_KEY_ENV = "INTERNAL_API_KEY"
+
+
+def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
+    """Wire the internal-key endpoints into the API Gateway router.
+
+    Keeps route registration adjacent to the handler module — same
+    pattern as `admin_handlers.register_routes`. Routes are `public`
+    because this module enforces its own auth (constant-time API key +
+    X-Org-Id), bypassing the Cognito middleware.
+    """
+    router.public(
+        "GET",
+        "/api/internal/analysis/{analysis_id}",
+        lambda event, analysis_id: handle_internal_get_analysis(
+            event, storage, analysis_id
+        ),
+    )
 
 
 def _read_internal_key() -> str:

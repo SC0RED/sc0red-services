@@ -14,7 +14,6 @@ single-sourced. Per design.md D2 / task 3.2.
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
@@ -33,10 +32,20 @@ from src.handlers.api_gateway_handler import (
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
     from src.handlers.auth_middleware import AuthContext
+    from src.handlers.router import Router
 
 logger = logging.getLogger(__name__)
 
 PDF_RENDER_LAMBDA_ARN_ENV = "PDF_RENDER_LAMBDA_ARN"
+
+
+def register_routes(router: Router) -> None:
+    """Wire the PDF render proxy into the API Gateway router.
+
+    Cognito-protected — the `Router.protected` middleware forwards a
+    validated `AuthContext` to `handle_render_pdf`.
+    """
+    router.protected("POST", "/api/admin/render-pdf", handle_render_pdf)
 
 # Module-level boto3 client survives Lambda container reuse, avoiding
 # the ~50ms per-invoke client init.
@@ -138,6 +147,13 @@ def handle_render_pdf(
     # isBase64Encoded: true, headers: {...}}`. Re-emit it as our own API
     # Gateway proxy response so binary streams correctly via the
     # `application/pdf` binary media-type configured at the gateway.
+    if "body" not in result:
+        # Contract violation — the Node.js handler always sets `body` on
+        # the success path. A 200 with no body would silently render an
+        # empty PDF in the browser; surface as 502 instead.
+        logger.error("render_pdf_missing_body")
+        return build_error("PDF render returned 200 with no body", 502)
+
     return {
         "statusCode": 200,
         "headers": {
@@ -145,11 +161,6 @@ def handle_render_pdf(
             "Cache-Control": "no-store",
             "Access-Control-Allow-Origin": "*",
         },
-        "body": result.get("body", ""),
+        "body": result["body"],
         "isBase64Encoded": bool(result.get("isBase64Encoded")),
     }
-
-
-def decode_pdf_base64(body: str) -> bytes:
-    """Helper for tests: decode a base64-encoded PDF body to bytes."""
-    return base64.b64decode(body)

@@ -74,15 +74,10 @@ async function fetchAnalysisForPrint(analysisId: string, orgId: string): Promise
 
 export default async function PrintPage({ params, searchParams }: PrintPageProps) {
     const token = searchParams?.t ?? ''
-    let secret: string
-    try {
-        secret = readSigningSecret()
-    } catch (error) {
-        // Misconfiguration — the env var isn't set. Surface as 500 rather
-        // than a misleading 401 so ops sees the real problem.
-        throw error
-    }
-
+    // `readSigningSecret` throws a clear `PDF_TOKEN_SECRET is not set`
+    // error if the env var is missing — let it propagate as a 500 so ops
+    // sees the misconfiguration rather than a misleading 401.
+    const secret = readSigningSecret()
     const verification = verifyToken(token, params.analysisId, secret)
     if (!verification.ok) {
         // Returning JSX with a 401-shaped message is intentional: Next.js

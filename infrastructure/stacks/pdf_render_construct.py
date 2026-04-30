@@ -37,11 +37,6 @@ TIMEOUT_SECONDS = 30
 # gives a 100ms-class CPU allocation on Lambda.
 MEMORY_MB = 1024
 
-# Pin to the same Chromium version as in `package.json`. Layer ARN
-# pattern is the canonical `@sparticuz/chromium-aws-lambda` distribution
-# for the matching version. Update both together when bumping.
-CHROMIUM_LAYER_VERSION = "121.0.0"
-
 
 class PdfRenderConstruct(Construct):
     """PDF render Lambda + supporting resources (secret, layer, IAM)."""
@@ -60,7 +55,7 @@ class PdfRenderConstruct(Construct):
         self._config = config
 
         self._token_secret = self._build_token_secret()
-        self._chromium_layer = self._build_chromium_layer()
+        self._internal_api_key = self._build_internal_api_key()
         self._function = self._build_function(frontend_base_url)
 
         # Surface the Lambda ARN so the API Lambda's environment can pick
@@ -84,6 +79,16 @@ class PdfRenderConstruct(Construct):
     def token_secret(self) -> secretsmanager.Secret:
         """The HMAC signing secret. Granted-read to the API Lambda + this Lambda."""
         return self._token_secret
+
+    @property
+    def internal_api_key(self) -> secretsmanager.Secret:
+        """The shared secret for the Next.js print page → backend internal endpoint.
+
+        Consumed by `internal_handlers.handle_internal_get_analysis` (Python)
+        and the `/print/[analysisId]/page.tsx` server component (TypeScript).
+        Both MUST read it from `INTERNAL_API_KEY`.
+        """
+        return self._internal_api_key
 
     def grant_invoke(self, grantee: iam.IGrantable) -> iam.Grant:
         """Allow `grantee` (typically the API Lambda) to invoke the PDF Lambda."""
@@ -114,28 +119,26 @@ class PdfRenderConstruct(Construct):
             ),
         )
 
-    def _build_chromium_layer(self) -> lambda_.LayerVersion:
-        """Attach the `@sparticuz/chromium` Lambda layer.
+    def _build_internal_api_key(self) -> secretsmanager.Secret:
+        """Per-environment shared secret for the Next.js → backend internal path.
 
-        We bundle the layer's tarball alongside the Lambda code in the
-        `backend/lambdas/pdf-render/layers/chromium/` directory at deploy
-        time; the local-dev / CI flow downloads the matching tarball with
-        the wrapper script. See `backend/lambdas/pdf-render/README.md`.
-
-        For now the construct points at a placeholder path — apply-time
-        wiring will replace it with an actual asset path or a published
-        layer ARN once we decide on the distribution pattern.
+        Used by the `/print/{id}` server component when fetching analysis
+        data (the headless browser has no NextAuth session, so we can't
+        forward a Cognito JWT). Stored in Secrets Manager + injected as
+        `INTERNAL_API_KEY` on both Lambdas. Constant-time-compared in
+        `internal_handlers.handle_internal_get_analysis`.
         """
-        return lambda_.LayerVersion(
+        return secretsmanager.Secret(
             self,
-            "ChromiumLayer",
-            code=lambda_.Code.from_asset(
-                "../backend/lambdas/pdf-render/layers/chromium",
-            ),
-            compatible_runtimes=[lambda_.Runtime.NODEJS_20_X],
-            compatible_architectures=[lambda_.Architecture.X86_64],
+            "InternalApiKey",
+            secret_name=f"janus/{self._environment}/internal-api-key",
             description=(
-                f"@sparticuz/chromium {CHROMIUM_LAYER_VERSION} — headless Chromium for the PDF render Lambda."
+                "Shared secret authorising the Next.js print route's "
+                "headless-browser-data-fetch path to call /api/internal/analysis."
+            ),
+            generate_secret_string=secretsmanager.SecretStringGenerator(
+                password_length=64,
+                exclude_punctuation=True,
             ),
         )
 
@@ -150,6 +153,12 @@ class PdfRenderConstruct(Construct):
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
 
+        # `@sparticuz/chromium` ships as an npm package containing the
+        # Chromium binary (~50MB). We bundle it directly into the Lambda
+        # code asset instead of using a separate layer — at this size the
+        # function package is well inside the 250MB unzipped limit, and
+        # avoiding a layer simplifies the deploy story (no layer-version-
+        # vs-handler-version drift, no separate asset path to provision).
         function = lambda_.Function(
             self,
             "PdfRenderFunction",
@@ -165,14 +174,14 @@ class PdfRenderConstruct(Construct):
                         "bash",
                         "-c",
                         " && ".join([
-                            "npm ci --omit=dev --silent",
+                            "npm ci --silent",
                             "npm run build --silent",
+                            "npm prune --omit=dev --silent",
                             "cp -r dist node_modules /asset-output/",
                         ]),
                     ],
                 ),
             ),
-            layers=[self._chromium_layer],
             timeout=Duration.seconds(TIMEOUT_SECONDS),
             memory_size=MEMORY_MB,
             reserved_concurrent_executions=RESERVED_CONCURRENCY,
@@ -196,9 +205,19 @@ class PdfRenderConstruct(Construct):
         return function
 
     def _resolve_log_retention(self) -> logs.RetentionDays:
-        days = self._config.get("log_retention_days", 7)
-        return {
+        # Match `lambda_factory`'s strict contract: every environment
+        # config MUST declare `log_retention_days`. A missing key is a
+        # config-shape bug, not something we should silently paper over.
+        days = self._config["log_retention_days"]
+        retention_map = {
             7: logs.RetentionDays.ONE_WEEK,
             30: logs.RetentionDays.ONE_MONTH,
             90: logs.RetentionDays.THREE_MONTHS,
-        }.get(days, logs.RetentionDays.ONE_WEEK)
+        }
+        if days not in retention_map:
+            message = (
+                f"Unsupported log_retention_days={days}; "
+                "supported values are 7, 30, 90."
+            )
+            raise ValueError(message)
+        return retention_map[days]

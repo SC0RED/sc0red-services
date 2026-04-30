@@ -84,8 +84,17 @@ class AmplifyConstruct(Construct):
         nextauth_secret: str,
         cognito_user_pool_id: str,
         cognito_client_id: str,
+        pdf_token_secret: str,
+        internal_api_key: str,
     ) -> None:
-        """Phase 2: create the branch after API Gateway exists."""
+        """Phase 2: create the branch after API Gateway exists.
+
+        `pdf_token_secret` and `internal_api_key` are server-side env vars
+        consumed by the Next.js Lambda runtime (the `/api/export/pdf/[id]`
+        token-mint flow and the `/print/[id]` server component, respectively).
+        Both MUST agree with the same env vars on the API Lambda — they
+        come from the same Secrets Manager secret in `janus_stack.py`.
+        """
         branch = amplify.CfnBranch(
             self,
             "Branch",
@@ -114,6 +123,14 @@ class AmplifyConstruct(Construct):
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="NEXT_PUBLIC_COGNITO_CLIENT_ID",
                     value=cognito_client_id,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="PDF_TOKEN_SECRET",
+                    value=pdf_token_secret,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="INTERNAL_API_KEY",
+                    value=internal_api_key,
                 ),
             ],
         )
