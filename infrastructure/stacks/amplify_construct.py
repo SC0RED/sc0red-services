@@ -94,6 +94,14 @@ class AmplifyConstruct(Construct):
         token-mint flow and the `/print/[id]` server component, respectively).
         Both MUST agree with the same env vars on the API Lambda — they
         come from the same Secrets Manager secret in `janus_stack.py`.
+
+        `FRONTEND_BASE_URL` is the public origin the headless Chromium
+        Lambda navigates to (`${BASE}/print/{id}?t=...`). On Amplify SSR
+        the Next.js process binds to `localhost:3000` internally, so
+        `req.nextUrl.origin` returns the wrong URL — we have to set this
+        explicitly. Value is the Amplify-default branch URL (Amplify
+        routes the custom domain `dev.janus.sc0red.com` to the same
+        SSR Lambda, so headless navigation against either works).
         """
         branch = amplify.CfnBranch(
             self,
@@ -131,6 +139,10 @@ class AmplifyConstruct(Construct):
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="INTERNAL_API_KEY",
                     value=internal_api_key,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="FRONTEND_BASE_URL",
+                    value=self.branch_url,
                 ),
             ],
         )
@@ -178,13 +190,17 @@ class AmplifyConstruct(Construct):
                                 # `.env.production` during the build so Next.js
                                 # bundles them into the server runtime. The
                                 # grep filter MUST cover every server-side env
-                                # var the SSR runtime reads. New entries:
+                                # var the SSR runtime reads. Entries:
                                 #   - PDF_TOKEN_SECRET — HMAC signing for the
                                 #     /api/export/pdf URL token
                                 #   - INTERNAL_API_KEY — auth for the print
                                 #     route's call to /api/internal/analysis
+                                #   - FRONTEND_BASE_URL — public origin the
+                                #     PDF render Lambda navigates to (without
+                                #     this, `req.nextUrl.origin` falls to
+                                #     `localhost:3000` on Amplify SSR)
                                 "commands": [
-                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_|PDF_TOKEN_SECRET|INTERNAL_API_KEY)' >> .env.production",
+                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_|PDF_TOKEN_SECRET|INTERNAL_API_KEY|FRONTEND_BASE_URL)' >> .env.production",
                                     "npm run build",
                                 ],
                             },

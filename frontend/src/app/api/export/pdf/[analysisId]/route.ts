@@ -42,12 +42,26 @@ interface RenderRequestBody {
 }
 
 function readFrontendBaseUrl(req: NextRequest): string {
-    // Prefer the explicit env var (set per-environment in CDK so the
-    // Lambda's headless browser hits the right Amplify URL). Fall back
-    // to the request's origin so a developer running `npm run dev` can
-    // exercise the path locally without env tweaks.
+    // 1. Prefer the explicit env var (set per-environment in CDK so the
+    //    Lambda's headless browser hits the right Amplify URL).
     const explicit = process.env.FRONTEND_BASE_URL
     if (explicit) return explicit.replace(/\/$/, '')
+
+    // 2. Fall back to `X-Forwarded-Host` if the proxy set it. On Amplify
+    //    SSR, Next.js binds to `localhost:3000` internally, so
+    //    `req.nextUrl.origin` returns the wrong URL. CloudFront sets
+    //    `X-Forwarded-Host` + `X-Forwarded-Proto` to the public origin
+    //    when forwarding to the Lambda — use those if present.
+    const forwardedHost = req.headers.get('x-forwarded-host')
+    if (forwardedHost) {
+        const forwardedProto = req.headers.get('x-forwarded-proto') ?? 'https'
+        return `${forwardedProto}://${forwardedHost}`
+    }
+
+    // 3. Last resort: `req.nextUrl.origin` — works for `npm run dev` on
+    //    the developer's laptop where the request actually originates
+    //    on `localhost:3000`. Should NEVER hit on Amplify SSR if step 1
+    //    or 2 fired correctly.
     return req.nextUrl.origin
 }
 

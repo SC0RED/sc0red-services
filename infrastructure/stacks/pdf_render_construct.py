@@ -49,7 +49,6 @@ class PdfRenderConstruct(Construct):
         *,
         environment: str,
         config: dict[str, Any],
-        frontend_base_url: str,
     ) -> None:
         super().__init__(scope, construct_id)
         self._environment = environment
@@ -57,7 +56,7 @@ class PdfRenderConstruct(Construct):
 
         self._token_secret = self._build_token_secret()
         self._internal_api_key = self._build_internal_api_key()
-        self._function = self._build_function(frontend_base_url)
+        self._function = self._build_function()
         self._build_metrics(self._function.log_group)
 
         # Surface the Lambda ARN so the API Lambda's environment can pick
@@ -144,7 +143,7 @@ class PdfRenderConstruct(Construct):
             ),
         )
 
-    def _build_function(self, frontend_base_url: str) -> lambda_.Function:
+    def _build_function(self) -> lambda_.Function:
         log_retention = self._resolve_log_retention()
 
         log_group = logs.LogGroup(
@@ -202,7 +201,6 @@ class PdfRenderConstruct(Construct):
                 # (cached at module level). Avoids exposing the signing
                 # key via `lambda:GetFunctionConfiguration`.
                 "PDF_TOKEN_SECRET_ARN": self._token_secret.secret_arn,
-                "FRONTEND_BASE_URL": frontend_base_url,
                 "STAGE": self._environment,
             },
             tracing=(

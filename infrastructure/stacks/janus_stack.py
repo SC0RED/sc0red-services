@@ -153,7 +153,6 @@ class JanusStack(Stack):
             "PdfRender",
             environment=environment,
             config=config,
-            frontend_base_url=frontend_domain,
         )
         pdf_render.grant_invoke(api_handler)
         pdf_render.token_secret.grant_read(api_handler)
