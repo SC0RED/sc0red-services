@@ -21,9 +21,15 @@
 
     /* Accent */
     --accent-blue: #3b7bf6;
+    --accent-blue-hover: #5090ff;
     --accent-cyan: #06c8d9;
     --accent-blue-glow: rgba(59, 123, 246, 0.15);
     --accent-cyan-glow: rgba(6, 200, 217, 0.1);
+
+    /* Value-lever palette (used by EBITDA tree + opportunity cards) */
+    --lever-revenue: #22c55e;
+    --lever-cost: #a78bfa;
+    --lever-both: #06c8d9;
 
     /* Risk Tiers */
     --risk-low: #22c55e;
@@ -67,6 +73,112 @@
     /* Spacing */
     --sidebar-width: 240px;
     --topbar-height: 64px;
+}
+
+/* ── Light-theme palette (toggle via <html data-theme="light">) ────────────────
+   IMPORTANT: any new color token added to `:root` above MUST also be declared
+   here AND in the `@media print { :root }` block immediately below. The three
+   blocks together are the single source of truth for the light palette. */
+:root[data-theme='light'] {
+    /* Surfaces */
+    --bg-base: #ffffff;
+    --bg-surface: #f8fafc;
+    --bg-surface-2: #f1f5f9;
+    --bg-surface-3: #e2e8f0;
+    --bg-glass: rgba(248, 250, 252, 0.85);
+
+    /* Borders */
+    --border: rgba(37, 99, 235, 0.16);
+    --border-strong: rgba(37, 99, 235, 0.32);
+    --border-subtle: rgba(15, 23, 42, 0.08);
+
+    /* Accent */
+    --accent-blue: #2563eb;
+    --accent-blue-hover: #1d4ed8;
+    --accent-cyan: #0891b2;
+    --accent-blue-glow: rgba(37, 99, 235, 0.1);
+    --accent-cyan-glow: rgba(8, 145, 178, 0.08);
+
+    /* Value-lever palette */
+    --lever-revenue: #16a34a;
+    --lever-cost: #7c3aed;
+    --lever-both: #0891b2;
+
+    /* Risk Tiers — desaturated -600 family for white backgrounds */
+    --risk-low: #16a34a;
+    --risk-moderate: #d97706;
+    --risk-high: #ea580c;
+    --risk-critical: #dc2626;
+    --risk-low-bg: rgba(22, 163, 74, 0.1);
+    --risk-moderate-bg: rgba(217, 119, 6, 0.1);
+    --risk-high-bg: rgba(234, 88, 12, 0.1);
+    --risk-critical-bg: rgba(220, 38, 38, 0.1);
+
+    /* Text */
+    --text-primary: #0a0e1a;
+    --text-secondary: #475569;
+    --text-tertiary: #64748b;
+    --text-inverse: #ffffff;
+
+    /* Shadows — softened on white */
+    --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 8px 32px rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 20px 60px rgba(15, 23, 42, 0.12);
+    --shadow-blue: 0 0 40px rgba(37, 99, 235, 0.06);
+    --shadow-glow: 0 0 60px rgba(37, 99, 235, 0.1);
+}
+
+/* Print: always force light, regardless of user toggle.
+   Keep these values in lockstep with `[data-theme='light'] :root` above. */
+@media print {
+    :root {
+        /* Surfaces */
+        --bg-base: #ffffff;
+        --bg-surface: #f8fafc;
+        --bg-surface-2: #f1f5f9;
+        --bg-surface-3: #e2e8f0;
+        --bg-glass: rgba(248, 250, 252, 0.85);
+
+        /* Borders */
+        --border: rgba(37, 99, 235, 0.16);
+        --border-strong: rgba(37, 99, 235, 0.32);
+        --border-subtle: rgba(15, 23, 42, 0.08);
+
+        /* Accent */
+        --accent-blue: #2563eb;
+        --accent-blue-hover: #1d4ed8;
+        --accent-cyan: #0891b2;
+        --accent-blue-glow: rgba(37, 99, 235, 0.1);
+        --accent-cyan-glow: rgba(8, 145, 178, 0.08);
+
+        /* Value-lever palette */
+        --lever-revenue: #16a34a;
+        --lever-cost: #7c3aed;
+        --lever-both: #0891b2;
+
+        /* Risk Tiers */
+        --risk-low: #16a34a;
+        --risk-moderate: #d97706;
+        --risk-high: #ea580c;
+        --risk-critical: #dc2626;
+        --risk-low-bg: rgba(22, 163, 74, 0.1);
+        --risk-moderate-bg: rgba(217, 119, 6, 0.1);
+        --risk-high-bg: rgba(234, 88, 12, 0.1);
+        --risk-critical-bg: rgba(220, 38, 38, 0.1);
+
+        /* Text */
+        --text-primary: #0a0e1a;
+        --text-secondary: #475569;
+        --text-tertiary: #64748b;
+        --text-inverse: #ffffff;
+
+        /* Shadows */
+        --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+        --shadow-md: 0 8px 32px rgba(15, 23, 42, 0.08);
+        --shadow-lg: 0 20px 60px rgba(15, 23, 42, 0.12);
+        --shadow-blue: 0 0 40px rgba(37, 99, 235, 0.06);
+        --shadow-glow: 0 0 60px rgba(37, 99, 235, 0.1);
+    }
 }
 
 /* ── Reset ─────────────────────────────────────────────────── */
@@ -290,7 +402,7 @@ select {
     box-shadow: 0 4px 20px rgba(59, 123, 246, 0.35);
 }
 .btn-primary:hover {
-    background: #5090ff;
+    background: var(--accent-blue-hover);
     box-shadow: 0 4px 28px rgba(59, 123, 246, 0.5);
     transform: translateY(-1px);
 }
@@ -1189,18 +1301,18 @@ select {
 }
 
 .react-flow__controls-button {
-    background: rgba(26, 37, 56, 0.95) !important;
+    background: var(--bg-surface-3) !important;
     border: none !important;
-    border-bottom: 1px solid rgba(139, 154, 196, 0.15) !important;
-    fill: #8B9AC4 !important;
-    color: #8B9AC4 !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+    fill: var(--text-secondary) !important;
+    color: var(--text-secondary) !important;
     width: 28px !important;
     height: 28px !important;
 }
 
 .react-flow__controls-button:hover {
-    background: rgba(59, 123, 246, 0.2) !important;
-    fill: #3B7BF6 !important;
+    background: var(--accent-blue-glow) !important;
+    fill: var(--accent-blue) !important;
 }
 
 .react-flow__controls-button:last-child {
@@ -1617,4 +1729,50 @@ a:focus:not(:focus-visible),
     outline: 2px solid var(--accent-blue);
     outline-offset: 2px;
     box-shadow: 0 0 0 4px var(--accent-blue-glow);
+}
+
+/* ── Print stylesheet (chrome-hiding + page-break hints) ─────────────────────
+   Token overrides for `@media print` live near the top of this file (in
+   lockstep with `[data-theme='light']`). This block focuses on layout —
+   what to hide, what to widen, where to allow page breaks.
+   Cmd+P from any authenticated page renders content-only on white. */
+@media print {
+    /* Hide app chrome that adds no information to the printed report. */
+    .sidebar,
+    .skip-to-content,
+    .toast-region,
+    .breadcrumbs,
+    .scan-progress-strip,
+    [data-print-hide='true'] {
+        display: none !important;
+    }
+
+    /* The main content normally sits to the right of a fixed sidebar; for
+       print, drop the offset so the page uses the full sheet width. */
+    .page-content,
+    .page-content-wide,
+    .page-content-narrow {
+        margin-left: 0 !important;
+        max-width: none !important;
+        padding: 0 !important;
+    }
+
+    /* Avoid splitting key visual blocks across page boundaries. */
+    .card,
+    .opportunity-card,
+    .risk-row,
+    .ebitda-tree-container,
+    table {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    /* Drop heavy shadows + transitions; printers can't render them anyway,
+       and they bloat the rendered output on some drivers. */
+    * {
+        box-shadow: none !important;
+        text-shadow: none !important;
+        transition: none !important;
+        animation: none !important;
+    }
 }

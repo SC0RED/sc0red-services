@@ -84,7 +84,7 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
                     style={{
                         fontSize: '1rem',
                         fontWeight: 600,
-                        color: '#EEF2FF',
+                        color: 'var(--text-primary)',
                         marginBottom: '0.25rem',
                     }}
                 >
@@ -92,7 +92,7 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
                 </div>
             )}
             {data.percentageOfParent != null && (
-                <div style={{ fontSize: '0.8125rem', color: '#8B9AC4' }}>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
                     {data.percentageOfParent}% of parent
                 </div>
             )}
@@ -106,7 +106,7 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
                                 width: '10px',
                                 height: '10px',
                                 borderRadius: '50%',
-                                background: LEVER_COLORS[opp.valueLever] || '#8B9AC4',
+                                background: LEVER_COLORS[opp.valueLever] || 'var(--text-secondary)',
                             }}
                             title={`${opp.title} (${opp.valueLever})`}
                         />
@@ -123,11 +123,11 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
                         transform: 'translateX(-50%)',
                         marginTop: '8px',
                         padding: '0.75rem 0.875rem',
-                        background: '#1A2538',
+                        background: 'var(--bg-surface-3)',
                         border: '1px solid rgba(59,123,246,0.25)',
                         borderRadius: '8px',
                         fontSize: '0.8125rem',
-                        color: '#EEF2FF',
+                        color: 'var(--text-primary)',
                         width: '260px',
                         zIndex: 50,
                         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
@@ -146,7 +146,7 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
                             <div
                                 style={{
                                     fontSize: '0.75rem',
-                                    color: '#8B9AC4',
+                                    color: 'var(--text-secondary)',
                                     fontWeight: 600,
                                     marginBottom: '0.25rem',
                                     textTransform: 'uppercase',
@@ -171,7 +171,8 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
                                             height: '7px',
                                             borderRadius: '50%',
                                             flexShrink: 0,
-                                            background: LEVER_COLORS[opp.valueLever] || '#8B9AC4',
+                                            background:
+                                                LEVER_COLORS[opp.valueLever] || 'var(--text-secondary)',
                                         }}
                                     />
                                     <span style={{ fontSize: '0.75rem' }}>{opp.title}</span>

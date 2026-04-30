@@ -3,6 +3,7 @@
 import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useRef, useState } from 'react'
 
+import ThemeToggle from '@/components/ThemeToggle'
 import { useToast } from '@/components/ui'
 
 /**
@@ -119,6 +120,20 @@ export default function SettingsView() {
                         ) : null
                     }
                 />
+            </Section>
+
+            <Section title="Appearance">
+                <p
+                    style={{
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-tertiary)',
+                        marginBottom: '0.75rem',
+                    }}
+                >
+                    Choose how Janus looks. Print preview always uses the light theme regardless of your
+                    selection.
+                </p>
+                <ThemeToggle />
             </Section>
 
             <Section title="Session">
