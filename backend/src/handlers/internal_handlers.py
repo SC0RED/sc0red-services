@@ -57,9 +57,7 @@ def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
     router.public(
         "GET",
         "/api/internal/analysis/{analysis_id}",
-        lambda event, analysis_id: handle_internal_get_analysis(
-            event, storage, analysis_id
-        ),
+        lambda event, analysis_id: handle_internal_get_analysis(event, storage, analysis_id),
     )
 
 

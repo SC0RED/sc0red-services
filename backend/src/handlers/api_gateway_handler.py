@@ -370,9 +370,7 @@ class APIGatewayHandler:
                 headers, user_repo=self._storage.create_user_repository()
             )
         except ValueError as e:
-            return finalize_response(
-                build_error(str(e), 401, UNAUTHORIZED), **finalize_args
-            )
+            return finalize_response(build_error(str(e), 401, UNAUTHORIZED), **finalize_args)
 
         response = handler(event, authentication, **path_params)
         return finalize_response(response, **finalize_args)

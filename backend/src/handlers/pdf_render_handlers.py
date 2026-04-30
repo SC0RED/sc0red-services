@@ -47,6 +47,7 @@ def register_routes(router: Router) -> None:
     """
     router.protected("POST", "/api/admin/render-pdf", handle_render_pdf)
 
+
 # Module-level boto3 client survives Lambda container reuse, avoiding
 # the ~50ms per-invoke client init.
 _lambda_client = None
