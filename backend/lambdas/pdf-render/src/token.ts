@@ -123,4 +123,3 @@ export function verifyToken(token: string, expectedAnalysisId: string, secret: s
 
     return { ok: true, payload }
 }
-
