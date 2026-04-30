@@ -46,8 +46,8 @@
 - [x] 7.1 `cd frontend && npm run lint` clean
 - [x] 7.2 `cd frontend && npx tsc --noEmit` clean
 - [x] 7.3 `cd frontend && npm test` all green (676/676 across 70 files)
-- [ ] 7.4 Architecture-reviewer agent on the combined diff (touches CSS + components + hooks → guard tripped on file count)
-- [ ] 7.5 Open PR, CI green, merge.
+- [x] 7.4 Architecture-reviewer agent on the combined diff (3 MEDIUM findings resolved before commit; see PR description)
+- [ ] 7.5 Open PR, CI green, merge. _(PR #223 open — https://github.com/SC0RED/janus/pull/223)_
 
 ## 8. Closeout
 
