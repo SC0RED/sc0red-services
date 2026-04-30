@@ -97,9 +97,14 @@ describe('useTheme', () => {
         expect(result.current.resolved).toBe('light')
     })
 
-    it('defaults to system when nothing persisted', () => {
+    it('defaults to dark when nothing persisted (no OS-pref fallback)', () => {
+        // Even with the OS reporting `prefers-color-scheme: light`, a new
+        // user with no `localStorage.janus.theme` lands on dark — sc0red
+        // is dark-first by design. Users who want OS-followed behaviour
+        // can opt into `system` mode via Settings → Appearance.
+        installMatchMedia(true)
         const { result } = renderHook(() => useTheme())
-        expect(result.current.mode).toBe('system')
+        expect(result.current.mode).toBe('dark')
     })
 
     it('updates on setTheme()', () => {
@@ -125,8 +130,10 @@ describe('useTheme', () => {
 
     it('follows OS-level changes when in system mode', () => {
         const mql = installMatchMedia(false)
+        // Default is now "dark"; explicitly opt into system mode to
+        // exercise the OS-pref-following branch.
+        window.localStorage.setItem(THEME_STORAGE_KEY, 'system')
         const { result } = renderHook(() => useTheme())
-        // Default mode is "system".
         expect(result.current.mode).toBe('system')
 
         act(() => {
