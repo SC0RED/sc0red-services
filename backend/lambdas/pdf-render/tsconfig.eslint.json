@@ -1,0 +1,10 @@
+{
+    "//": "Wider tsconfig used by ESLint and `npm run typecheck`. Includes tests, which are deliberately excluded from the build (`tsconfig.json`) because vitest transforms them at runtime — no need to ship compiled tests in the Lambda asset.",
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "rootDir": ".",
+        "noEmit": true
+    },
+    "include": ["src/**/*", "tests/**/*"],
+    "exclude": ["node_modules", "dist"]
+}

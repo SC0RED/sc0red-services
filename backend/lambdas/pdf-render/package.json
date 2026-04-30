@@ -1,0 +1,33 @@
+{
+    "name": "@janus/pdf-render",
+    "version": "0.1.0",
+    "private": true,
+    "description": "PDF render Lambda — headless Chromium navigates to /print/{analysisId} and returns a binary PDF.",
+    "main": "dist/handler.js",
+    "scripts": {
+        "sync-token": "cp ../../../frontend/src/lib/pdf/token.ts src/token.ts",
+        "check-token-sync": "diff -q src/token.ts ../../../frontend/src/lib/pdf/token.ts > /dev/null || (echo 'token.ts has drifted from frontend/src/lib/pdf/token.ts — run npm run sync-token from backend/lambdas/pdf-render' && exit 1)",
+        "build": "tsc -p tsconfig.json",
+        "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts' --max-warnings=0",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc -p tsconfig.eslint.json --noEmit"
+    },
+    "dependencies": {
+        "@aws-sdk/client-secrets-manager": "3.583.0",
+        "@sparticuz/chromium": "121.0.0",
+        "puppeteer-core": "21.11.0"
+    },
+    "devDependencies": {
+        "@types/aws-lambda": "8.10.137",
+        "@types/node": "20.11.30",
+        "@typescript-eslint/eslint-plugin": "7.7.0",
+        "@typescript-eslint/parser": "7.7.0",
+        "eslint": "8.57.0",
+        "typescript": "5.4.5",
+        "vitest": "1.5.0"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    }
+}

@@ -1,0 +1,148 @@
+/*
+ * Print-only stylesheet for the /print/[analysisId] route.
+ *
+ * Pairs with the route's `useEffect` setting `<html data-theme="light">` so
+ * the rendered tree picks up the light token palette already declared in
+ * `globals.css`. Page breaks, A4 margins, and chrome-hiding rules live
+ * here; visual styling stays in the existing components.
+ */
+
+@page {
+    size: A4;
+    margin: 25mm 20mm 25mm 20mm;
+}
+
+@page :first {
+    /* Cover page gets a touch more breathing room top + bottom. */
+    margin: 30mm 20mm 30mm 20mm;
+}
+
+.print-root {
+    /* The print route owns the full viewport; no sidebar, no chrome. */
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    padding: 32px 40px;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+.print-cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(100vh - 64px);
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border-subtle);
+    /* Always start subsequent sections on a new printed page. */
+    page-break-after: always;
+    break-after: page;
+}
+
+.print-section {
+    margin-top: 32px;
+    /* Don't let a major section split a card across pages mid-row. */
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+/* Section starts that need vertical space (the EBITDA tree, the
+   value-chain) get an explicit hard break so they don't smear across
+   the seam between pages. */
+.print-section--break-before {
+    page-break-before: always;
+    break-before: page;
+}
+
+.print-section h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0 0 16px;
+    color: var(--text-primary);
+}
+
+.print-section h2,
+.print-section h3 {
+    /* Don't orphan a section heading at the bottom of a page. */
+    page-break-after: avoid;
+    break-after: avoid;
+}
+
+/* Opportunity cards, risk-score rows, EBITDA-tree blocks: keep each one
+   intact even when the parent section is allowed to break. */
+.print-card,
+.print-opportunity,
+.print-risk-row,
+.print-ebitda {
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+.print-cover-eyebrow {
+    font-size: 0.875rem;
+    color: var(--accent-blue);
+    font-weight: 600;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.print-cover-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+
+.print-cover-meta {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    margin-bottom: 4px;
+}
+
+.print-cover-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    border: 6px solid var(--accent-blue);
+    color: var(--accent-blue);
+    font-size: 2rem;
+    font-weight: 800;
+    margin: 32px 0 16px;
+}
+
+.print-cta {
+    margin-top: 48px;
+    padding: 24px 28px;
+    background: var(--accent-blue-glow);
+    border-top: 3px solid var(--accent-blue);
+    border-radius: 8px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+
+@media print {
+    /* Print preview: drop interactive chrome, full bleed. */
+    .print-root {
+        padding: 0;
+        max-width: none;
+    }
+
+    /* The cover-page page rule above gives the cover its own sheet;
+       these rules belt-and-brace it across browsers that handle
+       `:first` pseudo-selector inconsistently. */
+    .print-cover {
+        min-height: 0;
+    }
+
+    /* The header/footer template comes from `page.pdf()` options in
+       the Lambda; the in-document elements should not duplicate it. */
+    [data-print-only-screen='true'] {
+        display: none !important;
+    }
+}

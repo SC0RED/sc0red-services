@@ -50,6 +50,12 @@ jobs:
         # `docs/help-content.md` disagree on title/body for any term.
         # See `scripts/check-help-content.mjs`.
         run: cd frontend && npm run check:help-content
+      - name: Verify pdf-render token.ts is in lockstep with frontend
+        # The Lambda's token.ts is a verbatim copy of frontend's; CI fails
+        # the diff so the two never silently drift on the wire format.
+        # `npm run sync-token` (inside backend/lambdas/pdf-render) is the
+        # canonical way to update the Lambda's copy.
+        run: diff -q frontend/src/lib/pdf/token.ts backend/lambdas/pdf-render/src/token.ts
 
   audit:
     runs-on: ubuntu-latest

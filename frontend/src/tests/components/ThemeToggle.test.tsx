@@ -34,6 +34,17 @@ describe('ThemeToggle', () => {
         expect(light.checked).toBe(true)
     })
 
+    it('defaults to Dark highlighted when nothing is persisted', () => {
+        // Per `dark-default-theme`, sc0red is dark-first by design — a
+        // user with no `localStorage.janus.theme` lands on Dark, not on
+        // System. The radio in Settings reflects the rendered theme.
+        render(<ThemeToggle />)
+        const dark = screen.getByRole('radio', { name: /Dark/i }) as HTMLInputElement
+        const system = screen.getByRole('radio', { name: /System/i }) as HTMLInputElement
+        expect(dark.checked).toBe(true)
+        expect(system.checked).toBe(false)
+    })
+
     it('writes localStorage and <html data-theme> when the user picks Light', () => {
         render(<ThemeToggle />)
         const light = screen.getByRole('radio', { name: /Light/i }) as HTMLInputElement

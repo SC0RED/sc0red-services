@@ -32,14 +32,21 @@ interface ThemeChangeDetail {
 }
 
 function readStoredMode(): ThemeMode {
-    if (typeof window === 'undefined') return 'system'
+    // Default for new users (or anyone with cleared / unreadable storage)
+    // is `'dark'`, NOT `'system'` — sc0red is dark-first by design and a
+    // light-OS laptop user shouldn't see a light webapp on first paint.
+    // The Settings → Appearance radio reflects this: "Dark" is highlighted
+    // until the user picks something. Must stay in lockstep with the
+    // bootstrap script in `app/layout.tsx`. See
+    // `openspec/changes/dark-default-theme/proposal.md`.
+    if (typeof window === 'undefined') return 'dark'
     try {
         const raw = window.localStorage.getItem(THEME_STORAGE_KEY)
         if (raw === 'dark' || raw === 'light' || raw === 'system') return raw
     } catch {
         // Safari private mode throws on localStorage access — fall through.
     }
-    return 'system'
+    return 'dark'
 }
 
 function readSystemTheme(): ResolvedTheme {
