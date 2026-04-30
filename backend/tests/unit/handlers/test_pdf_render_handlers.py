@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 import src.handlers.pdf_render_handlers as pdf_render_handlers
 from src.handlers.auth_middleware import AuthContext
 from src.handlers.pdf_render_handlers import (
-    PDF_RENDER_LAMBDA_ARN_ENV,
+    PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME,
     handle_render_pdf,
 )
 
@@ -46,19 +46,19 @@ def _reset_lambda_client() -> None:
 
 
 def test_returns_500_when_arn_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(PDF_RENDER_LAMBDA_ARN_ENV, raising=False)
+    monkeypatch.delenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, raising=False)
     response = handle_render_pdf(_event(_valid_body()), _auth())
     assert response["statusCode"] == 500
 
 
 def test_returns_400_when_body_not_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENV, "arn:aws:lambda:us-east-1:1:function:render")
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "arn:aws:lambda:us-east-1:1:function:render")
     response = handle_render_pdf(_event("not-json"), _auth())
     assert response["statusCode"] == 400
 
 
 def test_returns_400_when_required_field_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENV, "arn:aws:lambda:us-east-1:1:function:render")
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "arn:aws:lambda:us-east-1:1:function:render")
     body = _valid_body()
     del body["token"]
     response = handle_render_pdf(_event(body), _auth())
@@ -66,7 +66,7 @@ def test_returns_400_when_required_field_missing(monkeypatch: pytest.MonkeyPatch
 
 
 def test_returns_502_when_boto3_invoke_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENV, "arn:aws:lambda:us-east-1:1:function:render")
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "arn:aws:lambda:us-east-1:1:function:render")
     mock_client = MagicMock()
     mock_client.invoke.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied", "Message": "no perms"}}, "Invoke"
@@ -77,7 +77,7 @@ def test_returns_502_when_boto3_invoke_raises(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_returns_502_when_payload_undecodable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENV, "arn:aws:lambda:us-east-1:1:function:render")
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "arn:aws:lambda:us-east-1:1:function:render")
     mock_client = MagicMock()
     mock_payload = MagicMock()
     mock_payload.read.return_value = b"not-json"
@@ -88,7 +88,7 @@ def test_returns_502_when_payload_undecodable(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_forwards_lambda_error_status(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENV, "arn:aws:lambda:us-east-1:1:function:render")
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "arn:aws:lambda:us-east-1:1:function:render")
     mock_client = MagicMock()
     mock_payload = MagicMock()
     mock_payload.read.return_value = json.dumps(
@@ -101,7 +101,7 @@ def test_forwards_lambda_error_status(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_happy_path_returns_pdf_with_correct_headers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENV, "arn:aws:lambda:us-east-1:1:function:render")
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "arn:aws:lambda:us-east-1:1:function:render")
     pdf_b64 = "JVBERi1tb2NrLWJ5dGVz"  # base64 of "%PDF-mock-bytes"
     mock_client = MagicMock()
     mock_payload = MagicMock()
@@ -125,7 +125,7 @@ def test_happy_path_returns_pdf_with_correct_headers(monkeypatch: pytest.MonkeyP
 
 def test_only_forwards_required_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cognito claims and other auth context MUST NOT leak into the Lambda payload."""
-    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENV, "arn:aws:lambda:us-east-1:1:function:render")
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "arn:aws:lambda:us-east-1:1:function:render")
     mock_client = MagicMock()
     mock_payload = MagicMock()
     mock_payload.read.return_value = json.dumps(

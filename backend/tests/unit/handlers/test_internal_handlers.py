@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.handlers.internal_handlers import (
-    INTERNAL_API_KEY_ENV,
+    INTERNAL_API_KEY_ENVIRONMENT_NAME,
     handle_internal_get_analysis,
 )
 
@@ -52,8 +52,8 @@ def _make_storage(
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Each test starts with the env var unset; tests that need it set
-    should call `monkeypatch.setenv(INTERNAL_API_KEY_ENV, ...)`."""
-    monkeypatch.delenv(INTERNAL_API_KEY_ENV, raising=False)
+    should call `monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, ...)`."""
+    monkeypatch.delenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, raising=False)
 
 
 def test_returns_500_when_internal_key_env_missing() -> None:
@@ -63,14 +63,14 @@ def test_returns_500_when_internal_key_env_missing() -> None:
 
 
 def test_returns_401_when_provided_key_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(INTERNAL_API_KEY_ENV, VALID_KEY)
+    monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, VALID_KEY)
     storage = _make_storage()
     response = handle_internal_get_analysis(_event(), storage, "a-1")
     assert response["statusCode"] == 401
 
 
 def test_returns_401_when_provided_key_wrong(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(INTERNAL_API_KEY_ENV, VALID_KEY)
+    monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, VALID_KEY)
     storage = _make_storage()
     response = handle_internal_get_analysis(
         _event(headers={"X-Internal-Api-Key": "wrong-key", "X-Org-Id": "org-1"}),
@@ -81,7 +81,7 @@ def test_returns_401_when_provided_key_wrong(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_returns_400_when_org_id_header_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(INTERNAL_API_KEY_ENV, VALID_KEY)
+    monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, VALID_KEY)
     storage = _make_storage()
     response = handle_internal_get_analysis(
         _event(headers={"X-Internal-Api-Key": VALID_KEY}),
@@ -92,7 +92,7 @@ def test_returns_400_when_org_id_header_missing(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_returns_404_when_company_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(INTERNAL_API_KEY_ENV, VALID_KEY)
+    monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, VALID_KEY)
     storage = _make_storage(company=None)
     response = handle_internal_get_analysis(
         _event(headers={"X-Internal-Api-Key": VALID_KEY, "X-Org-Id": "org-1"}),
@@ -104,7 +104,7 @@ def test_returns_404_when_company_not_found(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_returns_404_when_company_in_other_org(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cross-org reads return 404 — never reveal existence of cross-org records."""
-    monkeypatch.setenv(INTERNAL_API_KEY_ENV, VALID_KEY)
+    monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, VALID_KEY)
     storage = _make_storage(company={"id": "a-1", "org_id": "org-OTHER"})
     response = handle_internal_get_analysis(
         _event(headers={"X-Internal-Api-Key": VALID_KEY, "X-Org-Id": "org-1"}),
@@ -115,7 +115,7 @@ def test_returns_404_when_company_in_other_org(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_happy_path_returns_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(INTERNAL_API_KEY_ENV, VALID_KEY)
+    monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, VALID_KEY)
     company = {
         "id": "a-1",
         "org_id": "org-1",
@@ -141,7 +141,7 @@ def test_happy_path_returns_payload(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_lowercase_header_names_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
     """API Gateway sometimes lowercases header names; case-insensitive lookup."""
-    monkeypatch.setenv(INTERNAL_API_KEY_ENV, VALID_KEY)
+    monkeypatch.setenv(INTERNAL_API_KEY_ENVIRONMENT_NAME, VALID_KEY)
     company = {"id": "a-1", "org_id": "org-1", "company_name": "Acme"}
     storage = _make_storage(company=company, payload=company)
     response = handle_internal_get_analysis(

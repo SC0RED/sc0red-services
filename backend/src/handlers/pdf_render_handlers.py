@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-PDF_RENDER_LAMBDA_ARN_ENV = "PDF_RENDER_LAMBDA_ARN"
+PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME = "PDF_RENDER_LAMBDA_ARN"
 
 
 def register_routes(router: Router) -> None:
@@ -83,9 +83,9 @@ def handle_render_pdf(
     The Cognito JWT has already been validated by middleware before we
     arrive here, so we just need to forward + return.
     """
-    render_arn = os.environ.get(PDF_RENDER_LAMBDA_ARN_ENV, "")
+    render_arn = os.environ.get(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "")
     if not render_arn:
-        logger.error("handle_render_pdf: %s not set", PDF_RENDER_LAMBDA_ARN_ENV)
+        logger.error("handle_render_pdf: %s not set", PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME)
         return build_error("PDF render not configured", 500, NOT_CONFIGURED)
 
     body = _read_body(event)
@@ -138,8 +138,8 @@ def handle_render_pdf(
         # Surface the error back to the caller verbatim — the frontend
         # button shows a generic Toast, but logs preserve the reason.
         try:
-            body_obj = json.loads(result.get("body", "{}"))
-            return build_json_response(body_obj, status)
+            body_payload = json.loads(result.get("body", "{}"))
+            return build_json_response(body_payload, status)
         except (TypeError, ValueError):
             return build_error("PDF render failed", status)
 

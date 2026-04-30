@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-INTERNAL_API_KEY_ENV = "INTERNAL_API_KEY"
+INTERNAL_API_KEY_ENVIRONMENT_NAME = "INTERNAL_API_KEY"
 
 
 def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
@@ -78,10 +78,10 @@ def _read_internal_key() -> str:
     matches the fail-fast pattern used in the TypeScript
     `readSigningSecret()`.
     """
-    secret = os.environ.get(INTERNAL_API_KEY_ENV, "")
+    secret = os.environ.get(INTERNAL_API_KEY_ENVIRONMENT_NAME, "")
     if not secret:
         raise InternalKeyNotConfiguredError(
-            f"{INTERNAL_API_KEY_ENV} is not set on the API Lambda runtime",
+            f"{INTERNAL_API_KEY_ENVIRONMENT_NAME} is not set on the API Lambda runtime",
         )
     return secret
 
