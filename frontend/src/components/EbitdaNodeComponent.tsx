@@ -124,7 +124,7 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
                         marginTop: '8px',
                         padding: '0.75rem 0.875rem',
                         background: 'var(--bg-surface-3)',
-                        border: '1px solid rgba(59,123,246,0.25)',
+                        border: '1px solid var(--border-strong)',
                         borderRadius: '8px',
                         fontSize: '0.8125rem',
                         color: 'var(--text-primary)',
