@@ -5,7 +5,8 @@ import { BackendError } from '@/lib/api/errors'
 import { backendFetch, getBackendToken } from '@/lib/api/serverToken'
 import { BACKEND_URL } from '@/lib/config'
 import { buildContentDisposition, buildPdfFilename } from '@/lib/pdf/filename'
-import { readSigningSecret, signToken } from '@/lib/pdf/token'
+import { readSigningSecret } from '@/lib/pdf/secretSource'
+import { signToken } from '@/lib/pdf/token'
 import type { AnalysisData } from '@/lib/types/api'
 
 /**
@@ -94,6 +95,13 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
         })
 
         if (!response.ok) {
+            // LOW-priority review nit: the rest of the API returns
+            // `{error, code}` JSON. This route returns plain text because
+            // the frontend caller (`ExportPDFButton`) never displays the
+            // body — it shows `"PDF export failed (HTTP ${status})"` from
+            // the response code alone. Migrating to JSON here would
+            // change zero observable behaviour today; deferred until a
+            // future caller surfaces the body.
             const message = `PDF render failed (HTTP ${response.status})`
             return new NextResponse(message, { status: response.status })
         }

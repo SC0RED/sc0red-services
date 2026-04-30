@@ -119,9 +119,13 @@ def handle_render_pdf(
             InvocationType="RequestResponse",
             Payload=json.dumps({"body": json.dumps(payload)}).encode("utf-8"),
         )
-    except (BotoCoreError, ClientError) as error:
+    except (BotoCoreError, ClientError):
+        # Detail (ARN, region, error code) goes to CloudWatch via
+        # `logger.exception`. The user-facing message stays generic so
+        # we never leak AWS internals to a frontend that might one day
+        # surface the response body.
         logger.exception("render_pdf_invoke_failed")
-        return build_error(f"PDF render invoke failed: {error}", 502)
+        return build_error("PDF render failed", 502)
 
     raw_payload = response.get("Payload")
     if raw_payload is None:
@@ -129,9 +133,9 @@ def handle_render_pdf(
 
     try:
         result = json.loads(raw_payload.read().decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as error:
+    except (UnicodeDecodeError, ValueError):
         logger.exception("render_pdf_payload_decode_failed")
-        return build_error(f"PDF render returned invalid payload: {error}", 502)
+        return build_error("PDF render returned invalid payload", 502)
 
     status = int(result.get("statusCode", 500))
     success_status = 200
@@ -155,12 +159,16 @@ def handle_render_pdf(
         logger.error("render_pdf_missing_body")
         return build_error("PDF render returned 200 with no body", 502)
 
+    # No `Access-Control-Allow-Origin` on the binary PDF — the user-facing
+    # path is same-origin (Next.js proxies via `BACKEND_URL`), so a CORS
+    # header here is dead weight. CLAUDE.md "Infrastructure Defaults"
+    # mandates explicit FRONTEND_DOMAIN for non-dev origins; the safest
+    # posture for a same-origin endpoint is to omit the header entirely.
     return {
         "statusCode": 200,
         "headers": {
             "Content-Type": "application/pdf",
             "Cache-Control": "no-store",
-            "Access-Control-Allow-Origin": "*",
         },
         "body": result["body"],
         "isBase64Encoded": bool(result.get("isBase64Encoded")),

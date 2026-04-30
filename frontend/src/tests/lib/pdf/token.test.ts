@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import {
-    PDF_TOKEN_SECRET_ENV,
-    TOKEN_TTL_SECONDS,
-    readSigningSecret,
-    signToken,
-    verifyToken,
-} from '@/lib/pdf/token'
+import { TOKEN_TTL_SECONDS, signToken, verifyToken } from '@/lib/pdf/token'
 
 const SECRET = 'test-secret-32-bytes-of-randomness-please'
 
@@ -89,21 +83,5 @@ describe('verifyToken — rejection paths', () => {
         const [payload] = signToken({ analysisId: 'a-1', orgId: 'org-1' }, SECRET).split('.')
         const result = verifyToken(`${payload}.@@@bad@@@`, 'a-1', SECRET)
         expect(result.ok).toBe(false)
-    })
-})
-
-describe('readSigningSecret', () => {
-    it('returns the env var when set', () => {
-        process.env[PDF_TOKEN_SECRET_ENV] = 'present'
-        try {
-            expect(readSigningSecret()).toBe('present')
-        } finally {
-            delete process.env[PDF_TOKEN_SECRET_ENV]
-        }
-    })
-
-    it('throws a clear error when missing', () => {
-        delete process.env[PDF_TOKEN_SECRET_ENV]
-        expect(() => readSigningSecret()).toThrow(/PDF_TOKEN_SECRET is not set/)
     })
 })
