@@ -2,12 +2,11 @@ import type { Metadata } from 'next'
 
 import { BackendError } from '@/lib/api/errors'
 import { BACKEND_URL } from '@/lib/config'
-import { readSigningSecret, verifyToken } from '@/lib/pdf/token'
+import { readInternalApiKey, readSigningSecret } from '@/lib/pdf/secretSource'
+import { verifyToken } from '@/lib/pdf/token'
 import type { AnalysisData } from '@/lib/types/api'
 
 import PrintReport from './PrintReport'
-
-const INTERNAL_API_KEY_ENV = 'INTERNAL_API_KEY'
 
 /**
  * Print-optimised view of an analysis. Headless Chromium running in the PDF
@@ -47,10 +46,7 @@ interface PrintPageProps {
  * silently 401-ing on the backend.
  */
 async function fetchAnalysisForPrint(analysisId: string, orgId: string): Promise<AnalysisData> {
-    const internalKey = process.env[INTERNAL_API_KEY_ENV]
-    if (!internalKey) {
-        throw new Error(`${INTERNAL_API_KEY_ENV} is not set on the print route runtime`)
-    }
+    const internalKey = readInternalApiKey()
     const response = await fetch(`${BACKEND_URL}/api/internal/analysis/${analysisId}`, {
         method: 'GET',
         headers: {
@@ -80,11 +76,6 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
     const secret = readSigningSecret()
     const verification = verifyToken(token, params.analysisId, secret)
     if (!verification.ok) {
-        // Returning JSX with a 401-shaped message is intentional: Next.js
-        // server components don't have a clean Response.status path. The
-        // caller (the PDF Lambda) treats any non-render output as failure;
-        // for a developer hitting this URL by accident the page is plainly
-        // labelled "Unauthorized" with the underlying reason.
         return <UnauthorizedView reason={verification.reason} />
     }
 
@@ -98,33 +89,63 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
         throw error
     }
 
-    return <PrintReport analysis={analysis} />
+    return (
+        <>
+            {/* IMPORTANT: the render Lambda inspects this marker after `page.goto`
+                and BEFORE `page.pdf()`. If the meta is missing or has any value
+                other than `ok`, the Lambda bails with a 401 instead of producing
+                a "successful" PDF of an error page. Failure modes that flow
+                through here today: PDF_TOKEN_SECRET drift between the Next.js
+                Lambda runtime and the Node.js render Lambda runtime (rotation
+                window, env desync). See `backend/lambdas/pdf-render/src/render.ts`
+                — `verifyPrintStatus`. */}
+            <PrintStatusMarker status="ok" />
+            <PrintReport analysis={analysis} />
+        </>
+    )
+}
+
+/**
+ * Single source of truth for the meta-marker contract between the print route
+ * and the render Lambda. Re-used by `UnauthorizedView` so the failure case
+ * also emits a marker (lets the Lambda distinguish "no marker = misrouted /
+ * page didn't render" from "marker present = page rendered but auth failed").
+ */
+const PRINT_STATUS_META = 'x-print-status'
+type PrintStatus = 'ok' | 'unauthorized' | 'not_found'
+
+function PrintStatusMarker({ status }: { status: PrintStatus }) {
+    return <meta name={PRINT_STATUS_META} content={status} />
 }
 
 function UnauthorizedView({ reason }: { reason: string }) {
+    const status: PrintStatus = reason === 'not_found' ? 'not_found' : 'unauthorized'
     return (
-        <main
-            style={{
-                minHeight: '100vh',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.75rem',
-                background: 'var(--bg-base)',
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-sans)',
-                padding: '2rem',
-                textAlign: 'center',
-            }}
-        >
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Unauthorized</h1>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
-                This print URL is not valid. Reason: <code>{reason}</code>.
-            </p>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
-                Print URLs expire 60 seconds after they are minted. Re-export from the analysis page.
-            </p>
-        </main>
+        <>
+            <PrintStatusMarker status={status} />
+            <main
+                style={{
+                    minHeight: '100vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.75rem',
+                    background: 'var(--bg-base)',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-sans)',
+                    padding: '2rem',
+                    textAlign: 'center',
+                }}
+            >
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Unauthorized</h1>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
+                    This print URL is not valid. Reason: <code>{reason}</code>.
+                </p>
+                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
+                    Print URLs expire 60 seconds after they are minted. Re-export from the analysis page.
+                </p>
+            </main>
+        </>
     )
 }

@@ -9,7 +9,7 @@
  */
 
 import chromium from '@sparticuz/chromium'
-import puppeteer, { type Browser, type PDFOptions } from 'puppeteer-core'
+import puppeteer, { type Browser, type Page, type PDFOptions } from 'puppeteer-core'
 
 export interface RenderOptions {
     /** The print URL to navigate to, e.g. `https://app.example/print/{id}?t=...`. */
@@ -33,6 +33,20 @@ export interface RenderMetrics {
 export interface RenderResult {
     pdf: Buffer
     metrics: RenderMetrics
+}
+
+/**
+ * Discriminated failure for the print-page status check. The print route
+ * emits `<meta name="x-print-status">` indicating whether the rendered tree
+ * is the real analysis (`ok`) or a server-component-rendered error page
+ * (`unauthorized` / `not_found`). Without this check, an "Unauthorized"
+ * page would render as a successful 200 PDF — see review-fixes PR.
+ */
+export class PrintStatusError extends Error {
+    constructor(public readonly status: string) {
+        super(`Print page reported status: ${status}`)
+        this.name = 'PrintStatusError'
+    }
 }
 
 const DEFAULT_TIMEOUT_MS = 25_000
@@ -88,6 +102,14 @@ export async function renderPdf(options: RenderOptions): Promise<RenderResult> {
         // naturally because they finish layout in the same tick.
         await page.goto(options.printUrl, { waitUntil: 'networkidle0', timeout })
 
+        // Sanity-check the page actually rendered the analysis. Without this,
+        // a server-component-rendered "Unauthorized" page (which Next.js
+        // returns as a 200) would silently produce a successful PDF of the
+        // error message. The print route stamps a `<meta name="x-print-status">`
+        // marker on every render path; we require it to be `ok` before
+        // calling `page.pdf()`. See `frontend/src/app/print/[analysisId]/page.tsx`.
+        await verifyPrintStatus(page)
+
         const pdf = await page.pdf(buildPdfOptions(options.companyName))
 
         // Grab the page count off Puppeteer's PDF — we don't have a direct
@@ -114,6 +136,25 @@ export async function renderPdf(options: RenderOptions): Promise<RenderResult> {
             }
         }
     }
+}
+
+/**
+ * Read the `<meta name="x-print-status">` marker the print route emits.
+ * Throws `PrintStatusError` if the marker is missing (page didn't render
+ * at all, or rendered a non-print page) or has any value other than `ok`
+ * (auth failure, not-found, etc.).
+ *
+ * The print route ALWAYS emits the marker on every code path — the `ok`
+ * branch from the success render, `unauthorized` / `not_found` from
+ * `UnauthorizedView`. A missing marker means something rendered that we
+ * didn't author (proxy error page, framework default, etc.); fail loudly.
+ */
+async function verifyPrintStatus(page: Page): Promise<void> {
+    const status = await page
+        .$eval('meta[name="x-print-status"]', (element) => element.getAttribute('content'))
+        .catch(() => null)
+    if (status === 'ok') return
+    throw new PrintStatusError(status ?? 'missing_marker')
 }
 
 /**

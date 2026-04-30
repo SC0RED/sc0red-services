@@ -197,7 +197,11 @@ class PdfRenderConstruct(Construct):
             reserved_concurrent_executions=RESERVED_CONCURRENCY,
             log_group=log_group,
             environment={
-                "PDF_TOKEN_SECRET": self._token_secret.secret_value.to_string(),
+                # Pass the ARN, NOT the cleartext value. The Lambda fetches
+                # the secret at runtime via `secretsmanager:GetSecretValue`
+                # (cached at module level). Avoids exposing the signing
+                # key via `lambda:GetFunctionConfiguration`.
+                "PDF_TOKEN_SECRET_ARN": self._token_secret.secret_arn,
                 "FRONTEND_BASE_URL": frontend_base_url,
                 "STAGE": self._environment,
             },
@@ -208,9 +212,9 @@ class PdfRenderConstruct(Construct):
             ),
         )
 
-        # The Lambda reads its signing secret from the environment, so it
-        # needs the GetSecretValue permission for the rotation case
-        # (after a Secrets Manager rotation, env vars can be re-resolved).
+        # The Lambda fetches the signing secret via Secrets Manager at
+        # runtime (env carries the ARN, not the cleartext). Grant read
+        # access on the specific secret only.
         self._token_secret.grant_read(function)
         return function
 

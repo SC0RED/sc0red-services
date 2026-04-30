@@ -6,21 +6,23 @@
  * The `/print/{analysisId}` route validates the token before rendering.
  *
  * Tokens are HMAC-SHA256 over a JSON payload `{ analysisId, orgId, exp }`
- * with a 60-second TTL, signed with the per-environment `PDF_TOKEN_SECRET`
- * (Secrets Manager-managed). The wire format is `base64url(payload).base64url(sig)`,
+ * with a 60-second TTL. The wire format is `base64url(payload).base64url(sig)`,
  * matching the JWS-Compact shape but without the JOSE header overhead.
  *
- * IMPORTANT: this module is duplicated between
- *   - `frontend/src/lib/pdf/token.ts` (this file — used by /print + /api/export/pdf)
- *   - `backend/lambdas/pdf-render/src/token.ts` (used by the render Lambda)
- * Keep both copies in lockstep. They MUST agree on the wire format and the
- * environment variable name. See `openspec/specs/polished-pdf-export/spec.md`.
+ * IMPORTANT: this module is the CANONICAL token implementation. It is
+ * intentionally pure crypto — the secret is passed in as a parameter so
+ * each runtime (Amplify SSR Lambda, Node.js render Lambda) can source it
+ * however is appropriate (env var vs. Secrets Manager runtime fetch).
+ *
+ * The duplicate copy at `backend/lambdas/pdf-render/src/token.ts` is kept
+ * byte-identical via the `npm run sync-token` script in the Lambda dir,
+ * and CI fails the diff check if they drift. See
+ * `openspec/specs/polished-pdf-export/spec.md`.
  */
 
 import { createHmac, timingSafeEqual } from 'crypto'
 
 export const TOKEN_TTL_SECONDS = 60
-export const PDF_TOKEN_SECRET_ENV = 'PDF_TOKEN_SECRET'
 
 export interface TokenPayload {
     /** The analysis the token authorises rendering for. */
@@ -120,19 +122,4 @@ export function verifyToken(token: string, expectedAnalysisId: string, secret: s
     if (payload.analysisId !== expectedAnalysisId) return { ok: false, reason: 'analysis_id_mismatch' }
 
     return { ok: true, payload }
-}
-
-/**
- * Resolve the signing secret from the environment, throwing a clear error
- * if it's missing. Use this in route handlers and the Lambda — never read
- * `process.env.PDF_TOKEN_SECRET` directly so the error path is consistent.
- */
-export function readSigningSecret(): string {
-    const secret = process.env[PDF_TOKEN_SECRET_ENV]
-    if (!secret) {
-        throw new Error(
-            `${PDF_TOKEN_SECRET_ENV} is not set. The PDF export flow requires the signing secret.`
-        )
-    }
-    return secret
 }

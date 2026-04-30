@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-    PDF_TOKEN_SECRET_ENV,
-    TOKEN_TTL_SECONDS,
-    readSigningSecret,
-    signToken,
-    verifyToken,
-} from '../src/token'
+import { TOKEN_TTL_SECONDS, signToken, verifyToken } from '../src/token'
 
 const SECRET = 'test-secret-32-bytes-of-randomness-please'
 
@@ -67,18 +61,4 @@ describe('verifyToken — rejection paths', () => {
     })
 })
 
-describe('readSigningSecret', () => {
-    it('returns the env var when set', () => {
-        process.env[PDF_TOKEN_SECRET_ENV] = 'present'
-        try {
-            expect(readSigningSecret()).toBe('present')
-        } finally {
-            delete process.env[PDF_TOKEN_SECRET_ENV]
-        }
-    })
-
-    it('throws when missing', () => {
-        delete process.env[PDF_TOKEN_SECRET_ENV]
-        expect(() => readSigningSecret()).toThrow(/PDF_TOKEN_SECRET is not set/)
-    })
-})
+// Secret resolution moved to `secretSource.ts` — covered by `secretSource.test.ts`.

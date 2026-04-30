@@ -1,30 +1,39 @@
 /**
  * Short-lived signed-URL token for the PDF render flow.
  *
- * Verbatim duplicate of `frontend/src/lib/pdf/token.ts` (the canonical
- * source). Kept in lockstep — the wire format and `PDF_TOKEN_SECRET`
- * env var name MUST agree across both copies. See
- * `openspec/specs/polished-pdf-export/spec.md`.
+ * The auth-gated `/api/export/pdf/{analysisId}` endpoint mints a token,
+ * embeds it in the URL `?t=...` that the headless browser navigates to.
+ * The `/print/{analysisId}` route validates the token before rendering.
  *
- * The Lambda only needs `verifyToken` + `readSigningSecret` for the
- * defensive print-page validation pre-check, but `signToken` is kept
- * for symmetry and unit-test parity with the frontend module.
+ * Tokens are HMAC-SHA256 over a JSON payload `{ analysisId, orgId, exp }`
+ * with a 60-second TTL. The wire format is `base64url(payload).base64url(sig)`,
+ * matching the JWS-Compact shape but without the JOSE header overhead.
+ *
+ * IMPORTANT: this module is the CANONICAL token implementation. It is
+ * intentionally pure crypto — the secret is passed in as a parameter so
+ * each runtime (Amplify SSR Lambda, Node.js render Lambda) can source it
+ * however is appropriate (env var vs. Secrets Manager runtime fetch).
+ *
+ * The duplicate copy at `backend/lambdas/pdf-render/src/token.ts` is kept
+ * byte-identical via the `npm run sync-token` script in the Lambda dir,
+ * and CI fails the diff check if they drift. See
+ * `openspec/specs/polished-pdf-export/spec.md`.
  */
 
 import { createHmac, timingSafeEqual } from 'crypto'
 
 export const TOKEN_TTL_SECONDS = 60
-export const PDF_TOKEN_SECRET_ENV = 'PDF_TOKEN_SECRET'
 
 export interface TokenPayload {
+    /** The analysis the token authorises rendering for. */
     analysisId: string
+    /** The org of the user who minted the token (carries through for audit). */
     orgId: string
+    /** Unix epoch seconds at which the token stops being valid. */
     exp: number
 }
 
-export type VerifyResult =
-    | { ok: true; payload: TokenPayload }
-    | { ok: false; reason: VerifyFailureReason }
+export type VerifyResult = { ok: true; payload: TokenPayload } | { ok: false; reason: VerifyFailureReason }
 
 export type VerifyFailureReason =
     | 'missing_token'
@@ -47,14 +56,17 @@ function fromBase64Url(value: string): Buffer {
 interface SignInput {
     analysisId: string
     orgId: string
+    /** Override the current time (unix seconds) — for tests only. */
     nowSeconds?: number
+    /** Override the TTL — for tests only. */
     ttlSeconds?: number
 }
 
-export function signToken(
-    { analysisId, orgId, nowSeconds, ttlSeconds }: SignInput,
-    secret: string,
-): string {
+/**
+ * Sign a token authorising a PDF render of `analysisId` for `orgId`.
+ * Returns the wire-format `base64url(payload).base64url(sig)` string.
+ */
+export function signToken({ analysisId, orgId, nowSeconds, ttlSeconds }: SignInput, secret: string): string {
     if (!secret) throw new Error('signToken: secret is required')
     const now = nowSeconds ?? Math.floor(Date.now() / 1000)
     const ttl = ttlSeconds ?? TOKEN_TTL_SECONDS
@@ -64,11 +76,12 @@ export function signToken(
     return `${encodedPayload}.${toBase64Url(signature)}`
 }
 
-export function verifyToken(
-    token: string,
-    expectedAnalysisId: string,
-    secret: string,
-): VerifyResult {
+/**
+ * Verify a token against the expected analysis. Returns a discriminated
+ * result so the caller can map the failure reason to the correct HTTP
+ * status (401 for any failure here is fine — the reason is for logs).
+ */
+export function verifyToken(token: string, expectedAnalysisId: string, secret: string): VerifyResult {
     if (!token) return { ok: false, reason: 'missing_token' }
     if (!secret) return { ok: false, reason: 'missing_secret' }
 
@@ -106,18 +119,7 @@ export function verifyToken(
     }
 
     if (payload.exp < Math.floor(Date.now() / 1000)) return { ok: false, reason: 'expired' }
-    if (payload.analysisId !== expectedAnalysisId)
-        return { ok: false, reason: 'analysis_id_mismatch' }
+    if (payload.analysisId !== expectedAnalysisId) return { ok: false, reason: 'analysis_id_mismatch' }
 
     return { ok: true, payload }
-}
-
-export function readSigningSecret(): string {
-    const secret = process.env[PDF_TOKEN_SECRET_ENV]
-    if (!secret) {
-        throw new Error(
-            `${PDF_TOKEN_SECRET_ENV} is not set. The PDF render flow requires the signing secret.`,
-        )
-    }
-    return secret
 }

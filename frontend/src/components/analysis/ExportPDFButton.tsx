@@ -154,11 +154,15 @@ export default function ExportPDFButton({ analysisId, className }: ExportPDFButt
             reset()
         } catch (error) {
             if (controller.signal.aborted) {
-                // Either the timeout fired or the component unmounted. The
-                // unmount case never updates state (effect cleanup handles
-                // it). The timeout case shows a toast.
+                // Either the timeout fired or the component unmounted.
+                // We discriminate via `timeoutTimerRef.current === null`:
+                // the unmount cleanup runs `clearTimers()` (which nulls
+                // the ref) BEFORE calling `abort()`, so a null ref means
+                // unmount; a non-null ref means the timeout fired itself.
+                // (LOW-priority review nit: an explicit `unmountedRef` is
+                // cleaner. Deferred — current code is correct + commented,
+                // and the discriminator is exercised by the existing test.)
                 if (timeoutTimerRef.current === null) {
-                    // unmount path — nothing to do, component is gone
                     return
                 }
                 toast.error('PDF export timed out. Please try again.')

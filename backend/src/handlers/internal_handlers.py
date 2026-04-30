@@ -10,10 +10,19 @@ short-lived HMAC URL token (the URL token's claims are forwarded as
 `X-Org-Id`).
 
 Auth model:
-- `X-Internal-Api-Key` MUST match `INTERNAL_API_KEY` env var (constant-time)
+- `X-Internal-Api-Key` MUST match the secret resolved from
+  `INTERNAL_API_KEY_ARN` at runtime (constant-time compare)
 - `X-Org-Id` MUST be present and is used to scope the lookup
 - The handler is registered as `Router.public` so the standard JWT
   middleware doesn't run; this module enforces its own auth boundary
+
+Why ARN-based runtime resolution:
+- `lambda:GetFunctionConfiguration` is granted to debug/observability
+  IAM roles in many orgs. Baking the cleartext secret into
+  `Environment.Variables` would expose it via that path. Resolving from
+  Secrets Manager at request time (with a module-level cache) keeps the
+  exposure narrowed to `secretsmanager:GetSecretValue` on the specific
+  secret ARN, which only the API Lambda role holds.
 
 Anything more sensitive than read-only analysis data should NOT be
 exposed via this path without explicit review.
@@ -25,6 +34,9 @@ import hmac
 import logging
 import os
 from typing import TYPE_CHECKING, Any
+
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from src.handlers.analysis_payload import build_analysis_payload
 from src.handlers.api_gateway_handler import (
@@ -43,7 +55,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-INTERNAL_API_KEY_ENVIRONMENT_NAME = "INTERNAL_API_KEY"
+INTERNAL_API_KEY_ARN_ENVIRONMENT_NAME = "INTERNAL_API_KEY_ARN"
 
 
 def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
@@ -62,25 +74,69 @@ def register_routes(router: Router, storage: DynamoDBStorageProvider) -> None:
 
 
 class InternalKeyNotConfiguredError(RuntimeError):
-    """Raised when the `INTERNAL_API_KEY` env var is not set.
+    """Raised when the internal-key secret can't be resolved.
 
-    The handler catches this and returns a 500 — surfaces the misconfig
-    to ops without a misleading 401 (which would imply a client problem).
+    Triggers when `INTERNAL_API_KEY_ARN` is unset, when the Secrets
+    Manager fetch fails, or when the secret value comes back empty.
+    The handler maps this to a 500 — surfaces the misconfig to ops
+    without a misleading 401.
     """
+
+
+# Module-level cache of the resolved secret. Survives Lambda container
+# reuse so we only pay the Secrets Manager round-trip on the first
+# request after a cold start (~30ms). Rotation requires a new container
+# (or explicit invalidation, which we don't need today) — documented in
+# the secret-rotation runbook.
+_internal_api_key_cache: str | None = None
+_secrets_client = None
+
+
+def _get_secrets_client() -> Any:
+    """Cached boto3 Secrets Manager client.
+
+    Module-level cache survives container reuse, avoiding ~50ms
+    per-invoke client init.
+    """
+    global _secrets_client
+    if _secrets_client is None:
+        _secrets_client = boto3.client("secretsmanager")
+    return _secrets_client
 
 
 def _read_internal_key() -> str:
-    """Resolve the shared secret.
+    """Resolve the shared secret from Secrets Manager (cached).
 
-    Raises `InternalKeyNotConfiguredError` when the env var is unset —
-    matches the fail-fast pattern used in the TypeScript
-    `readSigningSecret()`.
+    Reads `INTERNAL_API_KEY_ARN` from env, fetches the secret value via
+    `secretsmanager:GetSecretValue` on first use, caches at the module
+    level for the lifetime of the Lambda container.
     """
-    secret = os.environ.get(INTERNAL_API_KEY_ENVIRONMENT_NAME, "")
+    global _internal_api_key_cache
+    if _internal_api_key_cache is not None:
+        return _internal_api_key_cache
+
+    arn = os.environ.get(INTERNAL_API_KEY_ARN_ENVIRONMENT_NAME, "")
+    if not arn:
+        raise InternalKeyNotConfiguredError(
+            f"{INTERNAL_API_KEY_ARN_ENVIRONMENT_NAME} is not set on the API Lambda runtime",
+        )
+
+    try:
+        response = _get_secrets_client().get_secret_value(SecretId=arn)
+    except (BotoCoreError, ClientError) as error:
+        message = (
+            f"Failed to resolve {INTERNAL_API_KEY_ARN_ENVIRONMENT_NAME} "
+            f"({arn}): {type(error).__name__}"
+        )
+        raise InternalKeyNotConfiguredError(message) from error
+
+    secret = response.get("SecretString", "")
     if not secret:
         raise InternalKeyNotConfiguredError(
-            f"{INTERNAL_API_KEY_ENVIRONMENT_NAME} is not set on the API Lambda runtime",
+            f"Secrets Manager returned empty value for {arn}",
         )
+
+    _internal_api_key_cache = secret
     return secret
 
 

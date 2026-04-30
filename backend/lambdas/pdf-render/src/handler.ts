@@ -16,8 +16,9 @@
 
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
 
-import { renderPdf } from './render'
-import { readSigningSecret, verifyToken } from './token'
+import { PrintStatusError, renderPdf } from './render'
+import { readSigningSecret } from './secretSource'
+import { verifyToken } from './token'
 
 interface RenderRequestBody {
     analysisId: string
@@ -91,9 +92,11 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     // Defensive token verification: the print route also verifies, but we
     // fail fast here to avoid spinning up Chromium for an obviously-bad
     // request. Saves ~2-3 seconds + container resources on misuse.
+    // Secret resolution is async (Secrets Manager round-trip on cold
+    // start, cached thereafter — see `secretSource.ts`).
     let secret: string
     try {
-        secret = readSigningSecret()
+        secret = await readSigningSecret()
     } catch (error) {
         logEvent({
             status: 'error',
@@ -126,6 +129,24 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
             body: pdf.toString('base64'),
         }
     } catch (error) {
+        // Print-route auth failure surfaces here as a `PrintStatusError`
+        // — translate to 401 so the caller (Python proxy → Next.js → user)
+        // sees a clean reject rather than a generic 500. Without this,
+        // env-drift between the Next.js runtime and the Lambda runtime
+        // (e.g. mid-rotation) silently produces a 200 PDF of the
+        // "Unauthorized" page. See `render.ts:verifyPrintStatus`.
+        if (error instanceof PrintStatusError) {
+            logEvent({
+                status: 'reject',
+                reason: 'print_status',
+                printStatus: error.status,
+                analysisId,
+                totalDurationMs: Date.now() - startedAt,
+            })
+            return errorResponse(401, 'Print page reported a non-ok status', {
+                reason: error.status,
+            })
+        }
         const message = error instanceof Error ? error.message : 'Unknown render error'
         logEvent({
             status: 'error',
