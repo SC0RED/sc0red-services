@@ -171,8 +171,20 @@ class AmplifyConstruct(Construct):
                                 "commands": ["npm ci --legacy-peer-deps"],
                             },
                             "build": {
+                                # Amplify branch env vars are NOT exposed to
+                                # the Next.js SSR Lambda runtime by default —
+                                # they're only available at build time. The
+                                # workaround is to write them to
+                                # `.env.production` during the build so Next.js
+                                # bundles them into the server runtime. The
+                                # grep filter MUST cover every server-side env
+                                # var the SSR runtime reads. New entries:
+                                #   - PDF_TOKEN_SECRET — HMAC signing for the
+                                #     /api/export/pdf URL token
+                                #   - INTERNAL_API_KEY — auth for the print
+                                #     route's call to /api/internal/analysis
                                 "commands": [
-                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_)' >> .env.production",
+                                    "env | grep -E '^(NEXTAUTH_|BACKEND_URL|NEXT_PUBLIC_|PDF_TOKEN_SECRET|INTERNAL_API_KEY)' >> .env.production",
                                     "npm run build",
                                 ],
                             },
