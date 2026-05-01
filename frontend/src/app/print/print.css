@@ -4,17 +4,33 @@
  * Pairs with the route's `useEffect` setting `<html data-theme="light">` so
  * the rendered tree picks up the light token palette already declared in
  * `globals.css`. Page breaks, A4 margins, and chrome-hiding rules live
- * here; visual styling stays in the existing components.
+ * here; visual styling stays in the print components.
+ *
+ * Page-format strategy (improve-pdf-export-content):
+ *   - Default: A4 portrait. Used for cover, executive summary, risk
+ *     profile, opportunity roadmap, value chain, methodology, back cover.
+ *   - Override: A3 landscape for the EBITDA tree page only — wider
+ *     margin to fit fully-expanded tree visuals without horizontal cut.
+ *     Activated by `.print-ebitda { page: ebitda-page; }`.
  */
 
 @page {
-    size: A4;
+    size: A4 portrait;
     margin: 25mm 20mm 25mm 20mm;
 }
 
 @page :first {
     /* Cover page gets a touch more breathing room top + bottom. */
     margin: 30mm 20mm 30mm 20mm;
+}
+
+@page ebitda-page {
+    size: A3 landscape;
+    margin: 18mm 16mm 18mm 16mm;
+}
+
+.print-ebitda {
+    page: ebitda-page;
 }
 
 .print-root {
@@ -26,6 +42,11 @@
     padding: 32px 40px;
     max-width: 1080px;
     margin: 0 auto;
+    /* Tighten widows/orphans so body copy doesn't strand a single line
+       across the page seam. Three lines is the conventional minimum
+       for readable PDFs. */
+    widows: 3;
+    orphans: 3;
 }
 
 .print-cover {
@@ -69,12 +90,15 @@
     break-after: avoid;
 }
 
-/* Opportunity cards, risk-score rows, EBITDA-tree blocks: keep each one
-   intact even when the parent section is allowed to break. */
+/* Cards / rows / outline blocks: keep each one intact across page
+   breaks. The improve-pdf-export-content change formalised these
+   selectors as the canonical print primitives. */
 .print-card,
-.print-opportunity,
+.print-opportunity-card,
 .print-risk-row,
-.print-ebitda {
+.print-value-chain-row,
+.print-ebitda,
+.print-ebitda-outline-block {
     page-break-inside: avoid;
     break-inside: avoid;
 }
@@ -114,16 +138,6 @@
     font-size: 2rem;
     font-weight: 800;
     margin: 32px 0 16px;
-}
-
-.print-cta {
-    margin-top: 48px;
-    padding: 24px 28px;
-    background: var(--accent-blue-glow);
-    border-top: 3px solid var(--accent-blue);
-    border-radius: 8px;
-    page-break-inside: avoid;
-    break-inside: avoid;
 }
 
 @media print {

@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 
-import { CAT_LABELS } from '@/components/RiskBreakdown'
 import type { ValueChainStep, Opportunity } from '@/lib/types/api'
-import { RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
+import { CAT_LABELS, RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
 
 interface ValueChainDiagramProps {
     steps: ValueChainStep[]
