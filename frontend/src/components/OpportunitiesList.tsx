@@ -2,10 +2,7 @@
 
 import { useState } from 'react'
 
-import Sc0redCTABanner from '@/components/Sc0redCTABanner'
 import HelpTooltip from '@/components/ui/HelpTooltip'
-import { getSc0redContactUrl } from '@/lib/config'
-import type { ActiveLeverFilter } from '@/lib/types/analytics'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -25,24 +22,17 @@ function TimelineBadge({ timeline }: { timeline: string }) {
 interface OpportunitiesListProps {
     opportunities: Opportunity[]
     activeLever: string
-    analysisId: string
 }
 
-function toActiveLeverFilter(activeLever: string): ActiveLeverFilter | null {
-    // Only the two named levers are tracked as filters for analytics. "All",
-    // "Both", or any other value collapses to null — the funnel only
-    // distinguishes Revenue/Cost intent.
-    if (activeLever === 'Revenue Side' || activeLever === 'Cost Side') {
-        return activeLever
-    }
-    return null
-}
-
-export default function OpportunitiesList({
-    opportunities,
-    activeLever,
-    analysisId,
-}: OpportunitiesListProps) {
+/**
+ * AI Opportunities list. The CTA banner that previously lived at the
+ * bottom of this component was removed as part of the
+ * improve-pdf-export-content change — the print PDF was rendering it
+ * twice (once here, once on the back cover), and the cleanest fix is
+ * to host the CTA at the parent surface (the analysis detail page)
+ * rather than per-list. Print path uses `PrintBackCover` instead.
+ */
+export default function OpportunitiesList({ opportunities, activeLever }: OpportunitiesListProps) {
     const [activeOppCat, setActiveOppCat] = useState<string>('All')
     const [expandedOpp, setExpandedOpp] = useState<string | null>(null)
 
@@ -341,15 +331,6 @@ export default function OpportunitiesList({
                     )
                 })}
             </div>
-
-            {filteredOpps.length > 0 && (
-                <Sc0redCTABanner
-                    contactUrl={getSc0redContactUrl()}
-                    analysisId={analysisId}
-                    opportunityCount={filteredOpps.length}
-                    activeLeverFilter={toActiveLeverFilter(activeLever)}
-                />
-            )}
         </div>
     )
 }

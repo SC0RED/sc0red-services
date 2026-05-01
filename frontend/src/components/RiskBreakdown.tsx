@@ -6,19 +6,6 @@ import RiskBadge from '@/components/RiskBadge'
 import { getRiskTier, RISK_CATEGORIES, TIER_COLORS } from '@/lib/utils/riskUtils'
 import type { RiskScore } from '@/lib/types/api'
 
-const CAT_LABELS: Record<string, string> = {
-    competitive_displacement: 'Competitive Displ.',
-    technology_obsolescence: 'Tech Obsolescence',
-    talent_workforce: 'Talent & Workforce',
-    margin_compression: 'Margin Compression',
-    customer_behavior: 'Customer Behavior',
-    regulatory_compliance: 'Regulatory',
-    supply_chain: 'Supply Chain',
-    data_ip: 'Data & IP',
-}
-
-export { CAT_LABELS }
-
 interface RiskBreakdownProps {
     riskScores: RiskScore[]
 }

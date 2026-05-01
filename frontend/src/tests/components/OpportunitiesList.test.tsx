@@ -42,9 +42,7 @@ const mockOpportunities: Opportunity[] = [
 
 describe('OpportunitiesList', () => {
     it('renders all opportunities with titles', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
         expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
         expect(screen.getByText('Automate Support')).toBeInTheDocument()
@@ -52,9 +50,7 @@ describe('OpportunitiesList', () => {
     })
 
     it('shows category filter buttons', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
         expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Competitive Moat' })).toBeInTheDocument()
@@ -62,9 +58,7 @@ describe('OpportunitiesList', () => {
     })
 
     it('clicking a category filter shows only matching opportunities', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
         fireEvent.click(screen.getByRole('button', { name: 'Operational Efficiency' }))
 
@@ -74,9 +68,7 @@ describe('OpportunitiesList', () => {
     })
 
     it('clicking "All" shows all opportunities', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
         // Filter first
         fireEvent.click(screen.getByRole('button', { name: 'Operational Efficiency' }))
@@ -90,9 +82,7 @@ describe('OpportunitiesList', () => {
     })
 
     it('clicking an opportunity expands details', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
         expect(screen.queryByText('Build a chatbot for customer support')).not.toBeInTheDocument()
 
@@ -107,33 +97,16 @@ describe('OpportunitiesList', () => {
         expect(screen.getByText('30% improvement')).toBeInTheDocument()
     })
 
-    it('renders the sc0red CTA banner when opportunities are visible', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
-
-        expect(screen.getByText('sc0red can help you capture these opportunities')).toBeInTheDocument()
-    })
-
-    it('hides the sc0red CTA banner when the filter returns zero opportunities', () => {
-        render(<OpportunitiesList opportunities={[]} activeLever="All" analysisId="assess-1" />)
-
-        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
-    })
-
-    it('hides the sc0red CTA banner when the lever filter matches nothing', () => {
-        const revenueOnly: Opportunity[] = [{ ...mockOpportunities[0]!, value_lever: 'Revenue Side' }]
-        render(
-            <OpportunitiesList opportunities={revenueOnly} activeLever="Cost Side" analysisId="assess-1" />
-        )
+    it('does not render the sc0red CTA banner — that lives at the parent surface now', () => {
+        // CTA was lifted to AnalysisDetail in improve-pdf-export-content
+        // so screen + print PDF have a single source of truth.
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
         expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
     })
 
     it('shows ImpactBadge and TimelineBadge for each opportunity', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
         // Two opportunities have "High" impact
         expect(screen.getAllByText('High Impact').length).toBe(2)
@@ -143,13 +116,7 @@ describe('OpportunitiesList', () => {
     })
 
     it('activeLever filter works', () => {
-        render(
-            <OpportunitiesList
-                opportunities={mockOpportunities}
-                activeLever="Cost Side"
-                analysisId="assess-1"
-            />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="Cost Side" />)
 
         expect(screen.getByText('Automate Support')).toBeInTheDocument()
         expect(screen.queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
@@ -157,20 +124,12 @@ describe('OpportunitiesList', () => {
     })
 
     it('shows opportunity count in heading', () => {
-        render(
-            <OpportunitiesList opportunities={mockOpportunities} activeLever="All" analysisId="assess-1" />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
         expect(screen.getByText('AI Opportunities (3)')).toBeInTheDocument()
     })
 
     it('combined category and lever filter produces intersection', () => {
-        render(
-            <OpportunitiesList
-                opportunities={mockOpportunities}
-                activeLever="Revenue Side"
-                analysisId="assess-1"
-            />
-        )
+        render(<OpportunitiesList opportunities={mockOpportunities} activeLever="Revenue Side" />)
 
         // activeLever=Revenue Side filters to only Deploy AI Chatbot and the Competitive Moat category
         fireEvent.click(screen.getByRole('button', { name: 'Competitive Moat' }))
