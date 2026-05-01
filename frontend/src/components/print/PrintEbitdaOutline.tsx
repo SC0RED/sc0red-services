@@ -150,6 +150,14 @@ function EbitdaNodeCard({ node, sortedOpportunities }: EbitdaNodeCardProps) {
         .map((originalIndex) => findByOriginalIndex(sortedOpportunities, originalIndex))
         .filter((entry): entry is OpportunityWithIndex => entry != null)
 
+    // The metadata row's bottom margin only applies when content
+    // follows it (description paragraph or linkage callout). Computed
+    // explicitly via `Boolean(...)` to keep nullish-coalescing
+    // (`??`) the lone falsy operator in this file — the rest of the
+    // codebase reaches for `??`, the previous `||` here was the only
+    // outlier.
+    const hasContentBelow = Boolean(node.description) || links.length > 0
+
     return (
         <div
             style={{
@@ -168,7 +176,7 @@ function EbitdaNodeCard({ node, sortedOpportunities }: EbitdaNodeCardProps) {
                     gap: '8px',
                     fontSize: '0.75rem',
                     color: 'var(--text-secondary)',
-                    marginBottom: node.description || links.length > 0 ? '6px' : 0,
+                    marginBottom: hasContentBelow ? '6px' : 0,
                 }}
             >
                 {node.value_range ? <span>{node.value_range}</span> : null}

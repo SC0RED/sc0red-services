@@ -54,23 +54,53 @@ export default function PrintOpportunityList({ sortedOpportunities }: PrintOppor
     )
 }
 
+type LeverKey = 'Revenue Side' | 'Cost Side' | 'Both' | null
+
 interface LeverGroup {
-    lever: 'Revenue Side' | 'Cost Side' | 'Both' | null
+    lever: LeverKey
     entries: OpportunityWithIndex[]
 }
 
-const LEVER_ORDER: Array<'Revenue Side' | 'Cost Side' | 'Both' | null> = [
-    'Revenue Side',
-    'Cost Side',
-    'Both',
-    null,
-]
+/**
+ * Ordered list of lever keys the print PDF groups opportunities by.
+ *
+ * If the `Opportunity.value_lever` union ever gains a new value, the
+ * type annotation forces TypeScript to complain here at compile time
+ * — the assignment fails until the new key is added to this array
+ * (or excluded from it deliberately). That fail-fast is the
+ * mitigation for "new lever silently buckets into 'Other'", which the
+ * code review flagged as a maintainability risk.
+ *
+ * `LeverKey` is exactly `Opportunity['value_lever'] | null`; widening
+ * it would defeat the exhaustiveness check.
+ */
+const LEVER_ORDER: readonly LeverKey[] = ['Revenue Side', 'Cost Side', 'Both', null] as const
 
 function groupByLever(entries: OpportunityWithIndex[]): LeverGroup[] {
-    return LEVER_ORDER.map((lever) => ({
+    const buckets: LeverGroup[] = LEVER_ORDER.map((lever) => ({
         lever,
         entries: entries.filter((entry) => (entry.opportunity.value_lever ?? null) === lever),
-    })).filter((group) => group.entries.length > 0)
+    }))
+    // Defensive log path: in development, surface any opportunity whose
+    // value_lever isn't represented by LEVER_ORDER. With the current
+    // union this is unreachable, but if the API enum widens and someone
+    // forgets to update LEVER_ORDER, the warning fires once per such opp
+    // so the gap shows up in `npm run dev` rather than silently.
+    if (process.env.NODE_ENV !== 'production') {
+        const known = new Set<LeverKey>(LEVER_ORDER)
+        for (const entry of entries) {
+            const lever = (entry.opportunity.value_lever ?? null) as LeverKey
+            if (!known.has(lever)) {
+                // eslint-disable-next-line no-console -- dev-only diagnostic for unknown enum values
+                console.warn(
+                    `[PrintOpportunityList] Unknown value_lever %o on opportunity %o — falling out of grouped render. Add it to LEVER_ORDER.`,
+                    entry.opportunity.value_lever,
+                    entry.opportunity.title
+                )
+            }
+        }
+    }
+    return buckets.filter((group) => group.entries.length > 0)
 }
 
 function LeverDivider({ lever }: { lever: LeverGroup['lever'] }) {

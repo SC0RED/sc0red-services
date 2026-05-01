@@ -110,9 +110,23 @@ export function useReanalyze({ analysisId, analyzedAt }: UseReanalyzeOptions): U
             const responseData = (await response.json()) as { status: string; scanId?: string }
             const reanalyzeScanId = responseData.scanId
 
+            // Realtime is best-effort. If `start` throws (transient
+            // AppSync hiccup, missing config in development), we still
+            // want polling to take over rather than aborting the whole
+            // re-analysis. `start`'s contract is to return false on
+            // failure, but we defend against the throw path too — the
+            // poll loop already handles `realtimeConnected === false`
+            // by reading progress directly from the `/api/analysis/{id}`
+            // payload.
             let realtimeConnected = false
             if (reanalyzeScanId) {
-                realtimeConnected = await reanalysisRealtime.start(reanalyzeScanId)
+                try {
+                    realtimeConnected = await reanalysisRealtime.start(reanalyzeScanId)
+                } catch (error: unknown) {
+                    const reason = error instanceof Error ? error.message : String(error)
+                    // eslint-disable-next-line no-console -- best-effort diagnostic; fall-through to polling
+                    console.warn('[useReanalyze] realtime start failed; falling back to polling', reason)
+                }
             }
 
             const originalAnalyzedAt = analyzedAt

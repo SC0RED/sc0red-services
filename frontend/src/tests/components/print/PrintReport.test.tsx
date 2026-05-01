@@ -64,23 +64,23 @@ const fullAnalysis: AnalysisData = {
 
 describe('PrintReport composition', () => {
     it('renders the Executive Summary section', () => {
-        render(<PrintReport analysis={fullAnalysis} />)
+        render(<PrintReport analysis={fullAnalysis} generatedDate="May 1, 2026" />)
         expect(screen.getByText('Executive Summary')).toBeInTheDocument()
     })
 
     it('renders the Methodology section', () => {
-        render(<PrintReport analysis={fullAnalysis} />)
+        render(<PrintReport analysis={fullAnalysis} generatedDate="May 1, 2026" />)
         expect(screen.getByText('Methodology')).toBeInTheDocument()
     })
 
     it('renders exactly one sc0red CTA', () => {
-        render(<PrintReport analysis={fullAnalysis} />)
+        render(<PrintReport analysis={fullAnalysis} generatedDate="May 1, 2026" />)
         const matches = screen.getAllByText('sc0red can help you capture these opportunities')
         expect(matches).toHaveLength(1)
     })
 
     it('omits the back cover when there are no opportunities', () => {
-        render(<PrintReport analysis={{ ...fullAnalysis, opportunities: [] }} />)
+        render(<PrintReport analysis={{ ...fullAnalysis, opportunities: [] }} generatedDate="May 1, 2026" />)
         expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
     })
 
@@ -94,13 +94,43 @@ describe('PrintReport composition', () => {
                     ebitdaTree: undefined,
                     valueChain: undefined,
                 }}
+                generatedDate="May 1, 2026"
             />
         )
         expect(screen.queryByText('Executive Summary')).not.toBeInTheDocument()
     })
 
+    it('renders coherently for a fully-empty analysis (no risks, opps, top actions, ebitda, or value chain)', () => {
+        // Sparse analyses must not produce broken layouts or empty
+        // sections. Cover and Methodology Appendix should still render;
+        // every other section component returns null and the back cover
+        // is omitted.
+        render(
+            <PrintReport
+                analysis={{
+                    ...fullAnalysis,
+                    riskScores: [],
+                    opportunities: [],
+                    topActions: [],
+                    ebitdaTree: undefined,
+                    valueChain: undefined,
+                }}
+                generatedDate="May 1, 2026"
+            />
+        )
+        // Company name appears twice: cover h1 + Methodology Subject block.
+        expect(screen.getAllByText('Acme Test Co').length).toBeGreaterThanOrEqual(1)
+        expect(screen.getByText('Methodology')).toBeInTheDocument()
+        expect(screen.queryByText('Executive Summary')).not.toBeInTheDocument()
+        expect(screen.queryByText('Risk Profile')).not.toBeInTheDocument()
+        expect(screen.queryByText('AI Opportunity Roadmap')).not.toBeInTheDocument()
+        expect(screen.queryByText('EBITDA Impact Model')).not.toBeInTheDocument()
+        expect(screen.queryByText('Value Chain Analysis')).not.toBeInTheDocument()
+        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
+    })
+
     it('renders the Risk Profile, Opportunity Roadmap, EBITDA Impact Model, and Value Chain Analysis sections when data is present', () => {
-        render(<PrintReport analysis={fullAnalysis} />)
+        render(<PrintReport analysis={fullAnalysis} generatedDate="May 1, 2026" />)
         expect(screen.getByText('Risk Profile')).toBeInTheDocument()
         expect(screen.getByText('AI Opportunity Roadmap')).toBeInTheDocument()
         expect(screen.getByText('EBITDA Impact Model')).toBeInTheDocument()

@@ -21,6 +21,14 @@ import '../print.css'
 
 interface PrintReportProps {
     analysis: AnalysisData
+    /**
+     * Pre-formatted "Generated <date>" string, computed server-side
+     * by `page.tsx` so server render + client hydration agree
+     * regardless of the runtime clock. See `page.tsx`'s
+     * `formatGeneratedDate()` for why this can't be computed inside
+     * this `'use client'` module.
+     */
+    generatedDate: string
 }
 
 /**
@@ -44,7 +52,7 @@ interface PrintReportProps {
  * is the belt to that braces because `page.pdf()` does not go through
  * the `@media print` media query path.
  */
-export default function PrintReport({ analysis }: PrintReportProps) {
+export default function PrintReport({ analysis, generatedDate }: PrintReportProps) {
     useEffect(() => {
         const previous = document.documentElement.getAttribute('data-theme')
         document.documentElement.setAttribute('data-theme', 'light')
@@ -77,17 +85,6 @@ export default function PrintReport({ analysis }: PrintReportProps) {
         [analysis, sortedOpportunities]
     )
     const opportunityCount = analysis.opportunities?.length ?? 0
-
-    // Explicit 'en-US' locale — Puppeteer's Lambda container and the
-    // developer's browser need to produce the SAME formatted string,
-    // otherwise hydration warns. The print PDF is an English-only
-    // artifact today; if/when localisation lands, this value moves to
-    // a `useMemo` seeded from a deterministic UTC formatter.
-    const generatedDate = new Date().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    })
 
     return (
         <main className="print-root">

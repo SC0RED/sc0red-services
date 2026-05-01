@@ -92,7 +92,7 @@ function pickTopRisks(riskScores: RiskScore[]): RiskDriverLine[] {
             category: rs.category,
             label: RISK_CATEGORIES.find((c) => c.id === rs.category)?.name ?? rs.category,
             score: rs.score,
-            rationaleFirstSentence: firstSentence(rs.rationale),
+            rationaleFirstSentence: getFirstSentence(rs.rationale),
         }))
 }
 
@@ -125,7 +125,7 @@ function deriveEbitdaUplift(tree: EbitdaTree | undefined): EbitdaUpliftBar | nul
  *
  * Empty input → empty output (the component skips the line).
  */
-function firstSentence(text: string | undefined): string {
+function getFirstSentence(text: string | undefined): string {
     if (!text) return ''
     const trimmed = text.trim()
     if (!trimmed) return ''
