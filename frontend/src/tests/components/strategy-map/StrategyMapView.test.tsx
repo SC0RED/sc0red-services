@@ -1,94 +1,111 @@
 import { render, screen } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 
 import StrategyMapView from '@/components/strategy-map/StrategyMapView'
 
 import { fullStrategyMap } from './_fixtures'
 
-describe('StrategyMapView', () => {
-    it('renders the strategy-map header band with vision, mission, and value proposition', () => {
-        render(<StrategyMapView strategyMap={fullStrategyMap} />)
+/**
+ * `StrategyMapView` tests under the new graphical layout.
+ *
+ * The React Flow canvas does not expose chip text via the standard
+ * jsdom DOM until the canvas measures itself (which it can't in a
+ * headless test). What we CAN reliably assert at this level:
+ *   - the section's structural elements render (header, canvas
+ *     container, core-values strip, gaps panel)
+ *   - vision/value-prop chip text appears in the header
+ *   - mission disclosure renders closed by default
+ *   - the strategic-priority legend lists every priority
+ *
+ * Detailed rendering of individual chips (titles, confidence dots,
+ * tooltips) is covered by `StrategyMapNode.test.tsx`. The graph data
+ * shape (positions, edges, fallback columns) is covered by
+ * `layout.test.ts`.
+ */
 
+// React Flow uses `ResizeObserver` and `IntersectionObserver` which
+// aren't in jsdom. Stub minimally so the component renders without
+// throwing during tests.
+beforeAll(() => {
+    if (typeof globalThis.ResizeObserver === 'undefined') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(globalThis as any).ResizeObserver = class {
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+        }
+    }
+    if (typeof globalThis.DOMRect === 'undefined') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(globalThis as any).DOMRect = class {
+            constructor(
+                public x = 0,
+                public y = 0,
+                public width = 0,
+                public height = 0
+            ) {}
+            top = 0
+            right = 0
+            bottom = 0
+            left = 0
+            toJSON() {
+                return this
+            }
+        }
+    }
+})
+
+describe('StrategyMapView — structural composition', () => {
+    it('renders the section root and the React Flow canvas container', () => {
+        render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        expect(screen.getByTestId('strategy-map-view')).toBeInTheDocument()
+        expect(screen.getByTestId('strategy-map-canvas')).toBeInTheDocument()
+    })
+
+    it('renders the strategy-map header with the section title', () => {
+        render(<StrategyMapView strategyMap={fullStrategyMap} />)
         expect(screen.getByText('Strategy Map')).toBeInTheDocument()
-        expect(screen.getByText(/To be the most appetizing convenience retailer/)).toBeInTheDocument()
-        expect(
-            screen.getByText('Provide convenient food, beverages, and fuel to commuters.')
-        ).toBeInTheDocument()
-        expect(screen.getByText('Customer Intimacy')).toBeInTheDocument()
     })
 
-    it('flags synthesised mission with the (synthesised) marker', () => {
+    it('renders the gaps panel below the canvas', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        expect(screen.getByText(/Mission \(synthesised\)/)).toBeInTheDocument()
+        expect(screen.getByTestId('strategy-map-whats-missing')).toBeInTheDocument()
     })
 
-    it('renders all four perspective rows with their objectives', () => {
-        render(<StrategyMapView strategyMap={fullStrategyMap} />)
-
-        // Financial: 3 objectives — every title should appear
-        expect(screen.getByText('Grow profitable revenue across markets')).toBeInTheDocument()
-        expect(screen.getByText('Drive operational efficiency')).toBeInTheDocument()
-        expect(screen.getByText('Maximise return on invested capital')).toBeInTheDocument()
-
-        // Customer (first-person, quoted)
-        expect(screen.getByText('"Offer me fresh products in a friendly environment"')).toBeInTheDocument()
-        expect(screen.getByText('"Recognise my loyalty and reward me for it"')).toBeInTheDocument()
-        expect(screen.getByText('"Make my visit fast and convenient"')).toBeInTheDocument()
-
-        // Internal Processes themed
-        expect(screen.getByText('Develop signature food and beverage offers')).toBeInTheDocument()
-        expect(screen.getByText('Improve end-to-end process throughput')).toBeInTheDocument()
-
-        // Organizational Capacity (P/T/C)
-        expect(screen.getByText('Develop our associates as brand ambassadors')).toBeInTheDocument()
-        expect(screen.getByText('Deliver reliable systems and data-driven insight')).toBeInTheDocument()
-        expect(screen.getByText('Live our values in every interaction')).toBeInTheDocument()
-    })
-
-    it('renders confidence chips for every objective', () => {
-        render(<StrategyMapView strategyMap={fullStrategyMap} />)
-
-        // 3 financial + 3 customer + 2 IP + 3 capacity = 11 total. Counts:
-        // HIGH=4 (F1, C1, C3, I1.1, I2.1) — actually 5
-        // MEDIUM=4 (F2, F3, C2, O.P, O.T)
-        // LOW=1 (O.C)
-        const highChips = screen.getAllByText('HIGH')
-        const mediumChips = screen.getAllByText('MEDIUM')
-        const lowChips = screen.getAllByText('LOW')
-
-        expect(highChips.length).toBeGreaterThanOrEqual(4)
-        expect(mediumChips.length).toBeGreaterThanOrEqual(4)
-        expect(lowChips.length).toBeGreaterThanOrEqual(1)
-    })
-
-    it('renders the strategic priorities with their results', () => {
-        render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        expect(screen.getAllByText(/Grow Through Foodservice/).length).toBeGreaterThanOrEqual(1)
-        expect(screen.getAllByText(/Deliver Convenience and Value/).length).toBeGreaterThanOrEqual(1)
-        expect(screen.getByText(/Industry-leading customer perception/)).toBeInTheDocument()
-    })
-
-    it('renders the core-values strip with the inferred marker when synthesised', () => {
+    it('renders the core-values strip with the inferred marker for synthesised values', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
         expect(screen.getByText(/Live our values \(inferred\):/)).toBeInTheDocument()
         expect(screen.getByText(/Care for customers/)).toBeInTheDocument()
     })
+})
 
-    it('renders the "What\'s Missing?" panel with each gap and its deep-dive framing', () => {
+describe('StrategyMapView — header content', () => {
+    it('renders the vision statement', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        expect(screen.getByTestId('strategy-map-whats-missing')).toBeInTheDocument()
-        expect(screen.getByText('Cultural commitments not explicitly published')).toBeInTheDocument()
-        expect(screen.getByText('Channel-relationship strategy unclear')).toBeInTheDocument()
-        // Deep-dive framing sentences should be visible
-        expect(screen.getByText(/A Vector Advisory deep-dive would interview leadership/)).toBeInTheDocument()
-        expect(
-            screen.getByText(/A Vector Advisory deep-dive would map the channel economics/)
-        ).toBeInTheDocument()
+        expect(screen.getByText(/To be the most appetizing convenience retailer/)).toBeInTheDocument()
     })
 
-    it('connects internal-process themes to financial objectives via the supports arrow', () => {
+    it('renders the value-proposition chip', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        expect(screen.getByText('→ F1')).toBeInTheDocument()
-        expect(screen.getByText('→ F1, F2')).toBeInTheDocument()
+        // The chip uses formatValueProposition; for primary='customer_intimacy'
+        // (no secondary) the result is 'Customer Intimacy'.
+        expect(screen.getByText('Customer Intimacy')).toBeInTheDocument()
+    })
+
+    it('renders the mission inside a closed <details> disclosure by default', () => {
+        const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        const details = container.querySelector('details')
+        expect(details).not.toBeNull()
+        // Closed disclosure — `open` attribute absent.
+        expect(details?.hasAttribute('open')).toBe(false)
+        // Summary label is the only mission-related text visible without opening.
+        expect(screen.getByText(/Mission \(synthesised\)/)).toBeInTheDocument()
+    })
+
+    it('lists every strategic priority', () => {
+        render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        // Both priorities from the fixture should appear as legend pills.
+        expect(screen.getAllByText('Grow Through Foodservice').length).toBeGreaterThanOrEqual(1)
+        expect(screen.getAllByText('Deliver Convenience and Value').length).toBeGreaterThanOrEqual(1)
     })
 })
