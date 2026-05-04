@@ -14,12 +14,29 @@ import type { ReactNode } from 'react'
 // (which jsdom can't lay out — see EbitdaTree.test.tsx for the same
 // constraint). The mock renders children as a plain `<div>` when
 // `isVisible` is true, restoring testability.
+//
+// The mock attaches `data-toolbar-position` so tests can also assert
+// which side of the chip the tooltip would render on (the capacity-band
+// chips flip to `Position.Top` to avoid overflowing past the canvas
+// bottom — see `StrategyMapNode.tsx`).
 vi.mock('@xyflow/react', async () => {
     const actual = await vi.importActual<typeof import('@xyflow/react')>('@xyflow/react')
     return {
         ...actual,
-        NodeToolbar: ({ isVisible, children }: { isVisible?: boolean; children?: ReactNode }) =>
-            isVisible ? <>{children}</> : null,
+        NodeToolbar: ({
+            isVisible,
+            children,
+            position,
+        }: {
+            isVisible?: boolean
+            children?: ReactNode
+            position?: string
+        }) =>
+            isVisible ? (
+                <div data-testid="strategy-map-node-toolbar" data-toolbar-position={position}>
+                    {children}
+                </div>
+            ) : null,
     }
 })
 
@@ -201,5 +218,40 @@ describe('StrategyMapNode — shared-lane visual marker', () => {
         renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
         const node = screen.getByRole('button')
         expect(node).toHaveStyle({ borderLeft: '3px dashed var(--accent-blue)' })
+    })
+})
+
+describe('StrategyMapNode — tooltip side flips for the bottom band', () => {
+    /**
+     * The strategy-map canvas has 4 horizontal perspective bands; the
+     * Capacity band is the bottom one. A NodeToolbar with the default
+     * `Position.Bottom` would render below the chip, which on a capacity
+     * chip means below the canvas's bottom edge — overlaying the gaps
+     * panel and CTA underneath. Capacity chips flip the tooltip to
+     * `Position.Top` so the toolbar renders above the chip, inside the
+     * canvas's vertical range.
+     */
+    it('uses Position.Bottom for chips in financial / customer / internal bands', () => {
+        for (const perspective of ['financial', 'customer', 'internal'] as const) {
+            const data: StrategyMapNodeData = { ...baseData, perspective }
+            const { unmount } = renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+            fireEvent.mouseEnter(screen.getByRole('button'))
+            const toolbar = screen.getByTestId('strategy-map-node-toolbar')
+            expect(toolbar.getAttribute('data-toolbar-position')).toBe('bottom')
+            unmount()
+        }
+    })
+
+    it('uses Position.Top for capacity chips (avoids overflowing past canvas bottom)', () => {
+        const data: StrategyMapNodeData = {
+            ...baseData,
+            objectiveId: 'O.P',
+            perspective: 'capacity',
+            capacityBucket: 'People',
+        }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        fireEvent.mouseEnter(screen.getByRole('button'))
+        const toolbar = screen.getByTestId('strategy-map-node-toolbar')
+        expect(toolbar.getAttribute('data-toolbar-position')).toBe('top')
     })
 })

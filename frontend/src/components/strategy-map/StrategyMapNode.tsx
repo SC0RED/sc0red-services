@@ -197,10 +197,23 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
              *       (long definitions on bottom-band chips don't get cut),
              *   (b) is never covered by sibling chips' DOM order
              *       (each toolbar lifts onto its own stacking context).
-             * `position={Position.Bottom}` puts the panel below the chip;
+             *
+             * Position is `Bottom` for chips in the top three bands (financial,
+             * customer, internal). For Capacity (the bottom band), it flips to
+             * `Top` — the toolbar portal positions content with viewport-fixed
+             * coords, so a `Bottom` tooltip on a capacity chip would render
+             * BELOW the canvas's bottom edge and overlay the gaps panel + CTA
+             * sitting directly underneath. Flipping puts capacity tooltips
+             * inside the canvas's vertical range.
+             *
              * `offset={8}` matches the previous in-chip `marginTop`.
              */}
-            <NodeToolbar nodeId={id} isVisible={showDetail} position={Position.Bottom} offset={8}>
+            <NodeToolbar
+                nodeId={id}
+                isVisible={showDetail}
+                position={data.perspective === 'capacity' ? Position.Top : Position.Bottom}
+                offset={8}
+            >
                 <div
                     id={tooltipId}
                     role="tooltip"
