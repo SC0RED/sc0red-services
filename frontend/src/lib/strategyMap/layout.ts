@@ -442,32 +442,28 @@ function buildNode(placement: ChipPlacement, totalColumns: number): Node<Strateg
 /**
  * Pixel `x` of a column's chips.
  *
- * Centre-lane chips need to sit BETWEEN two real columns so they don't
- * collide with a regular column's chip position. The geometric midpoint
- * `((totalColumns - 1) / 2) * COLUMN_WIDTH` works for even
- * `totalColumns` (lands cleanly between the two middle columns) but
- * coincides with a real column when `totalColumns` is odd — e.g. for
- * three themes the formula yields `COLUMN_WIDTH`, which IS column 1's
- * position, so a centre-lane chip stacks atop column 1's chip. That was
- * the production bug the screenshot surfaced. For odd column counts we
- * offset to between columns `floor(N/2) - 1` and `floor(N/2)` instead.
+ * Real columns: `column * COLUMN_WIDTH`.
+ *
+ * Shared-lane chips (`column === null`) are placed PAST the last real
+ * column at `totalColumns * COLUMN_WIDTH`. Earlier versions tried to
+ * position them BETWEEN two columns at the geometric centre; that
+ * worked geometrically but the chip itself (`CHIP_WIDTH = 220`) is
+ * wider than the gap between adjacent column chips
+ * (`COLUMN_WIDTH - CHIP_WIDTH = 60`), so the shared-lane chip always
+ * overlapped at least one neighbouring column chip in production. The
+ * "rightmost virtual column" placement avoids overlap entirely; the
+ * dashed left-border on the chip (set elsewhere in the renderer) still
+ * communicates "doesn't belong to a theme".
+ *
+ * The renaming from "centre lane" to "shared lane" already happened in
+ * the public type (`inSharedLane`). This function is the layout side
+ * of that semantic.
  */
 function columnBaseX(column: number | null, totalColumns: number): number {
     if (column === null) {
-        if (totalColumns <= 1) {
-            // Single-column maps — centre is the same as that column;
-            // slot-y stacking handles visual separation.
-            return 0
-        }
-        if (totalColumns % 2 === 0) {
-            // Even N: the geometric midpoint sits cleanly between columns.
-            return ((totalColumns - 1) / 2) * COLUMN_WIDTH
-        }
-        // Odd N: offset to between columns `floor(N/2) - 1` and
-        // `floor(N/2)` so the centre lane never lands on a real column.
-        // For N=3 this is x = COLUMN_WIDTH/2 (between cols 0 and 1);
-        // for N=5 this is x = 1.5 * COLUMN_WIDTH (between cols 1 and 2).
-        return Math.floor(totalColumns / 2) * COLUMN_WIDTH - COLUMN_WIDTH / 2
+        // Shared lane sits past the last real column. Slot-y stacking
+        // handles multiple shared-lane chips in the same band.
+        return totalColumns * COLUMN_WIDTH
     }
     return column * COLUMN_WIDTH
 }

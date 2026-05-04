@@ -74,12 +74,15 @@ describe('buildStrategyMapGraph — financial column from supports_financial_obj
         expect(xOf(graph, 'F2')).toBeGreaterThan(xOf(graph, 'F1'))
     })
 
-    it('places F3 in the centre lane (no theme lists it)', () => {
+    it('places F3 in the shared lane past the last real column', () => {
         const graph = buildStrategyMapGraph(fullStrategyMap)
-        // Centre between column 0 and column 1 → x === COLUMN_WIDTH / 2 with two themes.
+        // Shared-lane chips sit at x = totalColumns * COLUMN_WIDTH (one
+        // virtual column past the last real theme column). For the
+        // 2-theme fixture, that's x = 2 * COLUMN_WIDTH = 560 — to the
+        // right of F2 (column 1, x = COLUMN_WIDTH = 280).
         const xF3 = xOf(graph, 'F3')
-        expect(xF3).toBeGreaterThan(xOf(graph, 'F1'))
-        expect(xF3).toBeLessThan(xOf(graph, 'F2'))
+        expect(xF3).toBe(2 * COLUMN_WIDTH)
+        expect(xF3).toBeGreaterThan(xOf(graph, 'F2'))
     })
 })
 
@@ -102,7 +105,7 @@ describe('buildStrategyMapGraph — customer column inferred from outbound arrow
         expect(xOf(graph, 'C1')).toBe(xOf(graph, 'F1'))
     })
 
-    it('falls back to centre lane when customer chip has no disambiguating arrow', () => {
+    it('falls back to shared lane (past last column) when customer chip has no disambiguating arrow', () => {
         // Construct a minimal fixture: C-only objective without any arrow
         // pointing to or from it.
         const sparseMap: StrategyMap = {
@@ -113,7 +116,7 @@ describe('buildStrategyMapGraph — customer column inferred from outbound arrow
                         id: 'C9',
                         title: 'Orphan customer obj with no arrows',
                         definition:
-                            'A customer objective with no inbound or outbound arrow — should land in the centre lane.',
+                            'A customer objective with no inbound or outbound arrow — should land in the shared lane.',
                         panel: 'consumer',
                         confidence: 'LOW',
                     },
@@ -122,10 +125,9 @@ describe('buildStrategyMapGraph — customer column inferred from outbound arrow
             },
         }
         const graph = buildStrategyMapGraph(sparseMap)
-        const xC9 = xOf(graph, 'C9')
-        // Centre is between column 0 and column 1 → strictly between F1 and F2.
-        expect(xC9).toBeGreaterThan(xOf(graph, 'F1'))
-        expect(xC9).toBeLessThan(xOf(graph, 'F2'))
+        // Shared lane is past the last real column (totalColumns *
+        // COLUMN_WIDTH). For 2 themes that's x = 560.
+        expect(xOf(graph, 'C9')).toBe(2 * COLUMN_WIDTH)
     })
 })
 
@@ -143,8 +145,9 @@ describe('buildStrategyMapGraph — capacity column inference and triad fallback
 
     it('spreads the People/Tech/Culture triad when arrows are sparse', () => {
         // Strip ALL arrows so capacity has no inference signal. With 2
-        // themes, fallback puts People at column 0, Technology at the
-        // centre, Culture at column 1.
+        // themes, the fallback assigns People=col 0, Technology=null
+        // (shared lane → x = 2 * COLUMN_WIDTH = 560), Culture=col 1
+        // (x = COLUMN_WIDTH = 280). All three land at distinct x.
         const noArrowsMap: StrategyMap = { ...fullStrategyMap, arrows: [] }
         const graph = buildStrategyMapGraph(noArrowsMap)
 
@@ -154,8 +157,13 @@ describe('buildStrategyMapGraph — capacity column inference and triad fallback
 
         // Triad should NOT collapse — three distinct x positions.
         expect(new Set([xP, xT, xC]).size).toBe(3)
-        expect(xP).toBeLessThan(xT)
-        expect(xT).toBeLessThan(xC)
+        // Order: P < C < T (Technology lands in the shared lane past
+        // the last column when arrows are sparse — the fallback hasn't
+        // changed semantically, but the shared-lane x is now to the
+        // right of all real columns rather than between them).
+        expect(xP).toBe(0)
+        expect(xC).toBe(COLUMN_WIDTH)
+        expect(xT).toBe(2 * COLUMN_WIDTH)
     })
 })
 
@@ -347,7 +355,7 @@ describe('buildStrategyMapGraph — vertical slot stacking (production bug regre
     })
 })
 
-describe('buildStrategyMapGraph — centre-lane never collides with a real column', () => {
+describe('buildStrategyMapGraph — shared-lane never collides with a real column', () => {
     /**
      * Production screenshot: a 3-theme strategy map placed a centre-lane
      * customer chip (C2) at x = COLUMN_WIDTH = 280, which is exactly
@@ -397,7 +405,7 @@ describe('buildStrategyMapGraph — centre-lane never collides with a real colum
         }
     })
 
-    it('places centre lane between two real columns for 3-theme analyses (production bug)', () => {
+    it('places shared-lane chips past the last column for 3-theme analyses (production bug)', () => {
         const threeThemeMap: StrategyMap = {
             ...fullStrategyMap,
             strategicPriorities: [
@@ -433,12 +441,95 @@ describe('buildStrategyMapGraph — centre-lane never collides with a real colum
             },
         }
         const graph = buildStrategyMapGraph(threeThemeMap)
-        // F3 has no theme anchor → centre lane. Its x MUST NOT be the
-        // same as any column position for totalColumns=3.
+        // F3 has no theme anchor → shared lane. With totalColumns=3,
+        // shared lane lands at x = 3 * COLUMN_WIDTH (one virtual column
+        // past the last real column at x = 2 * COLUMN_WIDTH).
         const xF3 = xOf(graph, 'F3')
-        // Columns at 0, COLUMN_WIDTH, 2*COLUMN_WIDTH.
+        expect(xF3).toBe(3 * COLUMN_WIDTH)
+        // And it must NOT collide with any of the three real columns
+        // (0, COLUMN_WIDTH, 2*COLUMN_WIDTH) — the production bug.
         expect(xF3).not.toBe(0)
         expect(xF3).not.toBe(COLUMN_WIDTH)
         expect(xF3).not.toBe(2 * COLUMN_WIDTH)
+    })
+
+    /**
+     * Real-world bug: with 3 themes a customer chip without a
+     * disambiguating arrow (e.g. C4 in the screenshot) landed at the
+     * geometric centre of column 0 and column 1 (x ≈ 140). The chip is
+     * 220 px wide so it physically overlapped C1 (column 0, spans 0-220).
+     * This test reproduces the exact bug shape — 3 themes, customer chip
+     * with no arrow — and asserts the chip lands clear of every real
+     * column AND clear of the chip range of every neighbouring column
+     * chip (0 ± CHIP_WIDTH).
+     */
+    it('shared-lane chip cannot horizontally overlap any real-column chip with 3 themes', () => {
+        const threeThemes = [
+            { name: 'Theme A', supports: ['F1'] },
+            { name: 'Theme B', supports: ['F2'] },
+            { name: 'Theme C', supports: ['F3'] },
+        ]
+        const productionShapeMap: StrategyMap = {
+            ...fullStrategyMap,
+            strategicPriorities: threeThemes.map((t) => ({
+                name: t.name,
+                result: 'A long enough result string for validation purposes.',
+            })),
+            internalProcesses: {
+                themes: threeThemes.map((t, i) => ({
+                    name: t.name,
+                    supports_financial_objectives: t.supports,
+                    objectives: [
+                        {
+                            id: `I${i + 1}.1`,
+                            title: `${t.name} objective`,
+                            definition:
+                                'A long enough definition string to satisfy any min-length constraints.',
+                            category: 'innovation' as const,
+                            confidence: 'MEDIUM' as const,
+                        },
+                    ],
+                })),
+            },
+            // C-orphan with no inbound or outbound arrow — production
+            // example was "Connect me directly with…".
+            customer: {
+                objectives: [
+                    {
+                        id: 'C9',
+                        title: 'Orphan customer chip with no inbound/outbound arrow',
+                        definition:
+                            'Has no arrow connecting it to financial or internal-process chips, so it falls through to the shared-lane fallback.',
+                        panel: 'consumer',
+                        confidence: 'LOW',
+                    },
+                    ...fullStrategyMap.customer.objectives,
+                ],
+            },
+            arrows: [], // strip arrows so customer falls back deterministically
+        }
+        const graph = buildStrategyMapGraph(productionShapeMap)
+        const xC9 = xOf(graph, 'C9')
+
+        // C9 must land at x = 3 * COLUMN_WIDTH = 840 (past the last
+        // real column at x = 560).
+        expect(xC9).toBe(3 * COLUMN_WIDTH)
+
+        // And — critical — it must not overlap any real column's chip.
+        // A chip at column N spans `[N * COLUMN_WIDTH, N * COLUMN_WIDTH + CHIP_WIDTH]`.
+        // Two chips overlap when their x-ranges intersect.
+        const CHIP_WIDTH = 220
+        for (let column = 0; column < 3; column++) {
+            const columnChipStart = column * COLUMN_WIDTH
+            const columnChipEnd = columnChipStart + CHIP_WIDTH
+            const c9Start = xC9
+            const c9End = xC9 + CHIP_WIDTH
+            // Either C9 fully right of the column chip, or fully left.
+            const noOverlap = c9Start >= columnChipEnd || c9End <= columnChipStart
+            expect(
+                noOverlap,
+                `C9 [${c9Start},${c9End}] overlaps column ${column} [${columnChipStart},${columnChipEnd}]`
+            ).toBe(true)
+        }
     })
 })
