@@ -20,9 +20,7 @@ if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
 
 
-def save_strategy_map(
-    table: DynamoDBTable, assessment_id: str, data: dict[str, Any]
-) -> None:
+def save_strategy_map(table: DynamoDBTable, assessment_id: str, data: dict[str, Any]) -> None:
     """Persist the AI-generated strategy map for the given assessment.
 
     The full strategy map is JSON-encoded into a single `payload`
@@ -41,9 +39,7 @@ def save_strategy_map(
     table.put_item(item)
 
 
-def get_strategy_map(
-    table: DynamoDBTable, assessment_id: str
-) -> dict[str, Any] | None:
+def get_strategy_map(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] | None:
     """Return the strategy map for the given assessment, or None if not found.
 
     Raises `KeyError` if the STRATEGY_MAP item exists but has no
@@ -70,9 +66,7 @@ def get_strategy_map(
 # ── Value Chain ────────────────────────────────────────────────────────────
 
 
-def save_value_chain(
-    table: DynamoDBTable, assessment_id: str, data: dict[str, Any]
-) -> None:
+def save_value_chain(table: DynamoDBTable, assessment_id: str, data: dict[str, Any]) -> None:
     """Persist the value chain analysis for the given assessment."""
     item = {
         "pk": f"ASSESSMENT#{assessment_id}",
@@ -85,9 +79,7 @@ def save_value_chain(
     table.put_item(item)
 
 
-def get_value_chain(
-    table: DynamoDBTable, assessment_id: str
-) -> dict[str, Any] | None:
+def get_value_chain(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] | None:
     """Return the value chain for the given assessment, or None if not found."""
     item = table.get_item(
         pk=f"ASSESSMENT#{assessment_id}",

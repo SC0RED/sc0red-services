@@ -55,9 +55,7 @@ def assemble_strategy_map(
         vision=VisionStatement(**vision),
         mission=MissionStatement(**mission),
         valueProposition=ValuePropositionClassification(**value_proposition),
-        strategicPriorities=[
-            StrategicPriority(**sp) for sp in finale["strategicPriorities"]
-        ],
+        strategicPriorities=[StrategicPriority(**sp) for sp in finale["strategicPriorities"]],
         financial=FinancialPerspective(
             objectives=[FinancialObjective(**o) for o in financial["objectives"]]
         ),
@@ -69,9 +67,7 @@ def assemble_strategy_map(
                 InternalProcessTheme(
                     name=theme["name"],
                     supports_financial_objectives=theme["supports_financial_objectives"],
-                    objectives=[
-                        InternalProcessObjective(**o) for o in theme["objectives"]
-                    ],
+                    objectives=[InternalProcessObjective(**o) for o in theme["objectives"]],
                 )
                 for theme in internal_processes["themes"]
             ]

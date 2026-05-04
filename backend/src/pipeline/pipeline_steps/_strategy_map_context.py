@@ -44,14 +44,10 @@ def build_shared_context(company: Company) -> dict[str, Any]:
     (truncated JSON, signal subsets) for the templates to slot in.
     """
     profile = company.profile
-    opportunities = (
-        company.opportunity_result.opportunities if company.opportunity_result else []
-    )
+    opportunities = company.opportunity_result.opportunities if company.opportunity_result else []
     ebitda_tree = company.ebitda_tree
     value_chain = company.value_chain
-    risk_scores = (
-        company.risk_assessment.risk_scores if company.risk_assessment else []
-    )
+    risk_scores = company.risk_assessment.risk_scores if company.risk_assessment else []
 
     customer_risk_categories = {"customer_behavior", "competitive_displacement"}
     customer_risk_signals = [
@@ -211,8 +207,7 @@ def infer_go_to_market(profile: Any, _opportunities: list[Any]) -> str:
 
     if any(token in text for token in ("dealer", "distributor", "reseller", "franchise")):
         return (
-            "channel-mediated (dealers / distributors / franchisees indicated "
-            "in public materials)"
+            "channel-mediated (dealers / distributors / franchisees indicated in public materials)"
         )
     if any(token in text for token in ("marketplace", "two-sided", "platform")):
         return "marketplace / platform (two-sided)"

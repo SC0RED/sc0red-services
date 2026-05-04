@@ -24,7 +24,7 @@ assembly + validation lives in `_strategy_map_assembly.py`.
 Per CLAUDE.md mandatory patterns:
   - Subclass `RequestStep`.
   - Every AI call goes through `run_structured_ai_call`.
-  - Parallel block uses `FutureManager` (not raw ThreadPoolExecutor).
+  - Parallel block uses `FutureManager` (not raw thread pools).
   - Prompts loaded from external files (no inline AI prompt strings).
 """
 
@@ -118,9 +118,8 @@ class GenerateStrategyMap(RequestStep):
         value_proposition_data = self._step_2_value_proposition(system_prompt, context)
         context["value_proposition"] = summarise_value_proposition(value_proposition_data)
 
-        # Steps 3-6 — perspective generation in parallel.
-        # FutureManager (per CLAUDE.md mandatory pattern) — never raw
-        # ThreadPoolExecutor.
+        # Steps 3-6 — perspective generation in parallel via
+        # FutureManager (per CLAUDE.md mandatory pattern).
         results = self._steps_3_through_6_in_parallel(system_prompt, context)
 
         # Some models wrap output under a top-level key; tolerate both.

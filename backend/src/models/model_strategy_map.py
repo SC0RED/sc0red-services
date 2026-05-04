@@ -80,8 +80,7 @@ class ValuePropositionClassification(BaseModel):
 
     primary: ValuePropositionEnum
     secondary: (
-        Literal["operational_excellence", "customer_intimacy", "product_leadership"]
-        | None
+        Literal["operational_excellence", "customer_intimacy", "product_leadership"] | None
     ) = None
     rationale: str = Field(min_length=20, max_length=600)
     exemplar_company: str = Field(default="", max_length=100)
@@ -246,12 +245,8 @@ class Gap(BaseModel):
     id: str = Field(pattern=r"^G[1-9]$")
     title: str = Field(min_length=4, max_length=100)
     description: str = Field(min_length=30, max_length=600)
-    deep_dive_framing: str = Field(
-        min_length=30, max_length=400, alias="deepDiveFraming"
-    )
-    related_objective_ids: list[str] = Field(
-        default_factory=list, alias="relatedObjectiveIds"
-    )
+    deep_dive_framing: str = Field(min_length=30, max_length=400, alias="deepDiveFraming")
+    related_objective_ids: list[str] = Field(default_factory=list, alias="relatedObjectiveIds")
 
     model_config = {"populate_by_name": True}
 
