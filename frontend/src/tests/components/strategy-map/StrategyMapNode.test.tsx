@@ -29,6 +29,7 @@ const baseData: StrategyMapNodeData = {
     confidence: 'HIGH',
     rationaleSource: null,
     customerVoice: false,
+    inSharedLane: false,
 }
 
 // Minimal NodeProps stub. Many fields are unused by the component so we
@@ -156,5 +157,27 @@ describe('StrategyMapNode — customer-voice formatting', () => {
         }
         renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
         expect(screen.getByText('People')).toBeInTheDocument()
+    })
+})
+
+describe('StrategyMapNode — shared-lane visual marker', () => {
+    /**
+     * Centre-lane chips (those the layout helper couldn't anchor to a
+     * theme column) get a dashed left-border instead of solid so the
+     * reader spots them at a glance. Behaviour disappears under the
+     * planned `β` follow-up where every objective has a deterministic
+     * theme.
+     */
+    it('renders solid left-border for chips with a real theme column', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        const node = screen.getByRole('button')
+        expect(node).toHaveStyle({ borderLeft: '3px solid var(--accent-blue)' })
+    })
+
+    it('renders dashed left-border for chips in the shared centre lane', () => {
+        const data: StrategyMapNodeData = { ...baseData, inSharedLane: true }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        const node = screen.getByRole('button')
+        expect(node).toHaveStyle({ borderLeft: '3px dashed var(--accent-blue)' })
     })
 })

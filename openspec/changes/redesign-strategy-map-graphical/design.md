@@ -159,11 +159,36 @@ upgrade to `β` swaps only the layout pre-pass.
   `Customer Intimacy` / `Operational Excellence` / `Hybrid` etc.).
   The `rationale` text moves out of the header into the chip's
   own hover tooltip.
-- **Strategic Priorities**: rendered as the column headers above
-  the perspective bands inside the React Flow canvas (visually
-  defining the theme columns the chip layout uses). Each priority
-  shows just `name`; the `result` text moves into a hover tooltip
-  on the column header.
+- **Strategic Priorities**: rendered as a **legend pill row above
+  the React Flow canvas** (not as canvas-internal column headers
+  as initially considered — see "Implementation deviation" below).
+  Each priority shows just `name`; the `result` text moves into a
+  hover/focus tooltip on the pill.
+
+  *Implementation deviation:* an earlier draft of this section
+  specified "column headers above the perspective bands inside the
+  React Flow canvas (visually defining the theme columns the chip
+  layout uses)". During implementation that approach turned out to
+  carry costs disproportionate to the benefit:
+  - Required a new node type rendered at `y < 0` (above the
+    Financial band), with custom rendering distinct from chip nodes.
+  - Header position would track the canvas camera — when the user
+    pans/zooms, the headers move with the chips (potentially
+    desired for alignment, potentially confusing).
+  - Theme column widths can vary with the largest chip; perfectly
+    pixel-aligned headers would need a custom layout pass.
+  - Headers as React Flow nodes are read by screen readers in
+    canvas-tree order alongside chips, mixing decorative labels
+    with semantic content.
+
+  The chosen pill-legend pattern is simpler, accessible
+  (a separate semantic block above the canvas), and mobile-friendly
+  (no canvas zoom interaction). The 1:1 connection between
+  `strategicPriorities[i]` and `internalProcesses.themes[i]` is
+  encoded by ordering — first priority corresponds to leftmost
+  theme column, etc. If user testing reveals readers can't make
+  the connection from ordinal correspondence alone, we revisit
+  with explicit visual gridlines or column-internal labels.
 
 **Rationale:** this collapses the header from ~240 px to ~80 px
 while keeping the most identity-relevant pieces (vision quote,

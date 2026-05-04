@@ -199,11 +199,15 @@ the value-proposition rationale behind progressive disclosure:
 - **Value Proposition** SHALL render as the existing chip
   (e.g. `Customer Intimacy`). The `rationale` text SHALL move into
   a tooltip on the chip rather than rendering inline.
-- **Strategic Priorities** SHALL render as column headers above
-  the perspective bands inside the canvas, defining the theme
-  columns the chip layout uses. Each priority SHALL show its
-  `name`; the `result` text SHALL move into a tooltip on the
-  column header.
+- **Strategic Priorities** SHALL render as a legend pill row
+  above the React Flow canvas (each priority is its own pill,
+  positioned outside the canvas). Each priority SHALL show its
+  `name`; the `result` text SHALL move into a hover/focus tooltip
+  on the pill. The 1:1 correspondence between `strategicPriorities[i]`
+  and `internalProcesses.themes[i]` is encoded by ordering — first
+  priority pill corresponds to leftmost theme column, etc. (See
+  design.md decision D3 for why the legend pattern was chosen
+  over canvas-internal column headers.)
 
 #### Scenario: Mission is closed by default
 

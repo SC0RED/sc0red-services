@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
     Background,
     Controls,
@@ -48,6 +48,11 @@ const CANVAS_HEIGHT = 4 * BAND_HEIGHT + 32
  * presentation stay separate.
  */
 export default function StrategyMapCanvas({ strategyMap }: { strategyMap: StrategyMap }) {
+    // Ref on the canvas container so the edge tooltip can position itself
+    // relative to the canvas (not the viewport). See `CanvasInner` —
+    // tooltip positioning details + the scroll-tracking rationale.
+    const canvasRef = useRef<HTMLDivElement | null>(null)
+
     const { nodes, edges } = useMemo(() => {
         const graph = buildStrategyMapGraph(strategyMap)
         const styledEdges = graph.edges.map((edge) => ({
@@ -60,6 +65,7 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
 
     return (
         <div
+            ref={canvasRef}
             data-testid="strategy-map-canvas"
             style={{
                 position: 'relative',
@@ -72,16 +78,18 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
         >
             <BandLabels />
             <ReactFlowProvider>
-                <CanvasInner nodes={nodes} edges={edges} />
+                <CanvasInner canvasRef={canvasRef} nodes={nodes} edges={edges} />
             </ReactFlowProvider>
         </div>
     )
 }
 
 function CanvasInner({
+    canvasRef,
     nodes,
     edges,
 }: {
+    canvasRef: React.RefObject<HTMLDivElement | null>
     nodes: Node<StrategyMapNodeData>[]
     edges: Edge<StrategyMapEdgeData>[]
 }) {
@@ -104,7 +112,20 @@ function CanvasInner({
                 onEdgeMouseEnter={(event, edge) => {
                     const hypothesis = (edge.data as StrategyMapEdgeData | undefined)?.hypothesis
                     if (!hypothesis) return
-                    setEdgeTooltip({ x: event.clientX, y: event.clientY, hypothesis })
+                    // Position the tooltip relative to the canvas container,
+                    // NOT the viewport. The previous implementation used
+                    // `clientX/Y` + `position: fixed`, which left the tooltip
+                    // viewport-pinned: if the user scrolled the page while
+                    // hovering an edge, the edge moved with the scroll but
+                    // the tooltip stayed put. By subtracting the canvas's
+                    // bounding rect we get a coordinate that's stable inside
+                    // an absolutely-positioned child of the canvas div.
+                    const rect = canvasRef.current?.getBoundingClientRect()
+                    setEdgeTooltip({
+                        x: event.clientX - (rect?.left ?? 0),
+                        y: event.clientY - (rect?.top ?? 0),
+                        hypothesis,
+                    })
                 }}
                 onEdgeMouseLeave={() => setEdgeTooltip(null)}
             >
@@ -122,7 +143,11 @@ function EdgeTooltip({ x, y, hypothesis }: { x: number; y: number; hypothesis: s
             data-testid="strategy-map-edge-tooltip"
             role="tooltip"
             style={{
-                position: 'fixed',
+                // Absolute positioning relative to the canvas container (which
+                // is `position: relative`). Tooltip travels with the canvas
+                // when the user scrolls the page; previously `position: fixed`
+                // anchored to the viewport and mis-tracked on scroll.
+                position: 'absolute',
                 top: y + 12,
                 left: x + 12,
                 width: '280px',

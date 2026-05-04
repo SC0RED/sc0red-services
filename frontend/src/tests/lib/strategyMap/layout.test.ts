@@ -254,6 +254,16 @@ describe('buildStrategyMapGraph — node data shape', () => {
         }
     })
 
+    it('flags chips in the centre lane with inSharedLane=true (and others false)', () => {
+        const graph = buildStrategyMapGraph(fullStrategyMap)
+        // F3 is unanchored in the fixture (no theme lists it) → centre lane.
+        expect(findNode(graph, 'F3').data.inSharedLane).toBe(true)
+        // Anchored chips: not in shared lane.
+        expect(findNode(graph, 'F1').data.inSharedLane).toBe(false)
+        expect(findNode(graph, 'I1.1').data.inSharedLane).toBe(false)
+        expect(findNode(graph, 'C1').data.inSharedLane).toBe(false)
+    })
+
     it('every node is non-draggable + selectable (allows tap-to-focus on touch)', () => {
         const graph = buildStrategyMapGraph(fullStrategyMap)
         for (const node of graph.nodes) {

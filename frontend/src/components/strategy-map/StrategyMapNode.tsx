@@ -88,7 +88,14 @@ export default function StrategyMapNode({ data, selected }: NodeProps<Node<Strat
                 padding: '8px 12px',
                 background: 'var(--bg-surface-2)',
                 border: '1px solid var(--border-subtle)',
-                borderLeft: `3px solid ${accent}`,
+                // Centre-lane chips (those that the layout helper couldn't
+                // anchor to a real theme column) get a dashed accent
+                // instead of solid, so the reader can spot "no theme home"
+                // chips at a glance rather than having to map X-position
+                // against the theme columns. The marker disappears under
+                // the planned `β` follow-up where every objective has
+                // explicit theme membership and centre-lane never fires.
+                borderLeft: `3px ${data.inSharedLane ? 'dashed' : 'solid'} ${accent}`,
                 borderRadius: '8px',
                 boxShadow: showDetail ? '0 4px 16px rgba(0,0,0,0.25)' : '0 1px 3px rgba(0,0,0,0.15)',
                 cursor: 'pointer',

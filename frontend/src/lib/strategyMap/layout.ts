@@ -69,6 +69,15 @@ export interface StrategyMapNodeData extends Record<string, unknown> {
     customerVoice: boolean
     /** Capacity perspective only: which of the three triad buckets. */
     capacityBucket?: CapacityBucket
+    /**
+     * True when the chip's column couldn't be derived from schema or arrows
+     * and it landed in the centre "shared" lane. The renderer uses this to
+     * apply a visual marker (dashed left border) so the reader can spot
+     * "no theme home" chips at a glance rather than having to infer it
+     * from X position alone. Goes away under the planned `β` follow-up
+     * (deterministic theme membership for every objective).
+     */
+    inSharedLane: boolean
 }
 
 /**
@@ -219,6 +228,11 @@ function assignPlacements(strategyMap: StrategyMap, totalColumns: number): ChipP
 
 // ── Per-perspective node-data builders ────────────────────────────────────
 
+// Note: every per-perspective builder defaults `inSharedLane: false` here.
+// The actual value is computed in `buildNode` (where `column === null` ⇒
+// the chip ended up in the centre lane). Doing it once at build time keeps
+// these builders pure and simple.
+
 function financialNodeData(obj: FinancialObjective): StrategyMapNodeData {
     return {
         objectiveId: obj.id,
@@ -228,6 +242,7 @@ function financialNodeData(obj: FinancialObjective): StrategyMapNodeData {
         confidence: obj.confidence,
         rationaleSource: obj.rationale_source ?? null,
         customerVoice: false,
+        inSharedLane: false,
     }
 }
 
@@ -240,6 +255,7 @@ function customerNodeData(obj: CustomerObjective): StrategyMapNodeData {
         confidence: obj.confidence,
         rationaleSource: obj.rationale_source ?? null,
         customerVoice: true,
+        inSharedLane: false,
     }
 }
 
@@ -252,6 +268,7 @@ function internalNodeData(obj: InternalProcessObjective): StrategyMapNodeData {
         confidence: obj.confidence,
         rationaleSource: obj.rationale_source ?? null,
         customerVoice: false,
+        inSharedLane: false,
     }
 }
 
@@ -265,6 +282,7 @@ function capacityNodeData(obj: CapacityObjective, bucket: CapacityBucket): Strat
         rationaleSource: obj.rationale_source ?? null,
         customerVoice: false,
         capacityBucket: bucket,
+        inSharedLane: false,
     }
 }
 
@@ -291,13 +309,28 @@ function inferCustomerColumn(
     columnLookup: Map<string, number | null>
 ): number | null {
     // Outbound: customer → financial.
+    //
+    // Tie-break note: when a customer chip has arrows targeting Financial
+    // chips in MULTIPLE different columns (e.g. C1 → F1 in column 0 AND
+    // C1 → F2 in column 1), we deliberately take the first match
+    // (`downstreamColumns[0]`). The order is whatever the AI emitted in
+    // its `arrows[]` array, so the bias is "first arrow wins", not
+    // "user intent wins". Acceptable for v1 because (1) multi-column-
+    // target customer chips are rare in practice (most customer
+    // objectives map to one financial outcome), (2) when it does
+    // trigger the chip still lands on a real column rather than the
+    // centre lane (still readable), and (3) the planned `β` follow-up
+    // adds an explicit `theme` field on every objective, eliminating
+    // arrow inference entirely. If multi-target customer chips become
+    // common before β lands, upgrade this to majority-vote.
     const downstreamColumns = (arrowsByFrom.get(customerId) ?? [])
         .map((target) => columnLookup.get(target))
         .filter((col): col is number => typeof col === 'number')
     if (downstreamColumns.length > 0) {
         return downstreamColumns[0]
     }
-    // Inbound: internal → customer.
+    // Inbound: internal → customer. Same first-wins bias applies; same
+    // mitigation rationale.
     const upstreamColumns = (arrowsByTo.get(customerId) ?? [])
         .map((source) => columnLookup.get(source))
         .filter((col): col is number => typeof col === 'number')
@@ -384,7 +417,9 @@ function buildNode(placement: ChipPlacement, totalColumns: number): Node<Strateg
             x: baseX + slotOffset,
             y: row * BAND_HEIGHT + BAND_PADDING,
         },
-        data: placement.data,
+        // Mark centre-lane chips so the renderer can apply a visual marker.
+        // `column === null` is the canonical signal — see ChipPlacement.
+        data: { ...placement.data, inSharedLane: placement.column === null },
         draggable: false,
         selectable: true,
     }
