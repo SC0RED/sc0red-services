@@ -83,7 +83,7 @@ class ValuePropositionClassification(BaseModel):
         Literal["operational_excellence", "customer_intimacy", "product_leadership"] | None
     ) = None
     rationale: str = Field(min_length=20, max_length=600)
-    exemplar_company: str = Field(default="", max_length=100)
+    exemplar_company: str | None = Field(default=None, max_length=100)
 
 
 # ── Strategic Priorities (matches Internal Process themes) ─────────────────
@@ -111,7 +111,7 @@ class FinancialObjective(BaseModel):
     definition: str = Field(min_length=50, max_length=1200)
     category: Literal["revenue_growth", "productivity"]
     confidence: ConfidenceMarker
-    rationale_source: str = Field(default="", max_length=400)
+    rationale_source: str | None = Field(default=None, max_length=400)
 
 
 class CustomerObjective(BaseModel):
@@ -127,7 +127,7 @@ class CustomerObjective(BaseModel):
     definition: str = Field(min_length=50, max_length=1200)
     panel: Literal["consumer", "channel", "partner"] = "consumer"
     confidence: ConfidenceMarker
-    rationale_source: str = Field(default="", max_length=400)
+    rationale_source: str | None = Field(default=None, max_length=400)
 
 
 class InternalProcessObjective(BaseModel):
@@ -148,7 +148,7 @@ class InternalProcessObjective(BaseModel):
         "citizenship",
     ]
     confidence: ConfidenceMarker
-    rationale_source: str = Field(default="", max_length=400)
+    rationale_source: str | None = Field(default=None, max_length=400)
 
 
 class InternalProcessTheme(BaseModel):
@@ -177,7 +177,7 @@ class CapacityObjective(BaseModel):
     title: str = Field(min_length=8, max_length=200)
     definition: str = Field(min_length=50, max_length=1200)
     confidence: ConfidenceMarker
-    rationale_source: str = Field(default="", max_length=400)
+    rationale_source: str | None = Field(default=None, max_length=400)
 
 
 # ── Perspective containers ─────────────────────────────────────────────────

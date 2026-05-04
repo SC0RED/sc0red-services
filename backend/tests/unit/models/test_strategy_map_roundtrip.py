@@ -345,3 +345,47 @@ class TestStrategyMapRoundtrip:
         decoded = json.loads(wire)
         re_validated = StrategyMap.model_validate(decoded)
         assert re_validated.model_dump(by_alias=True) == dumped
+
+
+class TestStrategyMapNullableOptionalFields:
+    """Optional traceability fields must accept ``null`` from the AI.
+
+    OpenAI strict mode requires every property in ``properties`` to be
+    in ``required`` and produced by the model. Fields the AI may not
+    have ground truth for (e.g. ``rationale_source`` when no specific
+    document grounded the inference) are declared as nullable in the
+    JSON schema and the model emits ``null``. The Pydantic model must
+    accept that or the assemble step will raise ValidationError and
+    the entire strategy-map output will fail to persist.
+    """
+
+    def test_rationale_source_accepts_null_on_every_objective_type(self) -> None:
+        """All four objective types must accept ``rationale_source: null``."""
+        payload = _make_full_strategy_map_dict()
+        # Inject null on one objective from each perspective.
+        payload["financial"]["objectives"][0]["rationale_source"] = None
+        payload["customer"]["objectives"][0]["rationale_source"] = None
+        payload["internalProcesses"]["themes"][0]["objectives"][0]["rationale_source"] = None
+        payload["organizationalCapacity"]["people"]["rationale_source"] = None
+
+        sm = StrategyMap.model_validate(payload)
+
+        # Round-trip preserves the null (does NOT silently coerce to "").
+        dumped = sm.model_dump(by_alias=True)
+        assert dumped["financial"]["objectives"][0]["rationale_source"] is None
+        assert dumped["customer"]["objectives"][0]["rationale_source"] is None
+        assert (
+            dumped["internalProcesses"]["themes"][0]["objectives"][0]["rationale_source"] is None
+        )
+        assert dumped["organizationalCapacity"]["people"]["rationale_source"] is None
+
+    def test_exemplar_company_accepts_null(self) -> None:
+        """`valueProposition.exemplar_company` is nullable on the wire."""
+        payload = _make_full_strategy_map_dict()
+        payload["valueProposition"]["exemplar_company"] = None
+
+        sm = StrategyMap.model_validate(payload)
+
+        assert sm.value_proposition.exemplar_company is None
+        dumped = sm.model_dump(by_alias=True)
+        assert dumped["valueProposition"]["exemplar_company"] is None
