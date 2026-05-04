@@ -10,7 +10,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from src.models.model_strategy_map import StrategyMap
+from src.models.model_strategy_map import (
+    StrategyMap,  # noqa: TC001  pydantic field annotation needs runtime resolution
+)
 
 
 class CompanyProfile(BaseModel):

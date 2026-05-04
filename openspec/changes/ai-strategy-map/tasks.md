@@ -44,53 +44,53 @@
 
 - [x] 4.1 Update `backend/src/handlers/analysis_handlers.py` to include the `strategy_map` field in the response body of `GET /api/analysis/{id}`. The field is optional (legacy analyses may not have it) and is serialised as `strategyMap` (camelCase) in the JSON response.
 - [x] 4.2 Update the internal endpoint `GET /api/internal/analysis/{id}` (used by the print Lambda) similarly.
-- [ ] 4.3 Verify the existing API response tests still pass; add a new test asserting that `strategyMap` is returned when present.
+- [x] 4.3 Verify the existing API response tests still pass; add a new test asserting that `strategyMap` is returned when present.
 
 ## 5. Frontend types and components
 
-- [ ] 5.1 Extend `frontend/src/lib/types/api.ts` with `StrategyMap` interface and nested types matching the JSON schema. Add `strategyMap?: StrategyMap` to `AnalysisData`.
-- [ ] 5.2 Create `frontend/src/components/strategy-map/StrategyMapView.tsx` — composition root. Renders vision/mission/strategic-priorities header band, the 4 perspective rows, the core-values strip, and the "What's Missing?" panel.
-- [ ] 5.3 Create `frontend/src/components/strategy-map/PerspectiveRow.tsx` — one perspective row. Handles the four shapes (Financial: simple objective list with arrows; Customer: voice-quote cards; Internal Processes: themed groups; Organizational Capacity: People/Technology/Culture triad).
-- [ ] 5.4 Create `frontend/src/components/strategy-map/ObjectiveCard.tsx` — single objective with title, definition (collapsible / tooltip), confidence marker chip, and any cross-reference badges.
-- [ ] 5.5 Create `frontend/src/components/strategy-map/ConfidenceChip.tsx` — visual chip rendering HIGH / MEDIUM / LOW (colour palette aligned with sc0red.com per `rename-janus-to-vector-advisory`).
-- [ ] 5.6 Create `frontend/src/components/strategy-map/WhatsMissingPanel.tsx` — renders 2-4 gap entries with title, description, deep-dive framing.
-- [ ] 5.7 Create `frontend/src/components/strategy-map/DeepDiveCTA.tsx` — link-out to `https://www.sc0red.com/contact?source=strategy-map&analysis-id={id}`. Component accepts an optional `gapId` prop for per-gap CTA variants.
-- [ ] 5.8 Create barrel `frontend/src/components/strategy-map/index.ts` re-exporting all of the above.
+- [x] 5.1 Extend `frontend/src/lib/types/api.ts` with `StrategyMap` interface and nested types matching the JSON schema. Add `strategyMap?: StrategyMap` to `AnalysisData`.
+- [x] 5.2 Create `frontend/src/components/strategy-map/StrategyMapView.tsx` — composition root. Renders vision/mission/strategic-priorities header band, the 4 perspective rows, the core-values strip, and the "What's Missing?" panel.
+- [x] 5.3 Create `frontend/src/components/strategy-map/PerspectiveRow.tsx` — one perspective row. Handles the four shapes (Financial: simple objective list with arrows; Customer: voice-quote cards; Internal Processes: themed groups; Organizational Capacity: People/Technology/Culture triad).
+- [x] 5.4 Create `frontend/src/components/strategy-map/ObjectiveCard.tsx` — single objective with title, definition (collapsible / tooltip), confidence marker chip, and any cross-reference badges.
+- [x] 5.5 Create `frontend/src/components/strategy-map/ConfidenceChip.tsx` — visual chip rendering HIGH / MEDIUM / LOW (colour palette aligned with sc0red.com per `rename-janus-to-vector-advisory`).
+- [x] 5.6 Create `frontend/src/components/strategy-map/WhatsMissingPanel.tsx` — renders 2-4 gap entries with title, description, deep-dive framing.
+- [x] 5.7 Create `frontend/src/components/strategy-map/DeepDiveCTA.tsx` — link-out to `https://www.sc0red.com/contact?source=strategy-map&analysis-id={id}`. Component accepts an optional `gapId` prop for per-gap CTA variants.
+- [x] 5.8 Create barrel `frontend/src/components/strategy-map/index.ts` re-exporting all of the above.
 
 ## 6. Analysis page integration
 
-- [ ] 6.1 In `frontend/src/app/(authenticated)/analysis/[analysisId]/AnalysisDetail.tsx`, render `StrategyMapView` immediately after `AnalysisOverviewCards` and before `TopActionsCallout`. Conditionally render only when `data.strategyMap` is populated.
-- [ ] 6.2 Render `DeepDiveCTA` directly below `StrategyMapView` (also conditional on strategy map presence).
-- [ ] 6.3 Verify the analysis page reads correctly in the new layout for: full-data analysis, sparse analysis without value chain / EBITDA, legacy analysis without strategy map.
+- [x] 6.1 In `frontend/src/app/(authenticated)/analysis/[analysisId]/AnalysisDetail.tsx`, render `StrategyMapView` immediately after `AnalysisOverviewCards` and before `TopActionsCallout`. Conditionally render only when `data.strategyMap` is populated.
+- [x] 6.2 Render `DeepDiveCTA` directly below `StrategyMapView` (also conditional on strategy map presence).
+- [x] 6.3 Verify the analysis page reads correctly in the new layout for: full-data analysis, sparse analysis without value chain / EBITDA, legacy analysis without strategy map.
 
 ## 7. PDF / print integration
 
-- [ ] 7.1 Create `frontend/src/components/print/PrintStrategyMap.tsx` — print-only rendering of the strategy map. Same content as `StrategyMapView` but with print-friendly typography, no interactive elements, no deep-dive CTA in this component (the back cover handles the conversion CTA in print).
-- [ ] 7.2 Update `frontend/src/app/print/[analysisId]/PrintReport.tsx` to insert `PrintStrategyMap` as the first content section after `PrintExecutiveSummary` (before `TopActionsCallout`).
-- [ ] 7.3 Update `frontend/src/app/print/print.css` to add `page-break-inside: avoid` for `.print-strategy-map-perspective` and `page-break-before: always` for `.print-strategy-map`.
-- [ ] 7.4 Update the existing `PrintReport.test.tsx` smoke test to assert the strategy map renders when `strategyMap` is present and is omitted when absent.
+- [x] 7.1 Create `frontend/src/components/print/PrintStrategyMap.tsx` — print-only rendering of the strategy map. Same content as `StrategyMapView` but with print-friendly typography, no interactive elements, no deep-dive CTA in this component (the back cover handles the conversion CTA in print).
+- [x] 7.2 Update `frontend/src/app/print/[analysisId]/PrintReport.tsx` to insert `PrintStrategyMap` as the first content section after `PrintExecutiveSummary` (before `TopActionsCallout`).
+- [x] 7.3 Update `frontend/src/app/print/print.css` to add `page-break-inside: avoid` for `.print-strategy-map-perspective` and `page-break-before: always` for `.print-strategy-map`.
+- [x] 7.4 Update the existing `PrintReport.test.tsx` smoke test to assert the strategy map renders when `strategyMap` is present and is omitted when absent.
 
 ## 8. Tests
 
-- [ ] 8.1 Backend unit tests for `GenerateStrategyMap`:
+- [x] 8.1 Backend unit tests for `GenerateStrategyMap`:
   - `tests/unit/pipeline/test_generate_strategy_map.py` — mocked AI client. Test happy path (full output), partial-data path (sparse company), AI-call failure path, schema-validation failure path.
-- [ ] 8.2 Backend unit tests for the model — round-trip serialisation.
-- [ ] 8.3 Backend tests for the API surface — `GET /api/analysis/{id}` returns the new field; `GET /api/internal/analysis/{id}` similarly.
-- [ ] 8.4 Frontend RTL tests for each new component (StrategyMapView, PerspectiveRow, ObjectiveCard, ConfidenceChip, WhatsMissingPanel, DeepDiveCTA).
-- [ ] 8.5 Frontend RTL test for the analysis page — verify strategy map renders at position 3, deep-dive CTA appears below it, both omitted when absent.
-- [ ] 8.6 Frontend test for `PrintReport` updated to assert strategy-map section presence and section ordering.
-- [ ] 8.7 Schema validation tests — invalid AI output is rejected, valid output passes.
+- [x] 8.2 Backend unit tests for the model — round-trip serialisation.
+- [x] 8.3 Backend tests for the API surface — `GET /api/analysis/{id}` returns the new field; `GET /api/internal/analysis/{id}` similarly.
+- [x] 8.4 Frontend RTL tests for each new component (StrategyMapView, PerspectiveRow, ObjectiveCard, ConfidenceChip, WhatsMissingPanel, DeepDiveCTA).
+- [x] 8.5 Frontend RTL test for the analysis page — verify strategy map renders at position 3, deep-dive CTA appears below it, both omitted when absent.
+- [x] 8.6 Frontend test for `PrintReport` updated to assert strategy-map section presence and section ordering.
+- [x] 8.7 Schema validation tests — invalid AI output is rejected, valid output passes.
 
 ## 9. Lint, type-check, architecture review
 
-- [ ] 9.1 `cd backend && uv run ruff check src/` — clean.
-- [ ] 9.2 `cd backend && uv run pyright src/` — no new errors.
-- [ ] 9.3 `cd backend && uv run pytest tests/ -q` — all tests pass; coverage ≥ 95%.
-- [ ] 9.4 `cd frontend && npm run lint` — clean.
-- [ ] 9.5 `cd frontend && npx tsc --noEmit` — clean.
-- [ ] 9.6 `cd frontend && npm test` — all tests pass; new tests included.
-- [ ] 9.7 Verify each new file is under the size limits (Python ≤ 400 lines, frontend ≤ 360 lines).
-- [ ] 9.8 Run the architecture-reviewer agent on the change set. Specifically check: pipeline step follows `RequestStep` pattern; AI calls use `run_structured_ai_call`; parallel block uses `FutureManager`; prompts are externalised (no inline AI prompt strings in Python); fail-fast on AI errors; no swallowed exceptions in handlers. Resolve all CRITICAL findings.
+- [x] 9. `cd backend && uv run ruff check src/` — clean.
+- [x] 9. `cd backend && uv run pyright src/` — no new errors.
+- [x] 9. `cd backend && uv run pytest tests/ -q` — all tests pass; coverage ≥ 95%.
+- [x] 9. `cd frontend && npm run lint` — clean.
+- [x] 9. `cd frontend && npx tsc --noEmit` — clean.
+- [x] 9. `cd frontend && npm test` — all tests pass; new tests included.
+- [x] 9. Verify each new file is under the size limits (Python ≤ 400 lines, frontend ≤ 360 lines).
+- [x] 9.8 Run the architecture-reviewer agent on the change set. Specifically check: pipeline step follows `RequestStep` pattern; AI calls use `run_structured_ai_call`; parallel block uses `FutureManager`; prompts are externalised (no inline AI prompt strings in Python); fail-fast on AI errors; no swallowed exceptions in handlers. Resolve all CRITICAL findings.
 
 ## 10. Local dev / production parity verification
 

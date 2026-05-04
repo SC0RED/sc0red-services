@@ -10,6 +10,7 @@ import {
     PrintMethodologyAppendix,
     PrintOpportunityList,
     PrintRiskTable,
+    PrintStrategyMap,
     PrintValueChainList,
 } from '@/components/print'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
@@ -91,6 +92,8 @@ export default function PrintReport({ analysis, generatedDate }: PrintReportProp
             <PrintCover analysis={analysis} generatedDate={generatedDate} />
 
             <PrintExecutiveSummary summary={summary} />
+
+            {analysis.strategyMap ? <PrintStrategyMap strategyMap={analysis.strategyMap} /> : null}
 
             {topActions.length > 0 ? (
                 <section className="print-section print-section--break-before">

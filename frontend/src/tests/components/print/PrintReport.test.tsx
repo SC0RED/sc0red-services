@@ -136,4 +136,78 @@ describe('PrintReport composition', () => {
         expect(screen.getByText('EBITDA Impact Model')).toBeInTheDocument()
         expect(screen.getByText('Value Chain Analysis')).toBeInTheDocument()
     })
+
+    it('omits the Strategy Map section when analysis.strategyMap is missing', () => {
+        // Default fixture has no strategyMap — confirms legacy analyses
+        // render the rest of the PDF cleanly without the new section.
+        render(<PrintReport analysis={fullAnalysis} generatedDate="May 1, 2026" />)
+        expect(screen.queryByText('Strategy Map')).not.toBeInTheDocument()
+    })
+
+    it('renders the Strategy Map section when analysis.strategyMap is populated', () => {
+        const strategyMap: AnalysisData['strategyMap'] = {
+            vision: { statement: 'V', synthesised: false, rationale: 'r' },
+            mission: { statement: 'M', synthesised: false, rationale: 'r' },
+            valueProposition: {
+                primary: 'customer_intimacy',
+                secondary: null,
+                rationale: 'Public materials emphasise associate friendliness.',
+            },
+            strategicPriorities: [
+                { name: 'Grow Through X', result: 'best-in-class X' },
+                { name: 'Deliver Y', result: 'industry-leading Y perception' },
+            ],
+            financial: {
+                objectives: [
+                    {
+                        id: 'F1',
+                        title: 'Grow revenue',
+                        definition:
+                            'We will grow revenue across markets through deepened engagement and adjacent expansion driving year-over-year growth.',
+                        category: 'revenue_growth',
+                        confidence: 'HIGH',
+                    },
+                ] as never, // truncated for brevity; full schema isn't required for this assertion
+            } as never,
+            customer: { objectives: [] as never } as never,
+            internalProcesses: { themes: [] as never } as never,
+            organizationalCapacity: {
+                people: {
+                    id: 'O.P',
+                    title: 'p',
+                    definition: 'pdef pdef pdef pdef pdef pdef pdef pdef pdef pdef pdef pdef',
+                    confidence: 'MEDIUM',
+                },
+                technology: {
+                    id: 'O.T',
+                    title: 't',
+                    definition: 'tdef tdef tdef tdef tdef tdef tdef tdef tdef tdef tdef tdef',
+                    confidence: 'MEDIUM',
+                },
+                culture: {
+                    id: 'O.C',
+                    title: 'c',
+                    definition: 'cdef cdef cdef cdef cdef cdef cdef cdef cdef cdef cdef cdef',
+                    confidence: 'LOW',
+                },
+            },
+            arrows: [],
+            whatsMissing: [
+                {
+                    id: 'G1',
+                    title: 'Cultural commitments not published',
+                    description:
+                        'Public materials reference associate ownership but do not articulate specific values.',
+                    deepDiveFraming:
+                        'A Vector Advisory deep-dive would interview leadership to articulate the working culture.',
+                },
+            ],
+            coreValues: { values: ['a', 'b', 'c'], synthesised: true, rationale: 'r' },
+        }
+        render(<PrintReport analysis={{ ...fullAnalysis, strategyMap }} generatedDate="May 1, 2026" />)
+        expect(screen.getByText('Strategy Map')).toBeInTheDocument()
+        // Spot-check that the deep-dive framing is the print-only "Strategic gaps" header,
+        // not the screen "What's Missing?" headline.
+        expect(screen.getByText('Strategic gaps to address')).toBeInTheDocument()
+    })
 })

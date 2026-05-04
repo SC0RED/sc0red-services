@@ -13,6 +13,7 @@ performance pattern the parent loader uses.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -75,25 +76,33 @@ def compose_system_prompt() -> str:
     )
 
 
+_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+"""Pattern matching a `{key}` placeholder. Only single-token names
+qualify — JSON braces (`{ "field": …}` with whitespace inside) are
+ignored, which lets us paste JSON examples directly into templates."""
+
+
 def render_template(name: str, context: dict[str, Any]) -> str:
     """Load a per-step template and substitute context values.
 
-    Templates use Python `str.format` placeholders. Missing keys in
-    `context` are replaced with the literal string ``(unknown)`` rather
-    than raising — early-stage steps don't have every context variable
-    populated yet (e.g. Step 1 doesn't have a value_proposition).
+    Templates contain `{key_name}` placeholders that get replaced
+    with `context[key_name]`. Missing keys are replaced with the
+    literal string ``(unknown)`` rather than raising — early-stage
+    steps don't have every context variable populated yet (e.g.
+    Step 1 doesn't have a value_proposition).
+
+    Note: we use a regex-based substitution rather than
+    `str.format_map` so JSON examples in the template (which contain
+    literal `{` and `}`) don't collide with the placeholder syntax.
+    Only `{single_token_name}` patterns are recognised; JSON braces
+    with whitespace or nested content are left untouched.
     """
     template = load_template(name)
-    return template.format_map(_SafeFormatDict(context))
 
-
-class _SafeFormatDict(dict[str, Any]):
-    """Dict that returns ``(unknown)`` for missing keys.
-
-    Used during template rendering. Returning a placeholder rather
-    than raising KeyError lets us reuse the same template across
-    steps with partial context.
-    """
-
-    def __missing__(self, key: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key in context:
+            return str(context[key])
         return "(unknown)"
+
+    return _PLACEHOLDER_RE.sub(replace, template)

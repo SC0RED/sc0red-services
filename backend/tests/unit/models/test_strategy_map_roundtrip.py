@@ -1,0 +1,347 @@
+"""Round-trip serialisation tests for the StrategyMap pydantic model.
+
+Verifies that a StrategyMap survives the persistence + read path:
+  StrategyMap → model_dump(by_alias=True) → json.dumps → json.loads → StrategyMap
+
+This is the path used by:
+  - PersistResults (writes the by_alias dump to DynamoDB)
+  - analysis_payload.build_analysis_payload (reads the JSON-decoded
+    payload back and forwards it to the API as `strategyMap`)
+
+The aliases are critical here. Several fields use Pydantic aliases
+to translate between the snake_case Python identifiers and the
+camelCase JSON wire shape:
+
+  - StrategyMap.value_proposition          ↔ "valueProposition"
+  - StrategyMap.strategic_priorities       ↔ "strategicPriorities"
+  - StrategyMap.internal_processes         ↔ "internalProcesses"
+  - StrategyMap.organizational_capacity    ↔ "organizationalCapacity"
+  - StrategyMap.whats_missing              ↔ "whatsMissing"
+  - StrategyMap.core_values                ↔ "coreValues"
+  - Arrow.from_id                          ↔ "from"
+  - Arrow.to_id                            ↔ "to"
+  - Gap.deep_dive_framing                  ↔ "deepDiveFraming"
+  - Gap.related_objective_ids              ↔ "relatedObjectiveIds"
+
+A regression in any alias breaks the wire shape silently — JSON
+serialises with one name and a downstream consumer expects another.
+"""
+
+from __future__ import annotations
+
+import json
+
+from src.models.model_strategy_map import StrategyMap
+
+
+def _make_full_strategy_map_dict() -> dict:
+    """The camelCase wire shape that the AI generation chain produces."""
+    return {
+        "vision": {
+            "statement": "To be the most appetizing convenience retailer",
+            "synthesised": False,
+            "rationale": "Verbatim from public materials.",
+        },
+        "mission": {
+            "statement": "Provide convenient food and fuel to commuters.",
+            "synthesised": True,
+            "rationale": "Synthesised from store-locator content.",
+        },
+        "valueProposition": {
+            "primary": "customer_intimacy",
+            "secondary": None,
+            "rationale": "Public materials emphasise associate friendliness.",
+            "exemplar_company": "Wawa",
+        },
+        "strategicPriorities": [
+            {
+                "name": "Grow Through Foodservice",
+                "result": "Best-in-class food platform driving same-store growth.",
+            },
+            {
+                "name": "Deliver Convenience and Value",
+                "result": "Industry-leading customer perception of speed and value.",
+            },
+        ],
+        "financial": {
+            "objectives": [
+                {
+                    "id": "F1",
+                    "title": "Grow profitable revenue across markets",
+                    "definition": (
+                        "We will grow same-segment revenue by deepening engagement with "
+                        "current customers and entering adjacent markets, with year-over-"
+                        "year revenue growth as the primary measure of expansion success."
+                    ),
+                    "category": "revenue_growth",
+                    "confidence": "HIGH",
+                    "rationale_source": "EBITDA tree revenue branch.",
+                },
+                {
+                    "id": "F2",
+                    "title": "Drive operational efficiency",
+                    "definition": (
+                        "We will improve cost-to-serve metrics by automating routine "
+                        "operations, reducing waste in supply chain, and optimising "
+                        "labour scheduling against demand patterns."
+                    ),
+                    "category": "productivity",
+                    "confidence": "MEDIUM",
+                },
+                {
+                    "id": "F3",
+                    "title": "Maximise return on invested capital",
+                    "definition": (
+                        "We will allocate capital toward the highest-return store "
+                        "formats and geographies, retiring or repositioning stores "
+                        "below threshold IRR within a defined refresh cycle."
+                    ),
+                    "category": "productivity",
+                    "confidence": "MEDIUM",
+                },
+            ]
+        },
+        "customer": {
+            "objectives": [
+                {
+                    "id": "C1",
+                    "title": "Offer me fresh products in a friendly environment",
+                    "definition": (
+                        "I rely on this brand for fast, friendly service and quality "
+                        "products. The associates treat me as a regular."
+                    ),
+                    "panel": "consumer",
+                    "confidence": "HIGH",
+                },
+                {
+                    "id": "C2",
+                    "title": "Recognise my loyalty",
+                    "definition": (
+                        "I expect the loyalty programme to acknowledge my repeated "
+                        "visits with meaningful rewards I actually use."
+                    ),
+                    "panel": "consumer",
+                    "confidence": "MEDIUM",
+                },
+                {
+                    "id": "C3",
+                    "title": "Make my visit fast and convenient",
+                    "definition": (
+                        "I want to get in, get what I need, and get out efficiently "
+                        "without friction at checkout."
+                    ),
+                    "panel": "consumer",
+                    "confidence": "HIGH",
+                },
+            ]
+        },
+        "internalProcesses": {
+            "themes": [
+                {
+                    "name": "Grow Through Foodservice",
+                    "supports_financial_objectives": ["F1"],
+                    "objectives": [
+                        {
+                            "id": "I1.1",
+                            "title": "Develop signature food and beverage offers",
+                            "definition": (
+                                "We will create and improve fresh food and beverage "
+                                "offers that differentiate the brand and grow basket "
+                                "size with regular product platform reviews."
+                            ),
+                            "category": "innovation",
+                            "confidence": "HIGH",
+                        }
+                    ],
+                },
+                {
+                    "name": "Deliver Convenience and Value",
+                    "supports_financial_objectives": ["F1", "F2"],
+                    "objectives": [
+                        {
+                            "id": "I2.1",
+                            "title": "Improve end-to-end process throughput",
+                            "definition": (
+                                "We will continuously improve the throughput, quality, "
+                                "and cost of our end-to-end processes through a "
+                                "disciplined data-driven approach."
+                            ),
+                            "category": "operational_excellence",
+                            "confidence": "HIGH",
+                        }
+                    ],
+                },
+            ]
+        },
+        "organizationalCapacity": {
+            "people": {
+                "id": "O.P",
+                "title": "Develop our associates as brand ambassadors",
+                "definition": (
+                    "We will invest in associate development through structured training, "
+                    "succession planning, and a culture of ownership."
+                ),
+                "confidence": "MEDIUM",
+            },
+            "technology": {
+                "id": "O.T",
+                "title": "Deliver reliable systems and data-driven insight",
+                "definition": (
+                    "We will provide consistently reliable technical products and support "
+                    "services, with valuable insights for forward-looking decisions."
+                ),
+                "confidence": "MEDIUM",
+            },
+            "culture": {
+                "id": "O.C",
+                "title": "Live our values in every interaction",
+                "definition": (
+                    "Our values are the foundation of how we work. We will live them "
+                    "consistently across the organisation."
+                ),
+                "confidence": "LOW",
+            },
+        },
+        "arrows": [
+            {
+                "from": "O.P",
+                "to": "I1.1",
+                "hypothesis": (
+                    "Investing in associate development enables higher-quality "
+                    "execution of new food platforms."
+                ),
+            },
+            {
+                "from": "I1.1",
+                "to": "C1",
+                "hypothesis": (
+                    "Signature food platforms drive the customer perception of "
+                    "fresh, friendly experience."
+                ),
+            },
+            {
+                "from": "C1",
+                "to": "F1",
+                "hypothesis": (
+                    "A delighted, returning customer drives same-store revenue "
+                    "growth through frequency and basket size."
+                ),
+            },
+            {
+                "from": "I2.1",
+                "to": "F2",
+                "hypothesis": (
+                    "Process improvements lower cost-to-serve, contributing "
+                    "directly to operational efficiency."
+                ),
+            },
+            {
+                "from": "O.T",
+                "to": "I2.1",
+                "hypothesis": (
+                    "Reliable systems and data-driven insight enable the "
+                    "disciplined process improvement programme."
+                ),
+            },
+        ],
+        "whatsMissing": [
+            {
+                "id": "G1",
+                "title": "Cultural commitments not explicitly published",
+                "description": (
+                    "Public materials reference associate ownership but do not "
+                    "articulate specific values or expected behaviours."
+                ),
+                "deepDiveFraming": (
+                    "A Vector Advisory deep-dive would interview leadership and "
+                    "frontline associates to articulate the working culture."
+                ),
+                "relatedObjectiveIds": ["O.C"],
+            },
+            {
+                "id": "G2",
+                "title": "Channel-relationship strategy unclear",
+                "description": (
+                    "The company sells through multiple channels but the strategic "
+                    "balance is not visible in public materials."
+                ),
+                "deepDiveFraming": (
+                    "A Vector Advisory deep-dive would map channel economics and "
+                    "design Customer-perspective objectives for each."
+                ),
+            },
+        ],
+        "coreValues": {
+            "values": ["Care for customers", "Respect for associates", "Continuous improvement"],
+            "synthesised": True,
+            "rationale": "Synthesised from public materials.",
+        },
+    }
+
+
+class TestStrategyMapRoundtrip:
+    def test_roundtrip_preserves_full_payload(self):
+        """The AI's camelCase JSON survives parse → dump → parse without loss."""
+        payload = _make_full_strategy_map_dict()
+        # Parse the camelCase wire shape (matches what the AI produces).
+        sm = StrategyMap.model_validate(payload)
+        # Dump back to camelCase JSON (matches what gets persisted).
+        dumped = sm.model_dump(by_alias=True)
+        # Re-parse and confirm the structure is stable.
+        sm_again = StrategyMap.model_validate(dumped)
+        assert sm_again.model_dump(by_alias=True) == dumped
+
+    def test_top_level_aliases_use_camel_case(self):
+        sm = StrategyMap.model_validate(_make_full_strategy_map_dict())
+        dumped = sm.model_dump(by_alias=True)
+        # These must be camelCase in the persisted shape.
+        for required in (
+            "valueProposition",
+            "strategicPriorities",
+            "internalProcesses",
+            "organizationalCapacity",
+            "whatsMissing",
+            "coreValues",
+        ):
+            assert required in dumped
+        # Snake_case forms must NOT appear (would break the frontend type).
+        for forbidden in (
+            "value_proposition",
+            "strategic_priorities",
+            "internal_processes",
+            "organizational_capacity",
+            "whats_missing",
+            "core_values",
+        ):
+            assert forbidden not in dumped
+
+    def test_arrow_uses_from_to_keys(self):
+        """Arrow's `from_id`/`to_id` aliases must serialise as `from`/`to`."""
+        sm = StrategyMap.model_validate(_make_full_strategy_map_dict())
+        dumped = sm.model_dump(by_alias=True)
+        for arrow in dumped["arrows"]:
+            assert "from" in arrow
+            assert "to" in arrow
+            assert "from_id" not in arrow
+            assert "to_id" not in arrow
+
+    def test_gap_uses_camel_case_aliases(self):
+        sm = StrategyMap.model_validate(_make_full_strategy_map_dict())
+        dumped = sm.model_dump(by_alias=True)
+        for gap in dumped["whatsMissing"]:
+            assert "deepDiveFraming" in gap
+            assert "deep_dive_framing" not in gap
+            if "relatedObjectiveIds" in gap or "related_objective_ids" in gap:
+                # Either the aliased form is present, or neither.
+                assert "relatedObjectiveIds" in gap
+                assert "related_objective_ids" not in gap
+
+    def test_json_dumps_loads_roundtrip(self):
+        """The full DynamoDB persistence path: dump → json.dumps → json.loads → re-validate."""
+        payload = _make_full_strategy_map_dict()
+        sm = StrategyMap.model_validate(payload)
+        dumped = sm.model_dump(by_alias=True)
+        wire = json.dumps(dumped)
+        decoded = json.loads(wire)
+        re_validated = StrategyMap.model_validate(decoded)
+        assert re_validated.model_dump(by_alias=True) == dumped

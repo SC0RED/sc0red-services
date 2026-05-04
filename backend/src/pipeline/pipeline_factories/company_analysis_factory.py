@@ -1,8 +1,9 @@
 """Company analysis pipeline factory.
 
-Wires the 5-step single company analysis pipeline:
-ScrapeAndResolve → ParallelProfileRiskAndIdeation →
-DetailOpportunities → ComputeEbitdaTree → PersistResults
+Wires the 7-step single-company analysis pipeline:
+ScrapeAndResolveURL → ParallelProfileRiskAndIdeation →
+DetailOpportunities → ComputeEbitdaTree → ComputeValueChain →
+GenerateStrategyMap → PersistResults
 """
 
 from __future__ import annotations
