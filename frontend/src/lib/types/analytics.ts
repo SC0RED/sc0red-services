@@ -11,19 +11,31 @@
 
 export const ANALYTICS_VERSION = '1'
 
+/*
+ * Strategy-map deep-dive CTA event types.
+ *
+ *   sc0red_cta_rendered_strategy_map — fires on component mount
+ *     (the CTA is always-visible below the strategy map).
+ *   sc0red_cta_clicked_strategy_map  — fires on the contact-link click.
+ *
+ * Both are web-source. The backend model_validator enforces
+ * active_lever_filter=null for these (no lever-filter concept on the
+ * strategy-map surface; non-null would corrupt cross-surface funnel
+ * queries that join on event_type). Callers MUST pass
+ * activeLeverFilter as null.
+ *
+ * IMPORTANT — keep the union body below comment-free:
+ * scripts/check_analytics_type_parity.py extracts string literals from
+ * the union with a regex that does NOT understand // line comments.
+ * Apostrophes inside such a comment (e.g. "backend's") look like
+ * opening quotes to the parser and pull garbage between them into the
+ * extracted set, breaking parity. Put narrative here, members below.
+ */
 export type AnalyticsEventType =
     | 'sc0red_cta_banner_expanded'
     | 'sc0red_cta_banner_collapsed'
     | 'sc0red_cta_clicked'
     | 'sc0red_cta_rendered_in_pdf'
-    // Strategy-map deep-dive CTA — `_rendered_strategy_map` fires on
-    // component mount (the CTA is always-visible below the map),
-    // `_clicked_strategy_map` fires on the contact-link click. Both
-    // are web-source. The backend's model_validator enforces
-    // `active_lever_filter=null` for these — there is no lever-filter
-    // concept on the strategy-map surface, and a non-null filter
-    // would corrupt funnel queries that join across surfaces on
-    // event_type. Callers MUST pass `activeLeverFilter: null`.
     | 'sc0red_cta_rendered_strategy_map'
     | 'sc0red_cta_clicked_strategy_map'
 
