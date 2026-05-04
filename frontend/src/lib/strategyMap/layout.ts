@@ -94,20 +94,32 @@ export interface StrategyMapGraph {
 }
 
 // ── Layout constants ──────────────────────────────────────────────────────
+//
+// Slots stack VERTICALLY within a column (canonical K&N pattern: when a
+// theme has multiple objectives in one perspective, they're listed
+// downward inside the band). Earlier versions stacked horizontally with
+// a per-slot x-offset, but with `CHIP_WIDTH = 220` and `COLUMN_WIDTH =
+// 280` the slot-1 chip would extend past the column boundary and visually
+// overlap the next column's chip — exactly the production bug surfaced
+// in the screenshot. Vertical stacking keeps each column's chips inside
+// their column at the cost of a slightly taller band.
 
 /** Vertical distance between perspective bands. */
-export const BAND_HEIGHT = 160
+export const BAND_HEIGHT = 180
 
 /** Horizontal distance between theme columns. */
 export const COLUMN_WIDTH = 280
 
-/** Horizontal width of one chip slot within a column. */
-export const SLOT_WIDTH = 240
+/**
+ * Vertical offset between successive slots in the same (band, column).
+ * Sized to fit two slots cleanly inside `BAND_HEIGHT` with a small gap.
+ * Three-slot columns (rare) extend slightly past the band line — the
+ * dashed band-divider absorbs the visual overflow without crowding
+ * adjacent bands' chips.
+ */
+export const SLOT_Y_OFFSET = 76
 
-/** Gap between chips that share a column (e.g. multiple I* in one theme). */
-export const SLOT_GAP = 16
-
-/** Vertical offset within a band (gives the chip room above/below the band line). */
+/** Vertical offset within a band (gives the chip room above the band line). */
 const BAND_PADDING = 24
 
 /**
@@ -407,15 +419,17 @@ class SlotCounter {
 function buildNode(placement: ChipPlacement, totalColumns: number): Node<StrategyMapNodeData> {
     const row = PERSPECTIVE_ROW[placement.data.perspective]
     const baseX = columnBaseX(placement.column, totalColumns)
-    const slotOffset = placement.slot * (SLOT_WIDTH + SLOT_GAP)
+    // Slots stack vertically inside their (band, column) — see the
+    // SLOT_Y_OFFSET docs and the layout-constants section comment.
+    const slotYOffset = placement.slot * SLOT_Y_OFFSET
 
     return {
         id: placement.data.objectiveId,
         type: 'strategyMap',
         // (x, y) is the top-left of the node.
         position: {
-            x: baseX + slotOffset,
-            y: row * BAND_HEIGHT + BAND_PADDING,
+            x: baseX,
+            y: row * BAND_HEIGHT + BAND_PADDING + slotYOffset,
         },
         // Mark centre-lane chips so the renderer can apply a visual marker.
         // `column === null` is the canonical signal — see ChipPlacement.
@@ -425,11 +439,35 @@ function buildNode(placement: ChipPlacement, totalColumns: number): Node<Strateg
     }
 }
 
-/** Pixel `x` of column 0's first slot. Centre lane sits between columns. */
+/**
+ * Pixel `x` of a column's chips.
+ *
+ * Centre-lane chips need to sit BETWEEN two real columns so they don't
+ * collide with a regular column's chip position. The geometric midpoint
+ * `((totalColumns - 1) / 2) * COLUMN_WIDTH` works for even
+ * `totalColumns` (lands cleanly between the two middle columns) but
+ * coincides with a real column when `totalColumns` is odd — e.g. for
+ * three themes the formula yields `COLUMN_WIDTH`, which IS column 1's
+ * position, so a centre-lane chip stacks atop column 1's chip. That was
+ * the production bug the screenshot surfaced. For odd column counts we
+ * offset to between columns `floor(N/2) - 1` and `floor(N/2)` instead.
+ */
 function columnBaseX(column: number | null, totalColumns: number): number {
     if (column === null) {
-        // Centre lane — midpoint of the canvas's column range.
-        return ((totalColumns - 1) / 2) * COLUMN_WIDTH
+        if (totalColumns <= 1) {
+            // Single-column maps — centre is the same as that column;
+            // slot-y stacking handles visual separation.
+            return 0
+        }
+        if (totalColumns % 2 === 0) {
+            // Even N: the geometric midpoint sits cleanly between columns.
+            return ((totalColumns - 1) / 2) * COLUMN_WIDTH
+        }
+        // Odd N: offset to between columns `floor(N/2) - 1` and
+        // `floor(N/2)` so the centre lane never lands on a real column.
+        // For N=3 this is x = COLUMN_WIDTH/2 (between cols 0 and 1);
+        // for N=5 this is x = 1.5 * COLUMN_WIDTH (between cols 1 and 2).
+        return Math.floor(totalColumns / 2) * COLUMN_WIDTH - COLUMN_WIDTH / 2
     }
     return column * COLUMN_WIDTH
 }

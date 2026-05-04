@@ -1,6 +1,28 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
+
+// Mock @xyflow/react before importing the component so the `NodeToolbar`
+// passthrough is in place when `StrategyMapNode` is loaded.
+//
+// Why mock at all: in production `NodeToolbar` portals its children
+// through React Flow's internal store, which only contains nodes that
+// React Flow itself has rendered (via `<ReactFlow nodes={[...]}/>`).
+// Standalone test renders never populate that store, so the production
+// `NodeToolbar` returns null unconditionally — making it impossible to
+// assert tooltip content without spinning up a full ReactFlow canvas
+// (which jsdom can't lay out — see EbitdaTree.test.tsx for the same
+// constraint). The mock renders children as a plain `<div>` when
+// `isVisible` is true, restoring testability.
+vi.mock('@xyflow/react', async () => {
+    const actual = await vi.importActual<typeof import('@xyflow/react')>('@xyflow/react')
+    return {
+        ...actual,
+        NodeToolbar: ({ isVisible, children }: { isVisible?: boolean; children?: ReactNode }) =>
+            isVisible ? <>{children}</> : null,
+    }
+})
+
 import { ReactFlowProvider } from '@xyflow/react'
 
 import StrategyMapNode from '@/components/strategy-map/StrategyMapNode'
