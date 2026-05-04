@@ -8,6 +8,7 @@
  * legitimate consumer; non-print pages should never import from here.
  */
 export { default as PrintCover } from './PrintCover'
+export { default as PrintStrategyMap } from './PrintStrategyMap'
 export { default as PrintExecutiveSummary } from './PrintExecutiveSummary'
 export { default as PrintRiskTable } from './PrintRiskTable'
 export { default as PrintOpportunityCard } from './PrintOpportunityCard'

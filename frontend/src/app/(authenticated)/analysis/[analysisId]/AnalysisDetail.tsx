@@ -13,6 +13,7 @@ import AnalysisOverviewCards from '@/components/analysis/AnalysisOverviewCards'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
 import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
+import { DeepDiveCTA, StrategyMapView } from '@/components/strategy-map'
 import { LoadingSpinner } from '@/components/ui'
 import { getSc0redContactUrl } from '@/lib/config'
 import { useReanalyze } from '@/lib/hooks/useReanalyze'
@@ -104,6 +105,13 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             />
 
             <AnalysisOverviewCards data={data} />
+
+            {data.strategyMap ? (
+                <>
+                    <StrategyMapView strategyMap={data.strategyMap} />
+                    <DeepDiveCTA analysisId={analysisId} />
+                </>
+            ) : null}
 
             <TopActionsCallout actions={data.topActions ?? []} />
 

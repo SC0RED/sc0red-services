@@ -70,6 +70,9 @@ export interface AnalysisData {
     topActions?: string[]
     ebitdaTree?: EbitdaTree
     valueChain?: ValueChain
+    /** AI-generated Balanced Scorecard strategy map (Vector Advisory).
+     * Optional because legacy analyses pre-date this field. */
+    strategyMap?: StrategyMap
     documents?: DocumentInfo[]
     analyzedAt?: string
     error?: string
@@ -79,6 +82,130 @@ export interface AnalysisData {
     scanId?: string
     /** The PE-firm URL (or company URL for standalone) the parent scan was started from. */
     scanSourceUrl?: string
+}
+
+// ── Strategy Map ─────────────────────────────────────────────────────────
+//
+// Mirrors the JSON schema at
+// `backend/src/pipeline/prompts/strategy_map/schemas/strategy_map_output.json`
+// and the pydantic model at `backend/src/models/model_strategy_map.py`.
+// Backend serialises with `by_alias=True` so the wire shape is camelCase.
+
+/** Per-objective AI confidence in the inference. */
+export type ConfidenceMarker = 'HIGH' | 'MEDIUM' | 'LOW'
+
+export type ValueProposition =
+    | 'operational_excellence'
+    | 'customer_intimacy'
+    | 'product_leadership'
+    | 'hybrid'
+
+export interface ValuePropositionClassification {
+    primary: ValueProposition
+    /** Only populated when `primary === 'hybrid'`. */
+    secondary?: 'operational_excellence' | 'customer_intimacy' | 'product_leadership' | null
+    rationale: string
+    exemplar_company?: string
+}
+
+export interface VisionStatement {
+    statement: string
+    synthesised: boolean
+    rationale: string
+}
+
+export interface MissionStatement {
+    statement: string
+    synthesised: boolean
+    rationale: string
+}
+
+export interface StrategicPriority {
+    name: string
+    result: string
+}
+
+export interface FinancialObjective {
+    id: string
+    title: string
+    definition: string
+    category: 'revenue_growth' | 'productivity'
+    confidence: ConfidenceMarker
+    rationale_source?: string
+}
+
+export interface CustomerObjective {
+    id: string
+    /** First-person customer-voice quote (Vector house style).
+     * Renderer adds the surrounding quote marks. */
+    title: string
+    definition: string
+    panel: 'consumer' | 'channel' | 'partner'
+    confidence: ConfidenceMarker
+    rationale_source?: string
+}
+
+export interface InternalProcessObjective {
+    id: string
+    title: string
+    definition: string
+    category: 'innovation' | 'customer_management' | 'operational_excellence' | 'citizenship'
+    confidence: ConfidenceMarker
+    rationale_source?: string
+}
+
+export interface InternalProcessTheme {
+    name: string
+    supports_financial_objectives: string[]
+    objectives: InternalProcessObjective[]
+}
+
+export interface CapacityObjective {
+    id: string
+    title: string
+    definition: string
+    confidence: ConfidenceMarker
+    rationale_source?: string
+}
+
+export interface OrganizationalCapacityPerspective {
+    people: CapacityObjective
+    technology: CapacityObjective
+    culture: CapacityObjective
+}
+
+export interface Arrow {
+    from: string
+    to: string
+    hypothesis: string
+}
+
+export interface Gap {
+    id: string
+    title: string
+    description: string
+    deepDiveFraming: string
+    relatedObjectiveIds?: string[]
+}
+
+export interface CoreValues {
+    values: string[]
+    synthesised: boolean
+    rationale: string
+}
+
+export interface StrategyMap {
+    vision: VisionStatement
+    mission: MissionStatement
+    valueProposition: ValuePropositionClassification
+    strategicPriorities: StrategicPriority[]
+    financial: { objectives: FinancialObjective[] }
+    customer: { objectives: CustomerObjective[] }
+    internalProcesses: { themes: InternalProcessTheme[] }
+    organizationalCapacity: OrganizationalCapacityPerspective
+    arrows: Arrow[]
+    whatsMissing: Gap[]
+    coreValues: CoreValues
 }
 
 export interface AnalysisItem {

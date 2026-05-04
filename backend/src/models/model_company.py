@@ -10,6 +10,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from src.models.model_strategy_map import (
+    StrategyMap,  # noqa: TC001  pydantic field annotation needs runtime resolution
+)
+
 
 class CompanyProfile(BaseModel):
     """Structured company profile extracted from website content."""
@@ -129,6 +133,7 @@ class Company(BaseModel):
     opportunity_result: OpportunityResult | None = None
     ebitda_tree: EbitdaTreeResult | None = None
     value_chain: ValueChainResult | None = None
+    strategy_map: StrategyMap | None = None
     error: str | None = None
     analyzed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

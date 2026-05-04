@@ -8,6 +8,7 @@ from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnal
 from src.pipeline.pipeline_steps.compute_ebitda_tree import ComputeEbitdaTree
 from src.pipeline.pipeline_steps.compute_value_chain import ComputeValueChain
 from src.pipeline.pipeline_steps.detail_opportunities import DetailOpportunities
+from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
@@ -24,16 +25,17 @@ class TestCompanyAnalysisFactory:
             request_id="r-1",
         )
 
-    def test_get_pipeline_returns_five_steps(self):
+    def test_get_pipeline_returns_seven_steps(self):
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
-        assert len(pipeline) == 6
+        assert len(pipeline) == 7
         assert isinstance(pipeline[0], ScrapeAndResolveURL)
         assert isinstance(pipeline[1], ParallelProfileRiskAndIdeation)
         assert isinstance(pipeline[2], DetailOpportunities)
         assert isinstance(pipeline[3], ComputeEbitdaTree)
         assert isinstance(pipeline[4], ComputeValueChain)
-        assert isinstance(pipeline[5], PersistResults)
+        assert isinstance(pipeline[5], GenerateStrategyMap)
+        assert isinstance(pipeline[6], PersistResults)
 
     def test_build_executor_wires_accessor(self):
         factory = self._make_factory()
@@ -64,5 +66,5 @@ class TestCompanyAnalysisFactory:
             assessment_repo=assessment_repo,
         )
         pipeline = factory.get_pipeline()
-        persist_step = pipeline[5]
+        persist_step = pipeline[6]
         assert isinstance(persist_step, PersistResults)
