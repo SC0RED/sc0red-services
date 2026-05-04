@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Handle, type NodeProps, Position, type Node } from '@xyflow/react'
+import { Handle, type NodeProps, NodeToolbar, Position, type Node } from '@xyflow/react'
 
 import type { ConfidenceMarker } from '@/lib/types/api'
 import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
@@ -28,6 +28,17 @@ import ConfidenceChip from './ConfidenceChip'
  *   - The literal HIGH / MEDIUM / LOW label via the existing
  *     `ConfidenceChip` component.
  *   - The `rationale_source` traceability note when the AI supplied one.
+ *
+ * The tooltip is rendered through React Flow's `NodeToolbar` primitive,
+ * which portals the content out of the canvas viewport into a top-level
+ * container. That solves two production bugs reported in the
+ * `fix/strategy-map-canvas-layout-bugs` change:
+ *   - Sibling chips below the hovered chip would render ON TOP of the
+ *     in-canvas tooltip (no z-index lift inside React Flow's per-node
+ *     stacking context).
+ *   - Long definitions on chips in the bottom band overflowed the
+ *     canvas's `overflow: hidden` and got clipped.
+ * The `NodeToolbar` portal escapes both issues at once.
  */
 
 const CHIP_WIDTH = 220
@@ -48,7 +59,7 @@ const PERSPECTIVE_ACCENT: Record<StrategyMapNodeData['perspective'], string> = {
     capacity: 'var(--text-secondary)',
 }
 
-export default function StrategyMapNode({ data, selected }: NodeProps<Node<StrategyMapNodeData>>) {
+export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<StrategyMapNodeData>>) {
     const [hovered, setHovered] = useState(false)
     // Treat React Flow's `selected` (set on tap-to-focus) as equivalent to
     // hover so touch users see the same tooltip without a second tap.
@@ -179,23 +190,27 @@ export default function StrategyMapNode({ data, selected }: NodeProps<Node<Strat
                 style={{ background: accent, border: 'none', width: 6, height: 6 }}
             />
 
-            {showDetail ? (
+            {/*
+             * NodeToolbar portals its content outside the React Flow viewport
+             * via a top-level container, so the tooltip
+             *   (a) is never clipped by the canvas's `overflow: hidden`
+             *       (long definitions on bottom-band chips don't get cut),
+             *   (b) is never covered by sibling chips' DOM order
+             *       (each toolbar lifts onto its own stacking context).
+             * `position={Position.Bottom}` puts the panel below the chip;
+             * `offset={8}` matches the previous in-chip `marginTop`.
+             */}
+            <NodeToolbar nodeId={id} isVisible={showDetail} position={Position.Bottom} offset={8}>
                 <div
                     id={tooltipId}
                     role="tooltip"
                     style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        marginTop: '8px',
                         width: 280,
                         padding: '12px 14px',
                         background: 'var(--bg-surface-3)',
                         border: '1px solid var(--border-strong)',
                         borderRadius: '8px',
                         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                        zIndex: 50,
                         backdropFilter: 'blur(8px)',
                     }}
                 >
@@ -247,7 +262,7 @@ export default function StrategyMapNode({ data, selected }: NodeProps<Node<Strat
                         </p>
                     ) : null}
                 </div>
-            ) : null}
+            </NodeToolbar>
         </div>
     )
 }

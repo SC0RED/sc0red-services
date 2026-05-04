@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { BAND_HEIGHT, buildStrategyMapGraph } from '@/lib/strategyMap/layout'
+import { BAND_HEIGHT, COLUMN_WIDTH, SLOT_Y_OFFSET, buildStrategyMapGraph } from '@/lib/strategyMap/layout'
 import type { StrategyMap } from '@/lib/types/api'
 
 import { fullStrategyMap } from '@/tests/components/strategy-map/_fixtures'
@@ -298,5 +298,147 @@ describe('buildStrategyMapGraph — degenerate inputs', () => {
         // Customers fall back to the centre lane (no arrows).
         const xC1 = xOf(graph, 'C1')
         expect(xC1).toBeGreaterThan(xOf(graph, 'F1'))
+    })
+})
+
+// ── Regression tests for bugs surfaced in production screenshot ───────────
+
+describe('buildStrategyMapGraph — vertical slot stacking (production bug regression)', () => {
+    /**
+     * Earlier versions stacked slots horizontally with a per-slot x-offset
+     * (slot N at x = column*COLUMN_WIDTH + N * (SLOT_WIDTH + SLOT_GAP)).
+     * With CHIP_WIDTH=220 and COLUMN_WIDTH=280 the slot-1 chip extended
+     * past the column boundary and overlapped the next column's chip
+     * visually. Fixed by stacking slots vertically inside the band
+     * (y += slot * SLOT_Y_OFFSET).
+     *
+     * The fixture's themes have one IP objective each, so this test
+     * synthesises a multi-objective theme to exercise the path.
+     */
+    it('stacks slot-1 chips below slot-0 chips at the same x (not to the right)', () => {
+        const multiSlotMap: StrategyMap = {
+            ...fullStrategyMap,
+            internalProcesses: {
+                themes: [
+                    {
+                        ...fullStrategyMap.internalProcesses.themes[0],
+                        objectives: [
+                            ...fullStrategyMap.internalProcesses.themes[0].objectives,
+                            {
+                                id: 'I1.2',
+                                title: 'Second objective in the same theme',
+                                definition:
+                                    'Forced into slot 1 of theme 0 to exercise the vertical-stacking layout path.',
+                                category: 'innovation',
+                                confidence: 'MEDIUM',
+                            },
+                        ],
+                    },
+                    fullStrategyMap.internalProcesses.themes[1],
+                ],
+            },
+        }
+        const graph = buildStrategyMapGraph(multiSlotMap)
+        // I1.1 (slot 0) and I1.2 (slot 1) MUST share the same x — no
+        // horizontal overflow into theme 1's column.
+        expect(xOf(graph, 'I1.2')).toBe(xOf(graph, 'I1.1'))
+        // I1.2 sits one slot below I1.1.
+        expect(yOf(graph, 'I1.2')).toBe(yOf(graph, 'I1.1') + SLOT_Y_OFFSET)
+    })
+})
+
+describe('buildStrategyMapGraph — centre-lane never collides with a real column', () => {
+    /**
+     * Production screenshot: a 3-theme strategy map placed a centre-lane
+     * customer chip (C2) at x = COLUMN_WIDTH = 280, which is exactly
+     * column 1's position — the chip stacked behind C4 (also column 1).
+     * Fixed by offsetting the centre lane to a between-column position
+     * when totalColumns is odd.
+     */
+    it('never coincides with a column position for any reasonable column count', () => {
+        // Walk 1..6 themes and assert centre-lane x never equals any
+        // real column's x.
+        for (let totalColumns = 2; totalColumns <= 6; totalColumns++) {
+            const themes = Array.from({ length: totalColumns }, (_, i) => ({
+                name: `Theme ${i + 1}`,
+                supports_financial_objectives: ['F1'],
+                objectives: [
+                    {
+                        id: `I${i + 1}.1`,
+                        title: `Theme-${i + 1} objective`,
+                        definition: 'Long enough definition string to satisfy any min-length constraints.',
+                        category: 'innovation' as const,
+                        confidence: 'MEDIUM' as const,
+                    },
+                ],
+            }))
+            const map: StrategyMap = {
+                ...fullStrategyMap,
+                strategicPriorities: themes.map((t) => ({
+                    name: t.name,
+                    result: 'Some result string long enough to satisfy validation.',
+                })),
+                internalProcesses: { themes },
+                financial: {
+                    objectives: [
+                        // F2 has no theme support → centre lane.
+                        ...fullStrategyMap.financial.objectives,
+                    ],
+                },
+            }
+            const graph = buildStrategyMapGraph(map)
+            const xF3 = xOf(graph, 'F3') // F3 is in shared lane in fixture
+            for (let column = 0; column < totalColumns; column++) {
+                expect(
+                    xF3,
+                    `centre-lane collided with column ${column} for totalColumns=${totalColumns}`
+                ).not.toBe(column * COLUMN_WIDTH)
+            }
+        }
+    })
+
+    it('places centre lane between two real columns for 3-theme analyses (production bug)', () => {
+        const threeThemeMap: StrategyMap = {
+            ...fullStrategyMap,
+            strategicPriorities: [
+                { name: 'Priority A', result: 'A long enough result string for validation.' },
+                { name: 'Priority B', result: 'A long enough result string for validation.' },
+                { name: 'Priority C', result: 'A long enough result string for validation.' },
+            ],
+            internalProcesses: {
+                themes: [
+                    {
+                        ...fullStrategyMap.internalProcesses.themes[0],
+                        supports_financial_objectives: ['F1'],
+                    },
+                    {
+                        ...fullStrategyMap.internalProcesses.themes[1],
+                        supports_financial_objectives: ['F2'],
+                    },
+                    {
+                        name: 'Theme 3',
+                        supports_financial_objectives: [],
+                        objectives: [
+                            {
+                                id: 'I3.1',
+                                title: 'Theme 3 objective',
+                                definition:
+                                    'Long enough definition string to satisfy any min-length constraints.',
+                                category: 'innovation',
+                                confidence: 'MEDIUM',
+                            },
+                        ],
+                    },
+                ],
+            },
+        }
+        const graph = buildStrategyMapGraph(threeThemeMap)
+        // F3 has no theme anchor → centre lane. Its x MUST NOT be the
+        // same as any column position for totalColumns=3.
+        const xF3 = xOf(graph, 'F3')
+        // Columns at 0, COLUMN_WIDTH, 2*COLUMN_WIDTH.
+        expect(xF3).not.toBe(0)
+        expect(xF3).not.toBe(COLUMN_WIDTH)
+        expect(xF3).not.toBe(2 * COLUMN_WIDTH)
     })
 })
