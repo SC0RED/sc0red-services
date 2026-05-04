@@ -40,7 +40,7 @@
         },
         "valueProposition": {
             "type": "object",
-            "required": ["primary", "rationale"],
+            "required": ["primary", "secondary", "rationale", "exemplar_company"],
             "additionalProperties": false,
             "properties": {
                 "primary": {
@@ -52,7 +52,7 @@
                     "enum": ["operational_excellence", "customer_intimacy", "product_leadership", null]
                 },
                 "rationale": { "type": "string", "minLength": 20, "maxLength": 600 },
-                "exemplar_company": { "type": "string", "minLength": 2, "maxLength": 100 }
+                "exemplar_company": { "type": ["string", "null"], "maxLength": 100 }
             }
         },
         "strategicPriorities": {
@@ -157,7 +157,7 @@
             "maxItems": 4,
             "items": {
                 "type": "object",
-                "required": ["id", "title", "description", "deepDiveFraming"],
+                "required": ["id", "title", "description", "deepDiveFraming", "relatedObjectiveIds"],
                 "additionalProperties": false,
                 "properties": {
                     "id": { "type": "string", "pattern": "^G[1-9]$" },
@@ -194,7 +194,7 @@
         },
         "financialObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "category", "confidence"],
+            "required": ["id", "title", "definition", "category", "confidence", "rationale_source"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^F[123]$" },
@@ -202,12 +202,12 @@
                 "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
                 "category": { "type": "string", "enum": ["revenue_growth", "productivity"] },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": "string", "minLength": 5, "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
             }
         },
         "customerObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "panel", "confidence"],
+            "required": ["id", "title", "definition", "panel", "confidence", "rationale_source"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^C[1-4]$" },
@@ -215,12 +215,12 @@
                 "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
                 "panel": { "type": "string", "enum": ["consumer", "channel", "partner"] },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": "string", "minLength": 5, "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
             }
         },
         "internalProcessObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "category", "confidence"],
+            "required": ["id", "title", "definition", "category", "confidence", "rationale_source"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^I[1-3]\\.[1-9]$" },
@@ -231,19 +231,19 @@
                     "enum": ["innovation", "customer_management", "operational_excellence", "citizenship"]
                 },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": "string", "minLength": 5, "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
             }
         },
         "capacityObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "confidence"],
+            "required": ["id", "title", "definition", "confidence", "rationale_source"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^O\\.[PTC]$" },
                 "title": { "type": "string", "minLength": 8, "maxLength": 200 },
                 "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": "string", "minLength": 5, "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
             }
         }
     }

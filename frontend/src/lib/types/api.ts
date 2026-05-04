@@ -105,7 +105,9 @@ export interface ValuePropositionClassification {
     /** Only populated when `primary === 'hybrid'`. */
     secondary?: 'operational_excellence' | 'customer_intimacy' | 'product_leadership' | null
     rationale: string
-    exemplar_company?: string
+    /** Brand exemplar (e.g. "Mobil"). Nullable on the wire — see
+     *  `rationale_source` doc for the OpenAI strict-mode rationale. */
+    exemplar_company?: string | null
 }
 
 export interface VisionStatement {
@@ -131,7 +133,10 @@ export interface FinancialObjective {
     definition: string
     category: 'revenue_growth' | 'productivity'
     confidence: ConfidenceMarker
-    rationale_source?: string
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
 }
 
 export interface CustomerObjective {
@@ -142,7 +147,10 @@ export interface CustomerObjective {
     definition: string
     panel: 'consumer' | 'channel' | 'partner'
     confidence: ConfidenceMarker
-    rationale_source?: string
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
 }
 
 export interface InternalProcessObjective {
@@ -151,7 +159,10 @@ export interface InternalProcessObjective {
     definition: string
     category: 'innovation' | 'customer_management' | 'operational_excellence' | 'citizenship'
     confidence: ConfidenceMarker
-    rationale_source?: string
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
 }
 
 export interface InternalProcessTheme {
@@ -165,7 +176,10 @@ export interface CapacityObjective {
     title: string
     definition: string
     confidence: ConfidenceMarker
-    rationale_source?: string
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
 }
 
 export interface OrganizationalCapacityPerspective {
