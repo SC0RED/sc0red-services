@@ -332,6 +332,41 @@ class DynamoDBAssessmentRepository:
             "summary": item.get("summary", ""),
         }
 
+    # ── Strategy Map operations ────────────────────────────────────────
+
+    def save_strategy_map(self, assessment_id: str, data: dict[str, Any]) -> None:
+        """Persist the AI-generated strategy map for the given assessment.
+
+        The full strategy map is JSON-encoded into a single `payload`
+        attribute. This keeps the persistence simple — the map is read
+        as one blob rather than reassembled from many sub-items. The
+        camelCase shape produced here is what the API returns directly
+        to the frontend (no further conversion in `analysis_payload`).
+        """
+        item = {
+            "pk": f"ASSESSMENT#{assessment_id}",
+            "sk": "STRATEGY_MAP",
+            "entity_type": "strategy_map",
+            "assessment_id": assessment_id,
+            "payload": json.dumps(data),
+        }
+        self._table.put_item(item)
+
+    def get_strategy_map(self, assessment_id: str) -> dict[str, Any] | None:
+        """Return the strategy map for the given assessment, or None if not found."""
+        item = self._table.get_item(
+            pk=f"ASSESSMENT#{assessment_id}",
+            sk="STRATEGY_MAP",
+        )
+        if not item:
+            return None
+
+        payload = item.get("payload", "{}")
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+
+        return payload
+
     # ── Document operations ────────────────────────────────────────────
 
     def save_document(self, assessment_id: str, document: dict[str, Any]) -> None:
@@ -386,12 +421,19 @@ class DynamoDBAssessmentRepository:
         return join_document_texts(texts)
 
     def delete_analysis_results(self, assessment_id: str) -> None:
-        """Delete risk scores, opportunities, and EBITDA tree but keep documents and metadata."""
+        """Delete generated analysis outputs while keeping docs and metadata.
+
+        Removes risk scores, opportunities, EBITDA tree, value chain,
+        and strategy map. Documents and metadata are preserved so that
+        a re-analysis can rebuild the analytical output around the
+        same uploaded context.
+        """
         items = self._table.query(pk=f"ASSESSMENT#{assessment_id}")
+        analysis_prefixes = ("RISK#", "OPP#", "EBITDA_TREE", "VALUE_CHAIN", "STRATEGY_MAP")
         keys_to_delete = [
             {"pk": item["pk"], "sk": item["sk"]}
             for item in items
-            if item["sk"].startswith(("RISK#", "OPP#", "EBITDA_TREE"))
+            if item["sk"].startswith(analysis_prefixes)
         ]
         if keys_to_delete:
             self._table.batch_delete(keys_to_delete)

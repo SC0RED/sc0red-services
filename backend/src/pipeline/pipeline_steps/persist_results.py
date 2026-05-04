@@ -149,5 +149,16 @@ class PersistResults(RequestStep):
                 },
             )
 
+        # Persist the AI-generated Balanced Scorecard strategy map.
+        # Serialised by Pydantic with by_alias=True so the on-disk +
+        # API-visible payload uses camelCase keys (matching the JSON
+        # schema and the frontend `AnalysisData.strategyMap` shape).
+        strategy_map = company.strategy_map
+        if strategy_map and assessment_id:
+            self._assessment_repo.save_strategy_map(
+                assessment_id,
+                strategy_map.model_dump(by_alias=True),
+            )
+
         self.request_executor.add_details(timer.to_details())
         self.request_executor.mark_question_complete("persist_results")
