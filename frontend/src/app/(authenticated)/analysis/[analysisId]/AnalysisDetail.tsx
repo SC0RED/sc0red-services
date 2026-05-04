@@ -104,14 +104,22 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 onExportCsv={() => exportAnalysisDetailCsv(data)}
             />
 
+            {/* Deep-dive CTA above the fold for every analysis that has a
+                strategy map. Per the redesign-strategy-map-graphical change
+                (PR #239 follow-up), this banner used to render below the
+                strategy map and `WhatsMissingPanel`, but the section was
+                tall enough that the CTA was rarely visible without
+                scrolling. Hoisting it here makes the conversion affordance
+                visible on every page load. The `_rendered_strategy_map`
+                analytics event semantic relaxes from "user saw the map"
+                to "page with a strategy map loaded" — accepted in v1; see
+                openspec/changes/redesign-strategy-map-graphical/design.md
+                decision D6 + the matching task 10.2 follow-up. */}
+            {data.strategyMap ? <DeepDiveCTA analysisId={analysisId} /> : null}
+
             <AnalysisOverviewCards data={data} />
 
-            {data.strategyMap ? (
-                <>
-                    <StrategyMapView strategyMap={data.strategyMap} />
-                    <DeepDiveCTA analysisId={analysisId} />
-                </>
-            ) : null}
+            {data.strategyMap ? <StrategyMapView strategyMap={data.strategyMap} /> : null}
 
             <TopActionsCallout actions={data.topActions ?? []} />
 

@@ -490,3 +490,203 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
         expect(true).toBe(true)
     })
 })
+
+describe('AnalysisDetail — DeepDiveCTA placement (redesign-strategy-map-graphical)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+    })
+
+    /**
+     * Per the redesign change, the headline `DeepDiveCTA` was relocated
+     * from below the strategy-map section to immediately after the
+     * `AnalysisHeader` so the conversion affordance is visible above the
+     * fold on every page load. We assert DOM order rather than pixel
+     * position because jsdom doesn't compute layout — DOM order is a
+     * reliable proxy in a top-to-bottom flex column.
+     */
+    it('renders the headline CTA before the StrategyMapView in the DOM tree', () => {
+        const data = buildAnalysisData({
+            strategyMap: {
+                vision: {
+                    statement: 'Vision statement long enough to satisfy validation.',
+                    synthesised: false,
+                    rationale: 'Rationale long enough.',
+                },
+                mission: {
+                    statement: 'Mission statement long enough to satisfy validation.',
+                    synthesised: false,
+                    rationale: 'Rationale long enough.',
+                },
+                valueProposition: {
+                    primary: 'customer_intimacy',
+                    secondary: null,
+                    rationale: 'Public materials emphasise tailored deep-dives and partnership delivery.',
+                    exemplar_company: 'Wawa',
+                },
+                strategicPriorities: [
+                    {
+                        name: 'Theme A',
+                        result: 'Best-in-class outcome that satisfies the result min length.',
+                    },
+                    {
+                        name: 'Theme B',
+                        result: 'Industry-leading outcome that satisfies the result length.',
+                    },
+                ],
+                financial: {
+                    objectives: [
+                        {
+                            id: 'F1',
+                            title: 'Grow profitable revenue across markets',
+                            definition:
+                                'We will grow same-segment revenue by deepening engagement; supports F1 column.',
+                            category: 'revenue_growth',
+                            confidence: 'HIGH',
+                        },
+                        {
+                            id: 'F2',
+                            title: 'Drive operational efficiency further',
+                            definition:
+                                'We will improve cost-to-serve metrics by automating routine operations everywhere.',
+                            category: 'productivity',
+                            confidence: 'MEDIUM',
+                        },
+                        {
+                            id: 'F3',
+                            title: 'Maximise return on invested capital',
+                            definition:
+                                'We will allocate capital toward the highest-return store formats overall.',
+                            category: 'productivity',
+                            confidence: 'MEDIUM',
+                        },
+                    ],
+                },
+                customer: {
+                    objectives: [
+                        {
+                            id: 'C1',
+                            title: 'Offer me fresh products in a friendly environment',
+                            definition:
+                                'I rely on this brand for fast, friendly service and consistent quality.',
+                            panel: 'consumer',
+                            confidence: 'HIGH',
+                        },
+                        {
+                            id: 'C2',
+                            title: 'Recognise my loyalty and reward me appropriately',
+                            definition:
+                                'I expect the loyalty programme to acknowledge my repeated visits with rewards.',
+                            panel: 'consumer',
+                            confidence: 'MEDIUM',
+                        },
+                        {
+                            id: 'C3',
+                            title: 'Make my visit fast and convenient overall',
+                            definition: 'I want to get in, get what I need, and get out without friction.',
+                            panel: 'consumer',
+                            confidence: 'HIGH',
+                        },
+                    ],
+                },
+                internalProcesses: {
+                    themes: [
+                        {
+                            name: 'Theme A',
+                            supports_financial_objectives: ['F1'],
+                            objectives: [
+                                {
+                                    id: 'I1.1',
+                                    title: 'Develop signature offers',
+                                    definition:
+                                        'We will create and improve fresh food and beverage offers that differentiate.',
+                                    category: 'innovation',
+                                    confidence: 'HIGH',
+                                },
+                            ],
+                        },
+                        {
+                            name: 'Theme B',
+                            supports_financial_objectives: ['F2'],
+                            objectives: [
+                                {
+                                    id: 'I2.1',
+                                    title: 'Improve end-to-end throughput',
+                                    definition:
+                                        'We will continuously improve the throughput, quality and cost of our processes.',
+                                    category: 'operational_excellence',
+                                    confidence: 'HIGH',
+                                },
+                            ],
+                        },
+                    ],
+                },
+                organizationalCapacity: {
+                    people: {
+                        id: 'O.P',
+                        title: 'Develop our associates as ambassadors',
+                        definition:
+                            'We will invest in associate development through structured training programmes.',
+                        confidence: 'MEDIUM',
+                    },
+                    technology: {
+                        id: 'O.T',
+                        title: 'Deliver reliable systems and insight',
+                        definition:
+                            'We will provide consistently reliable technical products and support services.',
+                        confidence: 'MEDIUM',
+                    },
+                    culture: {
+                        id: 'O.C',
+                        title: 'Live our values in every interaction',
+                        definition: 'Our values are the foundation of how we work across the organisation.',
+                        confidence: 'LOW',
+                    },
+                },
+                arrows: [],
+                whatsMissing: [
+                    {
+                        id: 'G1',
+                        title: 'Cultural commitments not published',
+                        description:
+                            'Public materials reference associate ownership but do not articulate values.',
+                        deepDiveFraming:
+                            'A Vector Advisory deep-dive would interview leadership and frontline associates.',
+                    },
+                    {
+                        id: 'G2',
+                        title: 'Channel-relationship strategy unclear overall',
+                        description:
+                            'The company sells through multiple channels but the balance is not visible.',
+                        deepDiveFraming:
+                            'A Vector Advisory deep-dive would map the channel economics and design objectives.',
+                    },
+                ],
+                coreValues: {
+                    values: ['Care', 'Respect', 'Continuous improvement'],
+                    synthesised: true,
+                    rationale: 'Synthesised from public materials.',
+                },
+            },
+        })
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const cta = screen.getByTestId('strategy-map-cta')
+        const map = screen.getByTestId('strategy-map-view')
+
+        // The CTA must appear BEFORE the strategy map in document order
+        // (i.e. it's earlier in the DOM tree). compareDocumentPosition
+        // returns DOCUMENT_POSITION_FOLLOWING (4) when the argument follows
+        // the receiver.
+        const relationship = cta.compareDocumentPosition(map)
+        expect(relationship & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('does NOT render the CTA when the analysis has no strategy map', () => {
+        const data = buildAnalysisData()
+        // No strategyMap field on the data → CTA stays absent.
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        expect(screen.queryByTestId('strategy-map-cta')).toBeNull()
+    })
+})
