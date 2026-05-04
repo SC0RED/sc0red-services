@@ -16,6 +16,16 @@ export type AnalyticsEventType =
     | 'sc0red_cta_banner_collapsed'
     | 'sc0red_cta_clicked'
     | 'sc0red_cta_rendered_in_pdf'
+    // Strategy-map deep-dive CTA — `_rendered_strategy_map` fires on
+    // component mount (the CTA is always-visible below the map),
+    // `_clicked_strategy_map` fires on the contact-link click. Both
+    // are web-source. The backend's model_validator enforces
+    // `active_lever_filter=null` for these — there is no lever-filter
+    // concept on the strategy-map surface, and a non-null filter
+    // would corrupt funnel queries that join across surfaces on
+    // event_type. Callers MUST pass `activeLeverFilter: null`.
+    | 'sc0red_cta_rendered_strategy_map'
+    | 'sc0red_cta_clicked_strategy_map'
 
 export type WebAnalyticsEventType = Exclude<AnalyticsEventType, 'sc0red_cta_rendered_in_pdf'>
 

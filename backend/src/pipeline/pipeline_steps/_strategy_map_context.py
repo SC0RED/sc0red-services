@@ -19,12 +19,15 @@ shapes; no AI calls, no I/O.
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from src.models.model_company import Company
+
+logger = logging.getLogger(__name__)
 
 # Cap on the size of pipeline-input fragments fed back into AI prompts.
 # Strategy-map prompts include scraped text, opportunities, EBITDA
@@ -33,6 +36,16 @@ if TYPE_CHECKING:
 MAX_SCRAPED_TEXT_CHARS = 6_000
 MAX_DOCUMENT_TEXT_CHARS = 6_000
 MAX_JSON_FRAGMENT_CHARS = 4_000
+
+# Opportunities filtered into the customer-perspective prompt — the
+# Customer perspective cares about revenue-side levers (and the
+# revenue half of "Both"), not pure cost-side. Named here so the
+# intent ("revenue-affecting") is explicit at the call site rather
+# than appearing as bare string literals. The `value_lever` field
+# enum (`"Revenue Side" | "Cost Side" | "Both" | None`) is defined
+# inline on `Opportunity` in `model_company.py`; promote to a
+# shared constant if a second consumer emerges.
+_REVENUE_AFFECTING_LEVERS: frozenset[str] = frozenset({"Revenue Side", "Both"})
 
 
 def build_shared_context(company: Company) -> dict[str, Any]:
@@ -73,7 +86,7 @@ def build_shared_context(company: Company) -> dict[str, Any]:
     )
 
     revenue_opportunities = [
-        opp.model_dump() for opp in opportunities if opp.value_lever in ("Revenue Side", "Both")
+        opp.model_dump() for opp in opportunities if opp.value_lever in _REVENUE_AFFECTING_LEVERS
     ]
     opportunity_categories = sorted(
         {opp.strategic_category for opp in opportunities if opp.strategic_category}
@@ -134,8 +147,19 @@ def build_shared_context(company: Company) -> dict[str, Any]:
 
 
 def summarise_value_proposition(value_proposition_data: dict[str, Any]) -> str:
-    """One-line summary of the value-proposition classification for downstream prompts."""
-    primary = value_proposition_data.get("primary", "(unspecified)")
+    """One-line summary of the value-proposition classification for downstream prompts.
+
+    `primary` is required — Step 2's response handler in
+    `generate_strategy_map._step_2_value_proposition` raises
+    `ValueError` if it's missing, so by the time we get here the
+    field is guaranteed to be present. Indexing directly (rather
+    than `.get()`-with-default) preserves that fail-fast contract:
+    if upstream changes ever stop enforcing it, this function
+    raises `KeyError` instead of silently producing
+    `"(unspecified)"` text that the LLM would treat as real
+    classification context for Steps 3-7.
+    """
+    primary = value_proposition_data["primary"]
     secondary = value_proposition_data.get("secondary")
     if primary == "hybrid" and secondary:
         return f"hybrid (primary blend: {secondary})"
@@ -223,7 +247,18 @@ def unwrap_perspective(data: dict[str, Any], key: str) -> dict[str, Any]:
 
     Some models return ``{"financial": {"objectives": [...]}}`` and
     others return ``{"objectives": [...]}`` directly. Tolerate both.
+
+    Logs a debug line when the wrap path is taken so a model-version
+    regression that suddenly starts wrapping every response (or stops
+    wrapping any) is diagnosable from CloudWatch without re-running
+    the analysis. The log is debug-level (not info/warning) because
+    both shapes are valid — this is observability, not an error.
     """
     if key in data and isinstance(data[key], dict):
+        logger.debug(
+            "[GenerateStrategyMap] unwrapped wrapped %s response (model returned {%s: {...}})",
+            key,
+            key,
+        )
         return data[key]
     return data

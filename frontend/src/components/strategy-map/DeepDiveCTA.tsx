@@ -1,3 +1,8 @@
+'use client'
+
+import { useEffect } from 'react'
+
+import { emit } from '@/lib/analytics/emitEvent'
 import { getSc0redContactUrl } from '@/lib/config'
 
 interface DeepDiveCTAProps {
@@ -21,9 +26,59 @@ interface DeepDiveCTAProps {
  * it (no new form infrastructure). Future iterations could replace
  * with an embedded form, Calendly, or a custom modal — the
  * component's `href` is the only thing that changes.
+ *
+ * Emits two analytics events via `POST /api/analytics/events`:
+ * - `sc0red_cta_rendered_strategy_map` — fired on mount via
+ *   `useEffect`. The strategy-map CTA is always-visible (no
+ *   expand/collapse), so mount is the right "saw the CTA" signal.
+ * - `sc0red_cta_clicked_strategy_map` — fired in the anchor's
+ *   `onClick`. Fire-and-forget; navigation is not blocked by the
+ *   emit (see `Sc0redCTABanner` for the same pattern + rationale).
+ *
+ * The strategy-map surface has no lever-filter concept, so emits
+ * pass `activeLeverFilter: null`. `opportunityCount` is also `0` —
+ * the field belongs to the opportunities funnel, not the
+ * strategy-map funnel; funnel queries should scope on `event_type`.
  */
 export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }: DeepDiveCTAProps) {
     const href = buildContactUrl(analysisId, gapId)
+
+    const analyticsContext = {
+        analysisId,
+        // The strategy-map CTA is not anchored to opportunities — pass 0
+        // rather than overloading the field with an unrelated count.
+        // Funnel queries should scope on event_type, not opportunity_count.
+        opportunityCount: 0,
+        activeLeverFilter: null,
+    }
+
+    useEffect(() => {
+        // One emit per mount, scoped to `analysisId`. If the user
+        // navigates away and back the effect re-fires; that's the
+        // desired "saw the CTA" granularity. Fire-and-forget; emit
+        // failures never block UI (see emitEvent.ts).
+        //
+        // `gapId` is intentionally OMITTED from the dependency array
+        // and from the analytics payload in v1: the inline (per-gap)
+        // variant is not yet rendered in production (only the
+        // headline CTA on AnalysisDetail is wired up — see
+        // DeepDiveCTAProps.variant docstring). When per-gap CTAs do
+        // ship, the right move is to extend `WebEventContext` with
+        // `gapId` and add it here so multi-gap views produce
+        // distinct impression events. Until then, a `gapId`-only
+        // re-render does NOT re-emit, and that's deliberate — the
+        // current `_rendered_strategy_map` event is an
+        // analysis-level impression signal, not a per-gap one.
+        void emit('sc0red_cta_rendered_strategy_map', analyticsContext)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [analysisId])
+
+    const handleCtaClick = () => {
+        // Fire-and-forget. The browser dispatches the anchor's default
+        // navigation as soon as this handler returns; `keepalive: true`
+        // inside `emit()` ensures the POST survives the new-tab open.
+        void emit('sc0red_cta_clicked_strategy_map', analyticsContext)
+    }
 
     if (variant === 'inline') {
         return (
@@ -31,6 +86,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={handleCtaClick}
                 style={{
                     fontSize: '0.85rem',
                     color: 'var(--accent-blue)',
@@ -86,6 +142,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={handleCtaClick}
                 style={{
                     flex: '0 0 auto',
                     display: 'inline-flex',

@@ -22,7 +22,25 @@ AnalyticsEventType = Literal[
     "sc0red_cta_banner_collapsed",
     "sc0red_cta_clicked",
     "sc0red_cta_rendered_in_pdf",
+    # Strategy-map deep-dive CTA — `_rendered_strategy_map` fires on
+    # component mount (the CTA is always-visible below the map),
+    # `_clicked_strategy_map` fires on the contact-link click. Both
+    # are web-source. Strategy-map has no lever-filter concept, so
+    # `active_lever_filter` MUST be null for these events
+    # (enforced in the model_validator below).
+    "sc0red_cta_rendered_strategy_map",
+    "sc0red_cta_clicked_strategy_map",
 ]
+
+# Internal-only set of strategy-map event types — kept beside the
+# Literal so the validator can branch on them without restating the
+# names.
+_STRATEGY_MAP_EVENT_TYPES = frozenset(
+    {
+        "sc0red_cta_rendered_strategy_map",
+        "sc0red_cta_clicked_strategy_map",
+    }
+)
 
 AnalyticsSource = Literal["web", "pdf"]
 
@@ -56,22 +74,36 @@ class AnalyticsEvent(BaseModel):
     active_lever_filter: ActiveLeverFilter | None = None
 
     @model_validator(mode="after")
-    def _validate_pdf_rendered_event(self) -> AnalyticsEvent:
-        """PDF-render events MUST carry source='pdf' and MUST NOT carry a lever filter.
+    def _validate_event_surface_invariants(self) -> AnalyticsEvent:
+        """Each event type has surface-specific invariants — enforce them here.
 
-        The PDF surface does not support per-lever filtering, so an
-        `active_lever_filter` on a PDF event is a client bug that would
-        corrupt funnel queries later.
+        - PDF-render: must carry source='pdf' and MUST NOT carry a lever
+          filter. The PDF surface does not support per-lever filtering.
+        - Strategy-map (rendered/clicked): must carry source='web' and
+          MUST NOT carry a lever filter. The strategy-map surface has
+          no lever-filter concept; a non-null filter would corrupt
+          funnel queries that join across surfaces on event_type.
+        - All other events: must carry source='web'.
+
+        Surface-specific invariants live here (not in handler code) so
+        a malformed envelope is rejected at the model boundary, before
+        it can be persisted to CloudWatch and contaminate funnel data.
         """
         if self.event_type == "sc0red_cta_rendered_in_pdf":
             if self.source != "pdf":
                 raise ValueError("sc0red_cta_rendered_in_pdf requires source='pdf'")
             if self.active_lever_filter is not None:
                 raise ValueError("sc0red_cta_rendered_in_pdf must not carry active_lever_filter")
-        elif self.source != "web":
-            # All web-origin events must declare source='web' — prevents a
-            # misrouted PDF emit from being miscategorized as web.
+            return self
+
+        # All non-PDF events must declare source='web' — prevents a
+        # misrouted PDF emit from being miscategorized as web.
+        if self.source != "web":
             raise ValueError(f"{self.event_type} requires source='web'")
+
+        if self.event_type in _STRATEGY_MAP_EVENT_TYPES and self.active_lever_filter is not None:
+            raise ValueError(f"{self.event_type} must not carry active_lever_filter")
+
         return self
 
 

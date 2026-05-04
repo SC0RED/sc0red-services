@@ -80,7 +80,17 @@ def save_value_chain(table: DynamoDBTable, assessment_id: str, data: dict[str, A
 
 
 def get_value_chain(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] | None:
-    """Return the value chain for the given assessment, or None if not found."""
+    """Return the value chain for the given assessment, or None if not found.
+
+    Raises `KeyError` if the VALUE_CHAIN item exists but is missing
+    `steps` or `summary` — that indicates a corrupt or partially-
+    written record. Same fail-fast posture as `get_strategy_map`
+    (per CLAUDE.md "no silent fallback on required schema fields"):
+    a missing field on a present record is a programming bug or
+    write-path corruption, not a normal return path. Surface it
+    in CloudWatch rather than letting the frontend render a
+    half-empty value chain.
+    """
     item = table.get_item(
         pk=f"ASSESSMENT#{assessment_id}",
         sk="VALUE_CHAIN",
@@ -88,8 +98,8 @@ def get_value_chain(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] 
     if not item:
         return None
 
-    steps = item.get("steps", "[]")
+    steps = item["steps"]
     if isinstance(steps, str):
         steps = json.loads(steps)
 
-    return {"steps": steps, "summary": item.get("summary", "")}
+    return {"steps": steps, "summary": item["summary"]}
