@@ -39,12 +39,23 @@ describe('DocumentUpload', () => {
         mockFetch.mockReset()
     })
 
-    it('renders drop zone with upload instructions', () => {
+    it('renders drop zone with upload instructions and no page-level framing', () => {
         render(<DocumentUpload {...defaultProps} />)
 
-        expect(screen.getByText('Documents')).toBeInTheDocument()
+        // Per architecture review on redesign-analysis-detail-narrative,
+        // the "Improve This Analysis" framing (heading + lead paragraph)
+        // is owned by the consuming page (`AnalysisDetail`), NOT by this
+        // leaf widget — so it can be reused from `FailedAnalysisView`
+        // with different framing. This test asserts the leaf concerns
+        // only: drop zone + accepted-types text. Plus a negative
+        // assertion on the page-level framing so a regression that
+        // re-adds the heading to the widget fails fast.
         expect(screen.getByText('Drop a file here or click to browse')).toBeInTheDocument()
         expect(screen.getByText(/PDF, DOCX, XLSX, TXT, CSV, MD/)).toBeInTheDocument()
+        expect(screen.queryByText('Improve This Analysis')).not.toBeInTheDocument()
+        expect(
+            screen.queryByText(/Upload financial statements, board decks, or product docs/)
+        ).not.toBeInTheDocument()
     })
 
     it('renders document list when documents exist', () => {
@@ -275,5 +286,66 @@ describe('DocumentUpload', () => {
         render(<DocumentUpload {...defaultProps} documents={documents} />)
 
         expect(screen.getByText('500 chars')).toBeInTheDocument()
+    })
+
+    // ── In-section re-analyze concerns (redesign-analysis-detail-narrative) ───
+
+    it('exposes an accessible name on the re-analyze button containing "re-analyze"', () => {
+        const documents = [buildDocument()]
+        render(<DocumentUpload {...defaultProps} documents={documents} />)
+
+        // Per spec: button must have an accessible name including
+        // "re-analyse" or "re-analyze" so screen-reader users hear an
+        // unambiguous action.
+        const button = screen.getByRole('button', { name: /re-analy[sz]e/i })
+        expect(button).toBeInTheDocument()
+    })
+
+    it('renders the re-analyze progress block INSIDE the section when reanalyzing', () => {
+        const documents = [buildDocument()]
+        const { container } = render(
+            <DocumentUpload
+                {...defaultProps}
+                documents={documents}
+                reanalyzing={true}
+                reanalysisLabel="Step 3 of 6"
+                reanalysisProgress={42}
+            />
+        )
+
+        // Progress block is co-located with the trigger affordance —
+        // a previous bug rendered it as a sibling on the parent page,
+        // orphaned above the button.
+        const progress = screen.getByTestId('reanalyze-progress')
+        expect(progress).toBeInTheDocument()
+        // Must be a descendant of the section's root element.
+        expect(container.firstChild).toContainElement(progress)
+        expect(screen.getByText('Step 3 of 6')).toBeInTheDocument()
+        expect(screen.getByText('42% complete')).toBeInTheDocument()
+    })
+
+    it('falls back to "Starting pipeline..." when no reanalysisLabel is provided yet', () => {
+        const documents = [buildDocument()]
+        render(<DocumentUpload {...defaultProps} documents={documents} reanalyzing={true} />)
+
+        expect(screen.getByText('Starting pipeline...')).toBeInTheDocument()
+        expect(screen.getByText('0% complete')).toBeInTheDocument()
+    })
+
+    it('hides the progress block when not reanalyzing', () => {
+        render(<DocumentUpload {...defaultProps} reanalyzing={false} />)
+        expect(screen.queryByTestId('reanalyze-progress')).toBeNull()
+    })
+
+    it('renders documentError as an alert inside the section', () => {
+        render(<DocumentUpload {...defaultProps} documentError="Failed to refresh documents" />)
+        const alert = screen.getByRole('alert')
+        expect(alert).toHaveTextContent('Failed to refresh documents')
+    })
+
+    it('does not render a documentError alert when documentError is null', () => {
+        render(<DocumentUpload {...defaultProps} documentError={null} />)
+        // No alert exists at all — the role query returns nothing.
+        expect(screen.queryByRole('alert')).toBeNull()
     })
 })
