@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Handle, type NodeProps, NodeToolbar, Position, type Node } from '@xyflow/react'
 
 import type { ConfidenceMarker } from '@/lib/types/api'
@@ -59,8 +59,54 @@ const PERSPECTIVE_ACCENT: Record<StrategyMapNodeData['perspective'], string> = {
     capacity: 'var(--text-secondary)',
 }
 
+/**
+ * Grace period (ms) before a `mouseLeave` actually closes the tooltip.
+ *
+ * Why a delay at all: the tooltip is rendered via NodeToolbar's portal,
+ * which lives in a separate DOM tree from the chip. Moving the cursor
+ * from chip → tooltip therefore briefly leaves BOTH areas (the gap
+ * between them sits in neither), which fires `mouseLeave` on the chip
+ * before `mouseEnter` fires on the tooltip. Without a grace period, the
+ * tooltip closes mid-transit and the user can never reach its
+ * scrollbar — the bug the user reported on PR #244.
+ *
+ * 200 ms is the established hover-intent default (slow enough that most
+ * cursor transits land safely on the tooltip, fast enough that an
+ * intentional "look away" reads as immediate).
+ */
+const HOVER_CLOSE_DELAY_MS = 200
+
 export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<StrategyMapNodeData>>) {
     const [hovered, setHovered] = useState(false)
+    // Pending close-timeout. Captured in a ref so handlers can cancel it
+    // without re-running effects. See HOVER_CLOSE_DELAY_MS for the
+    // hover-intent rationale.
+    const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const cancelClose = useCallback(() => {
+        if (closeTimerRef.current !== null) {
+            clearTimeout(closeTimerRef.current)
+            closeTimerRef.current = null
+        }
+    }, [])
+
+    const openNow = useCallback(() => {
+        cancelClose()
+        setHovered(true)
+    }, [cancelClose])
+
+    const scheduleClose = useCallback(() => {
+        cancelClose()
+        closeTimerRef.current = setTimeout(() => {
+            closeTimerRef.current = null
+            setHovered(false)
+        }, HOVER_CLOSE_DELAY_MS)
+    }, [cancelClose])
+
+    // Drop any pending timer if the component unmounts mid-transit so
+    // we don't call setState on an unmounted component.
+    useEffect(() => () => cancelClose(), [cancelClose])
+
     // Treat React Flow's `selected` (set on tap-to-focus) as equivalent to
     // hover so touch users see the same tooltip without a second tap.
     const showDetail = hovered || Boolean(selected)
@@ -76,10 +122,10 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
             tabIndex={0}
             aria-label={`${data.objectiveId}: ${data.title}`}
             aria-describedby={showDetail ? tooltipId : undefined}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            onFocus={() => setHovered(true)}
-            onBlur={() => setHovered(false)}
+            onMouseEnter={openNow}
+            onMouseLeave={scheduleClose}
+            onFocus={openNow}
+            onBlur={scheduleClose}
             onKeyDown={(event) => {
                 // WCAG 2.1.1: a `role="button"` element MUST activate on
                 // Enter and Space. Activation here means "open the tooltip
@@ -217,6 +263,14 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                 <div
                     id={tooltipId}
                     role="tooltip"
+                    // Hover handlers on the tooltip body itself: when the
+                    // cursor enters here, cancel any pending close so the
+                    // user can scroll long definitions without the tooltip
+                    // dismissing under them. When the cursor leaves the
+                    // tooltip, schedule a close (the chip's mouseEnter
+                    // would cancel it again if the user transits BACK).
+                    onMouseEnter={openNow}
+                    onMouseLeave={scheduleClose}
                     style={{
                         width: 280,
                         // Cap the tooltip height so very long definitions
