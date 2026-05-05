@@ -491,21 +491,25 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
     })
 })
 
-describe('AnalysisDetail — DeepDiveCTA placement (redesign-strategy-map-graphical)', () => {
+describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-narrative)', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockSession = { user: { name: 'Test', email: 'test@test.com' } }
     })
 
     /**
-     * Per the redesign change, the headline `DeepDiveCTA` was relocated
-     * from below the strategy-map section to immediately after the
-     * `AnalysisHeader` so the conversion affordance is visible above the
-     * fold on every page load. We assert DOM order rather than pixel
-     * position because jsdom doesn't compute layout — DOM order is a
-     * reliable proxy in a top-to-bottom flex column.
+     * The headline DeepDiveCTA now renders IMMEDIATELY AFTER the
+     * StrategyMapView (which contains WhatsMissingPanel) — placing the
+     * upsell pitch at the moment of maximum buying intent ("we'll help
+     * you fill these strategic gaps") rather than asking for the
+     * upsell before any analysis content has loaded.
+     *
+     * This supersedes PR #239's design.md decision D6, which had hoisted
+     * the CTA above the strategy map "for visibility." That fix
+     * over-corrected — visibility came at the cost of asking before
+     * showing value. See redesign-analysis-detail-narrative D1 + D6.
      */
-    it('renders the headline CTA before the StrategyMapView in the DOM tree', () => {
+    it('renders the headline CTA AFTER the StrategyMapView in the DOM tree', () => {
         const data = buildAnalysisData({
             strategyMap: {
                 vision: {
@@ -675,12 +679,12 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-strategy-map-graphi
         const cta = screen.getByTestId('strategy-map-cta')
         const map = screen.getByTestId('strategy-map-view')
 
-        // The CTA must appear BEFORE the strategy map in document order
-        // (i.e. it's earlier in the DOM tree). compareDocumentPosition
-        // returns DOCUMENT_POSITION_FOLLOWING (4) when the argument follows
-        // the receiver.
+        // The CTA must appear AFTER the strategy map in document order
+        // (i.e. it's later in the DOM tree). compareDocumentPosition
+        // returns DOCUMENT_POSITION_PRECEDING (2) when the argument
+        // precedes the receiver — i.e. `map` comes before `cta`.
         const relationship = cta.compareDocumentPosition(map)
-        expect(relationship & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(relationship & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
     })
 
     it('does NOT render the CTA when the analysis has no strategy map', () => {
@@ -690,3 +694,257 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-strategy-map-graphi
         expect(screen.queryByTestId('strategy-map-cta')).toBeNull()
     })
 })
+
+describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrative)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+    })
+
+    /**
+     * Asserts the page-level beat order specified in design D1. Each
+     * section is wrapped at the page level with a `data-testid` of the
+     * form `analysis-section-*` so the order test queries the wrappers
+     * by ID rather than relying on layout coordinates (jsdom doesn't
+     * lay out reliably) or fragile selector chains.
+     */
+    function getRenderedSectionIds() {
+        const wrappers = document.querySelectorAll<HTMLElement>('[data-testid^="analysis-section-"]')
+        return Array.from(wrappers).map((el) =>
+            el.getAttribute('data-testid')!.replace('analysis-section-', '')
+        )
+    }
+
+    it('renders all 13 sections in the prescribed beat order with full data', () => {
+        // Full-data fixture: builds the success-path analysis with every
+        // optional artifact present so all 13 sections render.
+        const data: AnalysisData = {
+            ...buildAnalysisData(),
+            analyzedAt: '2026-05-05T10:00:00Z',
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'r',
+                        label: 'Revenue',
+                        type: 'revenue',
+                        description: 'r',
+                        linked_opportunity_indices: [],
+                        children: [],
+                    },
+                ],
+                ebitdaEstimate: '$5M-$140M',
+            },
+            valueChain: {
+                summary: 'Value chain summary',
+                steps: [
+                    {
+                        id: 's1',
+                        label: 'Inbound',
+                        description: 'd',
+                        category: 'primary',
+                        risk_categories: [],
+                        opportunity_indices: [],
+                    },
+                ],
+            },
+            strategyMap: makeFullStrategyMap(),
+        }
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const expectedOrder = [
+            'header',
+            'strap',
+            'overview',
+            'top-actions',
+            'strategy-map',
+            'deep-dive-cta',
+            'ebitda',
+            'value-chain',
+            'risk-breakdown',
+            'value-lever',
+            'opportunities',
+            'sc0red-cta',
+            'document-upload',
+        ]
+        expect(getRenderedSectionIds()).toEqual(expectedOrder)
+    })
+
+    it('preserves relative order when strategy map and EBITDA are absent', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const ids = getRenderedSectionIds()
+        // Strategy + deep-dive CTA + EBITDA + value chain absent.
+        expect(ids).not.toContain('strategy-map')
+        expect(ids).not.toContain('deep-dive-cta')
+        expect(ids).not.toContain('ebitda')
+        expect(ids).not.toContain('value-chain')
+        // Remaining sections still in the same relative order.
+        expect(ids).toEqual([
+            'header',
+            'strap',
+            'overview',
+            'top-actions',
+            'risk-breakdown',
+            'value-lever',
+            'opportunities',
+            'sc0red-cta',
+            'document-upload',
+        ])
+    })
+
+    it('drops the Sc0red CTA when there are no opportunities and preserves order', () => {
+        const data = buildAnalysisData({ opportunities: [] })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const ids = getRenderedSectionIds()
+        expect(ids).not.toContain('sc0red-cta')
+        // DocumentUpload follows OpportunitiesList directly.
+        const oppIndex = ids.indexOf('opportunities')
+        const docIndex = ids.indexOf('document-upload')
+        expect(docIndex).toBe(oppIndex + 1)
+    })
+
+    it('renders the executive strap between header and overview cards', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        const ids = getRenderedSectionIds()
+        expect(ids[0]).toBe('header')
+        expect(ids[1]).toBe('strap')
+        expect(ids[2]).toBe('overview')
+        // Strap content includes the company name from buildAnalysisData
+        // and the opportunity count from the fixture (3).
+        expect(screen.getByTestId('analysis-executive-strap')).toBeInTheDocument()
+    })
+
+    it('renders the "Improve This Analysis" heading + lead at the page level (not inside DocumentUpload)', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        // Page-level framing per architecture-review fix: the heading +
+        // lead live in `AnalysisDetail` so the leaf `DocumentUpload` is
+        // reusable from `FailedAnalysisView` with its own framing.
+        expect(screen.getByText('Improve This Analysis')).toBeInTheDocument()
+        expect(
+            screen.getByText(/Upload financial statements, board decks, or product docs/)
+        ).toBeInTheDocument()
+    })
+
+    it('does NOT render an orphaned reanalyze progress block at the page level', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        // The progress block only appears as a descendant of
+        // DocumentUpload (when reanalyzing); it must NEVER render as a
+        // top-level sibling on the page. Since reanalyzing is false in
+        // this fixture, no progress block exists at all.
+        expect(screen.queryByTestId('reanalyze-progress')).toBeNull()
+    })
+})
+
+/**
+ * Strategy-map fixture for ordering tests. Mirrors the shape required
+ * by `StrategyMapView` so the component renders without throwing during
+ * order assertions.
+ */
+function makeFullStrategyMap(): NonNullable<AnalysisData['strategyMap']> {
+    return {
+        vision: {
+            statement: 'Vision statement long enough to satisfy validation.',
+            synthesised: false,
+            rationale: 'r',
+        },
+        mission: {
+            statement: 'Mission statement long enough to satisfy validation.',
+            synthesised: false,
+            rationale: 'r',
+        },
+        valueProposition: {
+            primary: 'customer_intimacy',
+            secondary: null,
+            rationale: 'Public materials emphasise tailored deep-dives.',
+            exemplar_company: 'Wawa',
+        },
+        strategicPriorities: [
+            {
+                name: 'Theme A',
+                result: 'Best-in-class outcome that satisfies the result min length.',
+            },
+        ],
+        financial: {
+            objectives: [
+                {
+                    id: 'F1',
+                    title: 'Grow profitable revenue across markets',
+                    definition:
+                        'We will grow same-segment revenue by deepening engagement; supports F1 column.',
+                    category: 'revenue_growth',
+                    confidence: 'HIGH',
+                },
+            ],
+        },
+        customer: {
+            objectives: [
+                {
+                    id: 'C1',
+                    title: 'Offer me fresh products in a friendly environment',
+                    definition: 'I rely on this brand for fast, friendly service and consistent quality.',
+                    panel: 'consumer',
+                    confidence: 'HIGH',
+                },
+            ],
+        },
+        internalProcesses: {
+            themes: [
+                {
+                    name: 'Theme A',
+                    supports_financial_objectives: ['F1'],
+                    objectives: [
+                        {
+                            id: 'I1.1',
+                            title: 'Develop signature offers',
+                            definition:
+                                'We will create and improve fresh food and beverage offers that differentiate.',
+                            category: 'innovation',
+                            confidence: 'HIGH',
+                        },
+                    ],
+                },
+            ],
+        },
+        organizationalCapacity: {
+            people: {
+                id: 'O.P',
+                title: 'Develop our associates as ambassadors',
+                definition: 'We will invest in associate development through structured training programmes.',
+                confidence: 'MEDIUM',
+            },
+            technology: {
+                id: 'O.T',
+                title: 'Deliver reliable systems and insight',
+                definition: 'We will provide consistently reliable technical products and support services.',
+                confidence: 'MEDIUM',
+            },
+            culture: {
+                id: 'O.C',
+                title: 'Live our values in every interaction',
+                definition: 'Our values are the foundation of how we work across the organisation.',
+                confidence: 'LOW',
+            },
+        },
+        arrows: [],
+        whatsMissing: [
+            {
+                id: 'G1',
+                title: 'Cultural commitments not published',
+                description: 'Public materials reference associate ownership but do not articulate values.',
+                deepDiveFraming:
+                    'A Vector Advisory deep-dive would interview leadership and frontline associates.',
+            },
+        ],
+        coreValues: {
+            values: ['Care', 'Respect'],
+            synthesised: true,
+            rationale: 'Synthesised from public materials.',
+        },
+    }
+}
