@@ -412,6 +412,58 @@ select {
     padding: var(--card-padding-rich);
 }
 
+/* ── ExpandableCard ────────────────────────────────────────
+   Click-to-reveal-detail primitive used by RiskBreakdown and
+   OpportunitiesList. ValueChainDiagram and WhatsMissingPanel are
+   explicitly deferred (different visual model — chain layout and
+   accent-strip respectively). The trigger button fills the card's
+   content area; the chevron sits at the top-right of the header
+   row and rotates via CSS when the card opens.
+
+   `prefers-reduced-motion: reduce` (already handled in the global
+   `*` rule) collapses the rotation transition automatically. */
+.expandable-card__trigger {
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font: inherit;
+    color: inherit;
+}
+
+.expandable-card__header {
+    flex: 1;
+    min-width: 0;
+}
+
+.expandable-card__chevron {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+}
+
+.expandable-card__chevron[data-open='true'] {
+    transform: rotate(180deg);
+}
+
+.expandable-card__body {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* When the body is hidden, suppress all space contributions —
+   `hidden` HTML attribute does that by default but margin-top +
+   padding-top don't apply since the element is `display: none`. */
+.expandable-card__body[hidden] {
+    display: none;
+}
+
 .card-surface {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);

@@ -28,6 +28,6 @@
 
 ## 4. Architecture review + commit + PR
 
-- [ ] 4.1 Run the `architecture-reviewer` agent over the diff. Focus areas: (a) does the compound-selector pattern (`.card.card--metric` instead of `.card--metric` alone) actually win over inline `padding` styles via specificity? (b) are all 9 analysis-detail-page consumers migrated correctly? (c) any consumers I missed in the migration list (audit `grep`)? (d) any tests that asserted on inline padding that need updates?
-- [ ] 4.2 Commit with conventional-commit message: `refactor(analysis): introduce .card variants (metric/list/rich) for density consistency`
-- [ ] 4.3 Open PR against `development`. Body should reference UX review Audit 3, list the 9 migrated consumers, explicitly note the 38 non-analysis-detail consumers that intentionally stay on bare `.card`, and call out the manual visual verification gate.
+- [x] 4.1 Run the `architecture-reviewer` agent over the diff. Focus areas: (a) does the compound-selector pattern (`.card.card--metric` instead of `.card--metric` alone) actually win over inline `padding` styles via specificity? (b) are all 9 analysis-detail-page consumers migrated correctly? (c) any consumers I missed in the migration list (audit `grep`)? (d) any tests that asserted on inline padding that need updates?
+- [x] 4.2 Commit with conventional-commit message: `refactor(analysis): introduce .card variants (metric/list/rich) for density consistency`
+- [x] 4.3 Open PR against `development`. Body should reference UX review Audit 3, list the 9 migrated consumers, explicitly note the 38 non-analysis-detail consumers that intentionally stay on bare `.card`, and call out the manual visual verification gate.

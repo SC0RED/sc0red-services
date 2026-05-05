@@ -82,15 +82,30 @@ describe('OpportunitiesList', () => {
     })
 
     it('clicking an opportunity expands details', () => {
+        // Per `expandable-card-pattern`, ExpandableCard always keeps the
+        // body in the DOM (uses `hidden` attribute when closed, NOT
+        // conditional rendering). So body content like the description
+        // is technically present in the DOM at all times — we verify
+        // expand state via `aria-expanded` on the trigger and confirm
+        // body content is reachable when expanded.
         render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
 
-        expect(screen.queryByText('Build a chatbot for customer support')).not.toBeInTheDocument()
-
         const chatbotButton = screen.getByText('Deploy AI Chatbot').closest('button')!
-        fireEvent.click(chatbotButton)
+        expect(chatbotButton).toHaveAttribute('aria-expanded', 'false')
 
+        fireEvent.click(chatbotButton)
+        expect(chatbotButton).toHaveAttribute('aria-expanded', 'true')
+
+        // Body content is reachable when expanded. Note: all 3
+        // opportunity bodies render in the DOM (hidden when closed, per
+        // ExpandableCard's contract), so structural shared text like
+        // "Implementation Steps" appears 3× total. The chatbot-specific
+        // text below is unique to this opportunity, so getByText still
+        // disambiguates.
         expect(screen.getByText('Build a chatbot for customer support')).toBeInTheDocument()
-        expect(screen.getByText('Implementation Steps')).toBeInTheDocument()
+        // "Implementation Steps" header appears in all 3 bodies — assert
+        // at least one is present (the migrated component still renders it).
+        expect(screen.getAllByText('Implementation Steps').length).toBeGreaterThan(0)
         expect(screen.getByText('Step 1')).toBeInTheDocument()
         expect(screen.getByText('Step 2')).toBeInTheDocument()
         expect(screen.getByText('$100K-$500K')).toBeInTheDocument()
