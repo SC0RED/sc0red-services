@@ -9,11 +9,13 @@ import {
     type Node,
     ReactFlow,
     ReactFlowProvider,
+    ViewportPortal,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import {
     BAND_HEIGHT,
+    COLUMN_WIDTH,
     type StrategyMapEdgeData,
     type StrategyMapNodeData,
     buildStrategyMapGraph,
@@ -63,6 +65,16 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
         return { nodes: graph.nodes, edges: styledEdges }
     }, [strategyMap])
 
+    // Total label-row width = the rightmost x of any node + a chip's
+    // worth of padding. Used by BandLabels to span the whole world
+    // horizontally (so each band's label runs across all theme columns
+    // + the shared lane).
+    const labelRowWidth = useMemo(() => {
+        if (nodes.length === 0) return COLUMN_WIDTH
+        const maxX = Math.max(...nodes.map((node) => node.position.x))
+        return maxX + COLUMN_WIDTH
+    }, [nodes])
+
     return (
         <div
             ref={canvasRef}
@@ -76,9 +88,13 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
                 borderRadius: '8px',
             }}
         >
-            <BandLabels />
             <ReactFlowProvider>
-                <CanvasInner canvasRef={canvasRef} nodes={nodes} edges={edges} />
+                <CanvasInner
+                    canvasRef={canvasRef}
+                    nodes={nodes}
+                    edges={edges}
+                    labelRowWidth={labelRowWidth}
+                />
             </ReactFlowProvider>
         </div>
     )
@@ -88,10 +104,12 @@ function CanvasInner({
     canvasRef,
     nodes,
     edges,
+    labelRowWidth,
 }: {
     canvasRef: React.RefObject<HTMLDivElement | null>
     nodes: Node<StrategyMapNodeData>[]
     edges: Edge<StrategyMapEdgeData>[]
+    labelRowWidth: number
 }) {
     const [edgeTooltip, setEdgeTooltip] = useState<{ x: number; y: number; hypothesis: string } | null>(null)
 
@@ -130,6 +148,21 @@ function CanvasInner({
                 onEdgeMouseLeave={() => setEdgeTooltip(null)}
             >
                 <Background color="var(--border-subtle)" gap={32} size={1} />
+                {/*
+                 * Band labels live INSIDE the React Flow viewport via
+                 * ViewportPortal so they pan + zoom with the chips. The
+                 * earlier implementation rendered them as absolute-positioned
+                 * siblings of <ReactFlow> in the canvas div, which kept the
+                 * labels stationary while React Flow's `fitView` translated
+                 * the chip layer — even at default zoom the labels drifted
+                 * away from the chip rows. Putting them in the viewport
+                 * portal makes them part of the same transformed coordinate
+                 * space as the nodes; `pointer-events: none` keeps the
+                 * cursor's view of the chips unchanged.
+                 */}
+                <ViewportPortal>
+                    <BandLabels rowWidth={labelRowWidth} />
+                </ViewportPortal>
                 <Controls position="bottom-right" showInteractive={false} />
             </ReactFlow>
             {edgeTooltip ? <EdgeTooltip {...edgeTooltip} /> : null}
@@ -169,31 +202,32 @@ function EdgeTooltip({ x, y, hypothesis }: { x: number; y: number; hypothesis: s
 }
 
 /**
- * Decorative band labels rendered behind the canvas. Each band shows
- * its perspective name + tagline so users can read the canvas without
- * having to infer band identity from chip placement.
+ * Decorative band labels rendered INSIDE the React Flow viewport via
+ * `<ViewportPortal>` so they pan + zoom with the chips. Each band has
+ * its own absolute-positioned label at the band's `y` in world
+ * coordinates, with a dashed bottom-border that spans the full label
+ * row width (= the rightmost chip's column + a column's worth of
+ * padding).
  *
  * `aria-hidden` because the same labels are also encoded into each
  * chip's `perspective` field and the chip's `aria-label`; screen
- * readers don't need them twice.
+ * readers don't need them twice. `pointer-events: none` so the labels
+ * never intercept mouse events meant for chips or edges.
  */
-function BandLabels() {
+function BandLabels({ rowWidth }: { rowWidth: number }) {
     return (
-        <div
-            aria-hidden="true"
-            style={{
-                position: 'absolute',
-                inset: 0,
-                pointerEvents: 'none',
-                display: 'flex',
-                flexDirection: 'column',
-                zIndex: 1,
-            }}
-        >
-            {PERSPECTIVE_LABELS.map((band) => (
+        <div aria-hidden="true">
+            {PERSPECTIVE_LABELS.map((band, bandIndex) => (
                 <div
                     key={band.label}
                     style={{
+                        position: 'absolute',
+                        // World-coordinate positioning: label at the top of
+                        // its band. ViewportPortal applies the React Flow
+                        // viewport's transform (pan + zoom) on top.
+                        top: bandIndex * BAND_HEIGHT,
+                        left: 0,
+                        width: rowWidth,
                         height: BAND_HEIGHT,
                         borderBottom: '1px dashed var(--border-subtle)',
                         padding: '4px 8px',
@@ -202,6 +236,7 @@ function BandLabels() {
                         color: 'var(--text-tertiary)',
                         textTransform: 'uppercase',
                         letterSpacing: '0.06em',
+                        pointerEvents: 'none',
                     }}
                 >
                     {band.label}

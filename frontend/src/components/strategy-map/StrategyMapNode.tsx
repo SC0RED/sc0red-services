@@ -219,6 +219,20 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                     role="tooltip"
                     style={{
                         width: 280,
+                        // Cap the tooltip height so very long definitions
+                        // don't extend past the canvas (or, when flipped to
+                        // Position.Top, off the top of the viewport). The
+                        // header row stays put outside the scroll region;
+                        // only the definition + rationale-source body
+                        // scrolls. 320 px ≈ 8-9 lines of body text plus the
+                        // header — enough that the typical 50-300 char
+                        // definition fits without scrolling, while
+                        // outliers (e.g. multi-paragraph definitions in
+                        // very dense analyses) get a bounded UI rather
+                        // than overlaying the gaps panel below.
+                        maxHeight: 320,
+                        display: 'flex',
+                        flexDirection: 'column',
                         padding: '12px 14px',
                         background: 'var(--bg-surface-3)',
                         border: '1px solid var(--border-strong)',
@@ -234,6 +248,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                             justifyContent: 'space-between',
                             gap: '8px',
                             marginBottom: '8px',
+                            flexShrink: 0,
                         }}
                     >
                         <strong
@@ -248,32 +263,43 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                         </strong>
                         <ConfidenceChip confidence={data.confidence} />
                     </div>
-                    <p
+                    <div
+                        // Scrollable body. The header above stays pinned so
+                        // the user always sees the chip's title + confidence,
+                        // even when scrolling through a long definition.
                         style={{
-                            margin: 0,
-                            fontSize: '0.78rem',
-                            color: 'var(--text-secondary)',
-                            lineHeight: 1.6,
-                            whiteSpace: 'pre-line',
+                            overflowY: 'auto',
+                            flex: 1,
+                            minHeight: 0,
                         }}
                     >
-                        {data.definition}
-                    </p>
-                    {data.rationaleSource ? (
                         <p
                             style={{
-                                margin: '8px 0 0',
-                                paddingTop: '8px',
-                                borderTop: '1px solid var(--border-subtle)',
-                                fontSize: '0.7rem',
-                                fontStyle: 'italic',
-                                color: 'var(--text-tertiary)',
-                                lineHeight: 1.5,
+                                margin: 0,
+                                fontSize: '0.78rem',
+                                color: 'var(--text-secondary)',
+                                lineHeight: 1.6,
+                                whiteSpace: 'pre-line',
                             }}
                         >
-                            Source: {data.rationaleSource}
+                            {data.definition}
                         </p>
-                    ) : null}
+                        {data.rationaleSource ? (
+                            <p
+                                style={{
+                                    margin: '8px 0 0',
+                                    paddingTop: '8px',
+                                    borderTop: '1px solid var(--border-subtle)',
+                                    fontSize: '0.7rem',
+                                    fontStyle: 'italic',
+                                    color: 'var(--text-tertiary)',
+                                    lineHeight: 1.5,
+                                }}
+                            >
+                                Source: {data.rationaleSource}
+                            </p>
+                        ) : null}
+                    </div>
                 </div>
             </NodeToolbar>
         </div>
