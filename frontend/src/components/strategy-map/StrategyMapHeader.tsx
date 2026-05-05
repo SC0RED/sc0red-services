@@ -97,10 +97,16 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
                 isOpen={openSection === 'value-proposition'}
                 onToggle={() => toggle('value-proposition')}
             >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <span style={pillChipStyle}>{valueLabel}</span>
-                    <p style={bodyParagraphStyle}>{valueProposition.rationale}</p>
-                </div>
+                {/*
+                 * Same left-bar header treatment as each strategic priority
+                 * below — both are highlighted identity claims for the
+                 * company, both render with one consistent shape: blue
+                 * accent left border + uppercase title + paragraph
+                 * underneath. The earlier pill-chip treatment for the
+                 * value-proposition classification didn't read as a
+                 * "header" the way left-bar uppercase does.
+                 */}
+                <LabelledItem name={valueLabel}>{valueProposition.rationale}</LabelledItem>
             </ExpandableSection>
 
             {strategicPriorities.length > 0 ? (
@@ -120,23 +126,8 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
                         }}
                     >
                         {strategicPriorities.map((priority) => (
-                            <li
-                                key={priority.name}
-                                style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
-                            >
-                                {/*
-                                 * Render the priority's name as a pill chip — same
-                                 * styling as the Value Proposition chip above.
-                                 * Both elements are highlighted identity claims for
-                                 * the company; rendering them with one consistent
-                                 * treatment removes the "why do these look
-                                 * different" cognitive bump the user flagged.
-                                 * `<h4>` keeps heading semantics for screen readers
-                                 * + outline tools; the visual treatment is
-                                 * decorative.
-                                 */}
-                                <h4 style={pillChipHeadingStyle}>{priority.name}</h4>
-                                <p style={bodyParagraphStyle}>{priority.result}</p>
+                            <li key={priority.name}>
+                                <LabelledItem name={priority.name}>{priority.result}</LabelledItem>
                             </li>
                         ))}
                     </ul>
@@ -222,30 +213,34 @@ const bodyParagraphStyle: React.CSSProperties = {
 }
 
 /**
- * Single visual treatment shared by every "highlighted identity claim"
- * in the header: the value-proposition classification + each strategic
- * priority's name. They're conceptually peers (named labels the company
- * is staking out for itself) so they read with one consistent shape.
+ * Shared block layout for any "highlighted identity claim" in the
+ * header — the value-proposition classification + each strategic
+ * priority. Blue accent left border + uppercase heading + paragraph
+ * detail underneath. One consistent treatment regardless of which
+ * disclosure section the item lives in.
  */
-const pillChipStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    width: 'fit-content',
-    padding: '3px 10px',
-    borderRadius: '999px',
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    background: 'var(--accent-blue-glow)',
-    color: 'var(--accent-blue)',
-    border: '1px solid var(--accent-blue)',
-    letterSpacing: '0.02em',
+function LabelledItem({ name, children }: { name: string; children: ReactNode }) {
+    return (
+        <div style={labelledItemStyle}>
+            <h4 style={labelledItemHeadingStyle}>{name}</h4>
+            <p style={bodyParagraphStyle}>{children}</p>
+        </div>
+    )
 }
 
-/**
- * `<h4>` variant of the pill chip — same visual treatment, but resets
- * the browser's default heading margins / font-size so the chip looks
- * identical to the `<span>` form used on the value-proposition row.
- */
-const pillChipHeadingStyle: React.CSSProperties = {
-    ...pillChipStyle,
+const labelledItemStyle: React.CSSProperties = {
+    paddingLeft: '12px',
+    borderLeft: '3px solid var(--accent-blue)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+}
+
+const labelledItemHeadingStyle: React.CSSProperties = {
     margin: 0,
+    fontSize: '0.85rem',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
 }
