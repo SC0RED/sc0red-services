@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
 import { Handle, type NodeProps, NodeToolbar, Position, type Node } from '@xyflow/react'
 
-import type { ConfidenceMarker } from '@/lib/types/api'
+import { useHoverIntent } from '@/lib/hooks/useHoverIntent'
 import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
+import type { ConfidenceMarker } from '@/lib/types/api'
 
 import ConfidenceChip from './ConfidenceChip'
 
@@ -59,54 +59,13 @@ const PERSPECTIVE_ACCENT: Record<StrategyMapNodeData['perspective'], string> = {
     capacity: 'var(--text-secondary)',
 }
 
-/**
- * Grace period (ms) before a `mouseLeave` actually closes the tooltip.
- *
- * Why a delay at all: the tooltip is rendered via NodeToolbar's portal,
- * which lives in a separate DOM tree from the chip. Moving the cursor
- * from chip → tooltip therefore briefly leaves BOTH areas (the gap
- * between them sits in neither), which fires `mouseLeave` on the chip
- * before `mouseEnter` fires on the tooltip. Without a grace period, the
- * tooltip closes mid-transit and the user can never reach its
- * scrollbar — the bug the user reported on PR #244.
- *
- * 200 ms is the established hover-intent default (slow enough that most
- * cursor transits land safely on the tooltip, fast enough that an
- * intentional "look away" reads as immediate).
- */
-const HOVER_CLOSE_DELAY_MS = 200
-
 export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<StrategyMapNodeData>>) {
-    const [hovered, setHovered] = useState(false)
-    // Pending close-timeout. Captured in a ref so handlers can cancel it
-    // without re-running effects. See HOVER_CLOSE_DELAY_MS for the
-    // hover-intent rationale.
-    const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    const cancelClose = useCallback(() => {
-        if (closeTimerRef.current !== null) {
-            clearTimeout(closeTimerRef.current)
-            closeTimerRef.current = null
-        }
-    }, [])
-
-    const openNow = useCallback(() => {
-        cancelClose()
-        setHovered(true)
-    }, [cancelClose])
-
-    const scheduleClose = useCallback(() => {
-        cancelClose()
-        closeTimerRef.current = setTimeout(() => {
-            closeTimerRef.current = null
-            setHovered(false)
-        }, HOVER_CLOSE_DELAY_MS)
-    }, [cancelClose])
-
-    // Drop any pending timer if the component unmounts mid-transit so
-    // we don't call setState on an unmounted component.
-    useEffect(() => () => cancelClose(), [cancelClose])
-
+    // Hover state with safe-transit grace period — the tooltip lives in
+    // NodeToolbar's portal so the cursor briefly leaves both chip and
+    // tooltip during transit; without the grace period the tooltip
+    // would close before the cursor could reach it. See useHoverIntent
+    // for the full rationale + state machine.
+    const { hovered, openNow, scheduleClose, setHovered } = useHoverIntent()
     // Treat React Flow's `selected` (set on tap-to-focus) as equivalent to
     // hover so touch users see the same tooltip without a second tap.
     const showDetail = hovered || Boolean(selected)
