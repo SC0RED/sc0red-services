@@ -113,15 +113,22 @@ describe('StrategyMapNode — default chip state', () => {
 })
 
 describe('StrategyMapNode — hover surfaces tooltip', () => {
-    it('surfaces the full definition + ConfidenceChip when hovered', () => {
+    it('surfaces the full definition + ConfidenceIndicator when hovered', () => {
         renderInProvider(<StrategyMapNode {...nodeProps()} />)
         const node = screen.getByRole('button')
         fireEvent.mouseEnter(node)
 
         expect(screen.getByRole('tooltip')).toBeInTheDocument()
         expect(screen.getByText(/We will grow same-segment revenue/)).toBeInTheDocument()
-        // The ConfidenceChip renders the literal label.
-        expect(screen.getAllByText('HIGH').length).toBeGreaterThan(0)
+        // ConfidenceIndicator surfaces confidence via aria-label, not
+        // visible text — there's no longer a literal "HIGH" / "MEDIUM" /
+        // "LOW" label visible on the chip (that was the legacy
+        // ConfidenceChip's anti-pattern, which used the risk-tier
+        // palette). One indicator renders in the chip header (small
+        // size) and a second renders in the tooltip body (default size),
+        // so we expect at least 2 instances when hovered.
+        const indicators = screen.getAllByLabelText(/Confidence: high/i)
+        expect(indicators.length).toBeGreaterThanOrEqual(2)
     })
 
     it('shows the rationale_source when supplied', () => {
@@ -167,25 +174,32 @@ describe('StrategyMapNode — hover surfaces tooltip', () => {
     })
 })
 
-describe('StrategyMapNode — confidence dot palette', () => {
-    it('renders dot in --risk-low for HIGH', () => {
+describe('StrategyMapNode — confidence indicator (no risk-tier palette)', () => {
+    // Replaces the legacy "confidence dot palette" tests. Per
+    // `ai-output-trust-markers`, the chip header renders a
+    // `ConfidenceIndicator` (3-dot scale, neutral palette) — NOT the
+    // risk-tier-colored dot. The component itself is unit-tested in
+    // `ConfidenceIndicator.test.tsx`; here we just verify it's wired
+    // into the chip header via accessible name.
+
+    it('renders an indicator with "Confidence: High" in the chip header for HIGH', () => {
         renderInProvider(<StrategyMapNode {...nodeProps()} />)
-        const dot = screen.getByTitle('Confidence: HIGH')
-        expect(dot).toHaveStyle({ background: 'var(--risk-low)' })
+        // The chip header has a small ConfidenceIndicator; the tooltip
+        // would have a default-size one, but the tooltip is hidden
+        // until hover. So pre-hover, exactly 1 indicator renders.
+        expect(screen.getAllByLabelText('Confidence: High').length).toBe(1)
     })
 
-    it('renders dot in --risk-moderate for MEDIUM', () => {
+    it('renders an indicator with "Confidence: Medium" for MEDIUM', () => {
         const data: StrategyMapNodeData = { ...baseData, confidence: 'MEDIUM' }
         renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
-        const dot = screen.getByTitle('Confidence: MEDIUM')
-        expect(dot).toHaveStyle({ background: 'var(--risk-moderate)' })
+        expect(screen.getAllByLabelText('Confidence: Medium').length).toBe(1)
     })
 
-    it('renders dot in --risk-high for LOW', () => {
+    it('renders an indicator with "Confidence: Low" for LOW', () => {
         const data: StrategyMapNodeData = { ...baseData, confidence: 'LOW' }
         renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
-        const dot = screen.getByTitle('Confidence: LOW')
-        expect(dot).toHaveStyle({ background: 'var(--risk-high)' })
+        expect(screen.getAllByLabelText('Confidence: Low').length).toBe(1)
     })
 })
 

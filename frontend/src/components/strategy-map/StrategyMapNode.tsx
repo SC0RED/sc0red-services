@@ -2,11 +2,9 @@
 
 import { Handle, type NodeProps, NodeToolbar, Position, type Node } from '@xyflow/react'
 
+import ConfidenceIndicator from '@/components/analysis/ConfidenceIndicator'
 import { useHoverIntent } from '@/lib/hooks/useHoverIntent'
 import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
-import type { ConfidenceMarker } from '@/lib/types/api'
-
-import ConfidenceChip from './ConfidenceChip'
 
 /**
  * Custom React Flow node for the strategy-map canvas.
@@ -21,12 +19,14 @@ import ConfidenceChip from './ConfidenceChip'
  *   - Objective ID in monospace (cross-references in arrows + gaps stay
  *     readable when users scan the map).
  *   - Single-line title with CSS ellipsis.
- *   - 8 px circular confidence dot using the existing risk-tier palette.
+ *   - Compact `ConfidenceIndicator` (3-dot scale, neutral palette) so
+ *     the chip header signals confidence without recruiting the
+ *     risk-tier palette.
  *
  * Hover / focus tooltip:
  *   - Full definition paragraph.
- *   - The literal HIGH / MEDIUM / LOW label via the existing
- *     `ConfidenceChip` component.
+ *   - Default-size `ConfidenceIndicator` with tooltip-on-hover for the
+ *     long-form rationale.
  *   - The `rationale_source` traceability note when the AI supplied one.
  *
  * The tooltip is rendered through React Flow's `NodeToolbar` primitive,
@@ -43,13 +43,6 @@ import ConfidenceChip from './ConfidenceChip'
 
 const CHIP_WIDTH = 220
 const CHIP_HEIGHT = 64
-
-/** Palette per the change spec — reuses existing risk-tier tokens. */
-const CONFIDENCE_DOT: Record<ConfidenceMarker, string> = {
-    HIGH: 'var(--risk-low)',
-    MEDIUM: 'var(--risk-moderate)',
-    LOW: 'var(--risk-high)',
-}
 
 /** Slight visual differentiation per perspective via a left-border accent. */
 const PERSPECTIVE_ACCENT: Record<StrategyMapNodeData['perspective'], string> = {
@@ -147,17 +140,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                 >
                     {data.objectiveId}
                 </span>
-                <span
-                    aria-hidden="true"
-                    title={`Confidence: ${data.confidence}`}
-                    style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: CONFIDENCE_DOT[data.confidence],
-                        flexShrink: 0,
-                    }}
-                />
+                <ConfidenceIndicator confidence={data.confidence} size="small" />
                 {data.capacityBucket ? (
                     <span
                         style={{
@@ -286,7 +269,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                         >
                             {renderedTitle}
                         </strong>
-                        <ConfidenceChip confidence={data.confidence} />
+                        <ConfidenceIndicator confidence={data.confidence} />
                     </div>
                     <div
                         // Scrollable body. The header above stays pinned so

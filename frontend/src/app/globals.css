@@ -1439,6 +1439,29 @@ select {
     line-height: 1.6;
 }
 
+/* ── Provenance Markers ─────────────────────────────────────
+   Consumed by `ProvenanceMarker` component. Subtle uppercase-tracking
+   treatment matching the previous inline-styled `(synthesised)` text
+   it replaces — same visual weight, but now component-driven so any
+   future redesign of provenance signaling is a one-place edit. */
+.provenance-marker {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.provenance-marker-icon {
+    width: 10px;
+    height: 10px;
+    color: var(--accent-blue);
+    flex-shrink: 0;
+}
+
 .page-title {
     font-size: 1.5rem;
     font-weight: 700;

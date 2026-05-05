@@ -83,10 +83,16 @@ describe('StrategyMapView — structural composition', () => {
         expect(screen.getByTestId('strategy-map-whats-missing')).toBeInTheDocument()
     })
 
-    it('renders the core-values strip with the inferred marker for synthesised values', () => {
+    it('renders the core-values strip with a ProvenanceMarker for synthesised values', () => {
+        // Per `ai-output-trust-markers`, the inline "(inferred)"
+        // parenthetical is replaced by a `ProvenanceMarker` component.
+        // The visible label is now "Live our values:" alone, plus a
+        // separate ProvenanceMarker element with `aria-label="AI-inferred"`.
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        expect(screen.getByText(/Live our values \(inferred\):/)).toBeInTheDocument()
+        expect(screen.getByText(/Live our values:/)).toBeInTheDocument()
         expect(screen.getByText(/Care for customers/)).toBeInTheDocument()
+        // ProvenanceMarker is present (aria-label is the canonical query).
+        expect(screen.getAllByLabelText('AI-inferred').length).toBeGreaterThanOrEqual(1)
     })
 })
 
@@ -108,14 +114,25 @@ describe('StrategyMapView — header disclosures (single-open accordion)', () =>
         }
     })
 
-    it('renders the mission summary label with synthesised marker (visible when closed)', () => {
+    it('renders the mission summary label with a ProvenanceMarker (visible when closed)', () => {
+        // Per `ai-output-trust-markers`, the inline "(synthesised)"
+        // parenthetical in the mission summary label is replaced by a
+        // `ProvenanceMarker` component. The visible label is "Mission"
+        // alone; the ProvenanceMarker (aria-label="AI-inferred") sits
+        // next to it inside the summary element.
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        expect(screen.getByText(/Mission \(synthesised\)/i)).toBeInTheDocument()
+        const summary = summaryFor('Mission')
+        expect(summary).toBeInTheDocument()
+        // The summary contains the marker — query inside the closest
+        // <summary> element. (Note: there's also one for Vision, hence
+        // getAllByLabelText returning multiple is fine; we just verify
+        // at least one exists.)
+        expect(screen.getAllByLabelText('AI-inferred').length).toBeGreaterThanOrEqual(1)
     })
 
     it('opens the mission section and shows the statement when the summary is clicked', () => {
         const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        fireEvent.click(summaryFor(/Mission \(synthesised\)/i))
+        fireEvent.click(summaryFor('Mission'))
 
         // Exactly one details is open.
         const openDetails = Array.from(container.querySelectorAll('details')).filter((d) =>
@@ -130,7 +147,7 @@ describe('StrategyMapView — header disclosures (single-open accordion)', () =>
 
     it('opening a different section auto-closes the previously open one (single-open accordion)', () => {
         const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        fireEvent.click(summaryFor(/Mission \(synthesised\)/i))
+        fireEvent.click(summaryFor('Mission'))
         fireEvent.click(summaryFor('Value Proposition'))
 
         const openDetails = Array.from(container.querySelectorAll('details')).filter((d) =>
@@ -142,7 +159,7 @@ describe('StrategyMapView — header disclosures (single-open accordion)', () =>
 
     it('clicking the same summary again closes the section', () => {
         const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        const summary = summaryFor(/Mission \(synthesised\)/i)
+        const summary = summaryFor('Mission')
         fireEvent.click(summary)
         fireEvent.click(summary)
         const openDetails = Array.from(container.querySelectorAll('details')).filter((d) =>
