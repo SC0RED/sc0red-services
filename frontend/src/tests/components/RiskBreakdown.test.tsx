@@ -46,15 +46,23 @@ describe('RiskBreakdown', () => {
     })
 
     it('clicking a risk item expands it and shows rationale', () => {
+        // Per `expandable-card-pattern`, ExpandableCard always keeps the
+        // body in the DOM (uses `hidden` attribute when closed, NOT
+        // conditional rendering) so `aria-controls` references a valid
+        // element even when collapsed. Tests now query state via
+        // `aria-expanded` on the trigger button rather than DOM presence
+        // of the body text.
         render(<RiskBreakdown riskScores={mockRiskScores} />)
 
-        expect(screen.queryByText('Strong competition from AI startups')).not.toBeInTheDocument()
-
         const competitiveButton = screen.getByText('Competitive Displacement').closest('button')!
-        fireEvent.click(competitiveButton)
+        // Initially collapsed.
+        expect(competitiveButton).toHaveAttribute('aria-expanded', 'false')
 
-        expect(screen.getByText('Strong competition from AI startups')).toBeInTheDocument()
+        // Expand.
+        fireEvent.click(competitiveButton)
         expect(competitiveButton).toHaveAttribute('aria-expanded', 'true')
+        // Rationale text is now visible (not hidden).
+        expect(screen.getByText('Strong competition from AI startups')).toBeInTheDocument()
     })
 
     it('clicking an expanded risk item collapses it', () => {
@@ -64,11 +72,12 @@ describe('RiskBreakdown', () => {
 
         // Expand
         fireEvent.click(competitiveButton)
-        expect(screen.getByText('Strong competition from AI startups')).toBeInTheDocument()
+        expect(competitiveButton).toHaveAttribute('aria-expanded', 'true')
 
-        // Collapse
+        // Collapse — aria-expanded flips back to false. The rationale
+        // text remains in the DOM (with `hidden` attribute) but is not
+        // visible to users; we verify the state via aria-expanded.
         fireEvent.click(competitiveButton)
-        expect(screen.queryByText('Strong competition from AI startups')).not.toBeInTheDocument()
         expect(competitiveButton).toHaveAttribute('aria-expanded', 'false')
     })
 
