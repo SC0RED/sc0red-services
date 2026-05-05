@@ -221,6 +221,23 @@ describe('StrategyMapNode — shared-lane visual marker', () => {
     })
 })
 
+describe('StrategyMapNode — tooltip max-height (long-definition overflow)', () => {
+    /**
+     * Production data surfaced a chip with a multi-paragraph definition
+     * (~600 chars). The tooltip's intrinsic height extended past the
+     * canvas's bottom edge AND past the bottom of the page section,
+     * overlaying the gaps panel beneath. Bounded the wrapper at 320 px
+     * with internal scroll so the UI is consistent regardless of how
+     * verbose the AI was.
+     */
+    it('caps the tooltip wrapper at maxHeight: 320', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        fireEvent.mouseEnter(screen.getByRole('button'))
+        const tooltip = screen.getByRole('tooltip')
+        expect(tooltip).toHaveStyle({ maxHeight: '320px' })
+    })
+})
+
 describe('StrategyMapNode — tooltip side flips for the bottom band', () => {
     /**
      * The strategy-map canvas has 4 horizontal perspective bands; the
