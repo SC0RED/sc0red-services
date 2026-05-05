@@ -45,7 +45,7 @@ export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSecti
                 </p>
             )}
 
-            <div className="card" style={{ padding: '1rem' }}>
+            <div className="card card--rich">
                 <EbitdaTree treeData={ebitdaTree.treeData} opportunities={opportunities} />
             </div>
         </div>

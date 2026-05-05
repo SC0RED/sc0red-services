@@ -370,6 +370,48 @@ select {
     box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
+/* ── Card density variants ──────────────────────────────────
+   Three opinionated density variants of `.card`. Pick one based
+   on what's INSIDE the card:
+     - `.card--metric` — single number / single badge / single graphic.
+       Big central content, generous padding. Use for stat cards.
+     - `.card--list`   — compact single-line list row, often inside
+       an expandable accordion. Use for risk rows, opportunity rows,
+       value-chain steps, document list rows.
+     - `.card--rich`   — multi-element card with comfortable internal
+       spacing. Use for radar wrappers, paired stat groups, callout
+       cards with multiple lines.
+
+   Apply alongside `.card` (BEM-style modifier):
+     <div className="card card--list" />
+
+   Inline `padding` overrides the variant's lock — don't add them.
+   Inline `style` always wins over CSS class rules (specificity
+   1,0,0,0 vs 0,2,0) regardless of how the class is written, so the
+   compound selector here does NOT protect against rogue inline
+   padding. The protection is by convention: if you add a variant,
+   physically remove the inline padding from the JSX. The compound
+   selector (`.card.card--metric` rather than `.card--metric` alone)
+   serves a different purpose — it requires both the base `.card`
+   AND the variant class to apply, so a typo like
+   `className="card-metric"` (missing dash) silently no-ops rather
+   than cascading. If you find yourself reaching for inline padding,
+   you're probably picking the wrong variant.
+*/
+
+.card.card--metric {
+    padding: var(--card-padding-metric);
+    text-align: center;
+}
+
+.card.card--list {
+    padding: var(--card-padding-list);
+}
+
+.card.card--rich {
+    padding: var(--card-padding-rich);
+}
+
 .card-surface {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
@@ -1392,10 +1434,19 @@ select {
    `--section-header-row-gap` is the intra-row spacing between the
    heading and its trailing adornment (HelpTooltip, count badge,
    status pill). Locked into the token system from day one so the
-   future spacing proposal extends rather than introduces. */
+   future spacing proposal extends rather than introduces.
+
+   `--card-padding-{metric,list,rich}` are consumed by the three
+   `.card--*` density variants. Tokenising the values here (vs
+   inlining them in the variant rules) means a future redesign
+   that bumps density is one CSS edit per token rather than three
+   selector edits. Same DRY principle as the section-gap-y token. */
 :root {
     --section-gap-y: 1rem;
     --section-header-row-gap: 0.5rem;
+    --card-padding-metric: 2rem;
+    --card-padding-list: 0.75rem 1rem;
+    --card-padding-rich: 1.25rem 1.5rem;
 }
 
 .section-header {
