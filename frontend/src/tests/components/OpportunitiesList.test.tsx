@@ -123,9 +123,13 @@ describe('OpportunitiesList', () => {
         expect(screen.queryByText('AI Platform')).not.toBeInTheDocument()
     })
 
-    it('shows opportunity count in heading', () => {
+    it('does NOT render an internal "AI Opportunities" heading (page-level wrapper owns it)', () => {
+        // Per analysis-detail-consistency-wrapper D3, the heading +
+        // count badge `AI Opportunities ({n})` is rendered at the
+        // page level by `AnalysisSection`. The leaf renders only
+        // the category-chip filter row and the opportunity cards.
         render(<OpportunitiesList opportunities={mockOpportunities} activeLever="All" />)
-        expect(screen.getByText('AI Opportunities (3)')).toBeInTheDocument()
+        expect(screen.queryByText(/AI Opportunities/)).toBeNull()
     })
 
     it('combined category and lever filter produces intersection', () => {

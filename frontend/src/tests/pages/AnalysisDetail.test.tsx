@@ -841,6 +841,125 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
     })
 })
 
+describe('AnalysisDetail — section heading framing (analysis-detail-consistency-wrapper)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+    })
+
+    /**
+     * Per `analysis-detail-consistency-wrapper` D3, every migrated
+     * section's heading lives at the PAGE level (inside the
+     * `AnalysisSection` wrapper) rather than inside the leaf
+     * component. These tests pin the page-level rendering so a
+     * future regression that re-introduces an internal heading (or
+     * removes the page-level one) fails fast.
+     *
+     * Each assertion uses `within(wrapper).getByText(...)` so the
+     * test fails not just when the text is missing, but also if the
+     * text drifts to a different section's wrapper.
+     */
+    function buildFullData() {
+        return {
+            ...buildAnalysisData(),
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'r',
+                        label: 'Revenue',
+                        type: 'revenue' as const,
+                        description: 'r',
+                        linked_opportunity_indices: [],
+                        children: [],
+                    },
+                ],
+                ebitdaEstimate: '$2M-$8M',
+            },
+            valueChain: {
+                summary: 'Value chain summary',
+                steps: [
+                    {
+                        id: 's1',
+                        label: 'Inbound',
+                        description: 'd',
+                        category: 'primary' as const,
+                        risk_categories: [],
+                        opportunity_indices: [],
+                    },
+                ],
+            },
+        }
+    }
+
+    it('renders "Risk Breakdown" inside the page-level risk-breakdown wrapper', () => {
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-risk-breakdown')
+        expect(within(wrapper).getByRole('heading', { name: 'Risk Breakdown' })).toBeInTheDocument()
+    })
+
+    it('renders "EBITDA Impact Model" inside the page-level ebitda wrapper', () => {
+        render(<AnalysisDetail data={buildFullData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-ebitda')
+        expect(within(wrapper).getByRole('heading', { name: /EBITDA Impact Model/ })).toBeInTheDocument()
+    })
+
+    it('renders "Value Chain Analysis" inside the page-level value-chain wrapper', () => {
+        render(<AnalysisDetail data={buildFullData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-value-chain')
+        expect(within(wrapper).getByRole('heading', { name: 'Value Chain Analysis' })).toBeInTheDocument()
+    })
+
+    it('renders "Value Impact" inside the page-level value-lever wrapper', () => {
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-value-lever')
+        expect(within(wrapper).getByRole('heading', { name: /Value Impact/ })).toBeInTheDocument()
+    })
+
+    it('renders "AI Opportunities (3)" inside the page-level opportunities wrapper', () => {
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-opportunities')
+        // Heading text + count badge live together inside the page-level h2.
+        expect(within(wrapper).getByRole('heading', { name: /AI Opportunities \(3\)/ })).toBeInTheDocument()
+    })
+
+    it('renders "Improve This Analysis" inside the page-level document-upload wrapper', () => {
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-document-upload')
+        expect(within(wrapper).getByRole('heading', { name: 'Improve This Analysis' })).toBeInTheDocument()
+    })
+
+    it('renders the "Improve This Analysis" lead inside the same wrapper as the heading', () => {
+        // Pins the lead-paragraph containment so a regression that
+        // accidentally renders the lead as a sibling of the
+        // AnalysisSection (rather than inside it) fails. Closes a
+        // coverage gap noted by the architecture-reviewer.
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-document-upload')
+        expect(
+            within(wrapper).getByText(/Upload financial statements, board decks, or product docs/)
+        ).toBeInTheDocument()
+    })
+
+    it('omits the value-lever wrapper entirely when no opportunities have value_lever', () => {
+        // Page-level conditional rendering: when no value_lever data
+        // exists, the wrapper itself doesn't render — no empty
+        // testid'd element with just a heading and no body.
+        const data = buildAnalysisData({
+            opportunities: [
+                {
+                    title: 'Old Opportunity',
+                    description: 'No value lever set',
+                    impact_rating: 'High',
+                    timeline: 'Quick Win',
+                    strategic_category: 'Competitive Moat',
+                },
+            ],
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        expect(screen.queryByTestId('analysis-section-value-lever')).toBeNull()
+    })
+})
+
 /**
  * Strategy-map fixture for ordering tests. Mirrors the shape required
  * by `StrategyMapView` so the component renders without throwing during

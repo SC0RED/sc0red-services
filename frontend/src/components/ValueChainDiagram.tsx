@@ -19,8 +19,8 @@ export default function ValueChainDiagram({ steps, opportunities, summary }: Val
 
     return (
         <div style={{ marginBottom: '2rem' }}>
-            <h2 className="section-header">Value Chain Analysis</h2>
-
+            {/* Section heading lives at the page level via AnalysisSection
+                (analysis-detail-consistency-wrapper D3). */}
             <p
                 style={{
                     fontSize: '0.875rem',
