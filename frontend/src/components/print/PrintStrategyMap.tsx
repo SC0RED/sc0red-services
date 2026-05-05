@@ -1,3 +1,4 @@
+import ProvenanceMarker from '@/components/analysis/ProvenanceMarker'
 import type { StrategyMap } from '@/lib/types/api'
 import { formatValueProposition } from '@/lib/utils/strategyMapUtils'
 
@@ -106,11 +107,19 @@ function PrintHeader({ strategyMap }: { strategyMap: StrategyMap }) {
         <div style={{ marginBottom: '20px' }}>
             <p style={{ fontSize: '0.95rem', fontStyle: 'italic', margin: '0 0 6px' }}>
                 <strong>Vision:</strong> &ldquo;{vision.statement}&rdquo;
-                {vision.synthesised ? ' (synthesised)' : ''}
+                {vision.synthesised ? (
+                    <span style={{ marginLeft: '6px', fontStyle: 'normal' }}>
+                        <ProvenanceMarker kind="inferred" />
+                    </span>
+                ) : null}
             </p>
             <p style={{ fontSize: '0.85rem', margin: '0 0 6px', color: 'var(--text-secondary)' }}>
                 <strong>Mission:</strong> {mission.statement}
-                {mission.synthesised ? ' (synthesised)' : ''}
+                {mission.synthesised ? (
+                    <span style={{ marginLeft: '6px' }}>
+                        <ProvenanceMarker kind="inferred" />
+                    </span>
+                ) : null}
             </p>
             <p style={{ fontSize: '0.85rem', margin: '0 0 10px', color: 'var(--text-secondary)' }}>
                 <strong>Value Proposition:</strong>{' '}
@@ -215,8 +224,13 @@ function PrintCoreValuesStrip({ values, synthesised }: { values: string[]; synth
                 color: 'var(--text-secondary)',
             }}
         >
-            <strong>Live our values{synthesised ? ' (inferred)' : ''}: </strong>
+            <strong>Live our values: </strong>
             {values.join(' · ')}
+            {synthesised ? (
+                <span style={{ marginLeft: '6px' }}>
+                    <ProvenanceMarker kind="inferred" />
+                </span>
+            ) : null}
         </div>
     )
 }

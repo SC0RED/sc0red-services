@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 
+import ProvenanceMarker from '@/components/analysis/ProvenanceMarker'
 import type { StrategyMap } from '@/lib/types/api'
 import { formatValueProposition } from '@/lib/utils/strategyMapUtils'
 
@@ -68,24 +69,23 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
             >
                 &ldquo;{vision.statement}&rdquo;
                 {vision.synthesised ? (
-                    <span
-                        style={{
-                            marginLeft: '8px',
-                            fontStyle: 'normal',
-                            fontSize: '0.7rem',
-                            color: 'var(--text-tertiary)',
-                            fontWeight: 600,
-                            letterSpacing: '0.06em',
-                            textTransform: 'uppercase',
-                        }}
-                    >
-                        (synthesised)
+                    <span style={{ marginLeft: '8px', fontStyle: 'normal' }}>
+                        <ProvenanceMarker kind="inferred" />
                     </span>
                 ) : null}
             </p>
 
             <ExpandableSection
-                label={`Mission${mission.synthesised ? ' (synthesised)' : ''}`}
+                label={
+                    <>
+                        Mission
+                        {mission.synthesised ? (
+                            <span style={{ marginLeft: '8px' }}>
+                                <ProvenanceMarker kind="inferred" />
+                            </span>
+                        ) : null}
+                    </>
+                }
                 isOpen={openSection === 'mission'}
                 onToggle={() => toggle('mission')}
             >
@@ -155,7 +155,7 @@ function ExpandableSection({
     onToggle,
     children,
 }: {
-    label: string
+    label: ReactNode
     isOpen: boolean
     onToggle: () => void
     children: ReactNode

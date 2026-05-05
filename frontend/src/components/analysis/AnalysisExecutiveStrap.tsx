@@ -1,5 +1,6 @@
 import { formatAbsoluteUTC, parseIsoDate } from '@/lib/utils/dateFormat'
 import { getRiskTier } from '@/lib/utils/riskUtils'
+import { capitalise } from '@/lib/utils/stringUtils'
 import type { AnalysisData } from '@/lib/types/api'
 
 /**
@@ -79,8 +80,4 @@ export default function AnalysisExecutiveStrap({ data }: { data: AnalysisData })
             ))}
         </div>
     )
-}
-
-function capitalise(value: string): string {
-    return value.charAt(0).toUpperCase() + value.slice(1)
 }

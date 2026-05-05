@@ -1,5 +1,6 @@
 'use client'
 
+import ProvenanceMarker from '@/components/analysis/ProvenanceMarker'
 import type { StrategyMap } from '@/lib/types/api'
 
 import StrategyMapCanvas from './StrategyMapCanvas'
@@ -81,9 +82,14 @@ function CoreValuesStrip({ values, synthesised }: { values: string[]; synthesise
                     marginRight: '8px',
                 }}
             >
-                Live our values{synthesised ? ' (inferred)' : ''}:
+                Live our values:
             </span>
             {values.join(' · ')}
+            {synthesised ? (
+                <span style={{ marginLeft: '8px' }}>
+                    <ProvenanceMarker kind="inferred" />
+                </span>
+            ) : null}
         </div>
     )
 }
