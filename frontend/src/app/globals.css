@@ -1381,10 +1381,45 @@ select {
 }
 
 /* ── Section Headers ─────────────────────────────────────── */
+
+/* Vertical-spacing token for content within a section. Initially
+   used by `.section-header-row` and `.section-lead`; future spacing
+   work (the `section-spacing-tokens` proposal) will extend this to
+   section-to-section gaps and other vertical-rhythm anchors so the
+   page reads as one deliberate scroll-rhythm instead of accreted
+   per-component margins. */
+:root {
+    --section-gap-y: 1rem;
+}
+
 .section-header {
     font-size: 1.125rem;
     font-weight: 700;
-    margin-bottom: 1rem;
+    margin-bottom: var(--section-gap-y);
+}
+
+/* Row container for section heading + optional inline adornment
+   (HelpTooltip, count badge, status pill). Owns the bottom margin
+   so the heading inside doesn't double up its own. Adornment renders
+   as a SIBLING of the `<h2>` so the heading's accessible name stays
+   exactly the title text. See `extract-definition-popover` D2. */
+.section-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: var(--section-gap-y);
+}
+
+/* When inside the row, the heading's own bottom margin would double
+   up against the row's. CSS specificity (compound selector)
+   guarantees this rule wins over the bare `.section-header` rule. */
+.section-header-row > .section-header {
+    margin-bottom: 0;
+}
+
+.section-header-adornment {
+    display: inline-flex;
+    align-items: center;
 }
 
 /* Optional one-line lead paragraph below a section heading.
@@ -1392,7 +1427,7 @@ select {
    `.section-header` so any future redesign of section
    typography is one CSS edit. */
 .section-lead {
-    margin: 0 0 1rem;
+    margin: 0 0 var(--section-gap-y);
     font-size: 0.875rem;
     color: var(--text-secondary);
     line-height: 1.6;

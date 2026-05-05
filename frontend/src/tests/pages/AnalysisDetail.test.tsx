@@ -146,9 +146,12 @@ describe('AnalysisDetail — Value Lever', () => {
         expect(screen.getByText('Automate Support')).toBeInTheDocument()
         expect(screen.getByText('AI Platform')).toBeInTheDocument()
 
-        // Click the "Revenue Side" summary card (the one inside the Value Impact section)
-        const valueImpactHeading = screen.getByText('Value Impact')
-        const valueImpactSection = valueImpactHeading.parentElement!
+        // Click the "Revenue Side" summary card (the one inside the Value Impact section).
+        // Pre-`extract-definition-popover` this used `.parentElement!` from
+        // the heading text — that walked into `.section-header-row`, which
+        // no longer contains the lever cards. The testid wrapper is the
+        // stable handle.
+        const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const revenueSideCard = within(valueImpactSection).getAllByText('Revenue Side')[0]
         fireEvent.click(revenueSideCard.closest('[class*="card"]')!)
 
@@ -161,7 +164,7 @@ describe('AnalysisDetail — Value Lever', () => {
         const data = buildAnalysisData()
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        const valueImpactSection = screen.getByText('Value Impact').parentElement!
+        const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const costSideCard = within(valueImpactSection)
             .getAllByText('Cost Side')[0]
             .closest('[class*="card"]')!
@@ -201,8 +204,7 @@ describe('AnalysisDetail — Value Lever', () => {
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
         // Click "Competitive Moat" category filter — use the filter button, not the badge
-        const oppHeading = screen.getByText(/AI Opportunities/)
-        const oppSection = oppHeading.parentElement!
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
         const competitiveMoatButton = within(oppSection).getAllByText('Competitive Moat')[0]
         fireEvent.click(competitiveMoatButton)
 
@@ -210,7 +212,7 @@ describe('AnalysisDetail — Value Lever', () => {
         expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
 
         // Now also filter by "Cost Side" lever — intersection should be empty
-        const valueImpactSection = screen.getByText('Value Impact').parentElement!
+        const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const costSideCard = within(valueImpactSection)
             .getAllByText('Cost Side')[0]
             .closest('[class*="card"]')!
@@ -897,10 +899,28 @@ describe('AnalysisDetail — section heading framing (analysis-detail-consistenc
         expect(within(wrapper).getByRole('heading', { name: 'Risk Breakdown' })).toBeInTheDocument()
     })
 
-    it('renders "EBITDA Impact Model" inside the page-level ebitda wrapper', () => {
+    it('renders "EBITDA Impact Model" inside the page-level ebitda wrapper with a clean accessible name', () => {
+        // Two assertions, two roles:
+        //   1. Exact-match heading query — REGRESSION GUARD against
+        //      future drift where a contributor smuggles raw text or
+        //      another label into the title.
+        //   2. `heading.contains(helpButton)).toBe(false)` — the TRUE
+        //      structural proof that HelpTooltip is a sibling of the
+        //      <h2>, not a descendant. Under the old inside-h2
+        //      structure this would correctly fail.
+        // Note: the exact-match query alone is NOT a structural proof —
+        // `dom-accessibility-api` doesn't concatenate the descendant
+        // button's `aria-label` into the heading's name when the
+        // button's visible content is `aria-hidden`.
         render(<AnalysisDetail data={buildFullData()} analysisId="test-id" />)
         const wrapper = screen.getByTestId('analysis-section-ebitda')
-        expect(within(wrapper).getByRole('heading', { name: /EBITDA Impact Model/ })).toBeInTheDocument()
+        const heading = within(wrapper).getByRole('heading', { name: 'EBITDA Impact Model' })
+        expect(heading).toBeInTheDocument()
+        // Structural proof: help-tooltip button is INSIDE the section
+        // wrapper but OUTSIDE the heading element.
+        const helpButton = within(wrapper).getByRole('button', { name: /What is EBITDA Tree/i })
+        expect(helpButton).toBeInTheDocument()
+        expect(heading.contains(helpButton)).toBe(false)
     })
 
     it('renders "Value Chain Analysis" inside the page-level value-chain wrapper', () => {
@@ -909,17 +929,32 @@ describe('AnalysisDetail — section heading framing (analysis-detail-consistenc
         expect(within(wrapper).getByRole('heading', { name: 'Value Chain Analysis' })).toBeInTheDocument()
     })
 
-    it('renders "Value Impact" inside the page-level value-lever wrapper', () => {
+    it('renders "Value Impact" inside the page-level value-lever wrapper with a clean accessible name', () => {
+        // Same two-assertion pattern as the EBITDA test above:
+        // exact-match heading is a regression guard; `contains(...).toBe(false)`
+        // is the structural proof that HelpTooltip lives outside the <h2>.
         render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
         const wrapper = screen.getByTestId('analysis-section-value-lever')
-        expect(within(wrapper).getByRole('heading', { name: /Value Impact/ })).toBeInTheDocument()
+        const heading = within(wrapper).getByRole('heading', { name: 'Value Impact' })
+        expect(heading).toBeInTheDocument()
+        const helpButton = within(wrapper).getByRole('button', { name: /What is Value Lever/i })
+        expect(helpButton).toBeInTheDocument()
+        expect(heading.contains(helpButton)).toBe(false)
     })
 
-    it('renders "AI Opportunities (3)" inside the page-level opportunities wrapper', () => {
+    it('renders "AI Opportunities (3)" inside the page-level opportunities wrapper with a clean accessible name', () => {
+        // Title text includes the count badge ("AI Opportunities (3)")
+        // because the badge is a structural part of the heading text,
+        // not an interactive adornment. The HelpTooltip moves to the
+        // adornment slot. Same regression-guard + structural-proof
+        // pattern as above.
         render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
         const wrapper = screen.getByTestId('analysis-section-opportunities')
-        // Heading text + count badge live together inside the page-level h2.
-        expect(within(wrapper).getByRole('heading', { name: /AI Opportunities \(3\)/ })).toBeInTheDocument()
+        const heading = within(wrapper).getByRole('heading', { name: 'AI Opportunities (3)' })
+        expect(heading).toBeInTheDocument()
+        const helpButton = within(wrapper).getByRole('button', { name: /What is Impact Rating/i })
+        expect(helpButton).toBeInTheDocument()
+        expect(heading.contains(helpButton)).toBe(false)
     })
 
     it('renders "Improve This Analysis" inside the page-level document-upload wrapper', () => {
