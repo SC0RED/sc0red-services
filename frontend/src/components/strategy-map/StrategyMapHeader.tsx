@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import type { StrategyMap } from '@/lib/types/api'
 import { formatValueProposition } from '@/lib/utils/strategyMapUtils'
@@ -11,15 +11,22 @@ import { formatValueProposition } from '@/lib/utils/strategyMapUtils'
  * - **Vision**: italic single line, truncated with ellipsis. The full
  *   text is exposed via the native `title` attribute (browser tooltip)
  *   on overflow.
- * - **Mission**: hidden behind a native `<details>` disclosure
- *   (`Mission ▾`). Closed by default.
- * - **Value proposition**: chip stays visible; rationale moves into a
- *   hover/focus tooltip on the chip.
- * - **Strategic priorities**: pill list with hover/focus tooltip
- *   surfacing the priority's `result` text.
+ * - **Mission**, **Value Proposition**, **Strategic Priorities**: each
+ *   rendered with the same `ExpandableSection` disclosure pattern:
+ *   uppercase section label as the summary, click toggles open/close,
+ *   detail content (statement / chip + rationale / per-priority
+ *   highlighted name + result text) lives in the body.
+ *
+ *   Earlier versions used three different interaction patterns
+ *   (Mission as <details>, Value Proposition as a chip with hover
+ *   tooltip, Strategic Priorities as pills with hover tooltips), which
+ *   made the header feel inconsistent. Unifying on one disclosure
+ *   pattern gives the user a single mental model and surfaces all
+ *   detail with a click rather than a hover hunt.
  */
 export default function StrategyMapHeader({ strategyMap }: { strategyMap: StrategyMap }) {
     const { vision, mission, valueProposition, strategicPriorities } = strategyMap
+    const valueLabel = formatValueProposition(valueProposition.primary, valueProposition.secondary)
     return (
         <header
             style={{
@@ -73,185 +80,143 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
                 ) : null}
             </p>
 
-            <details style={{ fontSize: '0.85rem' }}>
-                <summary
-                    style={{
-                        cursor: 'pointer',
-                        fontSize: '0.7rem',
-                        color: 'var(--text-tertiary)',
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                    }}
-                >
-                    Mission {mission.synthesised ? '(synthesised)' : ''}
-                </summary>
-                <p
-                    style={{
-                        fontSize: '0.9rem',
-                        color: 'var(--text-secondary)',
-                        margin: '8px 0 0',
-                        lineHeight: 1.6,
-                    }}
-                >
-                    {mission.statement}
-                </p>
-            </details>
+            <ExpandableSection label={`Mission${mission.synthesised ? ' (synthesised)' : ''}`}>
+                <p style={bodyParagraphStyle}>{mission.statement}</p>
+            </ExpandableSection>
 
-            <ValuePropositionRow valueProposition={valueProposition} />
+            <ExpandableSection label="Value Proposition">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <span style={valuePropositionChipStyle}>{valueLabel}</span>
+                    <p style={bodyParagraphStyle}>{valueProposition.rationale}</p>
+                </div>
+            </ExpandableSection>
 
-            {strategicPriorities.length > 0 ? <PriorityLegend priorities={strategicPriorities} /> : null}
+            {strategicPriorities.length > 0 ? (
+                <ExpandableSection label="Strategic Priorities">
+                    <ul
+                        style={{
+                            listStyle: 'none',
+                            padding: 0,
+                            margin: 0,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                        }}
+                    >
+                        {strategicPriorities.map((priority) => (
+                            <li key={priority.name} style={priorityItemStyle}>
+                                <h4 style={priorityNameStyle}>{priority.name}</h4>
+                                <p style={bodyParagraphStyle}>{priority.result}</p>
+                            </li>
+                        ))}
+                    </ul>
+                </ExpandableSection>
+            ) : null}
         </header>
     )
 }
 
-function ValuePropositionRow({ valueProposition }: { valueProposition: StrategyMap['valueProposition'] }) {
-    const [hovered, setHovered] = useState(false)
-    const label = formatValueProposition(valueProposition.primary, valueProposition.secondary)
+/**
+ * One disclosure section in the header band. Uses native `<details>` so
+ * the keyboard story is correct by default (`Enter`/`Space` toggles,
+ * `aria-expanded` is implied). The native triangle marker is replaced
+ * with a custom rotating ▸ that flips to ▾ on open — driven by React
+ * state because inline styles can't target the `[open]` attribute.
+ *
+ * Default state is OPEN: the previous design had Mission collapsed and
+ * the other two open, which forced the user to click to read the
+ * mission. With the unified pattern we want the user to see all the
+ * positioning content on first load; they can collapse anything
+ * deliberately if they want a tighter view.
+ */
+function ExpandableSection({
+    label,
+    children,
+    defaultOpen = true,
+}: {
+    label: string
+    children: ReactNode
+    defaultOpen?: boolean
+}) {
+    const [open, setOpen] = useState(defaultOpen)
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-            <span
-                style={{
-                    fontSize: '0.7rem',
-                    color: 'var(--text-tertiary)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                }}
-            >
-                Value Proposition:
-            </span>
-            <button
-                type="button"
-                onMouseEnter={() => setHovered(true)}
-                onMouseLeave={() => setHovered(false)}
-                onFocus={() => setHovered(true)}
-                onBlur={() => setHovered(false)}
-                onClick={() => setHovered((current) => !current)}
-                aria-describedby={hovered ? 'value-prop-rationale' : undefined}
-                style={{
-                    display: 'inline-flex',
-                    padding: '3px 10px',
-                    borderRadius: '999px',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    background: 'var(--accent-blue-glow)',
-                    color: 'var(--accent-blue)',
-                    border: '1px solid var(--accent-blue)',
-                    letterSpacing: '0.02em',
-                    cursor: 'help',
-                    fontFamily: 'inherit',
-                }}
-            >
-                {label}
-            </button>
-            {hovered ? (
-                <div
-                    id="value-prop-rationale"
-                    role="tooltip"
-                    style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        marginTop: '6px',
-                        maxWidth: '480px',
-                        padding: '10px 12px',
-                        background: 'var(--bg-surface-3)',
-                        border: '1px solid var(--border-strong)',
-                        borderRadius: '8px',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                        fontSize: '0.78rem',
-                        color: 'var(--text-secondary)',
-                        lineHeight: 1.6,
-                        zIndex: 10,
-                    }}
-                >
-                    {valueProposition.rationale}
-                </div>
-            ) : null}
-        </div>
-    )
-}
-
-function PriorityLegend({ priorities }: { priorities: StrategyMap['strategicPriorities'] }) {
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <div
-                style={{
-                    fontSize: '0.7rem',
-                    color: 'var(--text-tertiary)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                }}
-            >
-                Strategic Priorities
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {priorities.map((priority) => (
-                    <PriorityPill key={priority.name} priority={priority} />
-                ))}
-            </div>
-        </div>
-    )
-}
-
-function PriorityPill({ priority }: { priority: StrategyMap['strategicPriorities'][number] }) {
-    const [hovered, setHovered] = useState(false)
-    const tooltipId = `priority-${priority.name.replace(/\s+/g, '-')}`
-    return (
-        <button
-            type="button"
-            aria-describedby={hovered ? tooltipId : undefined}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            onFocus={() => setHovered(true)}
-            onBlur={() => setHovered(false)}
-            onClick={() => setHovered((current) => !current)}
-            style={{
-                position: 'relative',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                background: 'var(--bg-surface-2)',
-                borderTop: '3px solid var(--accent-blue)',
-                borderRight: '1px solid transparent',
-                borderBottom: '1px solid transparent',
-                borderLeft: '1px solid transparent',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-                cursor: 'help',
-                fontFamily: 'inherit',
-                textAlign: 'left',
-            }}
+        <details
+            open={open}
+            onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}
+            style={{ fontSize: '0.85rem' }}
         >
-            {priority.name}
-            {hovered ? (
+            <summary style={summaryStyle}>
                 <span
-                    id={tooltipId}
-                    role="tooltip"
+                    aria-hidden="true"
                     style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        marginTop: '6px',
-                        width: '280px',
-                        padding: '10px 12px',
-                        background: 'var(--bg-surface-3)',
-                        border: '1px solid var(--border-strong)',
-                        borderRadius: '8px',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                        fontSize: '0.75rem',
-                        fontWeight: 400,
-                        color: 'var(--text-secondary)',
-                        lineHeight: 1.6,
-                        zIndex: 10,
-                        whiteSpace: 'normal',
+                        display: 'inline-block',
+                        color: 'var(--accent-blue)',
+                        transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.15s ease',
+                        // Counteract the rotation visually so ▸ (right) → ▾ (down).
+                        // Using a CSS rotate keeps a single character + animation
+                        // while the underlying glyph stays a right-pointing arrow.
+                        marginRight: '6px',
+                        fontSize: '0.6rem',
                     }}
                 >
-                    {priority.result}
+                    ▶
                 </span>
-            ) : null}
-        </button>
+                {label}
+            </summary>
+            <div style={{ marginTop: '8px' }}>{children}</div>
+        </details>
     )
+}
+
+// ── Shared styles for header section bodies ──────────────────────────
+
+const summaryStyle: React.CSSProperties = {
+    cursor: 'pointer',
+    fontSize: '0.7rem',
+    color: 'var(--text-tertiary)',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    listStyle: 'none', // hide native triangle so our custom marker is the only one
+    display: 'inline-flex',
+    alignItems: 'center',
+    width: 'fit-content',
+}
+
+const bodyParagraphStyle: React.CSSProperties = {
+    margin: 0,
+    fontSize: '0.85rem',
+    color: 'var(--text-secondary)',
+    lineHeight: 1.6,
+}
+
+const valuePropositionChipStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    width: 'fit-content',
+    padding: '3px 10px',
+    borderRadius: '999px',
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    background: 'var(--accent-blue-glow)',
+    color: 'var(--accent-blue)',
+    border: '1px solid var(--accent-blue)',
+    letterSpacing: '0.02em',
+}
+
+const priorityItemStyle: React.CSSProperties = {
+    paddingLeft: '12px',
+    borderLeft: '3px solid var(--accent-blue)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+}
+
+const priorityNameStyle: React.CSSProperties = {
+    margin: 0,
+    fontSize: '0.85rem',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
 }
