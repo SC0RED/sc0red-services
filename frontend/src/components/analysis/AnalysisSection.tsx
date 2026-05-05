@@ -52,21 +52,14 @@ interface AnalysisSectionProps {
  * Strictly presentational — no state, no hooks, no side effects.
  */
 export default function AnalysisSection({ id, title, lead, children }: AnalysisSectionProps) {
+    // Use loose-equality `!= null` (catches both `undefined` AND `null`)
+    // so a caller passing `title={null}` doesn't render an empty `<h2>`.
+    // ReactNode permits null, so the wider check is the correct contract
+    // even if no caller does it today — defends against contract drift.
     return (
         <div data-testid={`analysis-section-${id}`}>
-            {title !== undefined && <h2 className="section-header">{title}</h2>}
-            {lead !== undefined && (
-                <p
-                    style={{
-                        margin: '0 0 1rem',
-                        fontSize: '0.875rem',
-                        color: 'var(--text-secondary)',
-                        lineHeight: 1.6,
-                    }}
-                >
-                    {lead}
-                </p>
-            )}
+            {title != null && <h2 className="section-header">{title}</h2>}
+            {lead != null && <p className="section-lead">{lead}</p>}
             {children}
         </div>
     )

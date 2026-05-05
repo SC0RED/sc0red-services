@@ -89,6 +89,9 @@ describe('AnalysisSection', () => {
         const lead = container.querySelector('p')
         expect(lead).not.toBeNull()
         expect(lead).toHaveTextContent('Upload financial statements to refine this analysis.')
+        // Lead carries the canonical `.section-lead` class, NOT inline
+        // styles — same DRY pattern as `.section-header` (D4 + review fix).
+        expect(lead!.classList.contains('section-lead')).toBe(true)
         // Order: heading → lead → body
         const heading = screen.getByRole('heading', { level: 2 })
         const body = screen.getByTestId('body')
@@ -98,6 +101,28 @@ describe('AnalysisSection', () => {
         expect(headingPos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         // body follows lead
         expect(leadPos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('does NOT render an empty <h2> when title is explicitly null', () => {
+        // Defensive contract: ReactNode permits null. A caller passing
+        // `title={null}` (e.g., a conditional like `title={x ?? null}`)
+        // must not render an empty heading. This locks the `!= null`
+        // check against a regression to `!== undefined`.
+        const { container } = render(
+            <AnalysisSection id="x" title={null}>
+                <div>body</div>
+            </AnalysisSection>
+        )
+        expect(container.querySelector('h2')).toBeNull()
+    })
+
+    it('does NOT render an empty <p> when lead is explicitly null', () => {
+        const { container } = render(
+            <AnalysisSection id="x" lead={null}>
+                <div>body</div>
+            </AnalysisSection>
+        )
+        expect(container.querySelector('p')).toBeNull()
     })
 
     it('renders the lead even when no title is provided', () => {

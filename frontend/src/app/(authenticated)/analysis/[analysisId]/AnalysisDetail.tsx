@@ -118,7 +118,16 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
 
     return (
         <>
-            {/* Beat 1 — IDENTITY */}
+            {/* Beat 1 — IDENTITY.
+                Header / strap / overview render testid-only (no `title`
+                prop) by intentional design — none of these is a "section
+                with a heading-then-body" shape. AnalysisHeader owns the
+                page-level `<h1>`; ExecutiveStrap is a one-line band;
+                OverviewCards is a paired card row with internal labels.
+                See `analysis-detail-consistency-wrapper` D3 for the full
+                exempt-section list (7 sections total) and per-section
+                rationale. The exempt list is closed for v1; adding a
+                new exempt section requires a follow-up spec change. */}
             <AnalysisSection id="header">
                 <AnalysisHeader
                     analysisId={analysisId}
