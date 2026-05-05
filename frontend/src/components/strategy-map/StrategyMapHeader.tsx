@@ -98,7 +98,7 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
                 onToggle={() => toggle('value-proposition')}
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <span style={valuePropositionChipStyle}>{valueLabel}</span>
+                    <span style={pillChipStyle}>{valueLabel}</span>
                     <p style={bodyParagraphStyle}>{valueProposition.rationale}</p>
                 </div>
             </ExpandableSection>
@@ -116,12 +116,26 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
                             margin: 0,
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '10px',
+                            gap: '12px',
                         }}
                     >
                         {strategicPriorities.map((priority) => (
-                            <li key={priority.name} style={priorityItemStyle}>
-                                <h4 style={priorityNameStyle}>{priority.name}</h4>
+                            <li
+                                key={priority.name}
+                                style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
+                            >
+                                {/*
+                                 * Render the priority's name as a pill chip — same
+                                 * styling as the Value Proposition chip above.
+                                 * Both elements are highlighted identity claims for
+                                 * the company; rendering them with one consistent
+                                 * treatment removes the "why do these look
+                                 * different" cognitive bump the user flagged.
+                                 * `<h4>` keeps heading semantics for screen readers
+                                 * + outline tools; the visual treatment is
+                                 * decorative.
+                                 */}
+                                <h4 style={pillChipHeadingStyle}>{priority.name}</h4>
                                 <p style={bodyParagraphStyle}>{priority.result}</p>
                             </li>
                         ))}
@@ -207,7 +221,13 @@ const bodyParagraphStyle: React.CSSProperties = {
     lineHeight: 1.6,
 }
 
-const valuePropositionChipStyle: React.CSSProperties = {
+/**
+ * Single visual treatment shared by every "highlighted identity claim"
+ * in the header: the value-proposition classification + each strategic
+ * priority's name. They're conceptually peers (named labels the company
+ * is staking out for itself) so they read with one consistent shape.
+ */
+const pillChipStyle: React.CSSProperties = {
     display: 'inline-flex',
     width: 'fit-content',
     padding: '3px 10px',
@@ -220,19 +240,12 @@ const valuePropositionChipStyle: React.CSSProperties = {
     letterSpacing: '0.02em',
 }
 
-const priorityItemStyle: React.CSSProperties = {
-    paddingLeft: '12px',
-    borderLeft: '3px solid var(--accent-blue)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-}
-
-const priorityNameStyle: React.CSSProperties = {
+/**
+ * `<h4>` variant of the pill chip — same visual treatment, but resets
+ * the browser's default heading margins / font-size so the chip looks
+ * identical to the `<span>` form used on the value-proposition row.
+ */
+const pillChipHeadingStyle: React.CSSProperties = {
+    ...pillChipStyle,
     margin: 0,
-    fontSize: '0.85rem',
-    fontWeight: 700,
-    color: 'var(--text-primary)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
 }
