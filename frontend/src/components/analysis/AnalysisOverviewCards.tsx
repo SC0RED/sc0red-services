@@ -36,10 +36,8 @@ export default function AnalysisOverviewCards({ data }: AnalysisOverviewCardsPro
             }}
         >
             <div
-                className="card"
+                className="card card--metric"
                 style={{
-                    padding: '2rem',
-                    textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -98,7 +96,7 @@ export default function AnalysisOverviewCards({ data }: AnalysisOverviewCardsPro
                 )}
             </div>
 
-            <div className="card" style={{ padding: '1.5rem' }}>
+            <div className="card card--rich">
                 <div style={{ fontWeight: 600, marginBottom: '1rem', fontSize: '0.9375rem' }}>
                     Risk Dimensions
                 </div>

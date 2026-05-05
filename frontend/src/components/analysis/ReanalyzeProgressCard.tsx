@@ -38,11 +38,10 @@ export default function ReanalyzeProgressCard({ label, progress, id }: Reanalyze
         <div
             id={id}
             data-testid="reanalyze-progress"
-            className="card"
+            className="card card--rich"
             role="status"
             aria-live="polite"
             style={{
-                padding: '1.5rem',
                 marginTop: '1rem',
                 textAlign: 'center',
             }}

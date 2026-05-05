@@ -262,9 +262,8 @@ export default function DocumentUpload({
                     {documents.map((doc) => (
                         <div
                             key={doc.id}
-                            className="card"
+                            className="card card--list"
                             style={{
-                                padding: '0.75rem 1rem',
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
