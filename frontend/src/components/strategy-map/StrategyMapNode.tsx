@@ -230,6 +230,16 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                     // would cancel it again if the user transits BACK).
                     onMouseEnter={openNow}
                     onMouseLeave={scheduleClose}
+                    // Stop wheel events from leaking out to the React Flow
+                    // canvas. Without this, scrolling a long definition
+                    // would zoom the canvas instead — the cursor is over
+                    // the tooltip, so the user expects scroll-to-scroll,
+                    // not scroll-to-zoom. The tooltip's inner overflow-y:
+                    // auto region handles the actual scroll; this just
+                    // prevents the event from reaching React Flow's
+                    // wheel handler if it ever bubbles up to a higher
+                    // listener level.
+                    onWheel={(event) => event.stopPropagation()}
                     style={{
                         width: 280,
                         // Cap the tooltip height so very long definitions

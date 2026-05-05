@@ -92,20 +92,47 @@ describe('StrategyMapView — header content', () => {
         expect(screen.getByText('Customer Intimacy')).toBeInTheDocument()
     })
 
-    it('renders the mission inside a closed <details> disclosure by default', () => {
+    it('renders mission, value proposition, and strategic priorities as <details> disclosures', () => {
         const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        const details = container.querySelector('details')
-        expect(details).not.toBeNull()
-        // Closed disclosure — `open` attribute absent.
-        expect(details?.hasAttribute('open')).toBe(false)
-        // Summary label is the only mission-related text visible without opening.
-        expect(screen.getByText(/Mission \(synthesised\)/)).toBeInTheDocument()
+        // Three sections in the header band — same disclosure pattern.
+        const detailsElements = container.querySelectorAll('details')
+        expect(detailsElements.length).toBe(3)
+        // Default state is OPEN so the user sees the company positioning
+        // on first load. They can collapse any section deliberately.
+        for (const details of detailsElements) {
+            expect(details.hasAttribute('open')).toBe(true)
+        }
     })
 
-    it('lists every strategic priority', () => {
+    it('renders the mission summary label with synthesised marker', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        // Both priorities from the fixture should appear as legend pills.
+        expect(screen.getByText(/Mission \(synthesised\)/i)).toBeInTheDocument()
+    })
+
+    it('shows the mission statement inside the open disclosure body', () => {
+        render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        // Default-open means the statement is visible without interaction.
+        expect(
+            screen.getByText('Provide convenient food, beverages, and fuel to commuters.')
+        ).toBeInTheDocument()
+    })
+
+    it('renders the value proposition rationale inside the disclosure body', () => {
+        render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        // Rationale moved out of a hover tooltip into the always-visible
+        // (when open) disclosure body.
+        expect(screen.getByText(/Public materials emphasise associate friendliness/)).toBeInTheDocument()
+    })
+
+    it('lists every strategic priority with its result text inside the disclosure body', () => {
+        render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        // Priority names appear as highlighted sub-headers; result text
+        // appears underneath each one (no longer hidden behind hover).
         expect(screen.getAllByText('Grow Through Foodservice').length).toBeGreaterThanOrEqual(1)
         expect(screen.getAllByText('Deliver Convenience and Value').length).toBeGreaterThanOrEqual(1)
+        expect(screen.getByText(/Best-in-class signature food platform/)).toBeInTheDocument()
+        expect(
+            screen.getByText(/Industry-leading customer perception of speed and value/)
+        ).toBeInTheDocument()
     })
 })

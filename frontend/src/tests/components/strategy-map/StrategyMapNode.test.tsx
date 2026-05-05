@@ -314,6 +314,32 @@ describe('StrategyMapNode — tooltip hover-intent (safe transit)', () => {
     })
 })
 
+describe('StrategyMapNode — tooltip wheel events do not propagate to canvas zoom', () => {
+    /**
+     * React Flow's default behaviour is "wheel = zoom canvas". When the
+     * cursor is over the tooltip (which has overflow-y: auto for long
+     * definitions), the user expects "wheel = scroll the tooltip", not
+     * "wheel = zoom the canvas". Without explicit stopPropagation on
+     * the tooltip wrapper, the wheel event leaks out and the canvas
+     * zooms while the user tries to scroll. Stop the bubble.
+     */
+    it('calls stopPropagation on wheel events so they do not reach the React Flow canvas', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        fireEvent.mouseEnter(screen.getByRole('button'))
+        const tooltip = screen.getByRole('tooltip')
+
+        // Dispatch a real WheelEvent and spy on its stopPropagation. The
+        // tooltip's `onWheel={(e) => e.stopPropagation()}` handler should
+        // call this — React's synthetic event delegates stopPropagation
+        // to the underlying native event.
+        const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 100 })
+        const stopPropagationSpy = vi.spyOn(event, 'stopPropagation')
+        tooltip.dispatchEvent(event)
+
+        expect(stopPropagationSpy).toHaveBeenCalled()
+    })
+})
+
 describe('StrategyMapNode — tooltip max-height (long-definition overflow)', () => {
     /**
      * Production data surfaced a chip with a multi-paragraph definition
