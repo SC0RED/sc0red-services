@@ -27,6 +27,12 @@ interface AnalysisSectionProps {
      *   - The `<h2>`'s computed accessible name stays exactly the title
      *     text — screen readers don't concatenate the adornment's
      *     `aria-label` (e.g. "What is EBITDA Tree?") into the heading.
+     *     This is the W3C "accessible name and description computation"
+     *     contract — the algorithm walks descendants and concatenates
+     *     their text content / aria-label values into the parent's
+     *     accessible name. See https://www.w3.org/TR/accname-1.2/ for
+     *     the full algorithm; the relevant section is "Step 2F. Default
+     *     name computation" which describes the descendant-walk.
      *   - The adornment is independently focusable and announceable.
      *
      * **Valid uses**: `<HelpTooltip>`, count badges (when not part of the

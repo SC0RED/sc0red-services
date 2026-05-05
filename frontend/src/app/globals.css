@@ -1387,9 +1387,15 @@ select {
    work (the `section-spacing-tokens` proposal) will extend this to
    section-to-section gaps and other vertical-rhythm anchors so the
    page reads as one deliberate scroll-rhythm instead of accreted
-   per-component margins. */
+   per-component margins.
+
+   `--section-header-row-gap` is the intra-row spacing between the
+   heading and its trailing adornment (HelpTooltip, count badge,
+   status pill). Locked into the token system from day one so the
+   future spacing proposal extends rather than introduces. */
 :root {
     --section-gap-y: 1rem;
+    --section-header-row-gap: 0.5rem;
 }
 
 .section-header {
@@ -1406,7 +1412,7 @@ select {
 .section-header-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--section-header-row-gap);
     margin-bottom: var(--section-gap-y);
 }
 
