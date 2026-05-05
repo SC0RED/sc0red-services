@@ -1476,25 +1476,34 @@ select {
 
 /* ── Section Headers ─────────────────────────────────────── */
 
-/* Vertical-spacing token for content within a section. Initially
-   used by `.section-header-row` and `.section-lead`; future spacing
-   work (the `section-spacing-tokens` proposal) will extend this to
-   section-to-section gaps and other vertical-rhythm anchors so the
-   page reads as one deliberate scroll-rhythm instead of accreted
-   per-component margins.
+/* Vertical-rhythm tokens for the analysis-detail page.
 
-   `--section-header-row-gap` is the intra-row spacing between the
-   heading and its trailing adornment (HelpTooltip, count badge,
-   status pill). Locked into the token system from day one so the
-   future spacing proposal extends rather than introduces.
+   The system distinguishes two section-spacing concerns by name so
+   contributors pick by intent rather than by eyeballing existing
+   examples:
+
+   - `--section-gap-y` — INTRA-section vertical gap. Used between
+     a section's heading and its body via `.section-header-row` /
+     `.section-lead`. Pick this when you're spacing things WITHIN a
+     section (heading → adornment → lead → body).
+
+   - `--section-margin-bottom` — INTER-section vertical gap. Used
+     between consecutive section wrappers via
+     `.analysis-section-spacing`. Pick this when you're spacing
+     ONE section's bottom-edge from the NEXT section's top-edge.
+
+   `--section-header-row-gap` is the intra-row horizontal spacing
+   between the heading and its trailing adornment (HelpTooltip,
+   count badge, status pill).
 
    `--card-padding-{metric,list,rich}` are consumed by the three
    `.card--*` density variants. Tokenising the values here (vs
    inlining them in the variant rules) means a future redesign
    that bumps density is one CSS edit per token rather than three
-   selector edits. Same DRY principle as the section-gap-y token. */
+   selector edits. */
 :root {
     --section-gap-y: 1rem;
+    --section-margin-bottom: 2rem;
     --section-header-row-gap: 0.5rem;
     --card-padding-metric: 2rem;
     --card-padding-list: 0.75rem 1rem;
@@ -1540,6 +1549,17 @@ select {
     font-size: 0.875rem;
     color: var(--text-secondary);
     line-height: 1.6;
+}
+
+/* Inter-section vertical spacing utility. Applied to the OUTER
+   wrapper of every section on the analysis-detail page (RiskBreakdown,
+   OpportunitiesList, ValueChainDiagram, EbitdaSection, DocumentUpload,
+   AnalysisHeader). Two consumers are intentionally exempt — the
+   AnalysisExecutiveStrap (1.25rem) and AnalysisOverviewCards (1.5rem)
+   use tighter inline values to visually pair with each other. See
+   `section-spacing-tokens` design D4 for rationale. */
+.analysis-section-spacing {
+    margin-bottom: var(--section-margin-bottom);
 }
 
 /* ── Provenance Markers ─────────────────────────────────────

@@ -13,7 +13,7 @@ interface EbitdaSectionProps {
 
 export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSectionProps) {
     return (
-        <div style={{ marginBottom: '2rem' }}>
+        <div className="analysis-section-spacing">
             {/* Section heading + help tooltip live at the page level via
                 AnalysisSection (analysis-detail-consistency-wrapper D3). */}
             <div

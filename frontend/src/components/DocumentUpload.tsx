@@ -190,7 +190,7 @@ export default function DocumentUpload({
     )
 
     return (
-        <div style={{ marginBottom: '2rem' }}>
+        <div className="analysis-section-spacing">
             {/* Drop zone */}
             <div
                 data-testid="drop-zone"
