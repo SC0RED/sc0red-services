@@ -139,6 +139,32 @@ describe('AnalysisExecutiveStrap', () => {
         expect(placeholders.length).toBeGreaterThanOrEqual(2)
     })
 
+    it('falls back to em-dash placeholders when score is undefined (contract drift defence)', () => {
+        // The API contract types `overallRiskScore` as `number | null`,
+        // but the component guards with `typeof === 'number'` so a
+        // future schema relaxation introducing `undefined` doesn't
+        // crash the strap with `undefined.toFixed(1)`.
+        const data = buildData()
+        // Force the field to undefined to simulate a drifted API.
+        const drifted = {
+            ...data,
+            overallRiskScore: undefined as unknown as number | null,
+            riskTier: null,
+        }
+        render(<AnalysisExecutiveStrap data={drifted} />)
+        expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('falls back to em-dash placeholders when score is NaN', () => {
+        // Same defensive principle: `NaN.toFixed(1)` returns "NaN" as
+        // a string, which would render in the strap. The
+        // `Number.isFinite` guard catches this.
+        const data = buildData({ overallRiskScore: Number.NaN, riskTier: null })
+        render(<AnalysisExecutiveStrap data={data} />)
+        expect(screen.queryByText(/NaN/)).toBeNull()
+        expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
+    })
+
     it('exposes a stable testid for the strap root', () => {
         const data = buildData()
         render(<AnalysisExecutiveStrap data={data} />)

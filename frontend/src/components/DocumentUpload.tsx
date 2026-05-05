@@ -1,7 +1,18 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+
+import ReanalyzeProgressCard from '@/components/analysis/ReanalyzeProgressCard'
 import type { DocumentInfo } from '@/lib/types/api'
+
+/**
+ * Stable DOM id for the in-section progress card. Used so the
+ * re-analyze button can wire `aria-describedby` to the card when the
+ * card is rendered — screen readers then announce the progress state
+ * alongside the button's accessible name on focus, instead of just
+ * the static label.
+ */
+const REANALYZE_PROGRESS_ID = 'reanalyze-progress'
 
 const ALLOWED_TYPES = ['pdf', 'docx', 'xlsx', 'xls', 'txt', 'csv', 'md']
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
@@ -290,7 +301,10 @@ export default function DocumentUpload({
                 </div>
             )}
 
-            {/* Re-analyze button */}
+            {/* Re-analyze button. While re-analysis is in flight,
+                `aria-describedby` points at the progress card so screen
+                readers announce progress state alongside the button's
+                accessible name on focus. */}
             {documents.length > 0 && onReanalyze && (
                 <button
                     onClick={onReanalyze}
@@ -298,6 +312,7 @@ export default function DocumentUpload({
                     aria-label={
                         reanalyzing ? 'Re-analysis in progress' : 'Re-analyze with uploaded documents'
                     }
+                    aria-describedby={reanalyzing ? REANALYZE_PROGRESS_ID : undefined}
                     style={{
                         padding: '0.625rem 1.25rem',
                         background: reanalyzing ? 'var(--bg-surface-3)' : 'var(--accent-blue)',
@@ -318,40 +333,11 @@ export default function DocumentUpload({
                 AnalysisDetail.tsx, which placed the progress bar above
                 the trigger and orphaned it from its affordance. */}
             {reanalyzing && (
-                <div
-                    data-testid="reanalyze-progress"
-                    className="card"
-                    style={{
-                        padding: '1.5rem',
-                        marginTop: '1rem',
-                        textAlign: 'center',
-                    }}
-                >
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                        Re-analyzing with documents...
-                    </h3>
-                    <p
-                        style={{
-                            color: 'var(--text-secondary)',
-                            fontSize: '0.875rem',
-                            marginBottom: '1rem',
-                        }}
-                    >
-                        {reanalysisLabel || 'Starting pipeline...'}
-                    </p>
-                    <div className="progress-bar" style={{ maxWidth: '360px', margin: '0 auto' }}>
-                        <div className="progress-fill" style={{ width: `${reanalysisProgress ?? 0}%` }} />
-                    </div>
-                    <div
-                        style={{
-                            marginTop: '0.5rem',
-                            fontSize: '0.75rem',
-                            color: 'var(--text-tertiary)',
-                        }}
-                    >
-                        {reanalysisProgress ?? 0}% complete
-                    </div>
-                </div>
+                <ReanalyzeProgressCard
+                    id={REANALYZE_PROGRESS_ID}
+                    label={reanalysisLabel}
+                    progress={reanalysisProgress}
+                />
             )}
         </div>
     )

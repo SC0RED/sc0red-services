@@ -301,6 +301,26 @@ describe('DocumentUpload', () => {
         expect(button).toBeInTheDocument()
     })
 
+    it('does not set aria-describedby on the button when not reanalyzing', () => {
+        const documents = [buildDocument()]
+        render(<DocumentUpload {...defaultProps} documents={documents} reanalyzing={false} />)
+        const button = screen.getByRole('button', { name: /re-analy[sz]e/i })
+        // No progress card is rendered, so no describedby reference.
+        expect(button.getAttribute('aria-describedby')).toBeNull()
+    })
+
+    it('wires aria-describedby from button → progress card while reanalyzing', () => {
+        const documents = [buildDocument()]
+        render(<DocumentUpload {...defaultProps} documents={documents} reanalyzing={true} />)
+        const button = screen.getByRole('button', { name: /re-analy[sz]is in progress/i })
+        const describedBy = button.getAttribute('aria-describedby')
+        expect(describedBy).toBe('reanalyze-progress')
+        // The referenced id must exist on the rendered progress card —
+        // a dangling aria-describedby is worse than none.
+        const progressCard = screen.getByTestId('reanalyze-progress')
+        expect(progressCard.id).toBe('reanalyze-progress')
+    })
+
     it('renders the re-analyze progress block INSIDE the section when reanalyzing', () => {
         const documents = [buildDocument()]
         const { container } = render(

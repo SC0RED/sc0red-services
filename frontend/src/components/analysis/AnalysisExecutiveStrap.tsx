@@ -22,10 +22,18 @@ import type { AnalysisData } from '@/lib/types/api'
  * question 2 in the change's design.md.
  */
 export default function AnalysisExecutiveStrap({ data }: { data: AnalysisData }) {
+    // Use `typeof score === 'number'` rather than `score !== null` —
+    // the API contract types `overallRiskScore` as `number | null`,
+    // but the wider type guard defends against contract drift (e.g.
+    // a future schema relaxation that introduces `undefined`) and
+    // gracefully drops the entire section if `NaN` ever sneaks in,
+    // since `Number.isFinite(NaN)` is false. Cheap defence-in-depth
+    // for a marketing-grade summary strap.
     const score = data.overallRiskScore
-    const tier = data.riskTier ?? (score !== null ? getRiskTier(score) : null)
+    const hasScore = typeof score === 'number' && Number.isFinite(score)
+    const tier = data.riskTier ?? (hasScore ? getRiskTier(score) : null)
     const tierLabel = tier ? capitalise(tier) : '—'
-    const scoreLabel = score !== null ? score.toFixed(1) : '—'
+    const scoreLabel = hasScore ? score.toFixed(1) : '—'
 
     // Build segments after the headline. Each segment is conditionally
     // included so missing data drops cleanly without orphan separators.
