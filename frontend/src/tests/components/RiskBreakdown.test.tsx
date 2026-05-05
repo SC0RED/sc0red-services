@@ -83,9 +83,13 @@ describe('RiskBreakdown', () => {
         expect(screen.getByText('Low Risk')).toBeInTheDocument()
     })
 
-    it('renders heading', () => {
+    it('does NOT render an internal section heading (page-level wrapper owns the title)', () => {
+        // Per analysis-detail-consistency-wrapper D3, the "Risk Breakdown"
+        // heading is rendered at the page level by `AnalysisSection`.
+        // The leaf component must not render it again — duplicating the
+        // heading was the failure mode that necessitated the wrapper.
         render(<RiskBreakdown riskScores={mockRiskScores} />)
-        expect(screen.getByText('Risk Breakdown')).toBeInTheDocument()
+        expect(screen.queryByText('Risk Breakdown')).toBeNull()
     })
 
     it('falls back to category id when name is not found', () => {

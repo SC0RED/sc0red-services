@@ -1,6 +1,5 @@
 'use client'
 
-import HelpTooltip from '@/components/ui/HelpTooltip'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -10,28 +9,30 @@ interface ValueLeverSummaryProps {
     onLeverChange: (lever: string) => void
 }
 
+/**
+ * Lever-summary card row. Renders three "Revenue Side / Cost Side /
+ * Both" cards with per-lever counts. Click toggles the page-level
+ * lever filter.
+ *
+ * Caller contract: only render this component when at least one
+ * opportunity has a `value_lever` field — `AnalysisDetail` gates the
+ * render with `hasValueLevers` so an empty wrapper never appears on
+ * the page. The previous internal early-return + section heading are
+ * gone; framing is owned by the page-level `AnalysisSection`
+ * wrapper per `analysis-detail-consistency-wrapper` D3.
+ */
 export default function ValueLeverSummary({
     opportunities,
     activeLever,
     onLeverChange,
 }: ValueLeverSummaryProps) {
-    const hasValueLevers = opportunities.some((o) => o.value_lever)
-
-    const leverSummary = hasValueLevers
-        ? (['Revenue Side', 'Cost Side', 'Both'] as const).map((lever) => ({
-              lever,
-              count: opportunities.filter((o) => o.value_lever === lever).length,
-          }))
-        : []
-
-    if (!hasValueLevers) return null
+    const leverSummary = (['Revenue Side', 'Cost Side', 'Both'] as const).map((lever) => ({
+        lever,
+        count: opportunities.filter((o) => o.value_lever === lever).length,
+    }))
 
     return (
         <div style={{ marginBottom: '2rem' }}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1rem' }}>
-                Value Impact
-                <HelpTooltip term="value_lever" />
-            </h2>
             <div
                 style={{
                     display: 'grid',

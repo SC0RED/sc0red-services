@@ -41,9 +41,14 @@ const SAMPLE_OPPORTUNITIES: Opportunity[] = [
 ]
 
 describe('EbitdaSection', () => {
-    it('renders section header', () => {
+    it('does NOT render an internal "EBITDA Impact Model" heading (page-level wrapper owns it)', () => {
+        // Per analysis-detail-consistency-wrapper D3, the heading +
+        // its `<HelpTooltip term="ebitda_tree" />` adornment are
+        // rendered at the page level by `AnalysisSection`. The leaf
+        // renders only the body (badges + business-model summary +
+        // tree).
         render(<EbitdaSection ebitdaTree={SAMPLE_TREE} opportunities={SAMPLE_OPPORTUNITIES} />)
-        expect(screen.getByText('EBITDA Impact Model')).toBeInTheDocument()
+        expect(screen.queryByText('EBITDA Impact Model')).toBeNull()
     })
 
     it('renders revenue and EBITDA badges', () => {

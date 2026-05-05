@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 
-import HelpTooltip from '@/components/ui/HelpTooltip'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -48,42 +47,41 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
 
     return (
         <div style={{ marginBottom: '2rem' }}>
+            {/* Section heading + count badge live at the page level via
+                AnalysisSection (analysis-detail-consistency-wrapper D2 +
+                D3). The category-chip filter strip stays here as a body
+                control, rendered as its own row above the opportunity
+                cards. */}
             <div
                 style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
+                    justifyContent: 'flex-start',
                     alignItems: 'center',
                     marginBottom: '1rem',
                     flexWrap: 'wrap',
-                    gap: '0.75rem',
+                    gap: '0.5rem',
                 }}
             >
-                <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                    AI Opportunities ({opportunities.length})
-                    <HelpTooltip term="impact_rating" />
-                </h2>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {oppCategories.map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => setActiveOppCat(cat)}
-                            style={{
-                                padding: '0.3rem 0.75rem',
-                                borderRadius: 'var(--radius-full)',
-                                border: '1px solid',
-                                borderColor: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--border)',
-                                background: activeOppCat === cat ? 'rgba(59,123,246,0.1)' : 'transparent',
-                                color: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                                fontSize: '0.8rem',
-                                fontWeight: 500,
-                                cursor: 'pointer',
-                                transition: 'all var(--transition-fast)',
-                            }}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
+                {oppCategories.map((cat) => (
+                    <button
+                        key={cat}
+                        onClick={() => setActiveOppCat(cat)}
+                        style={{
+                            padding: '0.3rem 0.75rem',
+                            borderRadius: 'var(--radius-full)',
+                            border: '1px solid',
+                            borderColor: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--border)',
+                            background: activeOppCat === cat ? 'rgba(59,123,246,0.1)' : 'transparent',
+                            color: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            transition: 'all var(--transition-fast)',
+                        }}
+                    >
+                        {cat}
+                    </button>
+                ))}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>

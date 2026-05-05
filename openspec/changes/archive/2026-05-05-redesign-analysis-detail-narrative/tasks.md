@@ -1,7 +1,7 @@
 ## 1. Section testids (foundation for order-based tests)
 
 - [x] 1.1 Add stable `data-testid` markers at the page level by wrapping each rendered section in `AnalysisDetail.tsx` with a parent `<div data-testid="analysis-section-{name}">`: `analysis-section-header`, `analysis-section-strap`, `analysis-section-overview`, `analysis-section-top-actions`, `analysis-section-strategy-map`, `analysis-section-deep-dive-cta`, `analysis-section-ebitda`, `analysis-section-value-chain`, `analysis-section-risk-breakdown`, `analysis-section-value-lever`, `analysis-section-opportunities`, `analysis-section-sc0red-cta`, `analysis-section-document-upload`. (Page-level wrapping keeps section naming a page concern, so existing component-internal testids like `strategy-map-view` and `strategy-map-cta` are preserved and their tests don't churn.)
-- [ ] 1.2 Run existing test suite to verify no regression from added wrappers
+- [x] 1.2 Run existing test suite to verify no regression from added wrappers — 922 tests pass post-merge
 
 ## 2. AnalysisExecutiveStrap component
 
@@ -47,5 +47,5 @@
 ## 7. Architecture review + commit
 
 - [x] 7.1 Run the `architecture-reviewer` agent over the diff. Required because changes touch 3+ source files and alter component contracts (DocumentUpload prop additions). Resolve all CRITICAL findings before commit. (Two passes: first surfaced 3 MEDIUM findings — FailedAnalysisView divergence, file budget overrun, date-format inconsistency. Second pass confirmed all resolved; remaining LOW items addressed in same commit.)
-- [ ] 7.2 Commit with a conventional-commit message in the form `feat(analysis): redesign detail page narrative ordering`
-- [ ] 7.3 Open PR with a body summarising the 5-beat narrative, the executive-strap addition, and the re-analyse-affordance fix. Reference both BA reviews (this conversation + the Cowork PDF) in the rationale
+- [x] 7.2 Commit with a conventional-commit message in the form `feat(analysis): redesign detail page narrative ordering` — committed as `0e0fa2c`, follow-up review fixes as `ba446a9`, squash-merged to development as `155b00d`
+- [x] 7.3 Open PR with a body summarising the 5-beat narrative, the executive-strap addition, and the re-analyse-affordance fix. Reference both BA reviews (this conversation + the Cowork PDF) in the rationale — PR #250 opened and merged. CI all green (Lint, Test, Frontend Test, Audit, Security, Naming, E2E, Playwright, PR Summary, CodeRabbit)

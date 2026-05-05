@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useState } from 'react'
 import dynamic from 'next/dynamic'
 
 import DocumentUpload from '@/components/DocumentUpload'
@@ -11,9 +11,11 @@ import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisExecutiveStrap from '@/components/analysis/AnalysisExecutiveStrap'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import AnalysisOverviewCards from '@/components/analysis/AnalysisOverviewCards'
+import AnalysisSection from '@/components/analysis/AnalysisSection'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
 import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
+import HelpTooltip from '@/components/ui/HelpTooltip'
 import { DeepDiveCTA, StrategyMapView } from '@/components/strategy-map'
 import { LoadingSpinner } from '@/components/ui'
 import { getSc0redContactUrl } from '@/lib/config'
@@ -48,20 +50,8 @@ function toActiveLeverFilter(activeLever: string): ActiveLeverFilter | null {
 }
 
 /**
- * Page-level wrapper for an analysis-detail section. Adds a stable
- * `data-testid` of the form `analysis-section-{name}` so order tests
- * can query sections by DOM order without relying on layout
- * coordinates. Wrapping at the page level keeps section naming a page
- * concern and preserves any existing component-internal testids
- * (e.g., `strategy-map-view`, `strategy-map-cta`) without test churn.
- */
-function Section({ id, children }: { id: string; children: ReactNode }) {
-    return <div data-testid={`analysis-section-${id}`}>{children}</div>
-}
-
-/**
  * Top-to-bottom narrative ordering on this page is governed by the
- * `redesign-analysis-detail-narrative` OpenSpec change. Order rules:
+ * `analysis-detail-narrative` capability spec. Order rules:
  *
  *   Beat 1 — IDENTITY:    Header → ExecutiveStrap → OverviewCards
  *   Beat 2 — SYNTHESIS:   TopActionsCallout
@@ -70,11 +60,12 @@ function Section({ id, children }: { id: string; children: ReactNode }) {
  *   Beat 5 — RISK + OPP:  RiskBreakdown → ValueLever → Opportunities → Sc0redCTA
  *   Beat 6 — IMPROVE:     DocumentUpload (with progress bar absorbed)
  *
- * The DeepDiveCTA position supersedes PR #239's design.md decision D6
- * (which hoisted it to the top "for visibility") — the new placement
- * fires the CTA at maximum buying intent (right after the strategic
- * gaps it's pitched against) rather than asking for the upsell before
- * any analysis content has been shown.
+ * Section framing (testid + heading + lead) is owned by the shared
+ * `AnalysisSection` wrapper. Sections that have a heading pass it via
+ * `title`; sections that don't (StrategyMapView, Sc0redCTABanner,
+ * DeepDiveCTA, TopActionsCallout, AnalysisOverviewCards,
+ * AnalysisExecutiveStrap, AnalysisHeader) wrap with no `title` —
+ * testid-only render. See `analysis-detail-consistency-wrapper` D3.
  */
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
     const [activeLever, setActiveLever] = useState<string>('All')
@@ -98,6 +89,11 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     const riskScores = data.riskScores ?? []
     const opportunities = data.opportunities ?? []
     const tier = data.riskTier || getRiskTier(data.overallRiskScore ?? 0)
+    // Lifted from inside `ValueLeverSummary` so the page-level wrapper
+    // can render conditionally — same gating as the other sections that
+    // skip rendering entirely on missing data, rather than emitting an
+    // empty `<AnalysisSection>` wrapper around a `null` body.
+    const hasValueLevers = opportunities.some((o) => o.value_lever)
 
     // Failed analysis — show error + retry UI instead of the full analysis.
     if (data.error && !data.analyzedAt) {
@@ -123,7 +119,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     return (
         <>
             {/* Beat 1 — IDENTITY */}
-            <Section id="header">
+            <AnalysisSection id="header">
                 <AnalysisHeader
                     analysisId={analysisId}
                     companyName={data.companyName}
@@ -135,101 +131,119 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     scanSourceUrl={data.scanSourceUrl}
                     onExportCsv={() => exportAnalysisDetailCsv(data)}
                 />
-            </Section>
+            </AnalysisSection>
 
-            <Section id="strap">
+            <AnalysisSection id="strap">
                 <AnalysisExecutiveStrap data={data} />
-            </Section>
+            </AnalysisSection>
 
-            <Section id="overview">
+            <AnalysisSection id="overview">
                 <AnalysisOverviewCards data={data} />
-            </Section>
+            </AnalysisSection>
 
             {/* Beat 2 — SYNTHESIS (top actions = "so what?") */}
-            <Section id="top-actions">
+            <AnalysisSection id="top-actions">
                 <TopActionsCallout actions={data.topActions ?? []} />
-            </Section>
+            </AnalysisSection>
 
             {/* Beat 3 — STRATEGIC FRAME */}
             {data.strategyMap ? (
-                <Section id="strategy-map">
+                <AnalysisSection id="strategy-map">
                     <StrategyMapView strategyMap={data.strategyMap} />
-                </Section>
+                </AnalysisSection>
             ) : null}
 
             {data.strategyMap ? (
-                <Section id="deep-dive-cta">
+                <AnalysisSection id="deep-dive-cta">
                     <DeepDiveCTA analysisId={analysisId} />
-                </Section>
+                </AnalysisSection>
             ) : null}
 
             {/* Beat 4 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
                 lenses on the same question: where does value sit and how
                 is it produced?) */}
             {data.ebitdaTree && (
-                <Section id="ebitda">
+                <AnalysisSection
+                    id="ebitda"
+                    title={
+                        <>
+                            EBITDA Impact Model
+                            <HelpTooltip term="ebitda_tree" />
+                        </>
+                    }
+                >
                     <EbitdaSection ebitdaTree={data.ebitdaTree} opportunities={opportunities} />
-                </Section>
+                </AnalysisSection>
             )}
 
             {data.valueChain && data.valueChain.steps.length > 0 && (
-                <Section id="value-chain">
+                <AnalysisSection id="value-chain" title="Value Chain Analysis">
                     <ValueChainDiagram
                         steps={data.valueChain.steps}
                         opportunities={opportunities}
                         summary={data.valueChain.summary}
                     />
-                </Section>
+                </AnalysisSection>
             )}
 
             {/* Beat 5 — RISK + OPPORTUNITY EVIDENCE */}
-            <Section id="risk-breakdown">
+            <AnalysisSection id="risk-breakdown" title="Risk Breakdown">
                 <RiskBreakdown riskScores={riskScores} />
-            </Section>
+            </AnalysisSection>
 
-            <Section id="value-lever">
-                <ValueLeverSummary
-                    opportunities={opportunities}
-                    activeLever={activeLever}
-                    onLeverChange={setActiveLever}
-                />
-            </Section>
+            {hasValueLevers && (
+                <AnalysisSection
+                    id="value-lever"
+                    title={
+                        <>
+                            Value Impact
+                            <HelpTooltip term="value_lever" />
+                        </>
+                    }
+                >
+                    <ValueLeverSummary
+                        opportunities={opportunities}
+                        activeLever={activeLever}
+                        onLeverChange={setActiveLever}
+                    />
+                </AnalysisSection>
+            )}
 
-            <Section id="opportunities">
+            <AnalysisSection
+                id="opportunities"
+                title={
+                    <>
+                        AI Opportunities ({opportunities.length})
+                        <HelpTooltip term="impact_rating" />
+                    </>
+                }
+            >
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
-            </Section>
+            </AnalysisSection>
 
             {opportunities.length > 0 && (
-                <Section id="sc0red-cta">
+                <AnalysisSection id="sc0red-cta">
                     <Sc0redCTABanner
                         contactUrl={getSc0redContactUrl()}
                         analysisId={analysisId}
                         opportunityCount={opportunities.length}
                         activeLeverFilter={toActiveLeverFilter(activeLever)}
                     />
-                </Section>
+                </AnalysisSection>
             )}
 
             {/* Beat 6 — IMPROVE THIS ANALYSIS. The reanalyze progress bar
                 and any reanalyze polling errors render INSIDE the
                 DocumentUpload widget rather than as orphan siblings on
-                the page. The "Improve This Analysis" framing (heading +
-                lead) lives at the page level here so the leaf widget
-                stays reusable from FailedAnalysisView with its own
-                contextual heading. */}
-            <Section id="document-upload">
-                <h2 className="section-header">Improve This Analysis</h2>
-                <p
-                    style={{
-                        margin: '0 0 1rem',
-                        fontSize: '0.875rem',
-                        color: 'var(--text-secondary)',
-                        lineHeight: 1.6,
-                    }}
-                >
-                    Upload financial statements, board decks, or product docs and re-analyze to refine this
-                    page with the additional context.
-                </p>
+                the page. The framing (heading + lead) is owned by the
+                AnalysisSection wrapper at the page level so the leaf
+                widget stays reusable from FailedAnalysisView with its
+                own contextual heading. */}
+            <AnalysisSection
+                id="document-upload"
+                title="Improve This Analysis"
+                lead="Upload financial statements, board decks, or product docs and re-analyze to refine this page with the additional context."
+            >
                 <DocumentUpload
                     analysisId={analysisId}
                     documents={documents}
@@ -240,7 +254,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     reanalysisProgress={reanalyze.reanalysisProgress}
                     documentError={reanalyze.documentError}
                 />
-            </Section>
+            </AnalysisSection>
         </>
     )
 }
