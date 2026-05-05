@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, beforeAll } from 'vitest'
 
 import StrategyMapView from '@/components/strategy-map/StrategyMapView'
@@ -13,9 +13,10 @@ import { fullStrategyMap } from './_fixtures'
  * headless test). What we CAN reliably assert at this level:
  *   - the section's structural elements render (header, canvas
  *     container, core-values strip, gaps panel)
- *   - vision/value-prop chip text appears in the header
- *   - mission disclosure renders closed by default
- *   - the strategic-priority legend lists every priority
+ *   - the three header sections render as <details> disclosures
+ *   - default state is closed; clicking a summary opens that section
+ *     and closes any other (single-open accordion, mirrors
+ *     `WhatsMissingPanel`)
  *
  * Detailed rendering of individual chips (titles, confidence dots,
  * tooltips) is covered by `StrategyMapNode.test.tsx`. The graph data
@@ -55,6 +56,16 @@ beforeAll(() => {
     }
 })
 
+const summaryFor = (label: RegExp | string) => {
+    const match =
+        typeof label === 'string'
+            ? screen.getByText(label, { selector: 'summary, summary *' })
+            : screen.getByText(label)
+    const summary = match.closest('summary')
+    if (!summary) throw new Error(`No summary found for ${label}`)
+    return summary as HTMLElement
+}
+
 describe('StrategyMapView — structural composition', () => {
     it('renders the section root and the React Flow canvas container', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
@@ -79,55 +90,77 @@ describe('StrategyMapView — structural composition', () => {
     })
 })
 
-describe('StrategyMapView — header content', () => {
-    it('renders the vision statement', () => {
+describe('StrategyMapView — header disclosures (single-open accordion)', () => {
+    it('renders the vision statement always-visible', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
         expect(screen.getByText(/To be the most appetizing convenience retailer/)).toBeInTheDocument()
     })
 
-    it('renders the value-proposition chip', () => {
-        render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        // The chip uses formatValueProposition; for primary='customer_intimacy'
-        // (no secondary) the result is 'Customer Intimacy'.
-        expect(screen.getByText('Customer Intimacy')).toBeInTheDocument()
-    })
-
-    it('renders mission, value proposition, and strategic priorities as <details> disclosures', () => {
+    it('renders mission, value proposition, and strategic priorities as <details> disclosures, all closed by default', () => {
         const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        // Three sections in the header band — same disclosure pattern.
         const detailsElements = container.querySelectorAll('details')
         expect(detailsElements.length).toBe(3)
-        // Default state is OPEN so the user sees the company positioning
-        // on first load. They can collapse any section deliberately.
+        // Default state is CLOSED — same as WhatsMissingPanel's gap rows.
+        // User clicks a summary to open one section; opening a different
+        // section auto-closes the previous one (single-open accordion).
         for (const details of detailsElements) {
-            expect(details.hasAttribute('open')).toBe(true)
+            expect(details.hasAttribute('open')).toBe(false)
         }
     })
 
-    it('renders the mission summary label with synthesised marker', () => {
+    it('renders the mission summary label with synthesised marker (visible when closed)', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
         expect(screen.getByText(/Mission \(synthesised\)/i)).toBeInTheDocument()
     })
 
-    it('shows the mission statement inside the open disclosure body', () => {
-        render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        // Default-open means the statement is visible without interaction.
+    it('opens the mission section and shows the statement when the summary is clicked', () => {
+        const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        fireEvent.click(summaryFor(/Mission \(synthesised\)/i))
+
+        // Exactly one details is open.
+        const openDetails = Array.from(container.querySelectorAll('details')).filter((d) =>
+            d.hasAttribute('open')
+        )
+        expect(openDetails).toHaveLength(1)
+        // Mission statement is now in the rendered body.
         expect(
             screen.getByText('Provide convenient food, beverages, and fuel to commuters.')
         ).toBeInTheDocument()
     })
 
-    it('renders the value proposition rationale inside the disclosure body', () => {
+    it('opening a different section auto-closes the previously open one (single-open accordion)', () => {
+        const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        fireEvent.click(summaryFor(/Mission \(synthesised\)/i))
+        fireEvent.click(summaryFor('Value Proposition'))
+
+        const openDetails = Array.from(container.querySelectorAll('details')).filter((d) =>
+            d.hasAttribute('open')
+        )
+        expect(openDetails).toHaveLength(1)
+        expect(openDetails[0].textContent).toMatch(/Value Proposition/i)
+    })
+
+    it('clicking the same summary again closes the section', () => {
+        const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        const summary = summaryFor(/Mission \(synthesised\)/i)
+        fireEvent.click(summary)
+        fireEvent.click(summary)
+        const openDetails = Array.from(container.querySelectorAll('details')).filter((d) =>
+            d.hasAttribute('open')
+        )
+        expect(openDetails).toHaveLength(0)
+    })
+
+    it('shows the value-proposition chip + rationale when expanded', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        // Rationale moved out of a hover tooltip into the always-visible
-        // (when open) disclosure body.
+        fireEvent.click(summaryFor('Value Proposition'))
+        expect(screen.getByText('Customer Intimacy')).toBeInTheDocument()
         expect(screen.getByText(/Public materials emphasise associate friendliness/)).toBeInTheDocument()
     })
 
-    it('lists every strategic priority with its result text inside the disclosure body', () => {
+    it('lists every strategic priority with its result text when expanded', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        // Priority names appear as highlighted sub-headers; result text
-        // appears underneath each one (no longer hidden behind hover).
+        fireEvent.click(summaryFor('Strategic Priorities'))
         expect(screen.getAllByText('Grow Through Foodservice').length).toBeGreaterThanOrEqual(1)
         expect(screen.getAllByText('Deliver Convenience and Value').length).toBeGreaterThanOrEqual(1)
         expect(screen.getByText(/Best-in-class signature food platform/)).toBeInTheDocument()
