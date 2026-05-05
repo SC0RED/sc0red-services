@@ -222,6 +222,18 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                 <div
                     id={tooltipId}
                     role="tooltip"
+                    // `nowheel` is React Flow's official escape hatch for
+                    // wheel events: any element with this class (and any
+                    // descendant) is excluded from the zoom-on-scroll
+                    // handler. See the `noWheelClassName = 'nowheel'`
+                    // default on `<ReactFlow>`. This is what makes
+                    // wheel-over-tooltip scroll the inner overflow region
+                    // instead of zooming the canvas. `stopPropagation` on
+                    // its own wasn't enough because React Flow checks for
+                    // the class on the wheel event's target before the
+                    // zoom path runs, short-circuiting zoom regardless of
+                    // bubble-phase propagation.
+                    className="nowheel"
                     // Hover handlers on the tooltip body itself: when the
                     // cursor enters here, cancel any pending close so the
                     // user can scroll long definitions without the tooltip
@@ -230,16 +242,6 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                     // would cancel it again if the user transits BACK).
                     onMouseEnter={openNow}
                     onMouseLeave={scheduleClose}
-                    // Stop wheel events from leaking out to the React Flow
-                    // canvas. Without this, scrolling a long definition
-                    // would zoom the canvas instead — the cursor is over
-                    // the tooltip, so the user expects scroll-to-scroll,
-                    // not scroll-to-zoom. The tooltip's inner overflow-y:
-                    // auto region handles the actual scroll; this just
-                    // prevents the event from reaching React Flow's
-                    // wheel handler if it ever bubbles up to a higher
-                    // listener level.
-                    onWheel={(event) => event.stopPropagation()}
                     style={{
                         width: 280,
                         // Cap the tooltip height so very long definitions

@@ -314,29 +314,28 @@ describe('StrategyMapNode — tooltip hover-intent (safe transit)', () => {
     })
 })
 
-describe('StrategyMapNode — tooltip wheel events do not propagate to canvas zoom', () => {
+describe('StrategyMapNode — tooltip wheel events bypass canvas zoom', () => {
     /**
      * React Flow's default behaviour is "wheel = zoom canvas". When the
      * cursor is over the tooltip (which has overflow-y: auto for long
      * definitions), the user expects "wheel = scroll the tooltip", not
-     * "wheel = zoom the canvas". Without explicit stopPropagation on
-     * the tooltip wrapper, the wheel event leaks out and the canvas
-     * zooms while the user tries to scroll. Stop the bubble.
+     * "wheel = zoom the canvas". The tooltip wrapper carries the
+     * `nowheel` class — React Flow's official escape hatch — so its
+     * zoom-on-scroll handler skips wheel events on the tooltip subtree
+     * entirely. The browser's native scroll on the inner
+     * `overflow-y: auto` region then handles the user's gesture.
      */
-    it('calls stopPropagation on wheel events so they do not reach the React Flow canvas', () => {
+    it('marks the tooltip with the React Flow `nowheel` class so wheel-zoom is bypassed', () => {
         renderInProvider(<StrategyMapNode {...nodeProps()} />)
         fireEvent.mouseEnter(screen.getByRole('button'))
         const tooltip = screen.getByRole('tooltip')
 
-        // Dispatch a real WheelEvent and spy on its stopPropagation. The
-        // tooltip's `onWheel={(e) => e.stopPropagation()}` handler should
-        // call this — React's synthetic event delegates stopPropagation
-        // to the underlying native event.
-        const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 100 })
-        const stopPropagationSpy = vi.spyOn(event, 'stopPropagation')
-        tooltip.dispatchEvent(event)
-
-        expect(stopPropagationSpy).toHaveBeenCalled()
+        // See the `noWheelClassName = 'nowheel'` default on `<ReactFlow>`:
+        // any element with this class (or a descendant) is excluded from
+        // the zoom path. `stopPropagation` on its own wasn't enough —
+        // React Flow checks for the class on the wheel event's target
+        // before its zoom handler runs.
+        expect(tooltip.classList.contains('nowheel')).toBe(true)
     })
 })
 

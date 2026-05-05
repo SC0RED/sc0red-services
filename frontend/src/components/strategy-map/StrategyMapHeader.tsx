@@ -12,21 +12,25 @@ import { formatValueProposition } from '@/lib/utils/strategyMapUtils'
  *   text is exposed via the native `title` attribute (browser tooltip)
  *   on overflow.
  * - **Mission**, **Value Proposition**, **Strategic Priorities**: each
- *   rendered with the same `ExpandableSection` disclosure pattern:
- *   uppercase section label as the summary, click toggles open/close,
- *   detail content (statement / chip + rationale / per-priority
- *   highlighted name + result text) lives in the body.
- *
- *   Earlier versions used three different interaction patterns
- *   (Mission as <details>, Value Proposition as a chip with hover
- *   tooltip, Strategic Priorities as pills with hover tooltips), which
- *   made the header feel inconsistent. Unifying on one disclosure
- *   pattern gives the user a single mental model and surfaces all
- *   detail with a click rather than a hover hunt.
+ *   rendered with the same `ExpandableSection` disclosure pattern as
+ *   the gaps in `WhatsMissingPanel` — single-open accordion, all
+ *   closed by default, click a header to expand its detail (and
+ *   collapse any other open header). One mental model across the
+ *   entire strategy-map section: header rows are compact summaries,
+ *   click to drill in.
  */
+type HeaderSectionId = 'mission' | 'value-proposition' | 'strategic-priorities'
+
 export default function StrategyMapHeader({ strategyMap }: { strategyMap: StrategyMap }) {
     const { vision, mission, valueProposition, strategicPriorities } = strategyMap
     const valueLabel = formatValueProposition(valueProposition.primary, valueProposition.secondary)
+
+    // Single-open accordion: at most one section expanded at any time.
+    // Mirrors `WhatsMissingPanel`'s `expandedGapId` pattern so the user
+    // sees the same interaction on both sides of the canvas.
+    const [openSection, setOpenSection] = useState<HeaderSectionId | null>(null)
+    const toggle = (id: HeaderSectionId) => setOpenSection((current) => (current === id ? null : id))
+
     return (
         <header
             style={{
@@ -80,11 +84,19 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
                 ) : null}
             </p>
 
-            <ExpandableSection label={`Mission${mission.synthesised ? ' (synthesised)' : ''}`}>
+            <ExpandableSection
+                label={`Mission${mission.synthesised ? ' (synthesised)' : ''}`}
+                isOpen={openSection === 'mission'}
+                onToggle={() => toggle('mission')}
+            >
                 <p style={bodyParagraphStyle}>{mission.statement}</p>
             </ExpandableSection>
 
-            <ExpandableSection label="Value Proposition">
+            <ExpandableSection
+                label="Value Proposition"
+                isOpen={openSection === 'value-proposition'}
+                onToggle={() => toggle('value-proposition')}
+            >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <span style={valuePropositionChipStyle}>{valueLabel}</span>
                     <p style={bodyParagraphStyle}>{valueProposition.rationale}</p>
@@ -92,7 +104,11 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
             </ExpandableSection>
 
             {strategicPriorities.length > 0 ? (
-                <ExpandableSection label="Strategic Priorities">
+                <ExpandableSection
+                    label="Strategic Priorities"
+                    isOpen={openSection === 'strategic-priorities'}
+                    onToggle={() => toggle('strategic-priorities')}
+                >
                     <ul
                         style={{
                             listStyle: 'none',
@@ -117,45 +133,45 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
 }
 
 /**
- * One disclosure section in the header band. Uses native `<details>` so
- * the keyboard story is correct by default (`Enter`/`Space` toggles,
- * `aria-expanded` is implied). The native triangle marker is replaced
- * with a custom rotating ▸ that flips to ▾ on open — driven by React
- * state because inline styles can't target the `[open]` attribute.
+ * Controlled disclosure section. The parent owns `isOpen` so single-open
+ * accordion behaviour can be enforced across siblings — exactly the
+ * pattern used by `WhatsMissingPanel`'s `GapRow`.
  *
- * Default state is OPEN: the previous design had Mission collapsed and
- * the other two open, which forced the user to click to read the
- * mission. With the unified pattern we want the user to see all the
- * positioning content on first load; they can collapse anything
- * deliberately if they want a tighter view.
+ * Built on native `<details>` for accessibility-by-default. The summary
+ * click is intercepted (`event.preventDefault()` blocks the browser's
+ * native open/close) so the toggle goes through React state and stays
+ * authoritative — without the intercept the browser would also flip
+ * the `open` attribute and React's controlled `open` prop would
+ * disagree with the DOM.
  */
 function ExpandableSection({
     label,
+    isOpen,
+    onToggle,
     children,
-    defaultOpen = true,
 }: {
     label: string
+    isOpen: boolean
+    onToggle: () => void
     children: ReactNode
-    defaultOpen?: boolean
 }) {
-    const [open, setOpen] = useState(defaultOpen)
     return (
-        <details
-            open={open}
-            onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}
-            style={{ fontSize: '0.85rem' }}
-        >
-            <summary style={summaryStyle}>
+        <details open={isOpen} style={{ fontSize: '0.85rem' }}>
+            <summary
+                onClick={(event) => {
+                    event.preventDefault()
+                    onToggle()
+                }}
+                aria-expanded={isOpen}
+                style={summaryStyle}
+            >
                 <span
                     aria-hidden="true"
                     style={{
                         display: 'inline-block',
                         color: 'var(--accent-blue)',
-                        transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+                        transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
                         transition: 'transform 0.15s ease',
-                        // Counteract the rotation visually so ▸ (right) → ▾ (down).
-                        // Using a CSS rotate keeps a single character + animation
-                        // while the underlying glyph stays a right-pointing arrow.
                         marginRight: '6px',
                         fontSize: '0.6rem',
                     }}
