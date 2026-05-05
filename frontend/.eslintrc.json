@@ -17,6 +17,7 @@
                 "groups": ["builtin", "external", "internal", "parent", "sibling", "index"]
             }
         ],
-        "@next/next/no-img-element": "off"
+        "@next/next/no-img-element": "off",
+        "eqeqeq": ["error", "smart"]
     }
 }

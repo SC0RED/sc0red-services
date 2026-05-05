@@ -63,6 +63,6 @@
 
 ## 10. Architecture review + commit + PR
 
-- [ ] 10.1 Run the `architecture-reviewer` agent over the diff. Required because changes touch 6+ source files and alter component contracts. Resolve all CRITICAL findings before commit
-- [ ] 10.2 Commit with a conventional-commit message: `refactor(analysis): unify section heading framing via AnalysisSection wrapper`
-- [ ] 10.3 Open PR against `development`. Body should reference this OpenSpec change (`analysis-detail-consistency-wrapper`), explicitly call out the OpportunitiesList partial migration (D2 trade-off) and the exempt sections list, and note the manual visual verification gate (task 9.5)
+- [x] 10.1 Run the `architecture-reviewer` agent over the diff. Required because changes touch 6+ source files and alter component contracts. Resolve all CRITICAL findings before commit. (Two passes: first surfaced 0 CRITICAL + 2 MEDIUM judgment calls, both addressed; second confirmed safe. Reviewer: "commit safe.")
+- [x] 10.2 Commit with a conventional-commit message: `refactor(analysis): unify section heading framing via AnalysisSection wrapper` — committed as `403a80b`, follow-up review fixes as `3e81738`, squash-merged to development as `9bf44da`
+- [x] 10.3 Open PR against `development`. Body should reference this OpenSpec change (`analysis-detail-consistency-wrapper`), explicitly call out the OpportunitiesList partial migration (D2 trade-off) and the exempt sections list, and note the manual visual verification gate (task 9.5) — PR #251 opened and merged. CI all green (Lint, Test, Frontend Test, Audit, Security, Naming, E2E, Playwright, PR Summary, CodeRabbit)

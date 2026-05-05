@@ -174,12 +174,8 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             {data.ebitdaTree && (
                 <AnalysisSection
                     id="ebitda"
-                    title={
-                        <>
-                            EBITDA Impact Model
-                            <HelpTooltip term="ebitda_tree" />
-                        </>
-                    }
+                    title="EBITDA Impact Model"
+                    titleAdornment={<HelpTooltip term="ebitda_tree" />}
                 >
                     <EbitdaSection ebitdaTree={data.ebitdaTree} opportunities={opportunities} />
                 </AnalysisSection>
@@ -203,12 +199,8 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             {hasValueLevers && (
                 <AnalysisSection
                     id="value-lever"
-                    title={
-                        <>
-                            Value Impact
-                            <HelpTooltip term="value_lever" />
-                        </>
-                    }
+                    title="Value Impact"
+                    titleAdornment={<HelpTooltip term="value_lever" />}
                 >
                     <ValueLeverSummary
                         opportunities={opportunities}
@@ -220,12 +212,8 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
 
             <AnalysisSection
                 id="opportunities"
-                title={
-                    <>
-                        AI Opportunities ({opportunities.length})
-                        <HelpTooltip term="impact_rating" />
-                    </>
-                }
+                title={`AI Opportunities (${opportunities.length})`}
+                titleAdornment={<HelpTooltip term="impact_rating" />}
             >
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
             </AnalysisSection>
