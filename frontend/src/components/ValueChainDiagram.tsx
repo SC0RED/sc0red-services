@@ -18,7 +18,7 @@ export default function ValueChainDiagram({ steps, opportunities, summary }: Val
     const supportSteps = steps.filter((s) => s.category === 'support')
 
     return (
-        <div style={{ marginBottom: '2rem' }}>
+        <div className="analysis-section-spacing">
             {/* Section heading lives at the page level via AnalysisSection
                 (analysis-detail-consistency-wrapper D3). */}
             <p

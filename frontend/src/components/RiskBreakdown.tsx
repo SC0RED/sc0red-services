@@ -15,7 +15,7 @@ export default function RiskBreakdown({ riskScores }: RiskBreakdownProps) {
     const [expandedRisk, setExpandedRisk] = useState<string | null>(null)
 
     return (
-        <div style={{ marginBottom: '2rem' }}>
+        <div className="analysis-section-spacing">
             {/* Section heading lives at the page level via AnalysisSection
                 (analysis-detail-consistency-wrapper D3). */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>

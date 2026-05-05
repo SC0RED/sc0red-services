@@ -47,7 +47,7 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
     })
 
     return (
-        <div style={{ marginBottom: '2rem' }}>
+        <div className="analysis-section-spacing">
             {/* Section heading + count badge live at the page level via
                 AnalysisSection (analysis-detail-consistency-wrapper D2 +
                 D3). The category-chip filter strip stays here as a body
