@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
@@ -134,13 +134,29 @@ describe('StrategyMapNode — hover surfaces tooltip', () => {
         expect(screen.getByText(/Source: EBITDA tree revenue branch/)).toBeInTheDocument()
     })
 
-    it('hides the tooltip when the pointer leaves', () => {
-        renderInProvider(<StrategyMapNode {...nodeProps()} />)
-        const node = screen.getByRole('button')
-        fireEvent.mouseEnter(node)
-        expect(screen.getByRole('tooltip')).toBeInTheDocument()
-        fireEvent.mouseLeave(node)
-        expect(screen.queryByRole('tooltip')).toBeNull()
+    it('hides the tooltip after the safe-transit delay when the pointer leaves', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+            // mouseLeave starts a hover-intent timer (HOVER_CLOSE_DELAY_MS,
+            // currently 200 ms). The tooltip stays open during the grace
+            // period so the user can transit from chip → tooltip without
+            // it dismissing under them.
+            fireEvent.mouseLeave(node)
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+            // After the grace period the tooltip closes.
+            act(() => {
+                vi.advanceTimersByTime(250)
+            })
+            expect(screen.queryByRole('tooltip')).toBeNull()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('treats React Flow `selected` (touch tap) the same as hover', () => {
@@ -218,6 +234,83 @@ describe('StrategyMapNode — shared-lane visual marker', () => {
         renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
         const node = screen.getByRole('button')
         expect(node).toHaveStyle({ borderLeft: '3px dashed var(--accent-blue)' })
+    })
+})
+
+describe('StrategyMapNode — tooltip hover-intent (safe transit)', () => {
+    /**
+     * The user reported on PR #244 that the tooltip's scroll bar was
+     * unreachable: moving the cursor toward it triggered chip
+     * mouseLeave first (because the NodeToolbar portal lives in a
+     * different DOM tree from the chip and there's a small visual gap
+     * between them), which closed the tooltip mid-transit.
+     *
+     * Hover-intent fix: chip mouseLeave starts a 200 ms close timer
+     * that the tooltip's own mouseEnter cancels. So the tooltip stays
+     * open as long as the cursor is on EITHER the chip or the tooltip.
+     */
+    it('tooltip mouseEnter cancels the pending close so the user can scroll', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            const tooltip = screen.getByRole('tooltip')
+
+            // Cursor leaves the chip → close timer scheduled.
+            fireEvent.mouseLeave(node)
+            // Mid-transit: cursor reaches the tooltip and cancels the close.
+            fireEvent.mouseEnter(tooltip)
+            // Even after the grace period elapses the tooltip stays open
+            // because the timer was cancelled.
+            act(() => {
+                vi.advanceTimersByTime(500)
+            })
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('tooltip mouseLeave schedules a close (so leaving the tooltip closes it)', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            const tooltip = screen.getByRole('tooltip')
+
+            // User transits chip → tooltip → away.
+            fireEvent.mouseLeave(node)
+            fireEvent.mouseEnter(tooltip)
+            fireEvent.mouseLeave(tooltip)
+            expect(screen.getByRole('tooltip')).toBeInTheDocument() // still inside grace
+            act(() => {
+                vi.advanceTimersByTime(250)
+            })
+            expect(screen.queryByRole('tooltip')).toBeNull()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('chip mouseEnter during the grace period cancels the close (cursor returns)', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            // Cursor briefly leaves then comes back to the chip.
+            fireEvent.mouseLeave(node)
+            fireEvent.mouseEnter(node)
+            act(() => {
+                vi.advanceTimersByTime(500)
+            })
+            // Still open — the second mouseEnter cancelled the timer.
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })
 

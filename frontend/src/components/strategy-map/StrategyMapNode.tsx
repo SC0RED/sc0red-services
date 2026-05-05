@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
 import { Handle, type NodeProps, NodeToolbar, Position, type Node } from '@xyflow/react'
 
-import type { ConfidenceMarker } from '@/lib/types/api'
+import { useHoverIntent } from '@/lib/hooks/useHoverIntent'
 import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
+import type { ConfidenceMarker } from '@/lib/types/api'
 
 import ConfidenceChip from './ConfidenceChip'
 
@@ -60,7 +60,12 @@ const PERSPECTIVE_ACCENT: Record<StrategyMapNodeData['perspective'], string> = {
 }
 
 export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<StrategyMapNodeData>>) {
-    const [hovered, setHovered] = useState(false)
+    // Hover state with safe-transit grace period — the tooltip lives in
+    // NodeToolbar's portal so the cursor briefly leaves both chip and
+    // tooltip during transit; without the grace period the tooltip
+    // would close before the cursor could reach it. See useHoverIntent
+    // for the full rationale + state machine.
+    const { hovered, openNow, scheduleClose, setHovered } = useHoverIntent()
     // Treat React Flow's `selected` (set on tap-to-focus) as equivalent to
     // hover so touch users see the same tooltip without a second tap.
     const showDetail = hovered || Boolean(selected)
@@ -76,10 +81,10 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
             tabIndex={0}
             aria-label={`${data.objectiveId}: ${data.title}`}
             aria-describedby={showDetail ? tooltipId : undefined}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            onFocus={() => setHovered(true)}
-            onBlur={() => setHovered(false)}
+            onMouseEnter={openNow}
+            onMouseLeave={scheduleClose}
+            onFocus={openNow}
+            onBlur={scheduleClose}
             onKeyDown={(event) => {
                 // WCAG 2.1.1: a `role="button"` element MUST activate on
                 // Enter and Space. Activation here means "open the tooltip
@@ -217,6 +222,14 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                 <div
                     id={tooltipId}
                     role="tooltip"
+                    // Hover handlers on the tooltip body itself: when the
+                    // cursor enters here, cancel any pending close so the
+                    // user can scroll long definitions without the tooltip
+                    // dismissing under them. When the cursor leaves the
+                    // tooltip, schedule a close (the chip's mouseEnter
+                    // would cancel it again if the user transits BACK).
+                    onMouseEnter={openNow}
+                    onMouseLeave={scheduleClose}
                     style={{
                         width: 280,
                         // Cap the tooltip height so very long definitions
