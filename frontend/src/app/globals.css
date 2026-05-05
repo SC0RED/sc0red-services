@@ -400,16 +400,16 @@ select {
 */
 
 .card.card--metric {
-    padding: 2rem;
+    padding: var(--card-padding-metric);
     text-align: center;
 }
 
 .card.card--list {
-    padding: 0.75rem 1rem;
+    padding: var(--card-padding-list);
 }
 
 .card.card--rich {
-    padding: 1.25rem 1.5rem;
+    padding: var(--card-padding-rich);
 }
 
 .card-surface {
@@ -1434,10 +1434,19 @@ select {
    `--section-header-row-gap` is the intra-row spacing between the
    heading and its trailing adornment (HelpTooltip, count badge,
    status pill). Locked into the token system from day one so the
-   future spacing proposal extends rather than introduces. */
+   future spacing proposal extends rather than introduces.
+
+   `--card-padding-{metric,list,rich}` are consumed by the three
+   `.card--*` density variants. Tokenising the values here (vs
+   inlining them in the variant rules) means a future redesign
+   that bumps density is one CSS edit per token rather than three
+   selector edits. Same DRY principle as the section-gap-y token. */
 :root {
     --section-gap-y: 1rem;
     --section-header-row-gap: 0.5rem;
+    --card-padding-metric: 2rem;
+    --card-padding-list: 0.75rem 1rem;
+    --card-padding-rich: 1.25rem 1.5rem;
 }
 
 .section-header {
