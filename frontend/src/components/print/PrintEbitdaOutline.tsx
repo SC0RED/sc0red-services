@@ -183,6 +183,14 @@ function EbitdaNodeCard({ node, sortedOpportunities }: EbitdaNodeCardProps) {
                 {typeof node.percentage_of_parent === 'number' ? (
                     <span>{Math.round(node.percentage_of_parent * 100)}% of parent</span>
                 ) : null}
+                {node.confidence_level ? (
+                    // Print-mode renders the confidence level inline as plain
+                    // text — print can't surface a hover tooltip for the
+                    // basis, so the chip glyph would be misleading there.
+                    // The full basis is omitted by default to keep PDFs
+                    // concise; readers can refer to the on-page legend.
+                    <span data-testid="ebitda-confidence-print">({node.confidence_level})</span>
+                ) : null}
             </div>
             {node.description ? (
                 <p

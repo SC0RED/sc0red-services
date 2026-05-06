@@ -124,4 +124,55 @@ describe('PrintEbitdaOutline', () => {
         )
         expect(container.querySelector('.print-ebitda')).not.toBeNull()
     })
+
+    it('renders the confidence level inline when the node carries one', () => {
+        // Print medium can't render a hover tooltip for the basis, so the
+        // chip glyph would be misleading; we render the level inline as
+        // plain text instead.
+        const treeWithConfidence: EbitdaTree = {
+            treeData: [
+                node({
+                    id: 'rev',
+                    label: 'Revenue',
+                    type: 'revenue',
+                    value_range: '$10M',
+                    confidence_level: 'high',
+                    confidence_basis: 'Both inputs matched.',
+                }),
+                node({
+                    id: 'rev2',
+                    label: 'Other Revenue',
+                    type: 'revenue',
+                    value_range: '$2M',
+                    confidence_level: 'medium',
+                    confidence_basis: 'Partial signal.',
+                }),
+            ],
+        }
+        const { getAllByTestId } = render(
+            <PrintEbitdaOutline ebitdaTree={treeWithConfidence} sortedOpportunities={sortedOpportunities} />
+        )
+        const markers = getAllByTestId('ebitda-confidence-print')
+        const markerTexts = markers.map((node) => node.textContent)
+        expect(markerTexts).toContain('(high)')
+        expect(markerTexts).toContain('(medium)')
+    })
+
+    it('omits the confidence marker when the node has no confidence level', () => {
+        const treeNoConfidence: EbitdaTree = {
+            treeData: [
+                node({
+                    id: 'rev',
+                    label: 'Revenue',
+                    type: 'revenue',
+                    value_range: '$10M',
+                    // No confidence_level
+                }),
+            ],
+        }
+        const { queryAllByTestId } = render(
+            <PrintEbitdaOutline ebitdaTree={treeNoConfidence} sortedOpportunities={sortedOpportunities} />
+        )
+        expect(queryAllByTestId('ebitda-confidence-print')).toHaveLength(0)
+    })
 })
