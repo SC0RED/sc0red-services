@@ -76,15 +76,27 @@ class StrategyMapConstruct(Construct):
             retention_period=Duration.days(14),
         )
 
-        # Main queue. Visibility timeout is 90 seconds — covers today's ~55s
-        # strategy-map call shape with margin. After Phase 1 of
-        # optimize-strategy-map-latency lands the call drops to ~17s, but the
-        # 90s timeout gives headroom for OpenAI tail latency.
+        # Main queue. Visibility timeout is 720 seconds (12 minutes) — six
+        # times the worker Lambda's 120-second timeout, per the AWS recommended
+        # SQS-Lambda integration ratio. This ensures a message stays
+        # invisible for the full duration the Lambda could be processing it
+        # (worst case: full timeout) plus an exponential-backoff buffer for
+        # SQS-internal retries. The actual call shape today is ~55s and drops
+        # to ~17s after `optimize-strategy-map-latency` Phase 1, so the long
+        # visibility window does NOT delay user-visible recovery — it only
+        # affects the failure path.
+        #
+        # Earlier this construct shipped with `visibility_timeout=90` while
+        # the Lambda timeout was 120s. AWS rejected the event-source mapping
+        # at deploy time with `Queue visibility timeout: 90 seconds is less
+        # than Function timeout: 120 seconds`. The minimum for any
+        # SQS-Lambda mapping is `>= function_timeout`; we use the recommended
+        # 6× multiplier to leave operational headroom.
         self.queue = sqs.Queue(
             self,
             "StrategyMapQueue",
             queue_name=f"janus-strategy-map-queue-{environment}",
-            visibility_timeout=Duration.seconds(90),
+            visibility_timeout=Duration.seconds(720),
             retention_period=Duration.days(4),
             dead_letter_queue=sqs.DeadLetterQueue(queue=self.dlq, max_receive_count=3),
         )
