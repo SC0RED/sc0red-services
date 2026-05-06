@@ -95,6 +95,12 @@ class APIGatewayHandler:
         self._storage = storage or DynamoDBStorageProvider()
         self._factory_manager = FactoryManager(self._storage)
         self._queue_url = os.environ["ANALYSIS_QUEUE_URL"]
+        # Optional today: ``STRATEGY_MAP_QUEUE_URL`` is provisioned in
+        # ``strategy-map-on-demand`` Phase A2 (CDK). When unset, the
+        # ``POST /api/analysis/{id}/strategy-map`` route returns 503 so the
+        # API Lambda doesn't crash on cold start in environments where the
+        # queue isn't deployed yet.
+        self._strategy_map_queue_url = os.environ.get("STRATEGY_MAP_QUEUE_URL", "")
         self._sqs = boto3.client("sqs")
         self._documents_bucket = os.environ.get("DOCUMENTS_BUCKET", "")
         if not self._documents_bucket:
@@ -111,6 +117,7 @@ class APIGatewayHandler:
             handle_bulk_delete_analyses,
             handle_dashboard,
             handle_delete_analysis,
+            handle_generate_strategy_map,
             handle_get_analysis,
             handle_list_analyses,
             handle_reanalyze,
@@ -268,6 +275,33 @@ class APIGatewayHandler:
             "/api/analysis/{analysis_id}/reanalyze",
             lambda event, authentication, analysis_id: handle_reanalyze(
                 event, authentication, self._storage, self._sqs, self._queue_url, analysis_id
+            ),
+        )
+
+        # On-demand strategy-map generation (strategy-map-on-demand spec).
+        # Phase A1.5 ships the route + handler against the foundation pieces;
+        # Phase A2 provisions the dedicated SQS queue + worker Lambda. The
+        # handler returns 503 when STRATEGY_MAP_QUEUE_URL is unset so the
+        # API Lambda runs cleanly in environments where Phase A2 hasn't
+        # landed yet.
+        router.protected(
+            "POST",
+            "/api/analysis/{analysis_id}/strategy-map",
+            lambda event, authentication, analysis_id: (
+                build_error(
+                    "Strategy-map generation queue not configured for this environment",
+                    status=503,
+                    code="STRATEGY_MAP_FEATURE_DISABLED",
+                )
+                if not self._strategy_map_queue_url
+                else handle_generate_strategy_map(
+                    event,
+                    authentication,
+                    self._storage,
+                    self._sqs,
+                    self._strategy_map_queue_url,
+                    analysis_id,
+                )
             ),
         )
 
