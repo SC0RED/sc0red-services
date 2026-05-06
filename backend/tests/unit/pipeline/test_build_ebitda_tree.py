@@ -1,11 +1,11 @@
 """Tests for the programmatic EBITDA tree builder."""
 
 from src.models.model_company import CompanyProfile, EbitdaNode, EbitdaTreeResult
+from src.pipeline.pipeline_steps._ebitda_confidence import _compute_confidence
+from src.pipeline.pipeline_steps._ebitda_templates import _resolve_template
 from src.pipeline.pipeline_steps.build_ebitda_tree import (
-    _compute_confidence,
     _format_currency,
     _format_range,
-    _resolve_template,
     build_programmatic_ebitda_tree,
 )
 
