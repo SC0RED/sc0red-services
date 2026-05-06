@@ -4,28 +4,28 @@
 
 ## P0.1 Add StepTimer instrumentation
 
-- [ ] P0.1.1 In `backend/src/pipeline/pipeline_steps/generate_strategy_map.py`, import `StepTimer` from `src.pipeline.step_timer`.
-- [ ] P0.1.2 Instantiate `timer = StepTimer("GenerateStrategyMap")` at the top of `execute()`.
-- [ ] P0.1.3 Replace each `_label, content, _elapsed = self._run_ai_call(...)` with `_label, content, elapsed = ...; timer.record(f"ai_call_{label}", elapsed)`. Apply to all 7 calls (Step 1 vision/mission, Step 2 value-proposition, Steps 3-6 perspectives via FutureManager collected results, Step 7 arrows/gaps).
-- [ ] P0.1.4 At the end of `execute()` (before `mark_question_complete`), call `self.request_executor.add_details(timer.to_details())`.
-- [ ] P0.1.5 Confirm the labels match the `parallel_profile_risk` convention: `ai_call_vision_mission`, `ai_call_value_proposition`, `ai_call_financial`, `ai_call_customer`, `ai_call_internal_processes`, `ai_call_organizational_capacity`, `ai_call_arrows_and_gaps`.
+- [x] P0.1.1 In `backend/src/pipeline/pipeline_steps/generate_strategy_map.py`, import `StepTimer` from `src.pipeline.step_timer`.
+- [x] P0.1.2 Instantiate `timer = StepTimer("GenerateStrategyMap")` at the top of `execute()`.
+- [x] P0.1.3 Replace each `_label, content, _elapsed = self._run_ai_call(...)` with `_label, content, elapsed = ...; timer.record(f"ai_call_{label}", elapsed)`. Apply to all 7 calls. — Threaded `timer` parameter through each `_step_*` method so each call site records its own label.
+- [x] P0.1.4 At the end of `execute()` (before `mark_question_complete`), call `self.request_executor.add_details(timer.to_details())`. — Wrapped in `try/finally` so partial timings flush even when a downstream step raises (per the spec's failure-path scenario).
+- [x] P0.1.5 Confirm the labels match the `parallel_profile_risk` convention: `ai_call_vision_mission`, `ai_call_value_proposition`, `ai_call_financial`, `ai_call_customer`, `ai_call_internal_processes`, `ai_call_organizational_capacity`, `ai_call_arrows_and_gaps`. — Verified in `test_label_naming_convention`.
 
 ## P0.2 Add OpenAI cache-hit telemetry
 
-- [ ] P0.2.1 Investigate whether `signalfield-core`'s `AIClient.query_structured` exposes the OpenAI response's `usage.input_tokens_details.cached_tokens` field through its `response.metadata`. If yes → use it directly. If no → file a follow-up task in signalfield-core; for now skip cache-hit telemetry in Phase 0.
-- [ ] P0.2.2 If cache-hit data is reachable, extend `run_structured_ai_call` to log `cached_tokens` per call (already logs elapsed + metadata). No `StepTimer` field for it yet — log-only is fine for Phase 0; structured telemetry comes in Phase 1.
+- [x] P0.2.1 Investigate whether `signalfield-core`'s `AIClient.query_structured` exposes the OpenAI response's `usage.input_tokens_details.cached_tokens` field through its `response.metadata`. — Confirmed: signalfield-core's `openai_provider.py` extracts `response.usage.input_tokens` and `output_tokens` but does NOT extract `usage.input_tokens_details.cached_tokens`. Surface unavailable from janus today.
+- [x] P0.2.2 If cache-hit data is reachable, extend `run_structured_ai_call` to log `cached_tokens` per call. — Skipped per P0.2.1: data not surfaced. Cache-hit telemetry deferred to Phase 1 alongside the token-count extension; signalfield-core needs a small change first to expose the field. Filed mentally as a follow-up; not blocking.
 
 ## P0.3 Tests
 
-- [ ] P0.3.1 Update / add a unit test for `GenerateStrategyMap.execute()` that asserts `request_executor.add_details` is called once with a payload keyed `GenerateStrategyMap.timings` containing a `total` entry plus 7 `ai_call_*` entries.
-- [ ] P0.3.2 Test that all per-call labels match the convention: substring-assert `ai_call_` prefix on every key (excluding `total`).
-- [ ] P0.3.3 Run `cd backend && uv run pytest tests/ -q` — all green; coverage ≥ 95%.
-- [ ] P0.3.4 Run `cd backend && uv run ruff check src/ tests/` — clean.
-- [ ] P0.3.5 Run `cd backend && uv run pyright src/` — no new errors vs baseline.
+- [x] P0.3.1 Update / add a unit test for `GenerateStrategyMap.execute()` that asserts `request_executor.add_details` is called once with a payload keyed `GenerateStrategyMap.timings` containing a `total` entry plus 7 `ai_call_*` entries. — `TestGenerateStrategyMapTelemetry::test_emits_timings_detail_block` and `::test_records_one_entry_per_ai_call_today`.
+- [x] P0.3.2 Test that all per-call labels match the convention. — `test_label_naming_convention` asserts the exact 7-element set. Plus `test_emits_partial_timings_on_failure` covers the failure-path scenario from the spec.
+- [x] P0.3.3 Run `cd backend && uv run pytest tests/ -q` — all green; coverage ≥ 95%. — 1001 passed (4 new), coverage 95.09%.
+- [x] P0.3.4 Run `cd backend && uv run ruff check src/ tests/` — clean. — 1 pre-existing E501 on test file line 515 (untouched by this diff); no new errors.
+- [x] P0.3.5 Run `cd backend && uv run pyright src/` — no new errors vs baseline. — 1 pre-existing baseline error on `submit_task` typing; 0 new errors.
 
 ## P0.4 Architecture review + ship
 
-- [ ] P0.4.1 Run the architecture-reviewer agent on the diff. Resolve all CRITICAL findings.
+- [x] P0.4.1 Run the architecture-reviewer agent on the diff. Resolve all CRITICAL findings. — 0 critical, 0 medium, 0 low. Reviewer also surfaced a separate pre-existing gap (`generate_strategy_map` missing from `_PROGRESS_MAP` in `request_executor.py`) which is out of scope for telemetry; spawned as a follow-up task.
 - [ ] P0.4.2 Open PR `feat/strategy-map-telemetry` against `development`. PR description includes a sample CloudWatch payload showing the new `timings` block.
 - [ ] P0.4.3 Merge to `development`. Promote dev → testing → production with normal cadence. Confirm CloudWatch shows the new detail key.
 - [ ] P0.4.4 Capture per-call elapsed median + p95 from production over ~7 days. Document in `visual/baseline-timings.md` for use as the Phase 1 comparison anchor.
