@@ -52,42 +52,42 @@
 
 ## B.1 New components + hooks
 
-- [ ] B.1.1 Create `frontend/src/components/analysis/StrategyMapCTA.tsx`. Click handler POSTs to `/api/analysis/{id}/strategy-map`. On 202, calls a parent-provided `onGenerationStarted(analysisId)` callback. On error, renders an inline error message with retry. Includes brief framing copy ("Synthesise a Balanced Scorecard view from your risks, opportunities, EBITDA, and value chain").
-- [ ] B.1.2 Create `frontend/src/lib/hooks/useStrategyMapSubscription.ts`. Subscribes to AppSync events filtered by `analysis_id`. Handles `strategy_map_complete` (triggers re-fetch) and `strategy_map_failed` (transitions to error message). 90-second client-side timeout fallback to one-time `GET /api/analysis/{id}` if no event arrives.
-- [ ] B.1.3 Create `frontend/src/components/analysis/StrategyMapGeneratingPlaceholder.tsx`. Skeleton + status message ("Generating your strategy map..."). No cancel button.
-- [ ] B.1.4 Update `frontend/src/lib/types/api.ts`: `AnalysisData` gains `strategyMapGenerationState?: "generating" | null`.
+- [x] B.1.1 Create `frontend/src/components/analysis/StrategyMapCTA.tsx`. Click handler POSTs to `/api/analysis/{id}/strategy-map`. On 202, calls a parent-provided `onGenerationStarted(analysisId)` callback. On error, renders an inline error message with retry. Includes brief framing copy ("Synthesise a Balanced Scorecard view from your risks, opportunities, EBITDA, and value chain").
+- [x] B.1.2 Create `frontend/src/lib/hooks/useStrategyMapSubscription.ts`. Subscribes to AppSync events filtered by `analysis_id`. Handles `strategy_map_complete` (triggers re-fetch) and `strategy_map_failed` (transitions to error message). 90-second client-side timeout fallback to one-time `GET /api/analysis/{id}` if no event arrives.
+- [x] B.1.3 Create `frontend/src/components/analysis/StrategyMapGeneratingPlaceholder.tsx`. Skeleton + status message ("Generating your strategy map..."). No cancel button.
+- [x] B.1.4 Update `frontend/src/lib/types/api.ts`: `AnalysisData` gains `strategyMapGenerationState?: "generating" | null`.
 
 ## B.2 Layout reorder in `AnalysisDetail.tsx`
 
-- [ ] B.2.1 Move `<Sc0redCTABanner />` from after `OpportunitiesList` to between `AnalysisOverviewCards` and `TopActionsCallout` (Beat 4 of new layout). Single instance.
-- [ ] B.2.2 Move the strategy-map slot from after `TopActionsCallout` (Beat 5) to after `OpportunitiesList` (Beat 11 of new layout).
-- [ ] B.2.3 Replace the conditional `{data.strategyMap ? <StrategyMapView/> : null}` with a three-state branch: CTA / generating / present.
-- [ ] B.2.4 `<DeepDiveCTA />` renders ONLY in the present state, immediately after `<StrategyMapView />`. Remove its standalone-render branch.
-- [ ] B.2.5 Update the file's docstring to reflect the new beat order.
+- [x] B.2.1 Move `<Sc0redCTABanner />` from after `OpportunitiesList` to between `AnalysisOverviewCards` and `TopActionsCallout` (Beat 1.5 of new layout). Single instance.
+- [x] B.2.2 Move the strategy-map slot from after `TopActionsCallout` to after `OpportunitiesList` (Beat 6 of new layout).
+- [x] B.2.3 Replace the conditional `{data.strategyMap ? <StrategyMapView/> : null}` with a three-state branch: CTA / generating / present.
+- [x] B.2.4 `<DeepDiveCTA />` renders ONLY in the present state, immediately after `<StrategyMapView />`. Remove its standalone-render branch.
+- [x] B.2.5 Update the file's docstring to reflect the new beat order.
 
 ## B.3 Sc0redCTABanner copy + framing
 
-- [ ] B.3.1 Update `Sc0redCTABanner.tsx` collapsed-state headline. Draft string: **"Dig deeper with a sc0red advisor"**. Final wording is leadership's call — keep the prop or constant editable.
-- [ ] B.3.2 Update expanded-state body copy. Draft string: **"Our PE-experienced advisors take you from this analysis to operational results — from positioning strategy through production deployment, faster than traditional advisory timelines."** Final wording is leadership's call.
-- [ ] B.3.3 Keep "Start the conversation" CTA button label unchanged.
-- [ ] B.3.4 Verify analytics events (`sc0red_cta_banner_expanded` / `_collapsed` / `sc0red_cta_clicked`) still fire with the existing `analyticsContext` payload at the new position.
+- [x] B.3.1 Update `Sc0redCTABanner.tsx` collapsed-state headline. Draft string: **"Dig deeper with a sc0red advisor"**. Final wording is leadership's call — keep the prop or constant editable.
+- [x] B.3.2 Update expanded-state body copy. Draft string: **"Our PE-experienced advisors take you from this analysis to operational results — from positioning strategy through production deployment, faster than traditional advisory timelines."** Final wording is leadership's call.
+- [x] B.3.3 Keep "Start the conversation" CTA button label unchanged.
+- [x] B.3.4 Verify analytics events (`sc0red_cta_banner_expanded` / `_collapsed` / `sc0red_cta_clicked`) still fire with the existing `analyticsContext` payload at the new position.
 
 ## B.4 Tests
 
-- [ ] B.4.1 Unit tests: `<StrategyMapCTA />` renders the button, POSTs on click, transitions on 202, shows error on non-202.
-- [ ] B.4.2 Unit tests: `useStrategyMapSubscription` hook subscribes on mount, unsubscribes on unmount, handles complete + failed events, fires the 90s timeout fallback.
-- [ ] B.4.3 Page-level test (`AnalysisDetail.test.tsx`): all three slot states render correctly given different `data` shapes; section order matches the new spec; Sc0redCTABanner is at Beat 4 not Beat 12.
-- [ ] B.4.4 Page-level test: clicking the CTA optimistically transitions to generating; AppSync push transitions to present; failure event transitions back to CTA with error.
-- [ ] B.4.5 `cd frontend && npm run lint && npx tsc --noEmit && npm test` all clean.
+- [x] B.4.1 Unit tests: `<StrategyMapCTA />` renders the button, POSTs on click, transitions on 202, shows error on non-202.
+- [x] B.4.2 Unit tests: `useStrategyMapSubscription` hook subscribes on mount, unsubscribes on unmount, handles complete + failed events, fires the 90s timeout fallback.
+- [x] B.4.3 Page-level test (`AnalysisDetail.test.tsx`): all three slot states render correctly given different `data` shapes; section order matches the new spec; Sc0redCTABanner is at Beat 1.5 not Beat 12.
+- [x] B.4.4 Page-level test: clicking the CTA optimistically transitions to generating; AppSync push transitions to present; failure event transitions back to CTA with error.
+- [x] B.4.5 `cd frontend && npm run lint && npx tsc --noEmit && npm test` all clean.
 
 ## B.5 Architecture review + ship
 
-- [ ] B.5.1 Architecture-reviewer agent on the diff (substantial — new components, new hook, layout reorder, copy changes).
+- [x] B.5.1 Architecture-reviewer agent on the diff (substantial — new components, new hook, layout reorder, copy changes).
 - [ ] B.5.2 Open PR `feat/strategy-map-on-demand-frontend`. Land on development. Manual smoke-test:
-  - Fresh analysis → CTA renders at Beat 11
+  - Fresh analysis → CTA renders at Beat 6
   - Click CTA → optimistic transition → AppSync push → present
   - Re-analyse → CTA returns
-  - Pre-existing analysis with strategy map → renders in present state at Beat 11
+  - Pre-existing analysis with strategy map → renders in present state at Beat 6
 - [ ] B.5.3 Promote dev → testing → production with normal cadence.
 
 ---
