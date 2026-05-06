@@ -317,6 +317,15 @@ class DynamoDBAssessmentRepository:
         """Persist the AI-generated strategy map for the given assessment."""
         _assessment_subrecord_ops.save_strategy_map(self._table, assessment_id, data)
 
+    def clear_strategy_map(self, assessment_id: str) -> None:
+        """Remove the persisted strategy map for the given assessment.
+
+        Called by the re-analyse handler (strategy-map-on-demand spec) to
+        invalidate a stale map before regenerating the underlying diagnosis.
+        Idempotent — safe to call when no map exists.
+        """
+        _assessment_subrecord_ops.clear_strategy_map(self._table, assessment_id)
+
     def get_strategy_map(self, assessment_id: str) -> dict[str, Any] | None:
         """Return the strategy map for the given assessment, or None if not found."""
         return _assessment_subrecord_ops.get_strategy_map(self._table, assessment_id)

@@ -70,3 +70,28 @@ def build_reanalysis_message(
             "request_id": analysis_id,
         }
     )
+
+
+def build_strategy_map_message(
+    *,
+    analysis_id: str,
+    org_id: str,
+    user_id: str,
+    scan_id: str,
+) -> str:
+    """Build a JSON message for the on-demand strategy-map worker.
+
+    Per the strategy-map-on-demand spec, the message lands on the dedicated
+    `janus-strategy-map-queue`. The worker loads the latest assessment for
+    ``analysis_id``, runs the strategy-map generation, persists the result,
+    and pushes an AppSync ``strategy_map_complete`` event.
+    """
+    return json.dumps(
+        {
+            "type": "strategy_map_generation",
+            "analysis_id": analysis_id,
+            "org_id": org_id,
+            "user_id": user_id,
+            "scan_id": scan_id,
+        }
+    )
