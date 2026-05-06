@@ -1622,6 +1622,8 @@ class TestDocumentEndpoints:
             "scan_id": "scan-1",
         }
         storage.create_company_repository.return_value = company_repo
+        assessment_repo = MagicMock()
+        storage.create_assessment_repository.return_value = assessment_repo
 
         result = handler.handle(
             {
@@ -1637,6 +1639,91 @@ class TestDocumentEndpoints:
         message_body = json.loads(mock_sqs.send_message.call_args[1]["MessageBody"])
         assert message_body["reanalyze"] is True
         assert message_body["analysis_id"] == "a-1"
+        # Per `strategy-map-on-demand` Phase C, the persisted strategy map
+        # is invalidated up-front so the on-demand CTA returns. The repo
+        # method is idempotent and called even when no map existed — the
+        # validation that we don't break that path is in
+        # `test_reanalyze_clears_strategy_map_when_none_exists`.
+        assessment_repo.clear_strategy_map.assert_called_once_with("a-1")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_clears_strategy_map_when_none_exists(self, mock_boto3, mock_authentication):
+        # Re-analysing a fresh analysis (one that never had a strategy
+        # map generated) must NOT raise — the repo method is idempotent
+        # by contract (`_assessment_subrecord_ops.clear_strategy_map`
+        # uses `delete_item` which silently no-ops when the row is
+        # absent).
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_url": "https://test.com",
+            "scan_id": "scan-1",
+        }
+        storage.create_company_repository.return_value = company_repo
+        assessment_repo = MagicMock()
+        # Idempotent — return None (delete on missing row is a no-op).
+        assessment_repo.clear_strategy_map.return_value = None
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 202
+        assessment_repo.clear_strategy_map.assert_called_once_with("a-1")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_clears_strategy_map_before_enqueue(self, mock_boto3, mock_authentication):
+        # The clear MUST happen BEFORE the SQS send so a worker that
+        # picks up the message can't see the stale map between the SQS
+        # dispatch and the clear. Use a side effect to record call
+        # ordering across two distinct mocks.
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_url": "https://test.com",
+            "scan_id": "scan-1",
+        }
+        storage.create_company_repository.return_value = company_repo
+
+        events: list[str] = []
+        assessment_repo = MagicMock()
+        assessment_repo.clear_strategy_map.side_effect = lambda _aid: events.append("clear")
+        storage.create_assessment_repository.return_value = assessment_repo
+        mock_sqs.send_message.side_effect = lambda **_kw: events.append("enqueue")
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/analysis/a-1/reanalyze",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 202
+        assert events == ["clear", "enqueue"], (
+            "clear_strategy_map must run BEFORE enqueueing the re-analysis "
+            "so the worker can't observe a stale map between dispatch and clear"
+        )
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")

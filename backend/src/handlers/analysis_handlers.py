@@ -305,7 +305,13 @@ def handle_reanalyze(
     queue_url: str,
     analysis_id: str,
 ) -> LambdaResponse:
-    """Handle POST /api/analysis/{analysis_id}/reanalyze."""
+    """Handle POST /api/analysis/{analysis_id}/reanalyze.
+
+    Per ``strategy-map-on-demand`` Phase C, the persisted strategy map
+    is invalidated up-front (before SQS enqueue) so the slot returns to
+    the on-demand CTA state. Otherwise a stale map grounded in the
+    prior diagnosis would persist alongside the refreshed analysis.
+    """
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if error := check_org_access(company, authentication):
@@ -316,6 +322,10 @@ def handle_reanalyze(
         return build_error("Analysis has no company URL — cannot re-analyze", code=VALIDATION_ERROR)
 
     scan_id = company.get("scan_id", "")
+
+    # Idempotent — safe to call when no map exists (fresh analysis).
+    assessment_repo = storage.create_assessment_repository()
+    assessment_repo.clear_strategy_map(analysis_id)
 
     sqs.send_message(
         QueueUrl=queue_url,
