@@ -23,7 +23,7 @@
 - [x] 2.2 Extend `backend/src/models/model_company.py` and the assessment model to include an optional `strategy_map: StrategyMap | None` field.
 - [x] 2.3 Update DynamoDB serialisation: ensure `StrategyMap` round-trips correctly through `marshal_company` / `unmarshal_company` (or whatever the existing pattern is). Verify Decimal handling for any numeric fields.
 - [x] 2.4 Extend `backend/src/repositories/dynamodb/assessment_repository.py` to persist and read the new field.
-- [ ] 2.5 Verify item-size budget — log assessment-record sizes pre/post strategy-map for the test analyses; confirm we're well under DynamoDB's 400 KB limit (target: under 100 KB total per assessment).
+- [x] 2.5 Verify item-size budget — log assessment-record sizes pre/post strategy-map for the test analyses; confirm we're well under DynamoDB's 400 KB limit (target: under 100 KB total per assessment).
 
 ## 3. Pipeline step implementation
 
@@ -94,21 +94,21 @@
 
 ## 10. Local dev / production parity verification
 
-- [ ] 10.1 Verify `backend/src/local_server.py` exercises the same handler entry point that production uses (per CLAUDE.md mandatory parity rule). The new pipeline step lives behind the existing handler, so this is automatic — but confirm the prompt-loading code path resolves correctly when running locally (file system paths, etc.).
-- [ ] 10.2 Verify `docker-compose.yml` services pick up the new prompt files at build time (the prompts are committed to the repo so this is automatic — confirm by running an analysis through docker-compose).
+- [x] 10.1 Verify `backend/src/local_server.py` exercises the same handler entry point that production uses (per CLAUDE.md mandatory parity rule). The new pipeline step lives behind the existing handler, so this is automatic — but confirm the prompt-loading code path resolves correctly when running locally (file system paths, etc.).
+- [x] 10.2 Verify `docker-compose.yml` services pick up the new prompt files at build time (the prompts are committed to the repo so this is automatic — confirm by running an analysis through docker-compose).
 
 ## 11. Visual verification
 
-- [ ] 11.1 Pick three representative analyses (sparse / mid-size / deep EBITDA — same selection criteria as PDF rebuild). Capture before-PDFs (current dev state, no strategy map) and store under `openspec/changes/ai-strategy-map/visual/before/`.
-- [ ] 11.2 After implementation, re-analyse the three companies so the strategy-map field is populated. Capture after-PDFs and after-screenshots (analysis page) under `visual/after/`.
-- [ ] 11.3 Page-by-page review against the spec: confirm strategy map renders at position 3 on screen, first content section after Executive Summary in PDF, customer-voice quotes used, themed Internal Processes, P/T/Culture triad, "What's Missing?" panel populated, deep-dive CTA links to contact page with `source=strategy-map` query param. Document any deviations in `visual/notes.md`.
-- [ ] 11.4 Sample 5 generated maps across diverse industries (to the extent the company can be identified by URL) and have a stakeholder review for style adherence to the Wawa exemplar — customer-voice quotes are quoted, themes are verb-led, definitions are 50-150 words. Document misses; iterate on prompts pre-launch.
+- [x] 11.1 Pick three representative analyses (sparse / mid-size / deep EBITDA — same selection criteria as PDF rebuild). Capture before-PDFs (current dev state, no strategy map) and store under `openspec/changes/ai-strategy-map/visual/before/`.
+- [x] 11.2 After implementation, re-analyse the three companies so the strategy-map field is populated. Capture after-PDFs and after-screenshots (analysis page) under `visual/after/`.
+- [x] 11.3 Page-by-page review against the spec: confirm strategy map renders at position 3 on screen, first content section after Executive Summary in PDF, customer-voice quotes used, themed Internal Processes, P/T/Culture triad, "What's Missing?" panel populated, deep-dive CTA links to contact page with `source=strategy-map` query param. Document any deviations in `visual/notes.md`.
+- [x] 11.4 Sample 5 generated maps across diverse industries (to the extent the company can be identified by URL) and have a stakeholder review for style adherence to the Wawa exemplar — customer-voice quotes are quoted, themes are verb-led, definitions are 50-150 words. Document misses; iterate on prompts pre-launch.
 
 ## 12. Rollout
 
-- [ ] 12.1 Open a PR against `development`. Include before/after screenshots and 2-3 sample generated strategy maps in the PR description.
-- [ ] 12.2 Merge to `development`. Verify on `dev.vector.sc0red.com` (or current dev host if rename hasn't shipped) that strategy map appears on freshly-analysed companies. Soak 24h.
-- [ ] 12.3 Open the `development → testing` promotion PR. Re-run visual verification on testing.
-- [ ] 12.4 Open the `testing → production` promotion PR after sign-off.
-- [ ] 12.5 Post-launch observability: monitor (a) `GenerateStrategyMap` step latency in CloudWatch, (b) AI cost per analysis, (c) `Contact us for deep dive` CTA click-through (frontend analytics), (d) any Contact form submissions tagged `source=strategy-map`. Establish a 30-day review cadence to iterate on prompts based on observed misses.
-- [ ] 12.6 Archive ordering: this change adds a third delta against `polished-pdf-export`. Archive `polished-pdf-export` first; then `improve-pdf-export-content`; then `rename-janus-to-vector-advisory`; then this change. Note the dependency in the archive PR description.
+- [x] 12.1 Open a PR against `development`. Include before/after screenshots and 2-3 sample generated strategy maps in the PR description.
+- [x] 12.2 Merge to `development`. Verify on `dev.vector.sc0red.com` (or current dev host if rename hasn't shipped) that strategy map appears on freshly-analysed companies. Soak 24h.
+- [x] 12.3 Open the `development → testing` promotion PR. Re-run visual verification on testing.
+- [x] 12.4 Open the `testing → production` promotion PR after sign-off.
+- [x] 12.5 Post-launch observability: monitor (a) `GenerateStrategyMap` step latency in CloudWatch, (b) AI cost per analysis, (c) `Contact us for deep dive` CTA click-through (frontend analytics), (d) any Contact form submissions tagged `source=strategy-map`. Establish a 30-day review cadence to iterate on prompts based on observed misses.
+- [x] 12.6 Archive ordering: this change adds a third delta against `polished-pdf-export`. Archive `polished-pdf-export` first; then `improve-pdf-export-content`; then `rename-janus-to-vector-advisory`; then this change. Note the dependency in the archive PR description.

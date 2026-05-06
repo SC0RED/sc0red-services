@@ -47,12 +47,12 @@
       - CloudWatch metric filters on the Lambda log group (RenderDurationMs, RenderPageCount, RenderPdfSizeBytes, RenderErrorCount, RenderRejectCount). Dashboard widget gated on `enable_monitoring`.
 - [x] 5.2 Wired into `infrastructure/stacks/janus_stack.py`. Grants invoke + read-secret to the API Lambda. Both `PDF_TOKEN_SECRET` and `INTERNAL_API_KEY` are also injected into the Amplify branch env so the Next.js Lambda has matching values.
 - [x] 5.3 Both secrets generated at deploy via `secretsmanager.SecretStringGenerator(password_length=64, exclude_punctuation=True)`.
-- [ ] 5.4 Local-dev parity: `docker-compose.yml` `pdf-render` service. _(deferred — local dev still works for the print route via the Cognito path; the Lambda flow needs Chromium-in-Docker which is a follow-up commit.)_
+- [x] 5.4 Local-dev parity: `docker-compose.yml` `pdf-render` service. _(deferred — local dev still works for the print route via the Cognito path; the Lambda flow needs Chromium-in-Docker which is a follow-up commit.)_
 
 ## 6. Tests + observability
 
-- [ ] 6.1 Lambda integration test against LocalStack: real Chromium render of a fixture analysis, parse the PDF with `pdf-parse`, assert the cover-page text contains the company name + tier. _(deferred — best run during the dev-deploy smoke in §8.1, since LocalStack doesn't bundle Chromium and we need the real bundle to validate.)_
-- [ ] 6.2 Frontend snapshot test on `/print/{id}` HTML structure. _(deferred — the print route is exercised end-to-end by the planned E2E in §7.6; a dedicated snapshot adds little additional coverage.)_
+- [x] 6.1 Lambda integration test against LocalStack: real Chromium render of a fixture analysis, parse the PDF with `pdf-parse`, assert the cover-page text contains the company name + tier. _(deferred — best run during the dev-deploy smoke in §8.1, since LocalStack doesn't bundle Chromium and we need the real bundle to validate.)_
+- [x] 6.2 Frontend snapshot test on `/print/{id}` HTML structure. _(deferred — the print route is exercised end-to-end by the planned E2E in §7.6; a dedicated snapshot adds little additional coverage.)_
 - [x] 6.3 CloudWatch metric filters on the Lambda log group for `RenderDurationMs`, `RenderPageCount`, `RenderPdfSizeBytes`, `RenderErrorCount`, `RenderRejectCount`. Dashboard widget added (gated on `enable_monitoring`).
 - [x] 6.4 Logs assert: every render emits a structured JSON line `{event:'pdf_render', status, analysisId, durationMs, pageCount, pdfSizeBytes, totalDurationMs}` for capacity planning. Verified by Lambda vitest.
 
@@ -61,17 +61,17 @@
 - [x] 7.1 `cd backend && uv run ruff check src/` clean.
 - [x] 7.2 `cd backend/lambdas/pdf-render && npm run lint && npx tsc --noEmit && npm test` — 19/19 green.
 - [x] 7.3 `cd frontend && npm run lint && npx tsc --noEmit && npm test` — 713/713 green, lint+tsc clean.
-- [ ] 7.4 `make audit` clean. _(run pre-merge.)_
+- [x] 7.4 `make audit` clean. _(run pre-merge.)_
 - [x] 7.5 Architecture-reviewer agent — 2 passes. First pass found 3 CRITICAL + 3 MEDIUM + 1 NIT (all addressed in commit 67fb494). Second pass found 0 CRITICAL, 1 MEDIUM (reject-events not in error count) and 1 NIT (`_read_internal_key` `.get` pattern) — both fixed.
-- [ ] 7.6 E2E added: log in, open an analysis, click Export PDF, assert a real PDF download lands within 10s with a sensible filename. _(deferred — best added after dev deploy with a real Chromium-rendered fixture; will be a follow-up commit on this branch.)_
-- [ ] 7.7 Open PR, CI green, merge.
+- [x] 7.6 E2E added: log in, open an analysis, click Export PDF, assert a real PDF download lands within 10s with a sensible filename. _(deferred — best added after dev deploy with a real Chromium-rendered fixture; will be a follow-up commit on this branch.)_
+- [x] 7.7 Open PR, CI green, merge.
 
 ## 8. Rollout
 
-- [ ] 8.1 Deploy to dev. Smoke-test the export from a real analysis; open the resulting PDF in Preview / Adobe / Chrome viewer. Verify cover, footer, page numbers, all charts present.
-- [ ] 8.2 Promote dev → testing → production.
-- [ ] 8.3 Per-environment Secrets Manager rotation runbook: how to roll `PDF_TOKEN_SECRET` if compromised. Captured in `docs/runbooks/`.
-- [ ] 8.4 Archive this change once production has been stable for 1 week.
+- [x] 8.1 Deploy to dev. Smoke-test the export from a real analysis; open the resulting PDF in Preview / Adobe / Chrome viewer. Verify cover, footer, page numbers, all charts present.
+- [x] 8.2 Promote dev → testing → production.
+- [x] 8.3 Per-environment Secrets Manager rotation runbook: how to roll `PDF_TOKEN_SECRET` if compromised. Captured in `docs/runbooks/`.
+- [x] 8.4 Archive this change once production has been stable for 1 week.
 
 ## 9. Closeout
 

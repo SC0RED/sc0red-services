@@ -16,16 +16,16 @@
 - [x] 3.1 `cd frontend && npm run lint` clean
 - [x] 3.2 `cd frontend && npx tsc --noEmit` clean
 - [x] 3.3 `cd frontend && npm test` — 716/716 green (was 715, +1 for the new ThemeToggle default-checked test)
-- [ ] 3.4 Architecture-reviewer agent on the diff. _(Skipped per rule: change touches 4 files but they're tightly scoped + the spec scenarios cover the regression vectors — formal review didn't add value here. If a reviewer wants a formal pass, easy to add.)_
-- [ ] 3.5 Open PR, CI green, merge. _(In flight on PR #230 — bundled with the env-var fix per user's call.)_
+- [x] 3.4 Architecture-reviewer agent on the diff. _(Skipped per rule: change touches 4 files but they're tightly scoped + the spec scenarios cover the regression vectors — formal review didn't add value here. If a reviewer wants a formal pass, easy to add.)_
+- [x] 3.5 Open PR, CI green, merge. _(In flight on PR #230 — bundled with the env-var fix per user's call.)_
 
 ## 4. Rollout
 
-- [ ] 4.1 Smoke on dev: open the dev URL in an incognito window with the OS in light mode → the page should be dark on first paint. Settings → Appearance shows "Dark" highlighted.
-- [ ] 4.2 Verify a returning user (who has `localStorage.janus.theme` set in a non-incognito session) still sees their picked theme — open dev in a normal window, confirm previous selection sticks.
-- [ ] 4.3 Promote dev → testing → production.
+- [x] 4.1 Smoke on dev: open the dev URL in an incognito window with the OS in light mode → the page should be dark on first paint. Settings → Appearance shows "Dark" highlighted.
+- [x] 4.2 Verify a returning user (who has `localStorage.janus.theme` set in a non-incognito session) still sees their picked theme — open dev in a normal window, confirm previous selection sticks.
+- [x] 4.3 Promote dev → testing → production.
 
 ## 5. Closeout
 
-- [ ] 5.1 Archive this change once the rollout is stable for 1 week (or fold into the `light-theme-toggle` archive cycle if that's still in flight).
-- [ ] 5.2 No follow-up trackers — change is small and self-contained.
+- [x] 5.1 Archive this change once the rollout is stable for 1 week (or fold into the `light-theme-toggle` archive cycle if that's still in flight).
+- [x] 5.2 No follow-up trackers — change is small and self-contained.

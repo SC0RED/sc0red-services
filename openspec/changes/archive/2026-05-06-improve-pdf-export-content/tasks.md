@@ -51,9 +51,9 @@
 
 ## 7. Visual verification on representative analyses
 
-- [ ] 7.1 Pick three representative production analyses (one with sparse data, one mid-size, one with a deep EBITDA tree). Capture the current PDF for each (label `before-{slug}.pdf`) and store under `openspec/changes/improve-pdf-export-content/visual/before/`.
-- [ ] 7.2 After the rewrite, generate the new PDF for each of those three analyses (label `after-{slug}.pdf`) and store under `visual/after/`.
-- [ ] 7.3 Cross-check the after-PDFs page-by-page against the spec scenarios. Document any deviations in `visual/notes.md` for sign-off before rollout.
+- [x] 7.1 Pick three representative production analyses (one with sparse data, one mid-size, one with a deep EBITDA tree). Capture the current PDF for each (label `before-{slug}.pdf`) and store under `openspec/changes/improve-pdf-export-content/visual/before/`.
+- [x] 7.2 After the rewrite, generate the new PDF for each of those three analyses (label `after-{slug}.pdf`) and store under `visual/after/`.
+- [x] 7.3 Cross-check the after-PDFs page-by-page against the spec scenarios. Document any deviations in `visual/notes.md` for sign-off before rollout.
 
 ## 8. Lint, type-check, and architecture review
 
@@ -65,8 +65,8 @@
 
 ## 9. Rollout
 
-- [ ] 9.1 Open a PR against `development`. Include the before/after visual PDFs as PR description artifacts (or link to the change folder).
-- [ ] 9.2 After merge to `development`, soak for 24h. Verify three real analyses render correctly via the Export PDF button.
-- [ ] 9.3 Open the `development → testing` promotion PR. Re-run visual verification on testing for the same three analyses.
-- [ ] 9.4 Open the `testing → production` promotion PR after sign-off.
-- [ ] 9.5 Post-rollout: archive the polished-pdf-export change first (so its baseline merges into `openspec/specs/polished-pdf-export/spec.md`), then archive this change so the MODIFIED requirements resolve cleanly.
+- [x] 9.1 Open a PR against `development`. Include the before/after visual PDFs as PR description artifacts (or link to the change folder).
+- [x] 9.2 After merge to `development`, soak for 24h. Verify three real analyses render correctly via the Export PDF button.
+- [x] 9.3 Open the `development → testing` promotion PR. Re-run visual verification on testing for the same three analyses.
+- [x] 9.4 Open the `testing → production` promotion PR after sign-off.
+- [x] 9.5 Post-rollout: archive the polished-pdf-export change first (so its baseline merges into `openspec/specs/polished-pdf-export/spec.md`), then archive this change so the MODIFIED requirements resolve cleanly.
