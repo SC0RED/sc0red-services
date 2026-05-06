@@ -34,7 +34,6 @@ from src.models.model_company import (
 from src.models.model_strategy_map import StrategyMap
 from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 
-
 # ── Canned AI responses for each of the 7 steps ─────────────────────────────
 
 
@@ -577,3 +576,125 @@ class TestGenerateStrategyMap:
 
         with pytest.raises(ValueError, match="Step 1 response missing"):
             step.execute()
+
+
+class TestGenerateStrategyMapTelemetry:
+    """Per ai-strategy-map spec: GenerateStrategyMap emits per-AI-call timings.
+
+    Pattern matches `ParallelProfileRiskAndIdeation` and `DetailOpportunities`:
+    a `StepTimer` records each AI call's elapsed wall-clock under labels prefixed
+    with `ai_call_`, plus a `total` entry, and the dict is emitted via
+    `request_executor.add_details(...)` keyed `GenerateStrategyMap.timings`.
+    """
+
+    @staticmethod
+    def _captured_timings(executor: MagicMock) -> dict[str, float]:
+        """Pull the timings dict out of the (one) `add_details` call."""
+        executor.add_details.assert_called_once()
+        payload = executor.add_details.call_args.args[0]
+        assert "GenerateStrategyMap.timings" in payload, (
+            f"Expected key 'GenerateStrategyMap.timings' in details payload; "
+            f"got keys={list(payload.keys())}"
+        )
+        return payload["GenerateStrategyMap.timings"]
+
+    def test_emits_timings_detail_block(self):
+        """Happy path: one add_details call with the canonical key."""
+        company = _make_company()
+        accessor = CompanyAccessor(company)
+
+        step = GenerateStrategyMap(ai_client_factory=_make_mock_factory())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        timings = self._captured_timings(step._request_executor)
+        assert "total" in timings
+        assert timings["total"] > 0
+
+    def test_records_one_entry_per_ai_call_today(self):
+        """Today's call shape: 7 calls → 7 `ai_call_*` entries plus `total`."""
+        company = _make_company()
+        accessor = CompanyAccessor(company)
+
+        step = GenerateStrategyMap(ai_client_factory=_make_mock_factory())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        timings = self._captured_timings(step._request_executor)
+        ai_call_keys = {k for k in timings if k.startswith("ai_call_")}
+        # Step 1 + Step 2 + Steps 3-6 (4 perspectives) + Step 7 = 7 calls.
+        assert len(ai_call_keys) == 7, (
+            f"Expected 7 ai_call_* entries, got {len(ai_call_keys)}: {ai_call_keys}"
+        )
+
+    def test_label_naming_convention(self):
+        """Labels must match the `parallel_profile_risk` style: ``ai_call_{descriptor}``."""
+        company = _make_company()
+        accessor = CompanyAccessor(company)
+
+        step = GenerateStrategyMap(ai_client_factory=_make_mock_factory())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        timings = self._captured_timings(step._request_executor)
+        expected = {
+            "ai_call_vision_mission",
+            "ai_call_value_proposition",
+            "ai_call_financial",
+            "ai_call_customer",
+            "ai_call_internal_processes",
+            "ai_call_organizational_capacity",
+            "ai_call_arrows_and_gaps",
+        }
+        present = {k for k in timings if k.startswith("ai_call_")}
+        assert present == expected, f"missing={expected - present}, extra={present - expected}"
+
+    def test_emits_partial_timings_on_failure(self):
+        """Per spec scenario: failed call still emits the partial timings block."""
+        company = _make_company()
+        accessor = CompanyAccessor(company)
+
+        # Mock that returns Step 1 successfully, then raises on Step 2.
+        mock_factory = MagicMock()
+        mock_client = MagicMock()
+        mock_factory.get_client.return_value = mock_client
+
+        call_log: list[str] = []
+
+        def respond(input_text: str, json_schema: dict) -> MagicMock:
+            del json_schema
+            if "## Step 1 — Vision and Mission" in input_text:
+                call_log.append("step_1")
+                response = MagicMock()
+                response.content = _step1_response()
+                response.metadata = {}
+                return response
+            if "## Step 2 — Customer Value Proposition" in input_text:
+                call_log.append("step_2")
+                msg = "simulated AI failure"
+                raise RuntimeError(msg)
+            msg = f"Unexpected prompt:\n{input_text[:200]}"
+            raise AssertionError(msg)
+
+        mock_client.query_structured.side_effect = respond
+
+        step = GenerateStrategyMap(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        with pytest.raises(RuntimeError, match="simulated AI failure"):
+            step.execute()
+
+        # Step 1 succeeded → its timing recorded; Step 2 raised → no entry.
+        # Either way, add_details fires once on the way out via the finally block.
+        timings = self._captured_timings(step._request_executor)
+        assert "ai_call_vision_mission" in timings
+        assert "ai_call_value_proposition" not in timings
+        assert "total" in timings
+        assert call_log == ["step_1", "step_2"]
