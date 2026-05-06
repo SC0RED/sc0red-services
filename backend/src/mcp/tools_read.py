@@ -277,7 +277,12 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         tree_data = tree.get("treeData", [])
         if tree_data:
             lines.append(f"\n### Tree Nodes ({len(tree_data)})")
-            lines.extend(f"- {n.get('label', '?')}: {n.get('value', '')}" for n in tree_data)
+            # Each node is `EbitdaNode.model_dump()` — snake_case keys. Reading
+            # `value` (the legacy key) silently rendered blank for every node;
+            # the correct field on the persisted shape is `value_range`.
+            lines.extend(
+                f"- {n.get('label', '?')}: {n.get('value_range', '')}" for n in tree_data
+            )
         return "\n".join(lines)
 
     @mcp.tool()

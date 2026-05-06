@@ -2,16 +2,16 @@
 
 PE buyers don't take black-box numbers to their investment committee. They take numbers with provenance. Today the EBITDA tree surfaces revenue lines, cost lines, and margins as point estimates with no signal about *how the figure was derived* — a number anchored to a company's declared $40M ARR reads identically to one extrapolated from an industry-average revenue-per-employee benchmark. Both render as "$2M-$8M" and both look equally trustworthy.
 
-This change makes derivation provenance visible at the node level. Each EBITDA tree node carries a confidence signal (high / medium / low) plus a one-line basis ("Derived from declared revenue scraped from company About page" vs "Inferred from employee count × industry benchmark") so a PE analyst can see at a glance which figures are anchored to observed data and which are model-extrapolated. This is the highest-leverage trust signal we can ship: PE workflows already accept ranges, but only when they can audit the source.
+This change makes derivation provenance visible at the node level. Each EBITDA tree node carries a confidence signal (high / medium / low) plus a one-line basis ("Derived from a SaaS template at a known mid-market size bracket" vs "Defaulted to a generic mid-market estimate — neither business model nor size signal was usable") so a PE analyst can see at a glance which figures are anchored to clean inputs and which are generic extrapolations. This is the highest-leverage trust signal we can ship: PE workflows already accept ranges, but only when they can audit the source.
 
 ## What Changes
 
-- Backend: `build_programmatic_ebitda_tree` records derivation provenance per node as it builds the tree. The function already knows which path it took (declared revenue vs employees-benchmark vs size-bracket default vs industry-benchmark margin); we just stop discarding that signal.
+- Backend: `build_programmatic_ebitda_tree` records derivation provenance per node as it builds the tree. The function already knows which path it took (template matched vs defaulted; size resolved vs defaulted); we just stop discarding that signal.
 - Backend: `EbitdaNode` model gains two fields — `confidence_level: Literal["high", "medium", "low"] | None` and `confidence_basis: str | None` (1–2 sentence human-readable explanation of how the number was derived). Both `None` for non-leaf rollup nodes that inherit from children.
-- Backend: confidence level rules are deterministic and documented in `build_ebitda_tree.py`:
-  - **high** = anchored to a scraped/declared figure on the company profile
-  - **medium** = inferred from a known company-specific input (e.g., `company_size` → employee count → revenue) crossed with an industry benchmark
-  - **low** = defaulted from a size bracket / industry template with no company-specific anchor
+- Backend: confidence level rules are deterministic and documented in `build_ebitda_tree.py`. Both inputs to the build (`business_model` resolved against `_MODEL_KEYWORDS`, and `company_size` resolved against `_SIZE_TO_EMPLOYEES`) can each either match a known entry or fall back to a default; the level reflects how many resolved cleanly:
+  - **high** = both `business_model` and `company_size` resolved cleanly to known entries
+  - **medium** = exactly one of the two resolved cleanly; the other defaulted
+  - **low** = both defaulted — no useful signal on either input (see `design.md` decision §2 for rationale and the note on forward evolution when a declared-revenue field is added later)
 - Backend: schema for `EbitdaTreeResult` JSON output bumps to v2 (additive, backward-compatible with `null` defaults).
 - Frontend: `EbitdaNodeComponent` renders a confidence chip next to each node's `value_range`, sourced from the new `confidenceLevel` field. Three-dot scale, neutral palette (matches the existing `ConfidenceIndicator` component used elsewhere on the page).
 - Frontend: hovering or focusing the chip reveals a tooltip with `confidenceBasis`. Keyboard-accessible per the existing `HelpTooltip` pattern.

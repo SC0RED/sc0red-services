@@ -195,26 +195,95 @@ _DEFAULT_TEMPLATE_KEY = "saas"
 # ---------------------------------------------------------------------------
 
 
-def _resolve_template(business_model: str) -> _Template:
-    """Match a free-text business_model string to the closest template."""
+def _resolve_template(business_model: str) -> tuple[_Template, bool]:
+    """Match a free-text business_model string to the closest template.
+
+    Returns a tuple of (template, matched) where ``matched`` is True if a keyword
+    in ``_MODEL_KEYWORDS`` fired and False if we fell back to ``_DEFAULT_TEMPLATE_KEY``.
+    The flag drives the confidence label per the ebitda-tree-confidence spec —
+    callers MUST NOT discard it.
+    """
     lower = business_model.lower()
     for keywords, key in _MODEL_KEYWORDS:
         for keyword in keywords:
             if keyword in lower:
-                return _TEMPLATES[key]
-    return _TEMPLATES[_DEFAULT_TEMPLATE_KEY]
+                return _TEMPLATES[key], True
+    return _TEMPLATES[_DEFAULT_TEMPLATE_KEY], False
 
 
 def _estimate_revenue(
     template: _Template,
     company_size: str,
-) -> tuple[int, int]:
-    """Estimate (low, high) annual revenue in dollars from employee count x rev/employee."""
+) -> tuple[int, int, bool]:
+    """Estimate (low, high) annual revenue in dollars and report whether size resolved.
+
+    Returns a tuple of (revenue_low, revenue_high, size_matched). ``size_matched``
+    is True when ``company_size`` is a known key in ``_SIZE_TO_EMPLOYEES`` and
+    False when ``_DEFAULT_EMPLOYEES`` was used as the fallback. The flag drives
+    the confidence label.
+    """
+    size_matched = company_size in _SIZE_TO_EMPLOYEES
     employee_low, employee_high = _SIZE_TO_EMPLOYEES.get(company_size, _DEFAULT_EMPLOYEES)
     rev_per_emp_low, rev_per_emp_high = template.revenue_per_employee
     low = employee_low * rev_per_emp_low * 1000
     high = employee_high * rev_per_emp_high * 1000
-    return low, high
+    return low, high, size_matched
+
+
+def _compute_confidence(
+    *,
+    template: _Template,
+    template_matched: bool,
+    company_size: str,
+    size_matched: bool,
+    node_kind: Literal["revenue", "cost"],
+) -> tuple[Literal["high", "medium", "low"], str]:
+    """Compute the confidence (level, basis) pair for a leaf node.
+
+    The level reflects how cleanly the build inputs resolved against the
+    deterministic logic in this module. ``template_matched`` and ``size_matched``
+    each indicate whether their input resolved against a known entry; both
+    booleans together pick the level:
+
+    * both True  → "high"   — both inputs gave usable signal
+    * exactly 1  → "medium" — one input defaulted
+    * both False → "low"    — both inputs defaulted; figure is a generic guess
+
+    The ``basis`` string is a 1-2 sentence human-readable explanation that names
+    the resolved input(s) and the defaulted one(s); it is phrased differently
+    for revenue vs cost provenance because the inputs flow through differently
+    (revenue is computed directly from size times rev-per-employee; cost is
+    computed by applying template margins to revenue, so cost provenance always
+    references "industry-benchmark margin" in addition to the upstream revenue
+    inputs).
+    See the ebitda-tree-confidence spec for the canonical rules.
+    """
+    template_clause = (
+        f"a {template.label} template (matched on business model)"
+        if template_matched
+        else f"a defaulted {template.label} template (no matching business model keyword)"
+    )
+    size_clause = (
+        f"a known size bracket ({company_size!r})"
+        if size_matched
+        else "a defaulted mid-market size bracket (no matching company-size signal)"
+    )
+
+    if template_matched and size_matched:
+        level: Literal["high", "medium", "low"] = "high"
+    elif template_matched or size_matched:
+        level = "medium"
+    else:
+        level = "low"
+
+    if node_kind == "revenue":
+        basis = f"Revenue derived from {template_clause} applied to {size_clause}."
+    else:
+        basis = (
+            f"Cost derived from industry-benchmark margins on {template_clause}, "
+            f"applied to revenue estimated from {size_clause}."
+        )
+    return level, basis
 
 
 _BILLION = 1_000_000_000
@@ -255,8 +324,15 @@ def _build_child_nodes(
     node_type: Literal["revenue", "cost", "margin", "subtotal"],
     parent_low: int,
     parent_high: int,
+    confidence_level: Literal["high", "medium", "low"] | None,
+    confidence_basis: str | None,
 ) -> list[EbitdaNode]:
-    """Build child EbitdaNode objects for a set of line items."""
+    """Build child EbitdaNode objects for a set of line items.
+
+    ``confidence_level`` and ``confidence_basis`` are propagated to every leaf
+    child as-is — children inherit their parent's provenance signal because the
+    underlying inputs (template + size) are identical.
+    """
     children: list[EbitdaNode] = []
     for item_id, label, pct in items:
         child_low, child_high = _apply_percentage(parent_low, parent_high, pct)
@@ -268,6 +344,8 @@ def _build_child_nodes(
                 value_range=_format_range(child_low, child_high),
                 percentage_of_parent=pct,
                 description=f"{label} ({pct}% of {parent_id})",
+                confidence_level=confidence_level,
+                confidence_basis=confidence_basis,
             )
         )
     return children
@@ -284,14 +362,33 @@ def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
     Uses business_model to select a P&L template and company_size to estimate
     revenue ranges. All values are deterministic — no AI call required.
     """
-    template = _resolve_template(profile.business_model)
-    revenue_low, revenue_high = _estimate_revenue(template, profile.company_size)
+    template, template_matched = _resolve_template(profile.business_model)
+    revenue_low, revenue_high, size_matched = _estimate_revenue(template, profile.company_size)
+
+    revenue_confidence_level, revenue_confidence_basis = _compute_confidence(
+        template=template,
+        template_matched=template_matched,
+        company_size=profile.company_size,
+        size_matched=size_matched,
+        node_kind="revenue",
+    )
+    cost_confidence_level, cost_confidence_basis = _compute_confidence(
+        template=template,
+        template_matched=template_matched,
+        company_size=profile.company_size,
+        size_matched=size_matched,
+        node_kind="cost",
+    )
 
     logger.info(
-        "Building programmatic EBITDA tree: business_model=%s template=%s revenue=%s",
+        "Building programmatic EBITDA tree: business_model=%s template=%s "
+        "revenue=%s confidence=%s (template_matched=%s size_matched=%s)",
         profile.business_model,
         template.label,
         _format_range(revenue_low, revenue_high),
+        revenue_confidence_level,
+        template_matched,
+        size_matched,
     )
 
     # Derive COGS percentage from gross margin (inverse relationship)
@@ -314,9 +411,18 @@ def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
     ebitda_low = int(revenue_low * template.ebitda_margin[0] / 100)
     ebitda_high = int(revenue_high * template.ebitda_margin[1] / 100)
 
-    # Build node tree
+    # Build node tree. Leaf nodes (revenue streams, COGS items, OpEx items) carry
+    # the per-kind confidence pair; subtotal/margin rollups (gross profit, EBITDA)
+    # do NOT — they inherit visually via their children's chips, per the
+    # ebitda-tree-confidence spec.
     revenue_children = _build_child_nodes(
-        template.revenue_streams, "revenue", "revenue", revenue_low, revenue_high
+        template.revenue_streams,
+        "revenue",
+        "revenue",
+        revenue_low,
+        revenue_high,
+        revenue_confidence_level,
+        revenue_confidence_basis,
     )
     revenue_node = EbitdaNode(
         id="revenue",
@@ -325,9 +431,19 @@ def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
         value_range=_format_range(revenue_low, revenue_high),
         description=f"Total annual revenue for {profile.company_name}",
         children=revenue_children,
+        confidence_level=revenue_confidence_level,
+        confidence_basis=revenue_confidence_basis,
     )
 
-    cogs_children = _build_child_nodes(template.cogs_items, "cogs", "cost", cogs_low, cogs_high)
+    cogs_children = _build_child_nodes(
+        template.cogs_items,
+        "cogs",
+        "cost",
+        cogs_low,
+        cogs_high,
+        cost_confidence_level,
+        cost_confidence_basis,
+    )
     cogs_node = EbitdaNode(
         id="cogs",
         label="Cost of Revenue",
@@ -335,6 +451,8 @@ def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
         value_range=_format_range(cogs_low, cogs_high),
         description="Direct costs of delivering products and services",
         children=cogs_children,
+        confidence_level=cost_confidence_level,
+        confidence_basis=cost_confidence_basis,
     )
 
     gross_profit_node = EbitdaNode(
@@ -348,7 +466,15 @@ def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
         ),
     )
 
-    opex_children = _build_child_nodes(template.opex_items, "opex", "cost", opex_low, opex_high)
+    opex_children = _build_child_nodes(
+        template.opex_items,
+        "opex",
+        "cost",
+        opex_low,
+        opex_high,
+        cost_confidence_level,
+        cost_confidence_basis,
+    )
     opex_node = EbitdaNode(
         id="opex",
         label="Operating Expenses",
@@ -356,6 +482,8 @@ def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
         value_range=_format_range(opex_low, opex_high),
         description="Total operating expenses excluding COGS",
         children=opex_children,
+        confidence_level=cost_confidence_level,
+        confidence_basis=cost_confidence_basis,
     )
 
     ebitda_node = EbitdaNode(

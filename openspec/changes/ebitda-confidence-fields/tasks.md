@@ -1,30 +1,30 @@
 ## 1. Backend model + schema
 
-- [ ] 1.1 In `backend/src/models/model_company.py`, add `confidence_level: Literal["high", "medium", "low"] | None = None` and `confidence_basis: str | None = None` to `EbitdaNode`. Use `from typing import Literal` if not already imported.
-- [ ] 1.2 Verify `EbitdaTreeResult` round-trips through Pydantic with old payloads (no fields) — add a regression test that loads a fixture stored before this change and asserts no `ValidationError` is raised.
-- [ ] 1.3 Update the JSON schema mirror used by external consumers (if one is checked in under `backend/src/pipeline/prompts/schemas/` or similar) to add the two new optional fields. If no such mirror exists for `EbitdaNode`, skip.
+- [x] 1.1 In `backend/src/models/model_company.py`, add `confidence_level: Literal["high", "medium", "low"] | None = None` and `confidence_basis: str | None = None` to `EbitdaNode`. Use `from typing import Literal` if not already imported. — Also added a class docstring explaining the provenance contract.
+- [x] 1.2 Verify `EbitdaTreeResult` round-trips through Pydantic with old payloads (no fields) — add a regression test that loads a fixture stored before this change and asserts no `ValidationError` is raised. — `TestEbitdaNodeBackwardCompat` covers both single-node and full-tree round-trips.
+- [x] 1.3 Update the JSON schema mirror used by external consumers (if one is checked in under `backend/src/pipeline/prompts/schemas/` or similar) to add the two new optional fields. If no such mirror exists for `EbitdaNode`, skip. — No mirror exists; the EBITDA tree is built programmatically (no AI call), so there's no prompt schema to update. Skipped.
 
 ## 2. Backend pipeline — provenance tagging
 
-- [ ] 2.1 In `backend/src/pipeline/pipeline_steps/build_ebitda_tree.py`, define the three confidence-decision branches as named helper functions (or inline if cleaner): `_confidence_for_revenue_node`, `_confidence_for_cost_node`. Each takes the inputs that drove the node and returns a `(level, basis)` tuple.
-- [ ] 2.2 Wire `confidence_level` and `confidence_basis` into every leaf-node construction site in `build_programmatic_ebitda_tree`. Rollup/subtotal nodes set both to `None` per the spec.
-- [ ] 2.3 Confidence rules must match the spec exactly:
-  - **high** when `CompanyProfile` has a declared figure that anchors the node
-  - **medium** when `company_size` resolves through `_SIZE_TO_EMPLOYEES` and a template benchmark
-  - **low** when `_DEFAULT_EMPLOYEES` was used, or when no company-specific signal is available
+- [x] 2.1 In `backend/src/pipeline/pipeline_steps/build_ebitda_tree.py`, define the three confidence-decision branches as named helper functions (or inline if cleaner): `_confidence_for_revenue_node`, `_confidence_for_cost_node`. Each takes the inputs that drove the node and returns a `(level, basis)` tuple. — Implemented as a single `_compute_confidence(node_kind="revenue"|"cost")` helper that handles both via a parameter — same shape, less duplication. `_resolve_template` and `_estimate_revenue` were extended to also return whether the input matched (booleans flow into `_compute_confidence`).
+- [x] 2.2 Wire `confidence_level` and `confidence_basis` into every leaf-node construction site in `build_programmatic_ebitda_tree`. Rollup/subtotal nodes set both to `None` per the spec. — Revenue/COGS/OpEx parents AND their children carry confidence; gross_profit and ebitda subtotals do not.
+- [x] 2.3 Confidence rules must match the spec exactly:
+  - **high** when `business_model` resolves to a known `_MODEL_KEYWORDS` entry AND `company_size` is a key in `_SIZE_TO_EMPLOYEES`
+  - **medium** when exactly one of (template, size) resolves; the other defaulted to `_DEFAULT_TEMPLATE_KEY` (saas) or `_DEFAULT_EMPLOYEES`
+  - **low** when both defaulted — neither input gave a usable signal
 
 ## 3. Backend tests
 
-- [ ] 3.1 In `backend/tests/pipeline/pipeline_steps/test_build_ebitda_tree.py`, add tests for each confidence branch: high (declared revenue present), medium (size bracket resolves), low (defaulted from `_DEFAULT_EMPLOYEES`). Use representative `CompanyProfile` fixtures.
-- [ ] 3.2 Test that subtotal/margin nodes have `confidence_level is None`.
-- [ ] 3.3 Test the human-readable basis strings — assert they reference the correct inputs (e.g., revenue-based basis mentions "company size" or "declared", cost-based basis mentions "industry-benchmark margin"). Use substring asserts to keep the tests resilient to copy edits.
-- [ ] 3.4 Run `cd backend && uv run pytest tests/ -q` — all green; coverage ≥ 95%.
-- [ ] 3.5 Run `cd backend && uv run ruff check src/` — clean.
-- [ ] 3.6 Run `cd backend && uv run pyright src/` — no new errors vs baseline.
+- [x] 3.1 In `backend/tests/unit/pipeline/test_build_ebitda_tree.py`, add tests for each confidence branch: high (both `business_model` and `company_size` resolve), medium (exactly one resolves — both directions: known model + unknown size, and unknown model + known size), low (both defaulted). Use representative `CompanyProfile` fixtures. — `TestConfidenceComputation` covers all four cells of the (template_matched × size_matched) matrix plus inheritance tests.
+- [x] 3.2 Test that subtotal/margin nodes have `confidence_level is None`. — `test_subtotal_and_margin_nodes_carry_no_confidence`.
+- [x] 3.3 Test the human-readable basis strings — assert they reference the resolved/defaulted inputs (e.g., a high-confidence basis mentions both the matched template and the matched size; a medium basis names which side defaulted; a low basis indicates both fell back). Use substring asserts to keep the tests resilient to copy edits. — Substring asserts on "matched" / "default" / template label / size bracket name / "industry-benchmark" for cost basis.
+- [x] 3.4 Run `cd backend && uv run pytest tests/ -q` — all green; coverage ≥ 95%. — 996 passed, coverage 95.07%.
+- [x] 3.5 Run `cd backend && uv run ruff check src/` — clean.
+- [x] 3.6 Run `cd backend && uv run pyright src/` — no new errors vs baseline. — 401 errors at baseline; 401 with these changes (zero new).
 
 ## 4. MCP smoke test for additive schema
 
-- [ ] 4.1 If the MCP server (`openspec/specs/mcp-repository-access/spec.md`) exposes the EBITDA tree, add a smoke test that the new fields don't break existing tool calls. Old records (without the fields) and new records (with them) both serialize through the MCP boundary.
+- [x] 4.1 If the MCP server (`openspec/specs/mcp-repository-access/spec.md`) exposes the EBITDA tree, add a smoke test that the new fields don't break existing tool calls. Old records (without the fields) and new records (with them) both serialize through the MCP boundary. — `test_tree_with_confidence_fields_does_not_break_tool` covers the new fields; `test_returns` already covered the old shape.
 
 ## 5. Frontend types + component
 

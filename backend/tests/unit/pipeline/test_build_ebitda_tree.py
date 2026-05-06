@@ -1,9 +1,8 @@
 """Tests for the programmatic EBITDA tree builder."""
 
-import pytest
-
-from src.models.model_company import CompanyProfile, EbitdaTreeResult
+from src.models.model_company import CompanyProfile, EbitdaNode, EbitdaTreeResult
 from src.pipeline.pipeline_steps.build_ebitda_tree import (
+    _compute_confidence,
     _format_currency,
     _format_range,
     _resolve_template,
@@ -14,36 +13,43 @@ from src.pipeline.pipeline_steps.build_ebitda_tree import (
 class TestResolveTemplate:
     def test_saas_keywords(self):
         for model in ["SaaS", "B2B SaaS", "Enterprise SaaS", "Software as a Service"]:
-            template = _resolve_template(model)
+            template, matched = _resolve_template(model)
             assert template.label == "SaaS"
+            assert matched is True
 
     def test_services_keywords(self):
         for model in ["Professional Services", "Consulting", "Advisory", "Digital Agency"]:
-            template = _resolve_template(model)
+            template, matched = _resolve_template(model)
             assert template.label == "Professional Services"
+            assert matched is True
 
     def test_ecommerce_keywords(self):
         for model in ["E-commerce", "ecommerce", "Marketplace", "DTC Retail"]:
-            template = _resolve_template(model)
+            template, matched = _resolve_template(model)
             assert template.label == "E-commerce / Marketplace"
+            assert matched is True
 
     def test_manufacturing_keywords(self):
         for model in ["Manufacturing", "Industrial Products", "Hardware Manufacturer"]:
-            template = _resolve_template(model)
+            template, matched = _resolve_template(model)
             assert template.label == "Manufacturing"
+            assert matched is True
 
     def test_financial_services_keywords(self):
         for model in ["Financial Services", "Fintech", "Banking Platform", "Insurance"]:
-            template = _resolve_template(model)
+            template, matched = _resolve_template(model)
             assert template.label == "Financial Services"
+            assert matched is True
 
-    def test_unknown_defaults_to_saas(self):
-        template = _resolve_template("Unknown Business Type")
+    def test_unknown_defaults_to_saas_and_reports_unmatched(self):
+        template, matched = _resolve_template("Unknown Business Type")
         assert template.label == "SaaS"
+        assert matched is False
 
-    def test_empty_defaults_to_saas(self):
-        template = _resolve_template("")
+    def test_empty_defaults_to_saas_and_reports_unmatched(self):
+        template, matched = _resolve_template("")
         assert template.label == "SaaS"
+        assert matched is False
 
 
 class TestFormatCurrency:
@@ -239,3 +245,212 @@ class TestBuildProgrammaticEbitdaTree:
                         assert "$-" not in child.value_range, (
                             f"Negative value in {child.id} for {model}/{size}: {child.value_range}"
                         )
+
+
+# ---------------------------------------------------------------------------
+# Derivation-provenance confidence (ebitda-tree-confidence capability)
+# ---------------------------------------------------------------------------
+
+
+def _make_profile(
+    business_model: str = "SaaS",
+    company_size: str = "Mid-market 200-1000",
+    company_name: str = "Test Corp",
+) -> CompanyProfile:
+    return CompanyProfile(
+        company_name=company_name,
+        industry="Technology",
+        business_model=business_model,
+        company_size=company_size,
+    )
+
+
+class TestConfidenceComputation:
+    """Branch coverage for the (level, basis) decision in _compute_confidence."""
+
+    def test_high_when_both_inputs_resolve(self):
+        result = build_programmatic_ebitda_tree(
+            _make_profile(business_model="SaaS", company_size="Mid-market 200-1000")
+        )
+        revenue_node = result.nodes[0]
+        assert revenue_node.confidence_level == "high"
+        # Basis names BOTH the matched template AND the matched size
+        assert revenue_node.confidence_basis is not None
+        assert "SaaS" in revenue_node.confidence_basis
+        assert "Mid-market 200-1000" in revenue_node.confidence_basis
+        assert "matched" in revenue_node.confidence_basis
+
+    def test_medium_when_template_matches_but_size_defaults(self):
+        result = build_programmatic_ebitda_tree(
+            _make_profile(business_model="SaaS", company_size="not-a-real-bracket")
+        )
+        revenue_node = result.nodes[0]
+        assert revenue_node.confidence_level == "medium"
+        assert revenue_node.confidence_basis is not None
+        assert "SaaS" in revenue_node.confidence_basis
+        # The size side should declare itself defaulted
+        assert "default" in revenue_node.confidence_basis.lower()
+
+    def test_medium_when_size_matches_but_template_defaults(self):
+        # Unknown business model falls back to the SaaS default template.
+        result = build_programmatic_ebitda_tree(
+            _make_profile(business_model="Holographic Bunny Sales", company_size="Startup <50")
+        )
+        revenue_node = result.nodes[0]
+        assert revenue_node.confidence_level == "medium"
+        assert revenue_node.confidence_basis is not None
+        assert "Startup <50" in revenue_node.confidence_basis
+        # The template side should declare itself defaulted
+        assert "default" in revenue_node.confidence_basis.lower()
+
+    def test_low_when_both_inputs_default(self):
+        result = build_programmatic_ebitda_tree(
+            _make_profile(business_model="Holographic Bunny Sales", company_size="")
+        )
+        revenue_node = result.nodes[0]
+        assert revenue_node.confidence_level == "low"
+        assert revenue_node.confidence_basis is not None
+        # Both sides declare themselves defaulted
+        assert revenue_node.confidence_basis.lower().count("default") >= 2
+
+    def test_revenue_confidence_propagates_to_revenue_children(self):
+        result = build_programmatic_ebitda_tree(
+            _make_profile(business_model="SaaS", company_size="Mid-market 200-1000")
+        )
+        revenue_node = result.nodes[0]
+        for child in revenue_node.children:
+            assert child.confidence_level == "high"
+            assert child.confidence_basis == revenue_node.confidence_basis
+
+    def test_cost_confidence_phrased_for_cost_provenance(self):
+        result = build_programmatic_ebitda_tree(
+            _make_profile(business_model="SaaS", company_size="Mid-market 200-1000")
+        )
+        cogs_node = result.nodes[1]
+        assert cogs_node.confidence_level == "high"
+        assert cogs_node.confidence_basis is not None
+        # Cost basis must reference the industry-benchmark margin lineage.
+        assert "industry-benchmark" in cogs_node.confidence_basis
+        assert "margin" in cogs_node.confidence_basis
+
+    def test_cost_confidence_propagates_to_cogs_and_opex_children(self):
+        result = build_programmatic_ebitda_tree(
+            _make_profile(business_model="SaaS", company_size="Mid-market 200-1000")
+        )
+        cogs_node = result.nodes[1]
+        opex_node = result.nodes[3]
+        for child in cogs_node.children:
+            assert child.confidence_level == "high"
+            assert child.confidence_basis == cogs_node.confidence_basis
+        for child in opex_node.children:
+            assert child.confidence_level == "high"
+            assert child.confidence_basis == opex_node.confidence_basis
+
+    def test_subtotal_and_margin_nodes_carry_no_confidence(self):
+        """Per ebitda-tree-confidence spec: rollups inherit visually via children."""
+        result = build_programmatic_ebitda_tree(_make_profile())
+        gross_profit = result.nodes[2]
+        ebitda = result.nodes[4]
+        assert gross_profit.type == "subtotal"
+        assert ebitda.type == "subtotal"
+        assert gross_profit.confidence_level is None
+        assert gross_profit.confidence_basis is None
+        assert ebitda.confidence_level is None
+        assert ebitda.confidence_basis is None
+
+    def test_revenue_basis_phrasing(self):
+        level, basis = _compute_confidence(
+            template=_resolve_template("SaaS")[0],
+            template_matched=True,
+            company_size="Mid-market 200-1000",
+            size_matched=True,
+            node_kind="revenue",
+        )
+        assert level == "high"
+        # Revenue basis should NOT mention margin lineage
+        assert "margin" not in basis
+        assert basis.startswith("Revenue derived from")
+
+    def test_cost_basis_phrasing(self):
+        level, basis = _compute_confidence(
+            template=_resolve_template("SaaS")[0],
+            template_matched=True,
+            company_size="Mid-market 200-1000",
+            size_matched=True,
+            node_kind="cost",
+        )
+        assert level == "high"
+        assert basis.startswith("Cost derived from")
+        assert "industry-benchmark" in basis
+
+    def test_all_size_brackets_count_as_resolved(self):
+        """Every documented company_size bracket should produce high confidence with a known model."""
+        for size in [
+            "Startup <50",
+            "Small 50-200",
+            "Mid-market 200-1000",
+            "Large 1000-5000",
+            "Enterprise 5000+",
+        ]:
+            result = build_programmatic_ebitda_tree(
+                _make_profile(business_model="SaaS", company_size=size)
+            )
+            revenue_node = result.nodes[0]
+            assert revenue_node.confidence_level == "high", (
+                f"Expected high for size={size!r}, got {revenue_node.confidence_level!r}"
+            )
+
+    def test_every_template_at_a_known_size_is_high(self):
+        for model in ["SaaS", "Consulting", "E-commerce", "Manufacturing", "Fintech"]:
+            result = build_programmatic_ebitda_tree(
+                _make_profile(business_model=model, company_size="Mid-market 200-1000")
+            )
+            revenue_node = result.nodes[0]
+            assert revenue_node.confidence_level == "high", (
+                f"Expected high for model={model!r}, got {revenue_node.confidence_level!r}"
+            )
+
+
+class TestEbitdaNodeBackwardCompat:
+    """Old records lacking the confidence fields must still deserialize cleanly."""
+
+    def test_old_payload_round_trips_with_null_confidence(self):
+        """A payload stored before this change has no confidence_* fields."""
+        old_payload = {
+            "id": "revenue",
+            "label": "Total Revenue",
+            "type": "revenue",
+            "value_range": "$5M-$20M",
+            "percentage_of_parent": None,
+            "description": "Total annual revenue",
+            "linked_opportunity_indices": [],
+            "children": [],
+        }
+        node = EbitdaNode.model_validate(old_payload)
+        assert node.confidence_level is None
+        assert node.confidence_basis is None
+        # Round-trip preserves the (absent) shape — no fields injected on dump.
+        dumped = node.model_dump()
+        assert dumped["confidence_level"] is None
+        assert dumped["confidence_basis"] is None
+
+    def test_full_tree_with_old_payload_deserializes(self):
+        """An EbitdaTreeResult with old-shaped nodes must still round-trip."""
+        old_tree = {
+            "summary": "Acme Corp operates ...",
+            "revenue_estimate": "$5M-$20M",
+            "ebitda_estimate": "$1M-$5M (15-25% margin)",
+            "nodes": [
+                {
+                    "id": "revenue",
+                    "label": "Total Revenue",
+                    "type": "revenue",
+                    "value_range": "$5M-$20M",
+                    "description": "Total annual revenue",
+                    "children": [],
+                },
+            ],
+        }
+        result = EbitdaTreeResult.model_validate(old_tree)
+        assert result.nodes[0].confidence_level is None
+        assert result.nodes[0].confidence_basis is None

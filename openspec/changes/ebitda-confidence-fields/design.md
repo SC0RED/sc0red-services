@@ -48,18 +48,23 @@ This is intentionally not an AI self-rating. AI confidence labels are notoriousl
 
 **Decision:**
 
+The level reflects how cleanly the build inputs resolved against the deterministic logic in `build_programmatic_ebitda_tree`. Two inputs drive every figure: `business_model` (resolved by `_resolve_template` against `_MODEL_KEYWORDS`) and `company_size` (resolved against `_SIZE_TO_EMPLOYEES`). Each can either match a known entry or fall back to a default.
+
 | Level | Trigger |
 |---|---|
-| `high` | Anchored to a scraped or declared figure on `CompanyProfile` (e.g., revenue stated on the company website / About page) |
-| `medium` | Inferred from a known company-specific input (`company_size` → employee count → revenue) crossed with an industry benchmark from `_Template` |
-| `low` | Defaulted from a size bracket / industry template with no company-specific anchor (e.g., `_DEFAULT_EMPLOYEES` fallback fired) |
+| `high` | **Both** inputs resolved cleanly — `business_model` matched a `_MODEL_KEYWORDS` entry **and** `company_size` is a known bracket in `_SIZE_TO_EMPLOYEES` |
+| `medium` | **Exactly one** of (template, size) resolved cleanly — the other defaulted to `_DEFAULT_TEMPLATE_KEY` (saas) or `_DEFAULT_EMPLOYEES` |
+| `low` | **Both defaulted** — no useful signal on either input; the figure is a generic mid-market guess |
 
-**Why:** Three is the smallest scale that distinguishes the three meaningful provenance classes. Two would collapse "anchored" and "benchmarked" into a single bucket, which is exactly the distinction PE analysts need. Five would over-fragment a deterministic signal.
+**Why:** Three is the smallest scale that distinguishes the three meaningful provenance classes against the *actual* build code. Two would collapse "fully resolved" into "partially resolved", which is exactly the distinction PE analysts need (a known SaaS company with a known size is a much firmer figure than an unknown business model with a default size). Five would over-fragment a deterministic signal.
+
+**Note on future evolution:** Today neither input is a declared numeric figure — both are categorical signals from `CompanyProfile`. If a future change introduces a numeric anchor (e.g., scraped declared revenue, tax-filing-derived figure, or LP-disclosed PE-firm-side data), the spec will be updated to redefine `high` against the strongest available signal. The current 3-level scheme is forward-compatible: a node anchored to a declared figure would naturally promote above today's "high" — at which point the levels would be re-stratified, not redefined.
 
 **Alternatives considered:**
 
-- **Two levels** (anchored vs inferred): rejected. The benchmark-with-input case is materially different from the "we have no signal at all" default case.
+- **Two levels** (resolved vs defaulted): rejected. The "exactly one resolved" case is materially different from the fully-resolved case — a known business model with an unknown size still benefits from industry-typical margins, but the revenue base is wider.
 - **Five levels**: rejected. The build logic only has three meaningful provenance branches today; sub-levels would invite arbitrary thresholding.
+- **Anchor-to-declared-figure semantics for today's "high"**: rejected. `CompanyProfile` has no declared-revenue field. Specifying levels around a non-existent input would have the canonical spec lie about reality. Those semantics remain available for a future change that adds the input.
 
 ### 3. Suppression when null, not "unknown" badge
 
