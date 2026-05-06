@@ -323,6 +323,49 @@ class TestAssessmentRepository:
         assert repo.get_by_id("assess-partial") is not None
         assert len(repo.get_documents("assess-partial")) == 1
 
+    @mock_aws
+    def test_delete_analysis_results_does_not_match_versioned_sk_variants(
+        self, dynamodb_table
+    ):
+        """Regression: ``startswith`` was previously matched against EXACT-style sks
+        (`EBITDA_TREE`, `VALUE_CHAIN`, `STRATEGY_MAP`) which would over-delete a
+        future versioned variant like `STRATEGY_MAP_V2` or `EBITDA_TREE_HISTORICAL`.
+
+        The repo now splits prefix-keyed sks (`RISK#`, `OPP#`) from exact-match sks,
+        so a hypothetical `STRATEGY_MAP_V2` sibling is preserved through a delete.
+        """
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-versioned", "company_id": "comp-1"})
+
+        # Real sks that SHOULD be deleted.
+        repo.save_strategy_map("assess-versioned", {"vision": {"statement": "v1"}})
+
+        # Hypothetical future sks that share prefixes with EXACT-match values but
+        # are NOT what the delete is supposed to touch. Inserted directly via the
+        # underlying client to bypass the repo's typed interface (which only knows
+        # about today's sks).
+        for hypothetical_sk in ("STRATEGY_MAP_V2", "EBITDA_TREE_HISTORICAL", "VALUE_CHAIN_DRAFT"):
+            dynamodb_table.put_item(
+                {
+                    "pk": "ASSESSMENT#assess-versioned",
+                    "sk": hypothetical_sk,
+                    "entity_type": "future_variant",
+                    "payload": "{}",
+                }
+            )
+
+        repo.delete_analysis_results("assess-versioned")
+
+        # Real strategy map deleted (exact-match sk)
+        assert repo.get_strategy_map("assess-versioned") is None
+
+        # Versioned variants survived — `startswith` did NOT match them.
+        items = dynamodb_table.query(pk="ASSESSMENT#assess-versioned")
+        surviving_sks = {item["sk"] for item in items}
+        assert "STRATEGY_MAP_V2" in surviving_sks
+        assert "EBITDA_TREE_HISTORICAL" in surviving_sks
+        assert "VALUE_CHAIN_DRAFT" in surviving_sks
+
     # ── Soft-delete (tombstone) tests ────────────────────────────────
 
     @mock_aws
