@@ -207,14 +207,20 @@ class TestRequestExecutorAppSyncIntegration:
         company_repo.update.assert_called_once()
 
     @patch("src.pipeline.appsync_notifier.notify_progress")
-    def test_mark_question_complete_fires_for_generate_strategy_map(
+    def test_mark_question_complete_skips_for_strategy_map_post_on_demand(
         self, mock_notify: MagicMock
     ) -> None:
-        """Regression: ``generate_strategy_map`` MUST be in _PROGRESS_MAP.
-
-        Before this fix the strategy-map step's ``mark_question_complete`` call
-        resolved to a missing _PROGRESS_MAP entry and silently fired no
-        progress notification — the frontend never saw the step transition.
+        """Per ``strategy-map-on-demand`` Phase C/D, ``generate_strategy_map``
+        must NOT have a ``_PROGRESS_MAP`` entry — the strategy-map worker
+        signals progress via ``strategy_map_complete`` / ``strategy_map_failed``
+        on the ``onScanProgress`` AppSync channel, not via
+        ``notify_progress``. The legacy ``mark_question_complete`` call still
+        lives inside ``GenerateStrategyMap.execute()`` (touching that step
+        from a cleanup PR was deemed riskier than letting the call no-op);
+        this test guards the intentional no-op so a future contributor
+        adding the entry back doesn't reintroduce the
+        ``pipeline_progress=92`` write that would jump backwards from the
+        already-written ``persist_results=95``.
         """
         company_repo = MagicMock()
         executor = JanusRequestExecutor(
@@ -227,11 +233,12 @@ class TestRequestExecutorAppSyncIntegration:
 
         executor.mark_question_complete("generate_strategy_map")
 
-        mock_notify.assert_called_once()
-        call_kwargs = mock_notify.call_args.kwargs
-        assert call_kwargs["scan_id"] == "scan-1"
-        assert call_kwargs["company_id"] == "company-1"
-        # Position constraint: strategy-map must sit between
-        # compute_value_chain (90) and persist_results (95).
-        assert 90 < call_kwargs["progress"] < 95
-        assert "strategy map" in call_kwargs["label"].lower()
+        mock_notify.assert_not_called()
+        company_repo.update.assert_not_called()
+        # The question IS still tracked in the executor's internal
+        # `_completed_questions` set (`mark_question_complete` adds the
+        # key unconditionally; only the progress-emission side-effect
+        # skips on missing `_PROGRESS_MAP` entries). Document the full
+        # contract explicitly so a future reader doesn't assume the call
+        # was a complete no-op.
+        assert executor.is_question_complete("generate_strategy_map") is True

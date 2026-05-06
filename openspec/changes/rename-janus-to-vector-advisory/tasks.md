@@ -95,19 +95,32 @@
 
 # Phase 3 — analysis-page-advisory-reorder
 
-*Independent of brand work. Section ordering decision against today's layout (post-PR #250). Reversible.*
+*Independent of brand work. Section ordering decision against today's layout. Reversible.*
 
 **Blocked on**: Open Question §9. Phase 3 is independent of Phases 1 and 2 and can ship in any order relative to them.
 
+> **Scope update (2026-05-07, post-`strategy-map-on-demand`):** The
+> strategy-map slot was repositioned to Beat 6 (after opportunities) by
+> `strategy-map-on-demand` Phase B (PR #272). The Sc0red CTA banner was
+> repositioned to Beat 1.5 (between overview and top-actions) in the
+> same PR. **Phase 3 must NOT re-order either of those two sections** —
+> their positions are now owned by the strategy-map narrative, not by
+> the brand-rename narrative. P3.1.2 below should encode the existing
+> Beat 1.5 + Beat 6 placements and reorder ONLY the EBITDA / value
+> chain / risk breakdown / value lever / opportunities cluster (Beats
+> 3–5) per leadership's call. If leadership wants to move strategy-map
+> or Sc0red CTA, that's a new spec change scoped to those slots, not a
+> Phase 3 task.
+
 ## P3.1 Design re-validation
 
-- [ ] P3.1.1 Receive Open Question §9 answer from leadership: against the current layout (post-PR #250 with executive strap + strategy map + deep-dive CTA), what reorder do we want?
-- [ ] P3.1.2 Update `specs/polished-pdf-export/spec.md` and the `analysis-detail-narrative` canonical-spec delta to encode the leadership-confirmed order. Add an `analysis-detail-narrative` MODIFIED Requirement covering the section-ordering scenario (does NOT exist in the current artifact; needs adding now that the world has moved).
+- [ ] P3.1.1 Receive Open Question §9 answer from leadership: against the current layout (post-`strategy-map-on-demand` Phase B with executive strap → overview → Sc0red CTA at Beat 1.5 → top-actions → EBITDA → value chain → risk breakdown → value lever → opportunities → strategy-map slot at Beat 6 → deep-dive CTA → document upload), what reorder do we want for the **Beats 3–5 cluster only**? The Beat 1.5 (Sc0red CTA) and Beat 6 (strategy map) positions are out of scope per the note above.
+- [ ] P3.1.2 Update `specs/polished-pdf-export/spec.md` and the `analysis-detail-narrative` canonical-spec delta to encode the leadership-confirmed order. Add an `analysis-detail-narrative` MODIFIED Requirement covering the section-ordering scenario. The MODIFIED Requirement should pin Beat 1.5 (Sc0red CTA) and Beat 6 (strategy-map slot) to their `strategy-map-on-demand`-determined positions and only re-encode the Beats 3–5 ordering.
 
 ## P3.2 Implementation
 
-- [ ] P3.2.1 In `frontend/src/app/(authenticated)/analysis/[analysisId]/AnalysisDetail.tsx`, reorder the JSX below the `<TopActionsCallout />` block per P3.1.1. Conditional render guards (`{data.valueChain && data.valueChain.steps.length > 0 && …}`, `{data.ebitdaTree && …}`) move with their components.
-- [ ] P3.2.2 In `frontend/src/app/print/[analysisId]/PrintReport.tsx`, mirror the on-screen reorder. PDF section break rules (`print-section--break-before`) move with their components.
+- [ ] P3.2.1 In `frontend/src/app/(authenticated)/analysis/[analysisId]/AnalysisDetail.tsx`, reorder ONLY the JSX between `<Sc0redCTABanner />` (Beat 1.5) and the strategy-map slot (Beat 6) per P3.1.1. Conditional render guards (`{data.valueChain && data.valueChain.steps.length > 0 && …}`, `{data.ebitdaTree && …}`) move with their components. Do NOT touch the `<StrategyMapSlot />` invocation or the `<Sc0redCTABanner />` placement.
+- [ ] P3.2.2 In `frontend/src/app/print/[analysisId]/PrintReport.tsx`, mirror the on-screen reorder for Beats 3–5. PDF section break rules (`print-section--break-before`) move with their components. Do NOT touch the strategy-map or Sc0red CTA section positions in the PDF.
 
 ## P3.3 Tests
 

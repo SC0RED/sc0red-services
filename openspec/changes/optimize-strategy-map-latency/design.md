@@ -1,6 +1,20 @@
 ## Context
 
-The `GenerateStrategyMap` pipeline step (`backend/src/pipeline/pipeline_steps/generate_strategy_map.py`, 269 lines) is the slowest single step in the company analysis pipeline. It produces a `StrategyMap` artifact via 7 sequential rounds of AI calls (the middle round fans out to 4 parallel calls), with a wall-clock of ~50–60 seconds per analysis. This is the dominant component of user-perceived latency on the re-analyse loop.
+> **Entry-point note (2026-05-07):** When this proposal was first drafted,
+> `GenerateStrategyMap` ran as a step in the auto-pipeline. Since
+> `strategy-map-on-demand` shipped (Phase A: PR #270/#271/#274; Phase B:
+> #272; Phase C: #273), the auto-pipeline no longer includes the step —
+> the strategy map is generated on demand by the dedicated
+> `janus-strategy-map-worker-{env}` Lambda triggered from
+> `POST /api/analysis/{id}/strategy-map`. The worker still invokes the
+> SAME `GenerateStrategyMap.execute()` method via a single-step
+> `JanusRequestExecutor` (see `backend/src/handlers/strategy_map_handler.py`),
+> so every decomposition decision below applies unchanged. The
+> measurement target shifts: instead of "pipeline duration includes
+> strategy map at the end," the worker is timed on its own. See
+> Decision §0a below.
+
+The `GenerateStrategyMap` step (`backend/src/pipeline/pipeline_steps/generate_strategy_map.py`, 269 lines) is the slowest single AI step in the company analysis flow. It produces a `StrategyMap` artifact via 7 sequential rounds of AI calls (the middle round fans out to 4 parallel calls), with a wall-clock of ~50–60 seconds per generation. This is the dominant component of user-perceived latency on the re-analyse loop AND on every on-demand "Generate strategy map" click.
 
 Other AI-heavy pipeline steps (`parallel_profile_risk`, `detail_opportunities`, `ideate_opportunities`, `assess_risk`) were optimised in earlier work and now follow a consistent pattern: many tiny parallel calls under one `FutureManager` block, with `StepTimer.record(label, elapsed)` for each call and a single `request_executor.add_details(timer.to_details())` emission to CloudWatch. Strategy-map generation predates that pattern and is now an outlier — it does not use `StepTimer` at all (per-call elapsed times are returned but discarded).
 
@@ -38,6 +52,28 @@ Stakeholders: end users (latency complaints), engineering (this proposal), produ
 - Cost optimisation. Cost is accepted to roughly 3x in exchange for the latency win.
 
 ## Decisions
+
+### 0a. Entry point under strategy-map-on-demand: worker handler, not pipeline step
+
+**Decision**: All decomposition work targets `GenerateStrategyMap.execute()` (and the supporting `_strategy_map_*` modules). The auto-pipeline no longer invokes this step directly — `strategy-map-on-demand` Phase C removed it from `CompanyAnalysisFactory.get_pipeline()`. The new call site is `backend/src/handlers/strategy_map_handler.py`, which builds a single-step `JanusRequestExecutor` and runs the step in isolation.
+
+**What changes for this proposal:**
+
+| Concern | Before strategy-map-on-demand | After |
+|---|---|---|
+| Where the step runs | Inline in `CompanyAnalysisFactory` after `ComputeValueChain` | Inside `StrategyMapSQSHandler._generate_and_persist` |
+| Lambda timeout budget | Shared with the analysis worker (540s) | Dedicated 120s on `janus-strategy-map-worker` |
+| AppSync progress channel | `notify_progress` events with `pipeline_progress` | `strategy_map_complete` / `strategy_map_failed` on the same `onScanProgress` channel |
+| Trigger | Implicit (every analysis) | Explicit (user click) |
+
+**Implications for decomposition phases:**
+
+- The 120s worker timeout is comfortable for the current ~55s shape and the post-Phase-1 ~17s target. No timeout headroom risk.
+- Per-call telemetry (`StepTimer.record(...)` then `request_executor.add_details(...)`) still works unchanged inside `GenerateStrategyMap` — the worker's executor receives the same details payload and writes it to CloudWatch.
+- The feature flag `GENERATE_STRATEGY_MAP_DECOMPOSED` (Decision §6) is read by `GenerateStrategyMap.execute()`; it's an env var on the `janus-strategy-map-worker-{env}` Lambda after this change, NOT on the analysis worker. Update the rollout checklist accordingly.
+- The "first-call uncached, rest cached" cache-utilization argument (Decision §1, §3) is unchanged — calls still happen within a single execution, so the OpenAI prompt cache window applies the same way.
+
+**Why call this out:** the rollout checklist in `tasks.md` originally read "deploy to analysis worker, flip flag, watch CloudWatch." Without this note, an engineer reading the design after Phase C ships would set the env var on the wrong Lambda.
 
 ### 1. Two-phase decomposition pattern for perspectives
 
@@ -256,6 +292,10 @@ Step 2 — Phase 1 Perspectives PR
   • Old single-call paths kept under a feature flag (env var
     GENERATE_STRATEGY_MAP_DECOMPOSED=1 enables the new path; default off
     in testing+prod for the soak window).
+  • Set the env var on `janus-strategy-map-worker-{env}` Lambda — NOT the
+    analysis worker. Per Decision §0a, `GenerateStrategyMap.execute()`
+    only runs inside the strategy-map worker after the
+    `strategy-map-on-demand` change.
   • Land on development with flag ON for dev environment only.
   • Manual eval: 5 companies × dev (new) vs testing (current).
   • If eval passes, flip flag ON for testing. Soak. If pass, flip ON for prod.
