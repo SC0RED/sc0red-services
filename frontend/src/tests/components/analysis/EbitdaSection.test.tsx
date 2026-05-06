@@ -84,4 +84,69 @@ describe('EbitdaSection', () => {
         render(<EbitdaSection ebitdaTree={treeNoSummary} opportunities={[]} />)
         expect(screen.queryByText('SaaS business model')).toBeNull()
     })
+
+    it('does NOT render the confidence legend when no node has a confidence level', () => {
+        // Older analyses (pre-this-feature) and re-analysed ones whose nodes
+        // didn't gain the field should NOT see a legend — there are no chips
+        // for the legend to explain.
+        render(<EbitdaSection ebitdaTree={SAMPLE_TREE} opportunities={SAMPLE_OPPORTUNITIES} />)
+        expect(screen.queryByTestId('ebitda-confidence-legend')).toBeNull()
+    })
+
+    it('renders the confidence legend when at least one node carries a level', () => {
+        const treeWithConfidence: EbitdaTree = {
+            ...SAMPLE_TREE,
+            treeData: [
+                {
+                    id: 'rev',
+                    label: 'Revenue',
+                    type: 'revenue',
+                    value_range: '$10M',
+                    parent_id: null,
+                    description: 'Total revenue',
+                    linked_opportunity_indices: [],
+                    confidence_level: 'high',
+                    confidence_basis: 'Anchored to template + size.',
+                },
+            ],
+        }
+        render(<EbitdaSection ebitdaTree={treeWithConfidence} opportunities={SAMPLE_OPPORTUNITIES} />)
+        const legend = screen.getByTestId('ebitda-confidence-legend')
+        expect(legend).toBeInTheDocument()
+        // Guards against the legend being misread as quality grading
+        expect(legend.textContent).toContain('derivation provenance')
+        expect(legend.textContent).toContain('not subjective quality')
+    })
+
+    it('finds confidence on a deeply-nested child and surfaces the legend', () => {
+        const treeNestedConfidence: EbitdaTree = {
+            ...SAMPLE_TREE,
+            treeData: [
+                {
+                    id: 'rev',
+                    label: 'Revenue',
+                    type: 'revenue',
+                    value_range: '$10M',
+                    parent_id: null,
+                    description: 'Total revenue',
+                    linked_opportunity_indices: [],
+                    children: [
+                        {
+                            id: 'subs',
+                            label: 'Subscriptions',
+                            type: 'revenue',
+                            value_range: '$8M',
+                            parent_id: 'rev',
+                            description: 'Sub revenue',
+                            linked_opportunity_indices: [],
+                            confidence_level: 'medium',
+                            confidence_basis: 'Partial signal.',
+                        },
+                    ],
+                },
+            ],
+        }
+        render(<EbitdaSection ebitdaTree={treeNestedConfidence} opportunities={[]} />)
+        expect(screen.getByTestId('ebitda-confidence-legend')).toBeInTheDocument()
+    })
 })

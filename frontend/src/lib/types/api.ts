@@ -26,6 +26,12 @@ export interface EbitdaNode {
     linked_opportunity_indices: number[]
     parent_id?: string | null
     children?: EbitdaNode[]
+    /** Per-node derivation provenance — see `ebitda-tree-confidence`
+     *  capability spec. `null` / undefined for rollup (subtotal/margin) nodes
+     *  and for any record stored before the confidence fields were added; the
+     *  frontend suppresses the chip in those cases (no "unknown" badge). */
+    confidence_level?: 'high' | 'medium' | 'low' | null
+    confidence_basis?: string | null
 }
 
 export interface EbitdaTree {
