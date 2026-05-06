@@ -9,25 +9,25 @@ Each leaf `EbitdaNode` produced by `build_programmatic_ebitda_tree` SHALL carry 
 
 Both fields default to `None` for nodes that do not have a deterministic provenance signal (e.g., rollup/subtotal nodes that aggregate children, or nodes produced by a code path that predates this change).
 
-#### Scenario: Revenue node anchored to declared figure tagged high
+#### Scenario: Both inputs resolved cleanly tagged high
 
-- **WHEN** `build_programmatic_ebitda_tree` produces a revenue node from a `CompanyProfile` whose declared revenue field is populated
-- **THEN** the node's `confidence_level` is `"high"` and `confidence_basis` describes the source (e.g., "Anchored to declared revenue from company profile")
+- **WHEN** `build_programmatic_ebitda_tree` produces a leaf node from a `CompanyProfile` whose `business_model` matches an entry in `_MODEL_KEYWORDS` AND whose `company_size` matches a key in `_SIZE_TO_EMPLOYEES`
+- **THEN** the node's `confidence_level` is `"high"` and `confidence_basis` references both inputs (e.g., "Derived from a SaaS template at a known mid-market size bracket")
 
-#### Scenario: Revenue node inferred from company-size benchmark tagged medium
+#### Scenario: Exactly one input resolved tagged medium
 
-- **WHEN** `build_programmatic_ebitda_tree` produces a revenue node from a `CompanyProfile` whose declared revenue is absent but `company_size` resolves via `_SIZE_TO_EMPLOYEES` and the template's `revenue_per_employee`
-- **THEN** the node's `confidence_level` is `"medium"` and `confidence_basis` references the inputs (e.g., "Inferred from company-size bracket × industry-benchmark revenue per employee")
+- **WHEN** `build_programmatic_ebitda_tree` produces a leaf node from a `CompanyProfile` where exactly one of (`business_model` matches `_MODEL_KEYWORDS`, `company_size` matches `_SIZE_TO_EMPLOYEES`) is true
+- **THEN** the node's `confidence_level` is `"medium"` and `confidence_basis` names the resolved input and the defaulted one (e.g., "SaaS template applied to a defaulted size bracket — no company-size signal" or "Defaulted to a generic SaaS template at a known small-company size bracket")
 
-#### Scenario: Revenue node defaulted from size bracket tagged low
+#### Scenario: Both inputs defaulted tagged low
 
-- **WHEN** `build_programmatic_ebitda_tree` produces a revenue node from a `CompanyProfile` whose `company_size` is absent and `_DEFAULT_EMPLOYEES` is used
-- **THEN** the node's `confidence_level` is `"low"` and `confidence_basis` indicates the default fallback (e.g., "Defaulted from generic mid-market size bracket — no company-size signal available")
+- **WHEN** `build_programmatic_ebitda_tree` produces a leaf node from a `CompanyProfile` whose `business_model` does NOT match any `_MODEL_KEYWORDS` entry AND whose `company_size` is NOT in `_SIZE_TO_EMPLOYEES`
+- **THEN** the node's `confidence_level` is `"low"` and `confidence_basis` indicates both fallbacks (e.g., "Defaulted to a generic mid-market estimate — neither business model nor size signal was usable")
 
-#### Scenario: Cost node tagged from industry-benchmark margin
+#### Scenario: Cost-node confidence inherits from the inputs that drove it
 
-- **WHEN** `build_programmatic_ebitda_tree` produces a cost node whose value derives from the template's `gross_margin` or `ebitda_margin`
-- **THEN** the node's `confidence_level` reflects the highest confidence among inputs that drove it (revenue base + industry benchmark) and `confidence_basis` references both (e.g., "Inferred from industry-benchmark gross margin applied to estimated revenue")
+- **WHEN** `build_programmatic_ebitda_tree` produces a leaf cost node (under COGS or OpEx) whose value derives from the template's `gross_margin` / `ebitda_margin` applied to the estimated revenue
+- **THEN** the node's `confidence_level` matches the level computed for revenue nodes from the same `CompanyProfile` (i.e., a single confidence label is computed once per profile and propagates to every leaf node) and `confidence_basis` is phrased for cost provenance (e.g., "Industry-benchmark gross margin applied to a revenue estimate from a known SaaS template at a mid-market size bracket")
 
 #### Scenario: Rollup nodes do not carry their own confidence
 
