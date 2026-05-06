@@ -122,16 +122,12 @@ class GenerateStrategyMap(RequestStep):
         timer = StepTimer(STEP_NAME)
         try:
             # Step 1 — Vision and Mission
-            vision_data, mission_data = self._step_1_vision_mission(
-                system_prompt, context, timer
-            )
+            vision_data, mission_data = self._step_1_vision_mission(system_prompt, context, timer)
             context["vision_statement"] = vision_data["statement"]
             context["mission_statement"] = mission_data["statement"]
 
             # Step 2 — Customer Value Proposition classification
-            value_proposition_data = self._step_2_value_proposition(
-                system_prompt, context, timer
-            )
+            value_proposition_data = self._step_2_value_proposition(system_prompt, context, timer)
             context["value_proposition"] = summarise_value_proposition(value_proposition_data)
 
             # Steps 3-6 — perspective generation in parallel via
