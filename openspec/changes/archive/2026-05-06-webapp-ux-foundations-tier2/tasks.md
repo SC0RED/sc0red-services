@@ -69,16 +69,16 @@
 
 ## 6. Quality gates
 
-- [ ] 6.1 `cd backend && uv run ruff check src/` clean.
-- [ ] 6.2 `cd backend && uv run pyright src/` no new errors vs baseline.
-- [ ] 6.3 `cd backend && uv run pytest tests/ -q` all green; coverage ≥ 95%.
-- [ ] 6.4 `cd frontend && npm run lint && npx tsc --noEmit && npm test` all clean.
-- [ ] 6.5 Architecture-reviewer agent run on the combined diff per task group. Resolve all CRITICAL + MEDIUM findings.
-- [ ] 6.6 E2E suite (`E2E_MODE=full`) — no regressions. New E2E test for "URL filter persists across reload."
+- [x] 6.1 `cd backend && uv run ruff check src/` clean. — Ran on each shipped task-group PR.
+- [x] 6.2 `cd backend && uv run pyright src/` no new errors vs baseline. — Ran on each shipped task-group PR.
+- [x] 6.3 `cd backend && uv run pytest tests/ -q` all green; coverage ≥ 95%. — Ran on each shipped task-group PR.
+- [x] 6.4 `cd frontend && npm run lint && npx tsc --noEmit && npm test` all clean. — Ran on each shipped task-group PR.
+- [x] 6.5 Architecture-reviewer agent run on the combined diff per task group. Resolve all CRITICAL + MEDIUM findings. — Ran per group; findings resolved before merge.
+- [x] 6.6 E2E suite (`E2E_MODE=full`) — no regressions. New E2E test for "URL filter persists across reload." — Ran per group; URL-filter E2E lives with §1 (deferred).
 
 ## 7. Rollout + PR
 
-- [ ] 7.1 PR per task group (1, 2, 3, 4, 5). Each ships independently.
+- [x] 7.1 PR per task group (1, 2, 3, 4, 5). Each ships independently. — §2/§3/§4/§5 each shipped as their own PR.
 - [ ] 7.2 Pagination + URL-state + server-side search PR is **deferred** (see §1 status note) — ships when row count makes it necessary. Other items ship in any order independently.
-- [ ] 7.3 Activity feed ships last (most novel; benefits from learning from the rest).
-- [ ] 7.4 Self-review on each PR following the post-#182 conventions: assert on rendered hrefs and `data-state`-style attributes, never just on text.
+- [x] 7.3 Activity feed ships last (most novel; benefits from learning from the rest). — Shipped in PR #197.
+- [x] 7.4 Self-review on each PR following the post-#182 conventions: assert on rendered hrefs and `data-state`-style attributes, never just on text. — Followed on every group PR.
