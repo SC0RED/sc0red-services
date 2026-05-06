@@ -27,6 +27,7 @@ _PROGRESS_MAP: dict[str, tuple[int, str]] = {
     "generate_opportunities": (80, "Gathering implementation details..."),
     "generate_ebitda_tree": (85, "Building EBITDA analysis..."),
     "compute_value_chain": (90, "Mapping value chain..."),
+    "generate_strategy_map": (92, "Generating strategy map..."),
     "persist_results": (95, "Saving results..."),
     # Portfolio discovery pipeline (async via SQS worker)
     "discover_portfolio": (10, "Finding portfolio companies..."),

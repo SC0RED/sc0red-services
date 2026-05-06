@@ -205,3 +205,33 @@ class TestRequestExecutorAppSyncIntegration:
         mock_notify.assert_not_called()
         # But company repo should still be updated
         company_repo.update.assert_called_once()
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_fires_for_generate_strategy_map(
+        self, mock_notify: MagicMock
+    ) -> None:
+        """Regression: ``generate_strategy_map`` MUST be in _PROGRESS_MAP.
+
+        Before this fix the strategy-map step's ``mark_question_complete`` call
+        resolved to a missing _PROGRESS_MAP entry and silently fired no
+        progress notification — the frontend never saw the step transition.
+        """
+        company_repo = MagicMock()
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            company_repo=company_repo,
+            scan_id="scan-1",
+        )
+
+        executor.mark_question_complete("generate_strategy_map")
+
+        mock_notify.assert_called_once()
+        call_kwargs = mock_notify.call_args.kwargs
+        assert call_kwargs["scan_id"] == "scan-1"
+        assert call_kwargs["company_id"] == "company-1"
+        # Position constraint: strategy-map must sit between
+        # compute_value_chain (90) and persist_results (95).
+        assert 90 < call_kwargs["progress"] < 95
+        assert "strategy map" in call_kwargs["label"].lower()
