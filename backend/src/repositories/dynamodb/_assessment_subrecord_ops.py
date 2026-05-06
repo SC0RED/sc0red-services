@@ -39,6 +39,16 @@ def save_strategy_map(table: DynamoDBTable, assessment_id: str, data: dict[str, 
     table.put_item(item)
 
 
+def clear_strategy_map(table: DynamoDBTable, assessment_id: str) -> None:
+    """Remove the persisted strategy map for the given assessment.
+
+    Used by the re-analyse handler (per the strategy-map-on-demand spec) to
+    invalidate a stale map before the analysis pipeline regenerates the
+    underlying diagnosis. Idempotent — safe to call when no map exists.
+    """
+    table.delete_item(pk=f"ASSESSMENT#{assessment_id}", sk="STRATEGY_MAP")
+
+
 def get_strategy_map(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] | None:
     """Return the strategy map for the given assessment, or None if not found.
 
