@@ -279,29 +279,17 @@ class APIGatewayHandler:
         )
 
         # On-demand strategy-map generation (strategy-map-on-demand spec).
-        # Phase A1.5 ships the route + handler against the foundation pieces;
-        # Phase A2 provisions the dedicated SQS queue + worker Lambda. The
-        # handler returns 503 when STRATEGY_MAP_QUEUE_URL is unset so the
-        # API Lambda runs cleanly in environments where Phase A2 hasn't
-        # landed yet.
+        # Handler returns 503 when queue_url is empty (Phase A2 wires it).
         router.protected(
             "POST",
             "/api/analysis/{analysis_id}/strategy-map",
-            lambda event, authentication, analysis_id: (
-                build_error(
-                    "Strategy-map generation queue not configured for this environment",
-                    status=503,
-                    code="STRATEGY_MAP_FEATURE_DISABLED",
-                )
-                if not self._strategy_map_queue_url
-                else handle_generate_strategy_map(
-                    event,
-                    authentication,
-                    self._storage,
-                    self._sqs,
-                    self._strategy_map_queue_url,
-                    analysis_id,
-                )
+            lambda event, authentication, analysis_id: handle_generate_strategy_map(
+                event,
+                authentication,
+                self._storage,
+                self._sqs,
+                self._strategy_map_queue_url,
+                analysis_id,
             ),
         )
 
