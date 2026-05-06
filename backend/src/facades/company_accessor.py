@@ -18,6 +18,7 @@ if TYPE_CHECKING:
         RiskAssessment,
         ValueChainResult,
     )
+    from src.models.model_strategy_map import StrategyMap
 
 
 class CompanyAccessor:
@@ -98,6 +99,10 @@ class CompanyAccessor:
     def set_value_chain(self, result: ValueChainResult) -> None:
         """Set the value chain analysis."""
         self._company.value_chain = result
+
+    def set_strategy_map(self, strategy_map: StrategyMap) -> None:
+        """Set the AI-generated Balanced Scorecard strategy map."""
+        self._company.strategy_map = strategy_map
 
     def set_url(self, url: str) -> None:
         """Set the company URL."""

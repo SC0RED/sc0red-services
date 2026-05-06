@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 
-import { CAT_LABELS } from '@/components/RiskBreakdown'
 import type { ValueChainStep, Opportunity } from '@/lib/types/api'
-import { RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
+import { CAT_LABELS, RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
 
 interface ValueChainDiagramProps {
     steps: ValueChainStep[]
@@ -19,9 +18,9 @@ export default function ValueChainDiagram({ steps, opportunities, summary }: Val
     const supportSteps = steps.filter((s) => s.category === 'support')
 
     return (
-        <div style={{ marginBottom: '2rem' }}>
-            <h2 className="section-header">Value Chain Analysis</h2>
-
+        <div className="analysis-section-spacing">
+            {/* Section heading lives at the page level via AnalysisSection
+                (analysis-detail-consistency-wrapper D3). */}
             <p
                 style={{
                     fontSize: '0.875rem',

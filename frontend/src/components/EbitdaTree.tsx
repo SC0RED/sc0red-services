@@ -86,6 +86,8 @@ function EbitdaTreeInner({ treeData, opportunities }: EbitdaTreeProps) {
                         title: opportunities[i].title,
                         valueLever: opportunities[i].value_lever || '',
                     })),
+                confidenceLevel: n.confidence_level,
+                confidenceBasis: n.confidence_basis,
             } as EbitdaNodeData,
         }))
 

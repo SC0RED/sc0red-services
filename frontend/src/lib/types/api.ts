@@ -26,6 +26,12 @@ export interface EbitdaNode {
     linked_opportunity_indices: number[]
     parent_id?: string | null
     children?: EbitdaNode[]
+    /** Per-node derivation provenance — see `ebitda-tree-confidence`
+     *  capability spec. `null` / undefined for rollup (subtotal/margin) nodes
+     *  and for any record stored before the confidence fields were added; the
+     *  frontend suppresses the chip in those cases (no "unknown" badge). */
+    confidence_level?: 'high' | 'medium' | 'low' | null
+    confidence_basis?: string | null
 }
 
 export interface EbitdaTree {
@@ -70,6 +76,9 @@ export interface AnalysisData {
     topActions?: string[]
     ebitdaTree?: EbitdaTree
     valueChain?: ValueChain
+    /** AI-generated Balanced Scorecard strategy map (Vector Advisory).
+     * Optional because legacy analyses pre-date this field. */
+    strategyMap?: StrategyMap
     documents?: DocumentInfo[]
     analyzedAt?: string
     error?: string
@@ -79,6 +88,144 @@ export interface AnalysisData {
     scanId?: string
     /** The PE-firm URL (or company URL for standalone) the parent scan was started from. */
     scanSourceUrl?: string
+}
+
+// ── Strategy Map ─────────────────────────────────────────────────────────
+//
+// Mirrors the JSON schema at
+// `backend/src/pipeline/prompts/strategy_map/schemas/strategy_map_output.json`
+// and the pydantic model at `backend/src/models/model_strategy_map.py`.
+// Backend serialises with `by_alias=True` so the wire shape is camelCase.
+
+/** Per-objective AI confidence in the inference. */
+export type ConfidenceMarker = 'HIGH' | 'MEDIUM' | 'LOW'
+
+export type ValueProposition =
+    | 'operational_excellence'
+    | 'customer_intimacy'
+    | 'product_leadership'
+    | 'hybrid'
+
+export interface ValuePropositionClassification {
+    primary: ValueProposition
+    /** Only populated when `primary === 'hybrid'`. */
+    secondary?: 'operational_excellence' | 'customer_intimacy' | 'product_leadership' | null
+    rationale: string
+    /** Brand exemplar (e.g. "Mobil"). Nullable on the wire — see
+     *  `rationale_source` doc for the OpenAI strict-mode rationale. */
+    exemplar_company?: string | null
+}
+
+export interface VisionStatement {
+    statement: string
+    synthesised: boolean
+    rationale: string
+}
+
+export interface MissionStatement {
+    statement: string
+    synthesised: boolean
+    rationale: string
+}
+
+export interface StrategicPriority {
+    name: string
+    result: string
+}
+
+export interface FinancialObjective {
+    id: string
+    title: string
+    definition: string
+    category: 'revenue_growth' | 'productivity'
+    confidence: ConfidenceMarker
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
+}
+
+export interface CustomerObjective {
+    id: string
+    /** First-person customer-voice quote (Vector house style).
+     * Renderer adds the surrounding quote marks. */
+    title: string
+    definition: string
+    panel: 'consumer' | 'channel' | 'partner'
+    confidence: ConfidenceMarker
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
+}
+
+export interface InternalProcessObjective {
+    id: string
+    title: string
+    definition: string
+    category: 'innovation' | 'customer_management' | 'operational_excellence' | 'citizenship'
+    confidence: ConfidenceMarker
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
+}
+
+export interface InternalProcessTheme {
+    name: string
+    supports_financial_objectives: string[]
+    objectives: InternalProcessObjective[]
+}
+
+export interface CapacityObjective {
+    id: string
+    title: string
+    definition: string
+    confidence: ConfidenceMarker
+    /** Optional traceability note. Backend serialises `null` (not missing)
+     *  when the AI didn't supply one — OpenAI strict mode requires the
+     *  field to be present, so use `?? ''` when rendering. */
+    rationale_source?: string | null
+}
+
+export interface OrganizationalCapacityPerspective {
+    people: CapacityObjective
+    technology: CapacityObjective
+    culture: CapacityObjective
+}
+
+export interface Arrow {
+    from: string
+    to: string
+    hypothesis: string
+}
+
+export interface Gap {
+    id: string
+    title: string
+    description: string
+    deepDiveFraming: string
+    relatedObjectiveIds?: string[]
+}
+
+export interface CoreValues {
+    values: string[]
+    synthesised: boolean
+    rationale: string
+}
+
+export interface StrategyMap {
+    vision: VisionStatement
+    mission: MissionStatement
+    valueProposition: ValuePropositionClassification
+    strategicPriorities: StrategicPriority[]
+    financial: { objectives: FinancialObjective[] }
+    customer: { objectives: CustomerObjective[] }
+    internalProcesses: { themes: InternalProcessTheme[] }
+    organizationalCapacity: OrganizationalCapacityPerspective
+    arrows: Arrow[]
+    whatsMissing: Gap[]
+    coreValues: CoreValues
 }
 
 export interface AnalysisItem {

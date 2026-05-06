@@ -225,10 +225,50 @@ class TestGetEbitdaTree:
     async def test_returns(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
-        _setup_assessment(assessment_repo, get_ebitda_tree={"revenueEstimate": "$5B", "ebitdaEstimate": "$1B", "treeData": [{"label": "R", "value": "$5B"}]})
+        _setup_assessment(
+            assessment_repo,
+            get_ebitda_tree={
+                "revenueEstimate": "$5B",
+                "ebitdaEstimate": "$1B",
+                # Each node is shaped per `EbitdaNode.model_dump()` — snake_case
+                # `value_range`, NOT `value`. The legacy fixture used `value`
+                # which masked a bug where the tool always rendered blank values.
+                "treeData": [{"label": "Revenue", "value_range": "$5B"}],
+            },
+        )
         server = _make_server(storage)
         text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
-        assert "$5B" in text
+        assert "Revenue: $5B" in text
+
+    @pytest.mark.asyncio
+    async def test_renders_value_range_field_not_legacy_value(self):
+        """Regression guard: persisted nodes use snake_case `value_range`, not `value`.
+
+        Reading `value` (which doesn't exist on the dumped shape) made every
+        node render as `- {label}: ` with an empty trailing string. This test
+        fails the moment that regression returns.
+        """
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_ebitda_tree={
+                "revenueEstimate": "$10M-$15M",
+                "ebitdaEstimate": "$1M-$3M",
+                "treeData": [
+                    {"label": "Subscriptions", "value_range": "$8M-$12M"},
+                    {"label": "Cloud Infrastructure", "value_range": "$1M-$2M"},
+                ],
+            },
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
+        assert "Subscriptions: $8M-$12M" in text
+        assert "Cloud Infrastructure: $1M-$2M" in text
+        # Negative regression: no node line should end on an empty trailing colon-space.
+        for line in text.splitlines():
+            if line.startswith("- "):
+                assert not line.endswith(": "), f"empty value rendered for line: {line!r}"
 
     @pytest.mark.asyncio
     async def test_no_tree(self):
@@ -237,6 +277,39 @@ class TestGetEbitdaTree:
         server = _make_server(storage)
         text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
         assert "No EBITDA tree" in text
+
+    @pytest.mark.asyncio
+    async def test_tree_with_confidence_fields_does_not_break_tool(self):
+        """Smoke test for the ebitda-tree-confidence capability: nodes carrying
+        the additive confidence_level / confidence_basis fields must not break
+        the existing MCP tool surface. The tool ignores unknown fields, so the
+        new keys flow through the boundary harmlessly.
+        """
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_ebitda_tree={
+                "revenueEstimate": "$5B",
+                "ebitdaEstimate": "$1B",
+                "treeData": [
+                    {
+                        "label": "Revenue",
+                        "value_range": "$5B",
+                        "confidence_level": "high",
+                        "confidence_basis": (
+                            "Revenue derived from a SaaS template (matched on business model) "
+                            "applied to a known size bracket ('Mid-market 200-1000')."
+                        ),
+                    },
+                ],
+            },
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
+        # Existing surface still renders label + value_range; the additive
+        # confidence_* fields flow through harmlessly (the tool ignores them).
+        assert "Revenue: $5B" in text
 
 
 class TestGetValueChain:

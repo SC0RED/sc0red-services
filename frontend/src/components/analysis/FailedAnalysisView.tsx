@@ -112,6 +112,8 @@ export default function FailedAnalysisView({
 
                 {documentError && (
                     <div
+                        role="alert"
+                        className="alert-error"
                         style={{
                             fontSize: '0.8125rem',
                             color: 'var(--risk-critical)',

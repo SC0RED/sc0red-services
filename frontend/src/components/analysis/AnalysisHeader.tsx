@@ -32,11 +32,11 @@ export default function AnalysisHeader({
     const scanLabel = scanSourceUrl ? prettifyUrl(scanSourceUrl) : 'portfolio scan'
     return (
         <div
+            className="analysis-section-spacing"
             style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'flex-start',
-                marginBottom: '2rem',
                 flexWrap: 'wrap',
                 gap: '1rem',
             }}

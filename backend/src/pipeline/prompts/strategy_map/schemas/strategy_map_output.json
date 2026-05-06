@@ -1,0 +1,250 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "StrategyMapOutput",
+    "description": "Final assembled strategy map produced by the 7-step generation chain. Validated before persistence.",
+    "type": "object",
+    "required": [
+        "vision",
+        "mission",
+        "valueProposition",
+        "strategicPriorities",
+        "financial",
+        "customer",
+        "internalProcesses",
+        "organizationalCapacity",
+        "arrows",
+        "whatsMissing",
+        "coreValues"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "vision": {
+            "type": "object",
+            "required": ["statement", "synthesised", "rationale"],
+            "additionalProperties": false,
+            "properties": {
+                "statement": { "type": "string", "minLength": 10, "maxLength": 200 },
+                "synthesised": { "type": "boolean" },
+                "rationale": { "type": "string", "minLength": 10, "maxLength": 300 }
+            }
+        },
+        "mission": {
+            "type": "object",
+            "required": ["statement", "synthesised", "rationale"],
+            "additionalProperties": false,
+            "properties": {
+                "statement": { "type": "string", "minLength": 10, "maxLength": 300 },
+                "synthesised": { "type": "boolean" },
+                "rationale": { "type": "string", "minLength": 10, "maxLength": 300 }
+            }
+        },
+        "valueProposition": {
+            "type": "object",
+            "required": ["primary", "secondary", "rationale", "exemplar_company"],
+            "additionalProperties": false,
+            "properties": {
+                "primary": {
+                    "type": "string",
+                    "enum": ["operational_excellence", "customer_intimacy", "product_leadership", "hybrid"]
+                },
+                "secondary": {
+                    "type": ["string", "null"],
+                    "enum": ["operational_excellence", "customer_intimacy", "product_leadership", null]
+                },
+                "rationale": { "type": "string", "minLength": 20, "maxLength": 600 },
+                "exemplar_company": { "type": ["string", "null"], "maxLength": 100 }
+            }
+        },
+        "strategicPriorities": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "required": ["name", "result"],
+                "additionalProperties": false,
+                "properties": {
+                    "name": { "type": "string", "minLength": 4, "maxLength": 60 },
+                    "result": { "type": "string", "minLength": 20, "maxLength": 300 }
+                }
+            }
+        },
+        "financial": {
+            "type": "object",
+            "required": ["objectives"],
+            "additionalProperties": false,
+            "properties": {
+                "objectives": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": { "$ref": "#/definitions/financialObjective" }
+                }
+            }
+        },
+        "customer": {
+            "type": "object",
+            "required": ["objectives"],
+            "additionalProperties": false,
+            "properties": {
+                "objectives": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 4,
+                    "items": { "$ref": "#/definitions/customerObjective" }
+                }
+            }
+        },
+        "internalProcesses": {
+            "type": "object",
+            "required": ["themes"],
+            "additionalProperties": false,
+            "properties": {
+                "themes": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 3,
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "supports_financial_objectives", "objectives"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": { "type": "string", "minLength": 4, "maxLength": 60 },
+                            "supports_financial_objectives": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": { "type": "string", "pattern": "^F[123]$" }
+                            },
+                            "objectives": {
+                                "type": "array",
+                                "minItems": 1,
+                                "maxItems": 4,
+                                "items": { "$ref": "#/definitions/internalProcessObjective" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "organizationalCapacity": {
+            "type": "object",
+            "required": ["people", "technology", "culture"],
+            "additionalProperties": false,
+            "properties": {
+                "people": { "$ref": "#/definitions/capacityObjective" },
+                "technology": { "$ref": "#/definitions/capacityObjective" },
+                "culture": { "$ref": "#/definitions/capacityObjective" }
+            }
+        },
+        "arrows": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 12,
+            "items": {
+                "type": "object",
+                "required": ["from", "to", "hypothesis"],
+                "additionalProperties": false,
+                "properties": {
+                    "from": { "type": "string", "minLength": 2, "maxLength": 10 },
+                    "to": { "type": "string", "minLength": 2, "maxLength": 10 },
+                    "hypothesis": { "type": "string", "minLength": 20, "maxLength": 500 }
+                }
+            }
+        },
+        "whatsMissing": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 4,
+            "items": {
+                "type": "object",
+                "required": ["id", "title", "description", "deepDiveFraming", "relatedObjectiveIds"],
+                "additionalProperties": false,
+                "properties": {
+                    "id": { "type": "string", "pattern": "^G[1-9]$" },
+                    "title": { "type": "string", "minLength": 4, "maxLength": 100 },
+                    "description": { "type": "string", "minLength": 30, "maxLength": 600 },
+                    "deepDiveFraming": { "type": "string", "minLength": 30, "maxLength": 400 },
+                    "relatedObjectiveIds": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 2, "maxLength": 10 }
+                    }
+                }
+            }
+        },
+        "coreValues": {
+            "type": "object",
+            "required": ["values", "synthesised", "rationale"],
+            "additionalProperties": false,
+            "properties": {
+                "values": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 6,
+                    "items": { "type": "string", "minLength": 2, "maxLength": 60 }
+                },
+                "synthesised": { "type": "boolean" },
+                "rationale": { "type": "string", "minLength": 10, "maxLength": 300 }
+            }
+        }
+    },
+    "definitions": {
+        "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW"]
+        },
+        "financialObjective": {
+            "type": "object",
+            "required": ["id", "title", "definition", "category", "confidence", "rationale_source"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "type": "string", "pattern": "^F[123]$" },
+                "title": { "type": "string", "minLength": 8, "maxLength": 120 },
+                "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
+                "category": { "type": "string", "enum": ["revenue_growth", "productivity"] },
+                "confidence": { "$ref": "#/definitions/confidence" },
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+            }
+        },
+        "customerObjective": {
+            "type": "object",
+            "required": ["id", "title", "definition", "panel", "confidence", "rationale_source"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "type": "string", "pattern": "^C[1-4]$" },
+                "title": { "type": "string", "minLength": 8, "maxLength": 200 },
+                "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
+                "panel": { "type": "string", "enum": ["consumer", "channel", "partner"] },
+                "confidence": { "$ref": "#/definitions/confidence" },
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+            }
+        },
+        "internalProcessObjective": {
+            "type": "object",
+            "required": ["id", "title", "definition", "category", "confidence", "rationale_source"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "type": "string", "pattern": "^I[1-3]\\.[1-9]$" },
+                "title": { "type": "string", "minLength": 8, "maxLength": 200 },
+                "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
+                "category": {
+                    "type": "string",
+                    "enum": ["innovation", "customer_management", "operational_excellence", "citizenship"]
+                },
+                "confidence": { "$ref": "#/definitions/confidence" },
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+            }
+        },
+        "capacityObjective": {
+            "type": "object",
+            "required": ["id", "title", "definition", "confidence", "rationale_source"],
+            "additionalProperties": false,
+            "properties": {
+                "id": { "type": "string", "pattern": "^O\\.[PTC]$" },
+                "title": { "type": "string", "minLength": 8, "maxLength": 200 },
+                "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
+                "confidence": { "$ref": "#/definitions/confidence" },
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+            }
+        }
+    }
+}

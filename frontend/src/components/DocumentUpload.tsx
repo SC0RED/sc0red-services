@@ -1,7 +1,18 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+
+import ReanalyzeProgressCard from '@/components/analysis/ReanalyzeProgressCard'
 import type { DocumentInfo } from '@/lib/types/api'
+
+/**
+ * Stable DOM id for the in-section progress card. Used so the
+ * re-analyze button can wire `aria-describedby` to the card when the
+ * card is rendered — screen readers then announce the progress state
+ * alongside the button's accessible name on focus, instead of just
+ * the static label.
+ */
+const REANALYZE_PROGRESS_ID = 'reanalyze-progress'
 
 const ALLOWED_TYPES = ['pdf', 'docx', 'xlsx', 'xls', 'txt', 'csv', 'md']
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
@@ -12,6 +23,25 @@ interface DocumentUploadProps {
     onDocumentsChange: () => void
     onReanalyze?: () => void
     reanalyzing?: boolean
+    /**
+     * Latest progress label from the re-analyze pipeline. Optional
+     * because not every caller wires the realtime hook (e.g., simple
+     * test renderings). When provided alongside `reanalyzing === true`,
+     * surfaces inside the in-section progress block.
+     */
+    reanalysisLabel?: string
+    /**
+     * Latest progress percentage (0-100) from the re-analyze pipeline.
+     * Same optionality contract as `reanalysisLabel`.
+     */
+    reanalysisProgress?: number
+    /**
+     * Error from the parent's re-analyze polling loop. Rendered as an
+     * alert inside this section so the document-related error surface
+     * is unified — DocumentUpload's internal upload/delete errors and
+     * the reanalyze loop's polling errors live in one visual region.
+     */
+    documentError?: string | null
 }
 
 function formatCharCount(count: number): string {
@@ -19,12 +49,32 @@ function formatCharCount(count: number): string {
     return `${count} chars`
 }
 
+/**
+ * Document-upload widget — the leaf component for the "improve this
+ * analysis" loop. Three concerns are colocated here:
+ *   1. File drag-drop / click upload + per-document delete
+ *   2. Explicit "Re-analyze with Documents" button to kick off the
+ *      re-analysis pipeline against the uploaded context
+ *   3. In-section progress display while re-analysis runs (label +
+ *      progress bar + percent readout) — co-located with the button
+ *      that triggers it, NOT rendered as an orphan sibling on the page
+ *
+ * Section framing (heading, lead copy) is owned by the consuming page,
+ * not this widget. `AnalysisDetail` wraps this with an "Improve This
+ * Analysis" heading + lead; `FailedAnalysisView` wraps it with
+ * "Upload supporting documents (optional)" + its own retry UI. Keeping
+ * framing at the page level matches the section-wrapper pattern set in
+ * `redesign-analysis-detail-narrative` D5.
+ */
 export default function DocumentUpload({
     analysisId,
     documents,
     onDocumentsChange,
     onReanalyze,
     reanalyzing = false,
+    reanalysisLabel,
+    reanalysisProgress,
+    documentError,
 }: DocumentUploadProps) {
     const [uploading, setUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -140,9 +190,7 @@ export default function DocumentUpload({
     )
 
     return (
-        <div style={{ marginBottom: '2rem' }}>
-            <h2 className="section-header">Documents</h2>
-
+        <div className="analysis-section-spacing">
             {/* Drop zone */}
             <div
                 data-testid="drop-zone"
@@ -191,8 +239,18 @@ export default function DocumentUpload({
             </div>
 
             {error && (
-                <div className="alert-error" style={{ marginBottom: '1rem' }}>
+                <div className="alert-error" style={{ marginBottom: '1rem' }} role="alert">
                     {error}
+                </div>
+            )}
+
+            {/* Re-analyze polling error from the parent. Different surface
+                than `error` (which is upload/delete failures inside this
+                component) — both are document-related so they live next
+                to each other. */}
+            {documentError && (
+                <div className="alert-error" style={{ marginBottom: '1rem' }} role="alert">
+                    {documentError}
                 </div>
             )}
 
@@ -204,9 +262,8 @@ export default function DocumentUpload({
                     {documents.map((doc) => (
                         <div
                             key={doc.id}
-                            className="card"
+                            className="card card--list"
                             style={{
-                                padding: '0.75rem 1rem',
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
@@ -243,11 +300,18 @@ export default function DocumentUpload({
                 </div>
             )}
 
-            {/* Re-analyze button */}
+            {/* Re-analyze button. While re-analysis is in flight,
+                `aria-describedby` points at the progress card so screen
+                readers announce progress state alongside the button's
+                accessible name on focus. */}
             {documents.length > 0 && onReanalyze && (
                 <button
                     onClick={onReanalyze}
                     disabled={reanalyzing}
+                    aria-label={
+                        reanalyzing ? 'Re-analysis in progress' : 'Re-analyze with uploaded documents'
+                    }
+                    aria-describedby={reanalyzing ? REANALYZE_PROGRESS_ID : undefined}
                     style={{
                         padding: '0.625rem 1.25rem',
                         background: reanalyzing ? 'var(--bg-surface-3)' : 'var(--accent-blue)',
@@ -261,6 +325,18 @@ export default function DocumentUpload({
                 >
                     {reanalyzing ? 'Re-analyzing...' : 'Re-analyze with Documents'}
                 </button>
+            )}
+
+            {/* Re-analyze progress — co-located with the button that
+                triggers it. Previously rendered as a sibling block in
+                AnalysisDetail.tsx, which placed the progress bar above
+                the trigger and orphaned it from its affordance. */}
+            {reanalyzing && (
+                <ReanalyzeProgressCard
+                    id={REANALYZE_PROGRESS_ID}
+                    label={reanalysisLabel}
+                    progress={reanalysisProgress}
+                />
             )}
         </div>
     )

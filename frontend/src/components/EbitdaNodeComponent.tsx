@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { type Node, Position, Handle, type NodeProps } from '@xyflow/react'
+import ConfidenceIndicator from '@/components/analysis/ConfidenceIndicator'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 
 export interface EbitdaNodeData extends Record<string, unknown> {
@@ -11,6 +12,12 @@ export interface EbitdaNodeData extends Record<string, unknown> {
     percentageOfParent?: number
     description: string
     linkedOpportunities: Array<{ title: string; valueLever: string }>
+    /** Derivation-provenance level emitted by the backend. `null` / undefined
+     *  suppresses the chip (no "unknown" badge — silence is more honest). */
+    confidenceLevel?: 'high' | 'medium' | 'low' | null
+    /** Human-readable explanation of which build inputs drove the figure;
+     *  surfaced as a tooltip below the chip. */
+    confidenceBasis?: string | null
 }
 
 const NODE_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
@@ -43,6 +50,17 @@ const NODE_COLORS: Record<string, { bg: string; border: string; text: string; gl
 export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeData>>) {
     const [hovered, setHovered] = useState(false)
     const colors = NODE_COLORS[data.type] || NODE_COLORS.margin
+
+    // Show a confidence chip when the backend supplied a level AND this is a
+    // leaf (revenue/cost) node. Subtotal / margin rollups carry no own
+    // confidence per the ebitda-tree-confidence spec — they inherit visually
+    // via their children's chips.
+    const showConfidenceChip =
+        (data.confidenceLevel === 'high' ||
+            data.confidenceLevel === 'medium' ||
+            data.confidenceLevel === 'low') &&
+        data.type !== 'subtotal' &&
+        data.type !== 'margin'
 
     return (
         /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
@@ -82,13 +100,35 @@ export default function EbitdaNodeComponent({ data }: NodeProps<Node<EbitdaNodeD
             {data.valueRange && (
                 <div
                     style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
                         fontSize: '1rem',
                         fontWeight: 600,
                         color: 'var(--text-primary)',
                         marginBottom: '0.25rem',
                     }}
                 >
-                    {data.valueRange}
+                    <span>{data.valueRange}</span>
+                    {showConfidenceChip && data.confidenceLevel && (
+                        <span
+                            data-testid="ebitda-confidence-chip"
+                            tabIndex={0}
+                            // Native HTML title gives a hover/focus tooltip for
+                            // free; ConfidenceIndicator's own aria-label still
+                            // provides the level to screen readers. Using
+                            // `title` keeps us within the node's React-Flow
+                            // bounds (no portal) so the tooltip doesn't get
+                            // clipped by the flow container.
+                            title={data.confidenceBasis ?? undefined}
+                            style={{ display: 'inline-flex', cursor: 'help' }}
+                        >
+                            <ConfidenceIndicator
+                                confidence={data.confidenceLevel.toUpperCase() as 'HIGH' | 'MEDIUM' | 'LOW'}
+                                size="small"
+                            />
+                        </span>
+                    )}
                 </div>
             )}
             {data.percentageOfParent != null && (

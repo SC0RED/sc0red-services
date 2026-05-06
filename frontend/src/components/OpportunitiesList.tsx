@@ -2,10 +2,7 @@
 
 import { useState } from 'react'
 
-import Sc0redCTABanner from '@/components/Sc0redCTABanner'
-import HelpTooltip from '@/components/ui/HelpTooltip'
-import { getSc0redContactUrl } from '@/lib/config'
-import type { ActiveLeverFilter } from '@/lib/types/analytics'
+import ExpandableCard from '@/components/ui/ExpandableCard'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -25,24 +22,17 @@ function TimelineBadge({ timeline }: { timeline: string }) {
 interface OpportunitiesListProps {
     opportunities: Opportunity[]
     activeLever: string
-    analysisId: string
 }
 
-function toActiveLeverFilter(activeLever: string): ActiveLeverFilter | null {
-    // Only the two named levers are tracked as filters for analytics. "All",
-    // "Both", or any other value collapses to null — the funnel only
-    // distinguishes Revenue/Cost intent.
-    if (activeLever === 'Revenue Side' || activeLever === 'Cost Side') {
-        return activeLever
-    }
-    return null
-}
-
-export default function OpportunitiesList({
-    opportunities,
-    activeLever,
-    analysisId,
-}: OpportunitiesListProps) {
+/**
+ * AI Opportunities list. The CTA banner that previously lived at the
+ * bottom of this component was removed as part of the
+ * improve-pdf-export-content change — the print PDF was rendering it
+ * twice (once here, once on the back cover), and the cleanest fix is
+ * to host the CTA at the parent surface (the analysis detail page)
+ * rather than per-list. Print path uses `PrintBackCover` instead.
+ */
+export default function OpportunitiesList({ opportunities, activeLever }: OpportunitiesListProps) {
     const [activeOppCat, setActiveOppCat] = useState<string>('All')
     const [expandedOpp, setExpandedOpp] = useState<string | null>(null)
 
@@ -57,299 +47,236 @@ export default function OpportunitiesList({
     })
 
     return (
-        <div style={{ marginBottom: '2rem' }}>
+        <div className="analysis-section-spacing">
+            {/* Section heading + count badge live at the page level via
+                AnalysisSection (analysis-detail-consistency-wrapper D2 +
+                D3). The category-chip filter strip stays here as a body
+                control, rendered as its own row above the opportunity
+                cards. */}
             <div
                 style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
+                    justifyContent: 'flex-start',
                     alignItems: 'center',
                     marginBottom: '1rem',
                     flexWrap: 'wrap',
-                    gap: '0.75rem',
+                    gap: '0.5rem',
                 }}
             >
-                <h2 style={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                    AI Opportunities ({opportunities.length})
-                    <HelpTooltip term="impact_rating" />
-                </h2>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {oppCategories.map((cat) => (
-                        <button
-                            key={cat}
-                            onClick={() => setActiveOppCat(cat)}
-                            style={{
-                                padding: '0.3rem 0.75rem',
-                                borderRadius: 'var(--radius-full)',
-                                border: '1px solid',
-                                borderColor: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--border)',
-                                background: activeOppCat === cat ? 'rgba(59,123,246,0.1)' : 'transparent',
-                                color: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                                fontSize: '0.8rem',
-                                fontWeight: 500,
-                                cursor: 'pointer',
-                                transition: 'all var(--transition-fast)',
-                            }}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
+                {oppCategories.map((cat) => (
+                    <button
+                        key={cat}
+                        onClick={() => setActiveOppCat(cat)}
+                        style={{
+                            padding: '0.3rem 0.75rem',
+                            borderRadius: 'var(--radius-full)',
+                            border: '1px solid',
+                            borderColor: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--border)',
+                            background: activeOppCat === cat ? 'rgba(59,123,246,0.1)' : 'transparent',
+                            color: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            transition: 'all var(--transition-fast)',
+                        }}
+                    >
+                        {cat}
+                    </button>
+                ))}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
                 {filteredOpps.map((opp: Opportunity) => {
                     const isOpen = expandedOpp === opp.title
                     return (
-                        <div key={opp.title} className="card" style={{ overflow: 'hidden' }}>
-                            <button
-                                onClick={() => setExpandedOpp(isOpen ? null : opp.title)}
-                                aria-expanded={isOpen}
-                                aria-controls={`opportunity-detail-${opp.title}`}
-                                style={{
-                                    width: '100%',
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    padding: '1.25rem',
-                                    textAlign: 'left',
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'flex-start',
-                                        gap: '1rem',
-                                    }}
-                                >
-                                    <div style={{ flex: 1 }}>
-                                        <div
-                                            style={{
-                                                fontWeight: 700,
-                                                fontSize: '0.9875rem',
-                                                marginBottom: '0.5rem',
-                                            }}
-                                        >
-                                            {opp.title}
-                                        </div>
-                                        <div
-                                            style={{
-                                                display: 'flex',
-                                                gap: '0.5rem',
-                                                flexWrap: 'wrap',
-                                            }}
-                                        >
-                                            <ImpactBadge impact={opp.impact_rating} />
-                                            <TimelineBadge timeline={opp.timeline} />
-                                            <span className="badge badge-neutral">
-                                                {opp.strategic_category}
-                                            </span>
-                                            {opp.value_lever && (
-                                                <span
-                                                    style={{
-                                                        padding: '0.15rem 0.5rem',
-                                                        borderRadius: 'var(--radius-full)',
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: 500,
-                                                        border: '1px solid',
-                                                        borderColor:
-                                                            LEVER_COLORS[opp.value_lever] ||
-                                                            'var(--text-secondary)',
-                                                        color:
-                                                            LEVER_COLORS[opp.value_lever] ||
-                                                            'var(--text-secondary)',
-                                                    }}
-                                                >
-                                                    {opp.value_lever}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <svg
-                                        width="16"
-                                        height="16"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="var(--text-tertiary)"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        style={{
-                                            transform: isOpen ? 'rotate(180deg)' : 'none',
-                                            transition: 'transform 0.2s',
-                                            flexShrink: 0,
-                                            marginTop: '4px',
-                                        }}
-                                    >
-                                        <polyline points="6 9 12 15 18 9" />
-                                    </svg>
-                                </div>
-                            </button>
-
-                            {isOpen && (
-                                <div
-                                    id={`opportunity-detail-${opp.title}`}
-                                    style={{ padding: '0 1.25rem 1.5rem' }}
-                                >
-                                    <div className="divider" style={{ marginBottom: '1.25rem' }} />
-
-                                    <p
-                                        style={{
-                                            fontSize: '0.9rem',
-                                            lineHeight: 1.75,
-                                            color: 'var(--text-primary)',
-                                            marginBottom: '1.5rem',
-                                            whiteSpace: 'pre-line',
-                                        }}
-                                    >
-                                        {opp.description}
-                                    </p>
-
-                                    {opp.implementation_steps && opp.implementation_steps.length > 0 && (
-                                        <div style={{ marginBottom: '1.25rem' }}>
-                                            <div
-                                                style={{
-                                                    fontWeight: 600,
-                                                    fontSize: '0.875rem',
-                                                    color: 'var(--text-secondary)',
-                                                    marginBottom: '0.75rem',
-                                                    textTransform: 'uppercase',
-                                                    letterSpacing: '0.06em',
-                                                }}
-                                            >
-                                                Implementation Steps
-                                            </div>
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: '0.5rem',
-                                                }}
-                                            >
-                                                {opp.implementation_steps.map((step, si) => (
-                                                    <div
-                                                        key={si}
-                                                        style={{
-                                                            display: 'flex',
-                                                            gap: '0.75rem',
-                                                            alignItems: 'flex-start',
-                                                        }}
-                                                    >
-                                                        <span
-                                                            style={{
-                                                                minWidth: '22px',
-                                                                height: '22px',
-                                                                borderRadius: '50%',
-                                                                background: 'rgba(59,123,246,0.12)',
-                                                                color: 'var(--accent-blue)',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                fontSize: '0.75rem',
-                                                                fontWeight: 700,
-                                                                flexShrink: 0,
-                                                                marginTop: '2px',
-                                                            }}
-                                                        >
-                                                            {si + 1}
-                                                        </span>
-                                                        <p
-                                                            style={{
-                                                                fontSize: '0.875rem',
-                                                                lineHeight: 1.6,
-                                                            }}
-                                                        >
-                                                            {step}
-                                                        </p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div
-                                        style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '1fr 1fr',
-                                            gap: '0.875rem',
-                                            marginBottom: '1.25rem',
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                padding: '1rem',
-                                                background: 'var(--bg-surface-3)',
-                                                borderRadius: 'var(--radius-md)',
-                                                borderLeft: '3px solid var(--risk-moderate)',
-                                            }}
-                                        >
-                                            <div
-                                                style={{
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: 600,
-                                                    color: 'var(--text-tertiary)',
-                                                    marginBottom: '0.375rem',
-                                                    textTransform: 'uppercase',
-                                                    letterSpacing: '0.06em',
-                                                }}
-                                            >
-                                                Estimated Investment
-                                            </div>
-                                            <div
-                                                style={{
-                                                    fontWeight: 700,
-                                                    color: 'var(--risk-moderate)',
-                                                }}
-                                            >
-                                                {opp.investment_range}
-                                            </div>
-                                        </div>
-                                        <div
-                                            style={{
-                                                padding: '1rem',
-                                                background: 'var(--bg-surface-3)',
-                                                borderRadius: 'var(--radius-md)',
-                                                borderLeft: '3px solid var(--risk-low)',
-                                            }}
-                                        >
-                                            <div
-                                                style={{
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: 600,
-                                                    color: 'var(--text-tertiary)',
-                                                    marginBottom: '0.375rem',
-                                                    textTransform: 'uppercase',
-                                                    letterSpacing: '0.06em',
-                                                }}
-                                            >
-                                                Potential ROI
-                                            </div>
-                                            <div
-                                                style={{
-                                                    fontWeight: 600,
-                                                    color: 'var(--risk-low)',
-                                                    fontSize: '0.9rem',
-                                                }}
-                                            >
-                                                {opp.roi_estimate}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <ExpandableCard
+                            key={opp.title}
+                            id={opp.title}
+                            isOpen={isOpen}
+                            onToggle={() => setExpandedOpp(isOpen ? null : opp.title)}
+                            header={<OpportunityHeader opp={opp} />}
+                        >
+                            <OpportunityBody opp={opp} />
+                        </ExpandableCard>
                     )
                 })}
             </div>
-
-            {filteredOpps.length > 0 && (
-                <Sc0redCTABanner
-                    contactUrl={getSc0redContactUrl()}
-                    analysisId={analysisId}
-                    opportunityCount={filteredOpps.length}
-                    activeLeverFilter={toActiveLeverFilter(activeLever)}
-                />
-            )}
         </div>
+    )
+}
+
+/**
+ * Header content for an opportunity's ExpandableCard. Title +
+ * impact/timeline/category/value-lever badge cluster. Lives next
+ * to the chevron in the expandable-card trigger row.
+ */
+function OpportunityHeader({ opp }: { opp: Opportunity }) {
+    return (
+        <div style={{ flex: 1 }}>
+            <div
+                style={{
+                    fontWeight: 700,
+                    fontSize: '0.9875rem',
+                    marginBottom: '0.5rem',
+                }}
+            >
+                {opp.title}
+            </div>
+            <div
+                style={{
+                    display: 'flex',
+                    gap: '0.5rem',
+                    flexWrap: 'wrap',
+                }}
+            >
+                <ImpactBadge impact={opp.impact_rating} />
+                <TimelineBadge timeline={opp.timeline} />
+                <span className="badge badge-neutral">{opp.strategic_category}</span>
+                {opp.value_lever && (
+                    <span
+                        style={{
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: 'var(--radius-full)',
+                            fontSize: '0.7rem',
+                            fontWeight: 500,
+                            border: '1px solid',
+                            borderColor: LEVER_COLORS[opp.value_lever] || 'var(--text-secondary)',
+                            color: LEVER_COLORS[opp.value_lever] || 'var(--text-secondary)',
+                        }}
+                    >
+                        {opp.value_lever}
+                    </span>
+                )}
+            </div>
+        </div>
+    )
+}
+
+/**
+ * Body content for an opportunity's ExpandableCard. Description +
+ * implementation steps + investment + ROI grid.
+ */
+function OpportunityBody({ opp }: { opp: Opportunity }) {
+    return (
+        <>
+            <p
+                style={{
+                    fontSize: '0.9rem',
+                    lineHeight: 1.75,
+                    color: 'var(--text-primary)',
+                    marginTop: 0,
+                    marginBottom: '1.5rem',
+                    whiteSpace: 'pre-line',
+                }}
+            >
+                {opp.description}
+            </p>
+
+            {opp.implementation_steps && opp.implementation_steps.length > 0 && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                    <div
+                        style={{
+                            fontWeight: 600,
+                            fontSize: '0.875rem',
+                            color: 'var(--text-secondary)',
+                            marginBottom: '0.75rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                        }}
+                    >
+                        Implementation Steps
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {opp.implementation_steps.map((step, si) => (
+                            <div
+                                key={si}
+                                style={{
+                                    display: 'flex',
+                                    gap: '0.75rem',
+                                    alignItems: 'flex-start',
+                                }}
+                            >
+                                <span
+                                    style={{
+                                        minWidth: '22px',
+                                        height: '22px',
+                                        borderRadius: '50%',
+                                        background: 'rgba(59,123,246,0.12)',
+                                        color: 'var(--accent-blue)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        flexShrink: 0,
+                                        marginTop: '2px',
+                                    }}
+                                >
+                                    {si + 1}
+                                </span>
+                                <p style={{ fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>{step}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.875rem',
+                }}
+            >
+                <div
+                    style={{
+                        padding: '1rem',
+                        background: 'var(--bg-surface-3)',
+                        borderRadius: 'var(--radius-md)',
+                        borderLeft: '3px solid var(--risk-moderate)',
+                    }}
+                >
+                    <div
+                        style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            color: 'var(--text-tertiary)',
+                            marginBottom: '0.375rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                        }}
+                    >
+                        Estimated Investment
+                    </div>
+                    <div style={{ fontWeight: 700, color: 'var(--risk-moderate)' }}>
+                        {opp.investment_range}
+                    </div>
+                </div>
+                <div
+                    style={{
+                        padding: '1rem',
+                        background: 'var(--bg-surface-3)',
+                        borderRadius: 'var(--radius-md)',
+                        borderLeft: '3px solid var(--risk-low)',
+                    }}
+                >
+                    <div
+                        style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            color: 'var(--text-tertiary)',
+                            marginBottom: '0.375rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                        }}
+                    >
+                        Potential ROI
+                    </div>
+                    <div style={{ fontWeight: 600, color: 'var(--risk-low)', fontSize: '0.9rem' }}>
+                        {opp.roi_estimate}
+                    </div>
+                </div>
+            </div>
+        </>
     )
 }

@@ -10,6 +10,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from src.models.model_strategy_map import (
+    StrategyMap,  # noqa: TC001  pydantic field annotation needs runtime resolution
+)
+
 
 class CompanyProfile(BaseModel):
     """Structured company profile extracted from website content."""
@@ -69,7 +73,15 @@ class OpportunityResult(BaseModel):
 
 
 class EbitdaNode(BaseModel):
-    """Single node in the EBITDA decomposition tree."""
+    """Single node in the EBITDA decomposition tree.
+
+    The optional ``confidence_level`` and ``confidence_basis`` fields surface the
+    derivation provenance of leaf nodes — see
+    ``src.pipeline.pipeline_steps.build_ebitda_tree`` and the
+    ``ebitda-tree-confidence`` capability spec for the rules that produce them.
+    Both are ``None`` for rollup/subtotal nodes (which inherit visually via their
+    children's chips) and for any record stored before this field was introduced.
+    """
 
     id: str
     label: str
@@ -79,6 +91,8 @@ class EbitdaNode(BaseModel):
     description: str = ""
     linked_opportunity_indices: list[int] = Field(default_factory=list)
     children: list[EbitdaNode] = Field(default_factory=list)
+    confidence_level: Literal["high", "medium", "low"] | None = None
+    confidence_basis: str | None = None
 
 
 class EbitdaTreeResult(BaseModel):
@@ -129,6 +143,7 @@ class Company(BaseModel):
     opportunity_result: OpportunityResult | None = None
     ebitda_tree: EbitdaTreeResult | None = None
     value_chain: ValueChainResult | None = None
+    strategy_map: StrategyMap | None = None
     error: str | None = None
     analyzed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

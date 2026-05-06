@@ -227,6 +227,335 @@ _MOCK_RESPONSES: dict[str, object] = {
         "investment_range": "$50K-$100K",
         "roi_estimate": "2x ROI within 12 months through efficiency gains",
     },
+    # GenerateStrategyMap — Step 1: Vision and Mission
+    "strategy_map_step_1": {
+        "vision": {
+            "statement": (
+                "To be the most trusted AI risk intelligence partner for"
+                " private equity globally."
+            ),
+            "synthesised": True,
+            "rationale": (
+                "Synthesised from public materials describing the platform's"
+                " PE focus and risk intelligence positioning."
+            ),
+        },
+        "mission": {
+            "statement": (
+                "We help PE firms see AI-driven risk and opportunity in their"
+                " portfolio before competitors do."
+            ),
+            "synthesised": True,
+            "rationale": (
+                "Synthesised from product copy emphasising risk-and-opportunity"
+                " intelligence for PE firms."
+            ),
+        },
+    },
+    # Step 2: Customer Value Proposition classification
+    "strategy_map_step_2": {
+        "primary": "customer_intimacy",
+        "secondary": None,
+        "rationale": (
+            "Public materials emphasise tailored deep-dives and a partnership"
+            " relationship with PE clients rather than pure scale or product"
+            " novelty."
+        ),
+        "exemplar_company": "Bain & Company",
+    },
+    # Step 3: Financial perspective — exactly 3 objectives
+    "strategy_map_step_3": {
+        "objectives": [
+            {
+                "id": "F1",
+                "title": "Grow ARR through PE expansion",
+                "definition": (
+                    "Drive subscription revenue growth by expanding the"
+                    " customer base of mid-market PE firms across geographies"
+                    " through outbound and partner-led channels."
+                ),
+                "category": "revenue_growth",
+                "confidence": "MEDIUM",
+                "rationale_source": "Inferred from subscription model.",
+            },
+            {
+                "id": "F2",
+                "title": "Improve gross margin via automation",
+                "definition": (
+                    "Increase gross margin by automating analyst-heavy steps"
+                    " in the assessment pipeline so each new customer added"
+                    " requires less marginal labour."
+                ),
+                "category": "productivity",
+                "confidence": "MEDIUM",
+                "rationale_source": "Inferred from EBITDA tree margin signals.",
+            },
+            {
+                "id": "F3",
+                "title": "Maximise return on data assets",
+                "definition": (
+                    "Generate compounding returns on accumulated proprietary"
+                    " analysis data by feeding it back into the assessment"
+                    " engine and benchmarking products."
+                ),
+                "category": "productivity",
+                "confidence": "LOW",
+                "rationale_source": "Hypothesised from data-product strategy.",
+            },
+        ],
+    },
+    # Step 4: Customer perspective — first-person voice quotes, 3 objectives
+    "strategy_map_step_4": {
+        "objectives": [
+            {
+                "id": "C1",
+                "title": "Show me AI risk in my portfolio I cannot see myself",
+                "definition": (
+                    "Customers want differentiated, non-obvious AI disruption"
+                    " signals across portfolio companies that they cannot"
+                    " easily generate using internal tooling."
+                ),
+                "panel": "consumer",
+                "confidence": "MEDIUM",
+                "rationale_source": "Inferred from differentiated-insight positioning.",
+            },
+            {
+                "id": "C2",
+                "title": "Help me act on that risk fast",
+                "definition": (
+                    "PE customers want concrete, prioritised actions tied to"
+                    " each risk signal so they can convert insight into a"
+                    " portfolio-company workplan within weeks."
+                ),
+                "panel": "consumer",
+                "confidence": "MEDIUM",
+                "rationale_source": "Inferred from opportunity-list product surface.",
+            },
+            {
+                "id": "C3",
+                "title": "Treat me like a partner, not a transaction",
+                "definition": (
+                    "Customers expect a hands-on advisory relationship around"
+                    " each diligence and monitoring engagement rather than a"
+                    " pure self-serve dashboard experience."
+                ),
+                "panel": "consumer",
+                "confidence": "MEDIUM",
+                "rationale_source": "Inferred from customer-intimacy classification.",
+            },
+        ],
+    },
+    # Step 5: Internal Processes — 2 themes, ids I1.x / I2.x
+    "strategy_map_step_5": {
+        "themes": [
+            {
+                "name": "Operate the Risk Intelligence Engine",
+                "supports_financial_objectives": ["F1", "F2"],
+                "objectives": [
+                    {
+                        "id": "I1.1",
+                        "title": "Run the assessment pipeline at scale",
+                        "definition": (
+                            "Operate the multi-step AI assessment pipeline"
+                            " reliably across every active engagement so"
+                            " analysts receive consistent, high-quality output."
+                        ),
+                        "category": "operational_excellence",
+                        "confidence": "MEDIUM",
+                        "rationale_source": "Inferred from pipeline architecture.",
+                    },
+                    {
+                        "id": "I1.2",
+                        "title": "Continuously improve assessment quality",
+                        "definition": (
+                            "Iterate on prompts, scoring rubrics and reviewer"
+                            " feedback loops so each generation of the engine"
+                            " produces sharper, better-evidenced outputs."
+                        ),
+                        "category": "innovation",
+                        "confidence": "MEDIUM",
+                        "rationale_source": "Inferred from product-quality focus.",
+                    },
+                ],
+            },
+            {
+                "name": "Deepen Customer Engagement",
+                "supports_financial_objectives": ["F1"],
+                "objectives": [
+                    {
+                        "id": "I2.1",
+                        "title": "Design tailored deep-dive engagements",
+                        "definition": (
+                            "Convert insight signals into bespoke deep-dive"
+                            " engagements that PE customers value enough to"
+                            " expand spend across their portfolio."
+                        ),
+                        "category": "customer_management",
+                        "confidence": "MEDIUM",
+                        "rationale_source": "Inferred from advisory positioning.",
+                    },
+                ],
+            },
+        ],
+    },
+    # Step 6: Organizational Capacity — People / Technology / Culture + coreValues
+    "strategy_map_step_6": {
+        "people": {
+            "id": "O.P",
+            "title": "Build a team of analyst-engineers",
+            "definition": (
+                "Recruit and retain a team that combines PE-domain analytical"
+                " skill with applied-AI engineering capability so the engine"
+                " and the advisory layer reinforce each other."
+            ),
+            "confidence": "MEDIUM",
+            "rationale_source": "Inferred from hybrid analyst+engineer needs.",
+        },
+        "technology": {
+            "id": "O.T",
+            "title": "Run a reliable AI delivery platform",
+            "definition": (
+                "Provide the AI orchestration, evaluation and infrastructure"
+                " backbone needed to deliver the assessment engine at scale"
+                " with predictable cost and latency."
+            ),
+            "confidence": "MEDIUM",
+            "rationale_source": "Inferred from cloud-AI architecture signals.",
+        },
+        "culture": {
+            "id": "O.C",
+            "title": "Live a culture of disciplined curiosity",
+            "definition": (
+                "Cultivate a working culture that pairs analytic rigour with"
+                " active curiosity about emerging AI patterns so the team"
+                " stays ahead of the disruption it advises on."
+            ),
+            "confidence": "LOW",
+            "rationale_source": "Synthesised from positioning language.",
+        },
+        "coreValues": {
+            "values": [
+                "Rigour",
+                "Curiosity",
+                "Partnership",
+                "Speed",
+            ],
+            "synthesised": True,
+            "rationale": (
+                "Inferred from public language emphasising analytical rigour"
+                " and partnership delivery."
+            ),
+        },
+    },
+    # Step 7: Strategic Priorities + Arrows + What's Missing gaps
+    "strategy_map_step_7": {
+        "strategicPriorities": [
+            {
+                "name": "Operate the Risk Intelligence Engine",
+                "result": (
+                    "A reliable, continuously improving assessment pipeline"
+                    " that scales to every active customer engagement."
+                ),
+            },
+            {
+                "name": "Deepen Customer Engagement",
+                "result": (
+                    "Trusted advisory relationships with each PE customer"
+                    " that expand from pilot into portfolio-wide rollout."
+                ),
+            },
+        ],
+        "arrows": [
+            {
+                "from": "O.P",
+                "to": "I1.1",
+                "hypothesis": (
+                    "A team of analyst-engineers is required to operate the"
+                    " assessment pipeline reliably at scale."
+                ),
+            },
+            {
+                "from": "O.T",
+                "to": "I1.1",
+                "hypothesis": (
+                    "Reliable AI infrastructure is required for the"
+                    " assessment pipeline to run consistently every day."
+                ),
+            },
+            {
+                "from": "O.C",
+                "to": "I1.2",
+                "hypothesis": (
+                    "A culture of disciplined curiosity drives the iterative"
+                    " improvement of the assessment engine over time."
+                ),
+            },
+            {
+                "from": "I1.1",
+                "to": "C1",
+                "hypothesis": (
+                    "Reliable engine operation produces the differentiated"
+                    " AI risk signals that customers cannot generate alone."
+                ),
+            },
+            {
+                "from": "I2.1",
+                "to": "C3",
+                "hypothesis": (
+                    "Tailored deep-dive engagements create the partnership"
+                    " feel that customer-intimacy customers expect."
+                ),
+            },
+            {
+                "from": "C1",
+                "to": "F1",
+                "hypothesis": (
+                    "Differentiated risk signals drive expansion within"
+                    " each PE customer and unlock new logo acquisition."
+                ),
+            },
+            {
+                "from": "I1.2",
+                "to": "F2",
+                "hypothesis": (
+                    "Engine quality improvements reduce per-engagement"
+                    " analyst hours and lift gross margin over time."
+                ),
+            },
+        ],
+        "whatsMissing": [
+            {
+                "id": "G1",
+                "title": "Channel and partner motion is unclear",
+                "description": (
+                    "Public materials do not yet describe a partner-led"
+                    " distribution motion that would scale customer reach"
+                    " beyond direct outbound effort."
+                ),
+                "deepDiveFraming": (
+                    "A Vector Advisory deep-dive would map the partner"
+                    " landscape and prioritise the channel motion most"
+                    " likely to accelerate F1."
+                ),
+                "relatedObjectiveIds": ["F1", "I2.1"],
+            },
+            {
+                "id": "G2",
+                "title": "Data moat strategy is implicit",
+                "description": (
+                    "Public materials hint at proprietary analysis data but"
+                    " do not yet articulate how that data compounds into a"
+                    " defensible product moat."
+                ),
+                "deepDiveFraming": (
+                    "A Vector Advisory deep-dive would shape the data-asset"
+                    " strategy that converts F3 from hypothesis into"
+                    " operating plan."
+                ),
+                "relatedObjectiveIds": ["F3"],
+            },
+        ],
+    },
 }
 
 # Category keywords used to dispatch ideation responses
@@ -268,6 +597,21 @@ def _detect_step(body: dict) -> str:
 
     for schema in candidates:
         props = set(schema.get("properties", {}).keys())
+
+        # Strategy map (GenerateStrategyMap pipeline step) — every one of
+        # the 7 calls passes the same schema, so we discriminate on the
+        # `## Step N` header at the top of each rendered template.
+        # `internalProcesses` is a property unique to the strategy-map
+        # output schema, which is why we use it as the disambiguator.
+        if "internalProcesses" in props:
+            prompt_text = _extract_prompt_text(body)
+            for step_number in range(1, 8):
+                if f"## Step {step_number} " in prompt_text:
+                    return f"strategy_map_step_{step_number}"
+            # Fall through to step 1 if the header is missing — keeps
+            # the mock from returning the generic `{"result": "mock"}`
+            # fallback that fails downstream Pydantic validation.
+            return "strategy_map_step_1"
 
         # Exact matches on unique top-level properties
         for key in ("actual_url", "company_name"):

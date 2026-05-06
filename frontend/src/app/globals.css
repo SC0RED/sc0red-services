@@ -370,6 +370,100 @@ select {
     box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
+/* ── Card density variants ──────────────────────────────────
+   Three opinionated density variants of `.card`. Pick one based
+   on what's INSIDE the card:
+     - `.card--metric` — single number / single badge / single graphic.
+       Big central content, generous padding. Use for stat cards.
+     - `.card--list`   — compact single-line list row, often inside
+       an expandable accordion. Use for risk rows, opportunity rows,
+       value-chain steps, document list rows.
+     - `.card--rich`   — multi-element card with comfortable internal
+       spacing. Use for radar wrappers, paired stat groups, callout
+       cards with multiple lines.
+
+   Apply alongside `.card` (BEM-style modifier):
+     <div className="card card--list" />
+
+   Inline `padding` overrides the variant's lock — don't add them.
+   Inline `style` always wins over CSS class rules (specificity
+   1,0,0,0 vs 0,2,0) regardless of how the class is written, so the
+   compound selector here does NOT protect against rogue inline
+   padding. The protection is by convention: if you add a variant,
+   physically remove the inline padding from the JSX. The compound
+   selector (`.card.card--metric` rather than `.card--metric` alone)
+   serves a different purpose — it requires both the base `.card`
+   AND the variant class to apply, so a typo like
+   `className="card-metric"` (missing dash) silently no-ops rather
+   than cascading. If you find yourself reaching for inline padding,
+   you're probably picking the wrong variant.
+*/
+
+.card.card--metric {
+    padding: var(--card-padding-metric);
+    text-align: center;
+}
+
+.card.card--list {
+    padding: var(--card-padding-list);
+}
+
+.card.card--rich {
+    padding: var(--card-padding-rich);
+}
+
+/* ── ExpandableCard ────────────────────────────────────────
+   Click-to-reveal-detail primitive used by RiskBreakdown and
+   OpportunitiesList. ValueChainDiagram and WhatsMissingPanel are
+   explicitly deferred (different visual model — chain layout and
+   accent-strip respectively). The trigger button fills the card's
+   content area; the chevron sits at the top-right of the header
+   row and rotates via CSS when the card opens.
+
+   `prefers-reduced-motion: reduce` (already handled in the global
+   `*` rule) collapses the rotation transition automatically. */
+.expandable-card__trigger {
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font: inherit;
+    color: inherit;
+}
+
+.expandable-card__header {
+    flex: 1;
+    min-width: 0;
+}
+
+.expandable-card__chevron {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+}
+
+.expandable-card__chevron[data-open='true'] {
+    transform: rotate(180deg);
+}
+
+.expandable-card__body {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* When the body is hidden, suppress all space contributions —
+   `hidden` HTML attribute does that by default but margin-top +
+   padding-top don't apply since the element is `display: none`. */
+.expandable-card__body[hidden] {
+    display: none;
+}
+
 .card-surface {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
@@ -1381,10 +1475,114 @@ select {
 }
 
 /* ── Section Headers ─────────────────────────────────────── */
+
+/* Vertical-rhythm tokens for the analysis-detail page.
+
+   The system distinguishes two section-spacing concerns by name so
+   contributors pick by intent rather than by eyeballing existing
+   examples:
+
+   - `--section-gap-y` — INTRA-section vertical gap. Used between
+     a section's heading and its body via `.section-header-row` /
+     `.section-lead`. Pick this when you're spacing things WITHIN a
+     section (heading → adornment → lead → body).
+
+   - `--section-margin-bottom` — INTER-section vertical gap. Used
+     between consecutive section wrappers via
+     `.analysis-section-spacing`. Pick this when you're spacing
+     ONE section's bottom-edge from the NEXT section's top-edge.
+
+   `--section-header-row-gap` is the intra-row horizontal spacing
+   between the heading and its trailing adornment (HelpTooltip,
+   count badge, status pill).
+
+   `--card-padding-{metric,list,rich}` are consumed by the three
+   `.card--*` density variants. Tokenising the values here (vs
+   inlining them in the variant rules) means a future redesign
+   that bumps density is one CSS edit per token rather than three
+   selector edits. */
+:root {
+    --section-gap-y: 1rem;
+    --section-margin-bottom: 2rem;
+    --section-header-row-gap: 0.5rem;
+    --card-padding-metric: 2rem;
+    --card-padding-list: 0.75rem 1rem;
+    --card-padding-rich: 1.25rem 1.5rem;
+}
+
 .section-header {
     font-size: 1.125rem;
     font-weight: 700;
-    margin-bottom: 1rem;
+    margin-bottom: var(--section-gap-y);
+}
+
+/* Row container for section heading + optional inline adornment
+   (HelpTooltip, count badge, status pill). Owns the bottom margin
+   so the heading inside doesn't double up its own. Adornment renders
+   as a SIBLING of the `<h2>` so the heading's accessible name stays
+   exactly the title text. See `extract-definition-popover` D2. */
+.section-header-row {
+    display: flex;
+    align-items: center;
+    gap: var(--section-header-row-gap);
+    margin-bottom: var(--section-gap-y);
+}
+
+/* When inside the row, the heading's own bottom margin would double
+   up against the row's. CSS specificity (compound selector)
+   guarantees this rule wins over the bare `.section-header` rule. */
+.section-header-row > .section-header {
+    margin-bottom: 0;
+}
+
+.section-header-adornment {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Optional one-line lead paragraph below a section heading.
+   Consumed by `AnalysisSection`'s `lead` prop. Lives next to
+   `.section-header` so any future redesign of section
+   typography is one CSS edit. */
+.section-lead {
+    margin: 0 0 var(--section-gap-y);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* Inter-section vertical spacing utility. Applied to the OUTER
+   wrapper of every section on the analysis-detail page (RiskBreakdown,
+   OpportunitiesList, ValueChainDiagram, EbitdaSection, DocumentUpload,
+   AnalysisHeader). Two consumers are intentionally exempt — the
+   AnalysisExecutiveStrap (1.25rem) and AnalysisOverviewCards (1.5rem)
+   use tighter inline values to visually pair with each other. See
+   `section-spacing-tokens` design D4 for rationale. */
+.analysis-section-spacing {
+    margin-bottom: var(--section-margin-bottom);
+}
+
+/* ── Provenance Markers ─────────────────────────────────────
+   Consumed by `ProvenanceMarker` component. Subtle uppercase-tracking
+   treatment matching the previous inline-styled `(synthesised)` text
+   it replaces — same visual weight, but now component-driven so any
+   future redesign of provenance signaling is a one-place edit. */
+.provenance-marker {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.provenance-marker-icon {
+    width: 10px;
+    height: 10px;
+    color: var(--accent-blue);
+    flex-shrink: 0;
 }
 
 .page-title {

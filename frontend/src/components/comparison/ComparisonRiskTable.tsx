@@ -1,6 +1,5 @@
 import { COMPARISON_COLORS } from '@/components/comparison/constants'
-import { RISK_CATEGORIES, TIER_COLORS, getRiskTier } from '@/lib/utils/riskUtils'
-import { CAT_LABELS } from '@/components/RiskBreakdown'
+import { CAT_LABELS, RISK_CATEGORIES, TIER_COLORS, getRiskTier } from '@/lib/utils/riskUtils'
 import type { AnalysisData } from '@/lib/types/api'
 
 interface ComparisonRiskTableProps {

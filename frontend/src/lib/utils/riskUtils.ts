@@ -72,6 +72,24 @@ export const RISK_CATEGORY_COLORS: Record<string, string> = {
     data_ip: '#6366f1',
 }
 
+/**
+ * Short labels used in chart axes and value-chain chips, where the
+ * full `RISK_CATEGORIES[*].name` doesn't fit. Lives here (not in
+ * `RiskBreakdown.tsx`) so server-rendered code paths — including the
+ * print PDF route — can import it without dragging the
+ * `'use client'`-flagged screen component into the server bundle.
+ */
+export const CAT_LABELS: Record<string, string> = {
+    competitive_displacement: 'Competitive Displ.',
+    technology_obsolescence: 'Tech Obsolescence',
+    talent_workforce: 'Talent & Workforce',
+    margin_compression: 'Margin Compression',
+    customer_behavior: 'Customer Behavior',
+    regulatory_compliance: 'Regulatory',
+    supply_chain: 'Supply Chain',
+    data_ip: 'Data & IP',
+}
+
 export const TIER_COLORS: Record<string, string> = {
     low: 'var(--risk-low)',
     moderate: 'var(--risk-moderate)',

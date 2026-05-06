@@ -100,9 +100,33 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
                 window, env desync). See `backend/lambdas/pdf-render/src/render.ts`
                 — `verifyPrintStatus`. */}
             <PrintStatusMarker status="ok" />
-            <PrintReport analysis={analysis} />
+            <PrintReport analysis={analysis} generatedDate={formatGeneratedDate()} />
         </>
     )
+}
+
+/**
+ * Compute the "Generated <date>" string for the PDF cover.
+ *
+ * Computed server-side (in this RSC) and threaded through to the
+ * client component as a prop so server render + client hydration
+ * produce the SAME formatted string. Doing it inside `PrintReport`
+ * (a `'use client'` module) would re-execute `new Date()` on
+ * hydration, opening a midnight-straddle hydration mismatch and a
+ * potentially different result if the headless browser locale ever
+ * drifts from the server.
+ *
+ * Locked to `'en-US'` because the printed PDF is an English-only
+ * artifact today; if/when localisation lands, this resolves to a
+ * deterministic UTC formatter or a per-locale variant threaded
+ * through the page params.
+ */
+function formatGeneratedDate(): string {
+    return new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    })
 }
 
 /**

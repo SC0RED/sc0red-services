@@ -1,40 +1,59 @@
 'use client'
 
-import dynamic from 'next/dynamic'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 
-import OpportunitiesList from '@/components/OpportunitiesList'
-import RiskBreakdown from '@/components/RiskBreakdown'
-import EbitdaSection from '@/components/analysis/EbitdaSection'
+import {
+    PrintBackCover,
+    PrintCover,
+    PrintEbitdaOutline,
+    PrintExecutiveSummary,
+    PrintMethodologyAppendix,
+    PrintOpportunityList,
+    PrintRiskTable,
+    PrintStrategyMap,
+    PrintValueChainList,
+} from '@/components/print'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
-import { getSc0redContactUrl } from '@/lib/config'
+import { deriveSummary } from '@/lib/pdf/derivedSummary'
+import { sortOpportunities } from '@/lib/pdf/sortOpportunities'
 import type { AnalysisData } from '@/lib/types/api'
-import { TIER_COLORS } from '@/lib/utils/riskUtils'
 
 import '../print.css'
 
-// ValueChainDiagram is loaded with `ssr: false` because it relies on
-// browser-only refs. The headless browser running the print job has full
-// browser context, so this loads cleanly during the Puppeteer render.
-const ValueChainDiagram = dynamic(() => import('@/components/ValueChainDiagram'), {
-    ssr: false,
-    loading: () => null,
-})
-
 interface PrintReportProps {
     analysis: AnalysisData
+    /**
+     * Pre-formatted "Generated <date>" string, computed server-side
+     * by `page.tsx` so server render + client hydration agree
+     * regardless of the runtime clock. See `page.tsx`'s
+     * `formatGeneratedDate()` for why this can't be computed inside
+     * this `'use client'` module.
+     */
+    generatedDate: string
 }
 
 /**
- * Print-optimised tree of the analysis. Forces the light theme on
- * `<html>` regardless of the user's screen preference (`@media print`
- * already covers Cmd+P; this `useEffect` covers headless-browser
- * `page.pdf()` which renders without going through the print media query).
+ * Composition root for the printed PDF.
  *
  * Section order matches the spec scenarios in
- * `openspec/changes/polished-pdf-export/specs/polished-pdf-export/spec.md`.
+ * `openspec/changes/improve-pdf-export-content/specs/polished-pdf-export/spec.md`:
+ *   Cover → Executive Summary → Top Actions → Risk Profile →
+ *   AI Opportunity Roadmap → EBITDA Impact Model → Value Chain Analysis →
+ *   Methodology → Back Cover
+ *
+ * Sections silently drop out when their source data is empty so a
+ * sparse analysis still renders a clean PDF without blank headers or
+ * empty pages. The orphan-page case (e.g. an analysis without
+ * opportunities) is handled by each child component returning `null`
+ * — `PrintReport` does not pre-filter the section order beyond that.
+ *
+ * The `useEffect` forces `<html data-theme="light">` so the headless
+ * Chromium render picks up the light token palette. We ALSO set this
+ * on the page-level CSS via the route's `print.css`; the `useEffect`
+ * is the belt to that braces because `page.pdf()` does not go through
+ * the `@media print` media query path.
  */
-export default function PrintReport({ analysis }: PrintReportProps) {
+export default function PrintReport({ analysis, generatedDate }: PrintReportProps) {
     useEffect(() => {
         const previous = document.documentElement.getAttribute('data-theme')
         document.documentElement.setAttribute('data-theme', 'light')
@@ -47,147 +66,62 @@ export default function PrintReport({ analysis }: PrintReportProps) {
         }
     }, [])
 
-    const tier = analysis.riskTier ?? 'moderate'
-    const tierColor = TIER_COLORS[tier] ?? 'var(--text-secondary)'
-    const opportunities = analysis.opportunities ?? []
     const riskScores = analysis.riskScores ?? []
     const topActions = analysis.topActions ?? []
-    const generatedDate = new Date().toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    })
+
+    // Sort once at the top so every downstream section (executive
+    // summary, opportunity list, EBITDA linkage, value-chain linkage)
+    // sees the same printedIndex → opportunity mapping. Re-sorting per
+    // section would desync the cross-references in the PDF.
+    //
+    // Reading `analysis.opportunities` *inside* the memo (rather than
+    // `?? []`-ing first) keeps the dependency array stable — `?? []`
+    // would mint a fresh empty array each render and bust the memo.
+    const sortedOpportunities = useMemo(
+        () => sortOpportunities(analysis.opportunities ?? []),
+        [analysis.opportunities]
+    )
+    const summary = useMemo(
+        () => deriveSummary(analysis, sortedOpportunities),
+        [analysis, sortedOpportunities]
+    )
+    const opportunityCount = analysis.opportunities?.length ?? 0
 
     return (
         <main className="print-root">
-            {/* Cover page */}
-            <section className="print-cover">
-                <div className="print-cover-eyebrow">sc0red · AI Risk Report</div>
-                <h1 className="print-cover-title">{analysis.companyName}</h1>
-                {analysis.companyUrl ? <p className="print-cover-meta">{analysis.companyUrl}</p> : null}
-                {analysis.industry ? <p className="print-cover-meta">{analysis.industry}</p> : null}
-                <div className="print-cover-score" style={{ borderColor: tierColor, color: tierColor }}>
-                    {analysis.overallRiskScore != null ? analysis.overallRiskScore.toFixed(1) : '—'}
-                </div>
-                <div>
-                    <span
-                        className="badge"
-                        style={{
-                            background: 'var(--accent-blue-glow)',
-                            color: tierColor,
-                            border: `1px solid ${tierColor}`,
-                            padding: '4px 12px',
-                            borderRadius: '999px',
-                            fontWeight: 600,
-                            fontSize: '0.8125rem',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.04em',
-                        }}
-                    >
-                        {tier} risk
-                    </span>
-                </div>
-                {analysis.analysisSummary ? (
-                    <p
-                        style={{
-                            marginTop: '24px',
-                            maxWidth: '640px',
-                            color: 'var(--text-secondary)',
-                            lineHeight: 1.65,
-                        }}
-                    >
-                        {analysis.analysisSummary}
-                    </p>
-                ) : null}
-                <p
-                    style={{
-                        marginTop: '32px',
-                        color: 'var(--text-tertiary)',
-                        fontSize: '0.875rem',
-                    }}
-                >
-                    Generated {generatedDate} · sc0red.com
-                </p>
-            </section>
+            <PrintCover analysis={analysis} generatedDate={generatedDate} />
 
-            {/* Top 3 immediate actions */}
+            <PrintExecutiveSummary summary={summary} />
+
+            {analysis.strategyMap ? <PrintStrategyMap strategyMap={analysis.strategyMap} /> : null}
+
             {topActions.length > 0 ? (
-                <section className="print-section">
+                <section className="print-section print-section--break-before">
                     <TopActionsCallout actions={topActions} />
                 </section>
             ) : null}
 
-            {/* Risk Assessment */}
-            {riskScores.length > 0 ? (
-                <section className="print-section">
-                    <h2>Risk Assessment</h2>
-                    <RiskBreakdown riskScores={riskScores} />
-                </section>
-            ) : null}
+            <PrintRiskTable riskScores={riskScores} />
 
-            {/* AI Opportunity Roadmap */}
-            {opportunities.length > 0 ? (
-                <section className="print-section print-section--break-before">
-                    <h2>AI Opportunity Roadmap</h2>
-                    <OpportunitiesList
-                        opportunities={opportunities}
-                        activeLever="All"
-                        analysisId={analysis.id}
-                    />
-                </section>
-            ) : null}
+            <PrintOpportunityList sortedOpportunities={sortedOpportunities} />
 
-            {/* EBITDA Impact Model */}
             {analysis.ebitdaTree ? (
-                <section className="print-section print-section--break-before print-ebitda">
-                    <EbitdaSection ebitdaTree={analysis.ebitdaTree} opportunities={opportunities} />
-                </section>
+                <PrintEbitdaOutline
+                    ebitdaTree={analysis.ebitdaTree}
+                    sortedOpportunities={sortedOpportunities}
+                />
             ) : null}
 
-            {/* Value Chain */}
             {analysis.valueChain && analysis.valueChain.steps.length > 0 ? (
-                <section className="print-section print-section--break-before">
-                    <h2>Value Chain Analysis</h2>
-                    <ValueChainDiagram
-                        steps={analysis.valueChain.steps}
-                        opportunities={opportunities}
-                        summary={analysis.valueChain.summary}
-                    />
-                </section>
+                <PrintValueChainList
+                    valueChain={analysis.valueChain}
+                    sortedOpportunities={sortedOpportunities}
+                />
             ) : null}
 
-            {/* sc0red CTA — only when there's something to act on */}
-            {opportunities.length > 0 ? (
-                <section className="print-cta">
-                    <div style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '8px' }}>
-                        sc0red can help you capture these opportunities
-                    </div>
-                    <p
-                        style={{
-                            color: 'var(--text-secondary)',
-                            lineHeight: 1.7,
-                            margin: '0 0 12px',
-                            fontSize: '0.9375rem',
-                        }}
-                    >
-                        Our AI specialists implement opportunities like these end-to-end — from strategy
-                        through production deployment — moving faster than traditional enterprise timelines.
-                    </p>
-                    <a
-                        href={getSc0redContactUrl()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                            color: 'var(--accent-blue)',
-                            fontWeight: 600,
-                            fontSize: '0.875rem',
-                            wordBreak: 'break-all',
-                        }}
-                    >
-                        {getSc0redContactUrl()}
-                    </a>
-                </section>
-            ) : null}
+            <PrintMethodologyAppendix analysis={analysis} />
+
+            <PrintBackCover hasOpportunities={opportunityCount > 0} />
         </main>
     )
 }

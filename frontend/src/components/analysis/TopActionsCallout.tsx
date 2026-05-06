@@ -7,9 +7,8 @@ export default function TopActionsCallout({ actions }: TopActionsCalloutProps) {
 
     return (
         <div
-            className="card"
+            className="card card--rich"
             style={{
-                padding: '1.25rem 1.5rem',
                 marginBottom: '1.5rem',
                 borderColor: 'rgba(59,123,246,0.3)',
                 background: 'rgba(59,123,246,0.04)',
