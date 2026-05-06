@@ -13,7 +13,10 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
-from src.handlers.sqs_messages import build_reanalysis_message
+from src.handlers.sqs_messages import (
+    build_reanalysis_message,
+    build_strategy_map_message,
+)
 from src.utilities.scan_summary import build_company_summary
 
 if TYPE_CHECKING:
@@ -326,3 +329,46 @@ def handle_reanalyze(
     )
 
     return build_json_response({"status": "queued", "scanId": scan_id}, 202)
+
+
+def handle_generate_strategy_map(
+    _event: dict[str, Any],
+    authentication: AuthContext,
+    storage: DynamoDBStorageProvider,
+    sqs: Any,
+    queue_url: str,
+    analysis_id: str,
+) -> LambdaResponse:
+    """Handle POST /api/analysis/{analysis_id}/strategy-map.
+
+    Per the strategy-map-on-demand spec: validate access, mark generation
+    in-flight on the company record, enqueue an SQS message on the dedicated
+    ``janus-strategy-map-queue``, and return 202 Accepted immediately. The
+    SQS worker (``strategy_map_handler``) picks up the message, runs
+    ``GenerateStrategyMap`` against the persisted analysis, persists the
+    result, and pushes an AppSync ``strategy_map_complete`` event.
+    """
+    company_repo = storage.create_company_repository()
+    company = company_repo.get_by_id(analysis_id)
+    if error := check_org_access(company, authentication):
+        return error
+
+    scan_id = company.get("scan_id", "")
+
+    # Mark generation in-flight BEFORE enqueueing so a refresh during the
+    # narrow window between SQS send and worker pickup still shows the
+    # generating placeholder rather than the CTA. The worker clears the
+    # field on success or failure.
+    company_repo.set_strategy_map_generation_state(analysis_id, "generating")
+
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=build_strategy_map_message(
+            analysis_id=analysis_id,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
+        ),
+    )
+
+    return build_json_response({"status": "queued", "analysisId": analysis_id}, 202)

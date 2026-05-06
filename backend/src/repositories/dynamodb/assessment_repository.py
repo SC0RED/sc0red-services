@@ -330,47 +330,19 @@ class DynamoDBAssessmentRepository:
         """Return the strategy map for the given assessment, or None if not found."""
         return _assessment_subrecord_ops.get_strategy_map(self._table, assessment_id)
 
-    # ── Document operations ────────────────────────────────────────────
+    # ── Document operations (delegates to `_assessment_subrecord_ops.py`) ──
 
     def save_document(self, assessment_id: str, document: dict[str, Any]) -> None:
-        """Persist a document metadata + extracted text item for the given assessment."""
-        item = {
-            "pk": f"ASSESSMENT#{assessment_id}",
-            "sk": f"DOC#{document['id']}",
-            "entity_type": "document",
-            "assessment_id": assessment_id,
-            "id": document["id"],
-            "filename": document["filename"],
-            "file_type": document["file_type"],
-            "extracted_text": document["extracted_text"],
-            "char_count": document["char_count"],
-            "uploaded_at": document["uploaded_at"],
-        }
-        self._table.put_item(item)
+        """Persist a document metadata + extracted text item."""
+        _assessment_subrecord_ops.save_document(self._table, assessment_id, document)
 
     def get_documents(self, assessment_id: str) -> list[dict[str, Any]]:
         """Return all document items for the given assessment ID."""
-        items = self._table.query(
-            pk=f"ASSESSMENT#{assessment_id}",
-            sk_prefix="DOC#",
-        )
-        return [
-            {
-                "id": item["id"],
-                "filename": item["filename"],
-                "fileType": item["file_type"],
-                "charCount": item["char_count"],
-                "uploadedAt": item["uploaded_at"],
-            }
-            for item in items
-        ]
+        return _assessment_subrecord_ops.get_documents(self._table, assessment_id)
 
     def delete_document(self, assessment_id: str, document_id: str) -> None:
         """Delete a single document from the given assessment."""
-        self._table.delete_item(
-            pk=f"ASSESSMENT#{assessment_id}",
-            sk=f"DOC#{document_id}",
-        )
+        _assessment_subrecord_ops.delete_document(self._table, assessment_id, document_id)
 
     def get_combined_document_text(self, assessment_id: str) -> str:
         """Fetch all documents and return combined extracted text, capped at MAX_CHARS_COMBINED."""
