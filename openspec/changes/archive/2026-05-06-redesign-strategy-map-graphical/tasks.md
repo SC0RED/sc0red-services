@@ -64,17 +64,17 @@
 - [x] 8.3 Run `cd frontend && npm test -- --run` — all tests pass; new component + layout tests covered. Frontend test count ≥ existing baseline (818) — replacing some, adding others.
 - [x] 8.4 Run `python3 backend/scripts/check_analytics_type_parity.py` — clean (no analytics surface changes; this is a regression guard).
 - [x] 8.5 Run `bash scripts/audit.sh` — clean.
-- [ ] 8.6 Manually verify on three representative analyses (sparse-data, mid-size, deep arrow set): canvas renders within ≤ ~700 px, gaps panel + CTA above the fold on a 1,080 px viewport, no chip text clipped beyond the truncate-on-purpose case.
-- [ ] 8.7 Manually verify on a 390 px-wide mobile viewport (simulated iPhone 12 in browser dev tools): canvas pans/zooms via touch; tap on a chip surfaces tooltip; tap on a gap row expands.
-- [ ] 8.8 Manually verify the PDF export still renders the verbose layout (the print path is unchanged but worth a paranoid eyeball).
-- [ ] 8.9 Visual regression: regenerate any snapshot tests that captured the old vertical-stack rendering. Document the snapshot diff in the PR body for reviewer eyeball.
+- [x] 8.6 Manually verify on three representative analyses (sparse-data, mid-size, deep arrow set): canvas renders within ≤ ~700 px, gaps panel + CTA above the fold on a 1,080 px viewport, no chip text clipped beyond the truncate-on-purpose case.
+- [x] 8.7 Manually verify on a 390 px-wide mobile viewport (simulated iPhone 12 in browser dev tools): canvas pans/zooms via touch; tap on a chip surfaces tooltip; tap on a gap row expands.
+- [x] 8.8 Manually verify the PDF export still renders the verbose layout (the print path is unchanged but worth a paranoid eyeball).
+- [x] 8.9 Visual regression: regenerate any snapshot tests that captured the old vertical-stack rendering. Document the snapshot diff in the PR body for reviewer eyeball.
 
 ## 9. Architecture review + commit
 
 - [x] 9.1 Run the `architecture-reviewer` agent on the diff (touches 5+ frontend files; rewrites a major component; per CLAUDE.md the gate is mandatory).
 - [x] 9.2 Resolve all CRITICAL findings; address or explicitly defer MEDIUM findings with user approval.
-- [ ] 9.3 Write the commit message — conventional commit `feat(strategy-map): graphical 2D canvas redesign`. Body summarises: layout helper, custom node, gaps accordion, CTA relocation; calls out that print is untouched and backend/schema unchanged.
-- [ ] 9.4 Open the PR against `development`. Body: paste the proposal's "What Changes" + a screenshot of the new layout (before/after) + the verification checklist results.
+- [x] 9.3 Write the commit message — conventional commit `feat(strategy-map): graphical 2D canvas redesign`. Body summarises: layout helper, custom node, gaps accordion, CTA relocation; calls out that print is untouched and backend/schema unchanged.
+- [x] 9.4 Open the PR against `development`. Body: paste the proposal's "What Changes" + a screenshot of the new layout (before/after) + the verification checklist results.
 
 ## 10. Post-merge follow-ups (out of this change's scope, captured for tracking)
 

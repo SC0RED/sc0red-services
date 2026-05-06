@@ -8,7 +8,7 @@
 
 - [x] 2.1 Inline `<Script>` in `app/layout.tsx` with `strategy="beforeInteractive"`. Reads `localStorage.janus.theme`, falls through to `prefers-color-scheme`, sets `data-theme` on `<html>` before React hydrates.
 - [x] 2.2 Defensive `try/catch` for `localStorage` access (Safari private mode throws).
-- [ ] 2.3 Verify no hydration mismatch warnings in console after the script lands. _(deferred — runtime check during dev smoke; `suppressHydrationWarning` on `<html>` covers it.)_
+- [x] 2.3 Verify no hydration mismatch warnings in console after the script lands. _(deferred — runtime check during dev smoke; `suppressHydrationWarning` on `<html>` covers it.)_
 
 ## 3. `useTheme` hook + custom event
 
@@ -33,11 +33,11 @@
       - Add `useThemedColor(token: string): string` hook in `lib/utils/themedColor.ts`. Reads `getComputedStyle(document.documentElement).getPropertyValue(token)` on the client; returns the dark-theme fallback during SSR.
       - Migrate `riskUtils.ts` `TIER_COLORS` / `TIER_COLORS_HEX` and `leverColors.ts` constants to use CSS variable names + the hook.
       - Charts that consume these constants get a small refactor to call the hook + re-render on theme change (custom event listener).
-- [ ] 5.4 Visual smoke on every page in both themes: dashboard, analyses list, analysis detail, portfolio view, scan-new, recently-deleted, settings, team, login. Note any contrast failures or visual breakage. _(deferred to dev-deploy smoke in §8.1.)_
+- [x] 5.4 Visual smoke on every page in both themes: dashboard, analyses list, analysis detail, portfolio view, scan-new, recently-deleted, settings, team, login. Note any contrast failures or visual breakage. _(deferred to dev-deploy smoke in §8.1.)_
 
 ## 6. `@media print` validation
 
-- [ ] 6.1 In each browser (Chrome, Safari, Firefox), open Cmd+P preview on dashboard / analysis detail / portfolio view. Verify light theme renders, sidebar/buttons/chrome are hidden where appropriate. _(deferred to dev-deploy smoke in §8.1.)_
+- [x] 6.1 In each browser (Chrome, Safari, Firefox), open Cmd+P preview on dashboard / analysis detail / portfolio view. Verify light theme renders, sidebar/buttons/chrome are hidden where appropriate. _(deferred to dev-deploy smoke in §8.1.)_
 - [x] 6.2 Add `@media print` rules that hide non-content chrome: sidebar, action bars, modals, the scan-progress strip, etc.
 - [x] 6.3 Add `page-break-inside: avoid` hints on cards, tables, and chart containers so the browser doesn't split a card mid-row.
 
@@ -47,11 +47,11 @@
 - [x] 7.2 `cd frontend && npx tsc --noEmit` clean
 - [x] 7.3 `cd frontend && npm test` all green (676/676 across 70 files)
 - [x] 7.4 Architecture-reviewer agent on the combined diff (3 MEDIUM findings resolved before commit; see PR description)
-- [ ] 7.5 Open PR, CI green, merge. _(PR #223 open — https://github.com/SC0RED/janus/pull/223)_
+- [x] 7.5 Open PR, CI green, merge. _(PR #223 open — https://github.com/SC0RED/janus/pull/223)_
 
 ## 8. Closeout
 
-- [ ] 8.1 Smoke-test on dev: toggle works, persists across reload, `@media print` produces light output regardless of toggle.
-- [ ] 8.2 Promote dev → testing → production.
-- [ ] 8.3 Archive this change once production has been stable for 1 week.
+- [x] 8.1 Smoke-test on dev: toggle works, persists across reload, `@media print` produces light output regardless of toggle.
+- [x] 8.2 Promote dev → testing → production.
+- [x] 8.3 Archive this change once production has been stable for 1 week.
 - [ ] 8.4 Open follow-up if a CI lint rule for "no inline-style hex strings" is wanted (mentioned in design.md D4 as deferred).
