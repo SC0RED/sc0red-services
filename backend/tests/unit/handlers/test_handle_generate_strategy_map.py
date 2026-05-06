@@ -70,8 +70,11 @@ class TestHandleGenerateStrategyMap:
         assert message_body["type"] == "strategy_map_generation"
         assert message_body["analysis_id"] == "ana-1"
         assert message_body["scan_id"] == "scan-1"
-        assert message_body["org_id"] == "org-1"
-        assert message_body["user_id"] == "user-1"
+        # org_id + user_id are NOT in the message — hydration loads them from
+        # the persisted company record. Keeps the contract honest about what
+        # the consumer reads.
+        assert "org_id" not in message_body
+        assert "user_id" not in message_body
 
     def test_returns_404_when_analysis_does_not_exist(self):
         storage, _ = _make_storage(company=None)
@@ -90,6 +93,29 @@ class TestHandleGenerateStrategyMap:
         # leaking existence to the wrong tenant.
         assert response["statusCode"] in (403, 404)
         sqs.send_message.assert_not_called()
+
+    def test_returns_503_when_queue_url_unset(self):
+        """When STRATEGY_MAP_QUEUE_URL isn't configured, the handler returns 503
+        (STRATEGY_MAP_FEATURE_DISABLED) rather than letting boto3 ParamValidationError out."""
+        company = {"id": "ana-1", "company_name": "Acme", "org_id": "org-1"}
+        storage, company_repo = _make_storage(company)
+        sqs = MagicMock()
+
+        response = handle_generate_strategy_map(
+            _event={},
+            authentication=_make_authentication(),
+            storage=storage,
+            sqs=sqs,
+            queue_url="",  # not configured
+            analysis_id="ana-1",
+        )
+
+        assert response["statusCode"] == 503
+        body = json.loads(response["body"])
+        assert body["code"] == "STRATEGY_MAP_FEATURE_DISABLED"
+        # Short-circuit: nothing else fires
+        sqs.send_message.assert_not_called()
+        company_repo.set_strategy_map_generation_state.assert_not_called()
 
     def test_returns_403_when_org_mismatch(self):
         company = {"id": "ana-1", "org_id": "OTHER_ORG", "company_name": "Acme"}

@@ -101,25 +101,31 @@ class TestBuildStrategyMapMessage:
     def test_sets_strategy_map_generation_type(self) -> None:
         payload = build_strategy_map_message(
             analysis_id="ana-7",
-            org_id="org-1",
-            user_id="user-1",
             scan_id="scan-1",
         )
         data = json.loads(payload)
         assert data == {
             "type": "strategy_map_generation",
             "analysis_id": "ana-7",
-            "org_id": "org-1",
-            "user_id": "user-1",
             "scan_id": "scan-1",
         }
 
     def test_payload_is_valid_json(self) -> None:
         payload = build_strategy_map_message(
             analysis_id="ana-9",
-            org_id="org-9",
-            user_id="user-9",
             scan_id="scan-9",
         )
         # Round-trip — fails fast if any value isn't JSON-serializable.
         assert json.loads(payload)["analysis_id"] == "ana-9"
+
+    def test_payload_omits_org_and_user_ids(self) -> None:
+        """Hydration loads org_id + user_id from the persisted company record;
+        the message contract MUST NOT carry them as a future-attribution hazard.
+        """
+        payload = build_strategy_map_message(
+            analysis_id="ana-x",
+            scan_id="scan-x",
+        )
+        data = json.loads(payload)
+        assert "org_id" not in data
+        assert "user_id" not in data

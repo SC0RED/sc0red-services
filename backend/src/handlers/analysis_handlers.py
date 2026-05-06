@@ -347,7 +347,19 @@ def handle_generate_strategy_map(
     SQS worker (``strategy_map_handler``) picks up the message, runs
     ``GenerateStrategyMap`` against the persisted analysis, persists the
     result, and pushes an AppSync ``strategy_map_complete`` event.
+
+    Returns 503 ``STRATEGY_MAP_FEATURE_DISABLED`` when ``queue_url`` is empty
+    — the API Lambda's CDK env var is unset (e.g., environment hasn't
+    deployed Phase A2 yet), and we'd rather fail cleanly than ParamValidationError
+    out of boto3 below.
     """
+    if not queue_url:
+        return build_error(
+            "Strategy-map generation queue not configured for this environment",
+            status=503,
+            code="STRATEGY_MAP_FEATURE_DISABLED",
+        )
+
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
     if error := check_org_access(company, authentication):
@@ -365,8 +377,6 @@ def handle_generate_strategy_map(
         QueueUrl=queue_url,
         MessageBody=build_strategy_map_message(
             analysis_id=analysis_id,
-            org_id=authentication.org_id,
-            user_id=authentication.user_id,
             scan_id=scan_id,
         ),
     )
