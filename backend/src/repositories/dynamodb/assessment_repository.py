@@ -374,14 +374,24 @@ class DynamoDBAssessmentRepository:
             return ""
         return join_document_texts(texts)
 
+    # Sort-key shapes the analysis-results section of an assessment uses:
+    #   - PREFIX_SK_PATTERNS: legitimately prefix-keyed (`RISK#cat`, `OPP#0`).
+    #   - EXACT_SK_VALUES: single-row blobs (one ebitda tree, one value chain,
+    #     one strategy map per assessment).
+    # Splitting the two prevents `startswith` from matching a future versioned
+    # sk like `STRATEGY_MAP_V2` or `EBITDA_TREE_HISTORICAL` and silently
+    # over-deleting. Exact-match strings stay exact-match.
+    _PREFIX_SK_PATTERNS = ("RISK#", "OPP#")
+    _EXACT_SK_VALUES = frozenset({"EBITDA_TREE", "VALUE_CHAIN", "STRATEGY_MAP"})
+
     def delete_analysis_results(self, assessment_id: str) -> None:
         """Delete risk scores, opps, EBITDA, value chain, strategy map; keep docs + metadata."""
         items = self._table.query(pk=f"ASSESSMENT#{assessment_id}")
-        prefixes = ("RISK#", "OPP#", "EBITDA_TREE", "VALUE_CHAIN", "STRATEGY_MAP")
         keys_to_delete = [
             {"pk": item["pk"], "sk": item["sk"]}
             for item in items
-            if item["sk"].startswith(prefixes)
+            if item["sk"].startswith(self._PREFIX_SK_PATTERNS)
+            or item["sk"] in self._EXACT_SK_VALUES
         ]
         if keys_to_delete:
             self._table.batch_delete(keys_to_delete)
