@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from signalfield_core.exceptions.base import EngineError
@@ -182,6 +183,21 @@ class StrategyMapSQSHandler:
         analysis_id = message["analysis_id"]
         scan_id = message.get("scan_id", "")
 
+        # Worker-level checkpoint logs. These mirror the analysis worker's
+        # ``sqs_handler.handle_async_analysis`` pattern (line 70 of
+        # ``sqs_handler.py``) so the strategy-map worker has the same
+        # CloudWatch audit trail as the analysis worker. The
+        # ``[pipeline] starting / executing / completed`` lines emitted
+        # by ``executor.execute_all()`` are an INNER chain; these
+        # OUTER lines guarantee a record-of-progress at the SQS handler
+        # boundary even if any inner log gets eaten by a runtime quirk.
+        logger.info(
+            "Processing strategy-map generation for analysis=%s scan=%s",
+            analysis_id,
+            scan_id,
+        )
+        worker_start = time.monotonic()
+
         company_repo = self._storage.create_company_repository()
         assessment_repo = self._storage.create_assessment_repository()
 
@@ -212,6 +228,12 @@ class StrategyMapSQSHandler:
         # persistence happened inside _generate_and_persist; AppSync push
         # now signals the frontend to re-fetch.
         notify_strategy_map_complete(scan_id=scan_id, analysis_id=analysis_id)
+        logger.info(
+            "Strategy-map generation complete for analysis=%s scan=%s in %.2fs",
+            analysis_id,
+            scan_id,
+            time.monotonic() - worker_start,
+        )
 
     def _generate_and_persist(
         self,
@@ -224,6 +246,23 @@ class StrategyMapSQSHandler:
         """Hydrate, generate, persist. Wrapped in a single try-block by the caller."""
         # Hydrate the in-memory Company shape that GenerateStrategyMap expects.
         company = hydrate_company_for_strategy_map(self._storage, analysis_id)
+        # Hydration confirmation with shape facts — surfaces in CloudWatch
+        # before the long-running ``executor.execute_all()`` so a hung AI
+        # call can't make it look like the worker silently failed at
+        # hydration. ``risk_scores`` and ``opportunities`` counts are
+        # logged because GenerateStrategyMap's prerequisite gates check
+        # those and silently raising on missing data was the original
+        # hydration-bug shape.
+        logger.info(
+            "Hydrated company for strategy-map: analysis=%s profile_present=%s "
+            "risk_scores=%d opportunities=%d ebitda_present=%s value_chain_present=%s",
+            analysis_id,
+            company.profile is not None,
+            len(company.risk_assessment.risk_scores) if company.risk_assessment else 0,
+            len(company.opportunity_result.opportunities) if company.opportunity_result else 0,
+            company.ebitda_tree is not None,
+            company.value_chain is not None,
+        )
         accessor = CompanyAccessor(company)
 
         # Build a request executor with a single-step pipeline so
@@ -281,6 +320,11 @@ class StrategyMapSQSHandler:
         assessment_id = assessments[0]["id"]
 
         assessment_repo.save_strategy_map(assessment_id, strategy_map_payload)
+        logger.info(
+            "Persisted strategy map for analysis=%s under assessment=%s",
+            analysis_id,
+            assessment_id,
+        )
 
         # Clear in-flight state so the next GET response shows the persisted
         # map without the generating placeholder.

@@ -327,3 +327,202 @@ def _verify_storage_unused() -> None:
     storage, company_repo, assessment_repo = _make_storage()
     assert storage.create_company_repository() is company_repo
     assert storage.create_assessment_repository() is assessment_repo
+
+
+class TestStrategyMapSQSHandlerCheckpointLogging:
+    """The strategy-map worker must emit OUTER-level checkpoint logs at
+    each stage so CloudWatch shows progress even if the
+    ``executor.execute_all()`` inner chain's logs are eaten by a runtime
+    quirk. Mirrors the analysis worker's
+    ``sqs_handler.handle_async_analysis`` pattern.
+
+    Tests assert via ``patch.object(logger, "info")`` rather than
+    pytest's ``caplog`` because the autouse fixtures in this directory's
+    ``conftest.py`` (``mock_ai_client_factory`` etc.) interfere with
+    pytest-cov's logger interception, leaving caplog empty. Patching
+    the module-level logger directly is the same boundary check
+    without the plugin interaction.
+    """
+
+    @staticmethod
+    def _make_happy_company(
+        *,
+        risk_count: int = 2,
+        opp_count: int = 3,
+        ebitda: bool = True,
+        value_chain: bool = False,
+    ) -> MagicMock:
+        company = MagicMock()
+        company.profile = MagicMock()
+        company.risk_assessment = MagicMock()
+        company.risk_assessment.risk_scores = [MagicMock() for _ in range(risk_count)]
+        company.opportunity_result = MagicMock()
+        company.opportunity_result.opportunities = [MagicMock() for _ in range(opp_count)]
+        company.ebitda_tree = MagicMock() if ebitda else None
+        company.value_chain = MagicMock() if value_chain else None
+        company.strategy_map = MagicMock()
+        company.strategy_map.model_dump.return_value = {"vision": {"statement": "v"}}
+        return company
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_complete")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    @patch("src.handlers.strategy_map_handler.GenerateStrategyMap")
+    @patch("src.handlers.strategy_map_handler.logger")
+    def test_emits_processing_log_at_message_start(
+        self,
+        mock_logger: MagicMock,
+        mock_step_class: MagicMock,
+        mock_hydrate: MagicMock,
+        mock_notify_complete: MagicMock,
+    ):
+        storage, _, assessment_repo = _make_storage()
+        mock_hydrate.return_value = self._make_happy_company()
+        mock_step_class.return_value = MagicMock()
+        assessment_repo.find_by_company.return_value = [
+            {"id": "assess-1", "created_at": "2026-01-01T00:00:00Z"}
+        ]
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        handler.handle(_make_message(analysis_id="ana-77", scan_id="scan-77"))
+
+        processing_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Processing strategy-map" in (call.args[0] if call.args else "")
+        ]
+        assert len(processing_calls) == 1
+        # Args 1 + 2 of the format-style logger.info call: analysis_id, scan_id.
+        assert processing_calls[0].args[1] == "ana-77"
+        assert processing_calls[0].args[2] == "scan-77"
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_complete")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    @patch("src.handlers.strategy_map_handler.GenerateStrategyMap")
+    @patch("src.handlers.strategy_map_handler.logger")
+    def test_emits_hydration_summary_with_shape_facts(
+        self,
+        mock_logger: MagicMock,
+        mock_step_class: MagicMock,
+        mock_hydrate: MagicMock,
+        mock_notify_complete: MagicMock,
+    ):
+        # The hydration summary log shows the prerequisite-data counts
+        # so a future hydration regression (missing risk scores, missing
+        # opportunities) surfaces in CloudWatch as low values rather
+        # than only as a downstream ValidationError.
+        storage, _, assessment_repo = _make_storage()
+        mock_hydrate.return_value = self._make_happy_company(
+            risk_count=7, opp_count=5, ebitda=True, value_chain=True
+        )
+        mock_step_class.return_value = MagicMock()
+        assessment_repo.find_by_company.return_value = [
+            {"id": "assess-1", "created_at": "2026-01-01T00:00:00Z"}
+        ]
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        handler.handle(_make_message(analysis_id="ana-9"))
+
+        hydration_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Hydrated company for strategy-map" in (call.args[0] if call.args else "")
+        ]
+        assert len(hydration_calls) == 1
+        # Args ordering of the format-style logger.info call:
+        #   1: analysis_id, 2: profile_present, 3: risk_count,
+        #   4: opp_count, 5: ebitda_present, 6: value_chain_present.
+        args = hydration_calls[0].args
+        assert args[1] == "ana-9"
+        assert args[2] is True  # profile_present
+        assert args[3] == 7  # risk_scores
+        assert args[4] == 5  # opportunities
+        assert args[5] is True  # ebitda_present
+        assert args[6] is True  # value_chain_present
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_complete")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    @patch("src.handlers.strategy_map_handler.GenerateStrategyMap")
+    @patch("src.handlers.strategy_map_handler.logger")
+    def test_emits_persist_and_completion_logs(
+        self,
+        mock_logger: MagicMock,
+        mock_step_class: MagicMock,
+        mock_hydrate: MagicMock,
+        mock_notify_complete: MagicMock,
+    ):
+        # Persist log includes the assessment_id so ops can cross-check
+        # DynamoDB. Completion log includes wall-clock seconds so a
+        # regression where the worker quietly takes 10x longer is
+        # immediately visible in CloudWatch.
+        storage, _, assessment_repo = _make_storage()
+        mock_hydrate.return_value = self._make_happy_company(risk_count=1, opp_count=1)
+        mock_step_class.return_value = MagicMock()
+        assessment_repo.find_by_company.return_value = [
+            {"id": "assess-77", "created_at": "2026-01-01T00:00:00Z"}
+        ]
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        handler.handle(_make_message(analysis_id="ana-77", scan_id="scan-77"))
+
+        persist_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Persisted strategy map" in (call.args[0] if call.args else "")
+        ]
+        assert len(persist_calls) == 1
+        assert persist_calls[0].args[1] == "ana-77"
+        assert persist_calls[0].args[2] == "assess-77"
+
+        completion_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Strategy-map generation complete" in (call.args[0] if call.args else "")
+        ]
+        assert len(completion_calls) == 1
+        assert completion_calls[0].args[1] == "ana-77"
+        assert completion_calls[0].args[2] == "scan-77"
+        # The fourth %s/%-format arg is the elapsed seconds float.
+        elapsed = completion_calls[0].args[3]
+        assert isinstance(elapsed, float)
+        assert elapsed >= 0
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_failed")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    @patch("src.handlers.strategy_map_handler.logger")
+    def test_processing_log_fires_even_on_hydration_failure(
+        self,
+        mock_logger: MagicMock,
+        mock_hydrate: MagicMock,
+        mock_notify_failed: MagicMock,
+    ):
+        # The "Processing strategy-map …" log MUST fire BEFORE
+        # _generate_and_persist runs — otherwise a hydration failure
+        # would produce a CloudWatch view with zero "we got the message"
+        # markers, masking the worker's behavior. Pin that the log
+        # appears even when downstream blows up.
+        storage, _, _ = _make_storage()
+        mock_hydrate.side_effect = StrategyMapHydrationError("missing assessment")
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        handler.handle(_make_message(analysis_id="ana-fail"))
+
+        processing_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Processing strategy-map" in (call.args[0] if call.args else "")
+        ]
+        assert len(processing_calls) == 1
+
+        # Hydration + completion logs MUST NOT fire on the failure path.
+        hydration_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Hydrated company" in (call.args[0] if call.args else "")
+        ]
+        completion_calls = [
+            call
+            for call in mock_logger.info.call_args_list
+            if "Strategy-map generation complete" in (call.args[0] if call.args else "")
+        ]
+        assert hydration_calls == []
+        assert completion_calls == []
