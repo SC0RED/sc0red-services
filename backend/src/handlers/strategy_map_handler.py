@@ -77,13 +77,13 @@ class StrategyMapSQSHandler:
     _MAX_RECEIVE_COUNT = 3
 
     def handle(self, event: dict[str, Any]) -> dict[str, Any]:
-        """Public entry — delegates to ``_handle_impl`` after a debug print."""
+        """Public entry — delegates to ``_handle_implementation`` after a debug print."""
         print(  # noqa: T201
             "[STRATEGY-MAP-DEBUG] StrategyMapSQSHandler.handle entered", flush=True
         )
-        return self._handle_impl(event)
+        return self._handle_implementation(event)
 
-    def _handle_impl(self, event: dict[str, Any]) -> dict[str, Any]:
+    def _handle_implementation(self, event: dict[str, Any]) -> dict[str, Any]:
         """Process all SQS records in the event.
 
         Returns the standard ``{"batchItemFailures": [...]}`` shape so SQS
