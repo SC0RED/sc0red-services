@@ -131,39 +131,57 @@ class StrategyMapConstruct(Construct):
             )
 
         # Worker Lambda — runs `StrategyMapSQSHandler` against incoming
-        # messages. Memory + timeout sized for OpenAI's tail-latency shape:
-        # the typical 7-call sequence runs in ~55s, but real-world traces
-        # have crossed 120s on tail-latency days (initial 120s timeout
-        # blew up in production on 2026-05-07 — the user's first dev click
-        # timed out at exactly the budget, message went to DLQ, state
-        # stuck "generating"). 300s gives ~2.5× margin over the typical
-        # call shape and absorbs OpenAI tail latency without leaking
-        # messages to the DLQ. Post-`optimize-strategy-map-latency` Phase 1
-        # the work drops to ~17s but the headroom stays useful.
+        # messages. Sized to MATCH the analysis-pipeline worker
+        # (``janus-worker-{environment}`` in ``stack_resources.create_queues``
+        # / ``janus_stack``): the analysis worker had been running the
+        # legacy 7-call ``GenerateStrategyMap`` chain successfully as
+        # one of its pipeline steps for months — same code path, same
+        # call shape, no resource problems. After
+        # ``strategy-map-on-demand`` Phase C the step moved into this
+        # dedicated worker, but the original construct under-provisioned
+        # it (120s timeout / 1024MB memory) and real-world OpenAI tail
+        # latency timed out repeatedly on dev (2026-05-07 — first click
+        # hit exactly 120s; bumped to 300s in PR #276 and STILL timed
+        # out at 5min). The bump kept hitting the same wall because the
+        # bottleneck wasn't the timeout — at 1024MB memory the Lambda
+        # only gets ~0.6 of a vCPU, slowing every TLS handshake and
+        # JSON-parse. 1769MB is the sweet spot where Lambda gives a full
+        # vCPU (per AWS docs); the analysis worker has used this for
+        # the same workload without issue.
         #
-        # Queue visibility timeout is 720s (Decision in this construct
-        # above), which is ≥ Lambda timeout, satisfying the AWS SQS-Lambda
-        # event-source mapping constraint.
+        # Aligned config:
+        #   - ``timeout_seconds=540`` (9 min — matches analysis worker)
+        #   - ``memory_size=1769`` (full vCPU — matches analysis worker)
+        #   - ``reserved_concurrency=4`` (bounded; on-demand clicks
+        #     shouldn't burst)
+        #
+        # Queue visibility timeout is 720s, which is > 540s Lambda
+        # timeout, satisfying AWS's SQS-Lambda event-source mapping
+        # constraint. The 1.33× ratio is tighter than AWS's recommended
+        # 6× but matches the production AnalysisQueue (600s visibility
+        # / 540s timeout = 1.11×) which has run reliably for months.
         #
         # **Coverage gap — Lambda timeout vs in-process fail-safe**: the
         # ``StrategyMapSQSHandler`` fail-safe state-clear (in
         # ``backend/src/handlers/strategy_map_handler.py``) only runs when
         # a Python exception propagates out of ``_process_message``. A
         # Lambda timeout SIGKILLs the process — no ``except`` block runs.
-        # The full coverage chain for the timeout case is: timeout →
-        # message reappears after queue visibility expiry → next attempt
-        # runs → if it ALSO times out (likely if root cause unfixed),
-        # SQS increments ``ApproximateReceiveCount`` → after 3 timeouts
-        # the worker would fail-safe IF it survived long enough — which
-        # it doesn't, because the timeout fires first. So timeout-only
-        # failures still leak to the DLQ with state stuck. The DLQ alarm
-        # (above) is the operator-facing signal for this case. A future
-        # follow-up could subscribe an EventBridge rule to Lambda
-        # timeout events and run a dedicated cleanup Lambda; not in
-        # scope for this hotfix.
+        # The DLQ alarm above is the operator-facing signal for that mode.
+        # A future follow-up could subscribe an EventBridge rule to
+        # Lambda timeout events and run a dedicated cleanup Lambda.
         worker_environment = dict(common_environment)
         worker_environment["APPSYNC_ENDPOINT"] = appsync_endpoint
         worker_environment["APPSYNC_API_KEY"] = appsync_api_key
+
+        # Enable the optimize-strategy-map-latency Phase 1 decomposed
+        # call shape on the staging (= development AWS account) worker
+        # only. Per Decision §6 of that change's design.md, manual eval
+        # gates the rollout to testing/production. The flag is read by
+        # ``GenerateStrategyMap.execute()`` at call time (not module
+        # import) so this take effect on the next user click after the
+        # next deploy.
+        if environment == "staging":
+            worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED"] = "1"
 
         self.worker = create_lambda(
             self,
@@ -172,8 +190,8 @@ class StrategyMapConstruct(Construct):
             handler="src.handlers.strategy_map_worker_entry.handle_event",
             bundling=bundling,
             environment=worker_environment,
-            timeout_seconds=300,
-            memory_size=1024,
+            timeout_seconds=540,
+            memory_size=1769,
             architecture=lambda_architecture,
             log_retention_days=log_retention_days,
             enable_tracing=enable_tracing,
