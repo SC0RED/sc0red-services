@@ -90,6 +90,15 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     // state. Cleared on AppSync complete/failed events.
     const [localGenerating, setLocalGenerating] = useState<boolean>(false)
     const [generationError, setGenerationError] = useState<string | null>(null)
+    // In-flight progress reported by the strategy-map worker via AppSync
+    // ``strategy_map_progress`` events. Drives the moving progress bar
+    // inside ``StrategyMapGeneratingPlaceholder``. ``null`` means we
+    // haven't heard from the worker yet (or AppSync isn't configured)
+    // so the placeholder falls back to its static spinner copy.
+    const [generationProgress, setGenerationProgress] = useState<{
+        percentage: number
+        label: string
+    } | null>(null)
 
     const reanalyze = useReanalyze({ analysisId, analyzedAt: data.analyzedAt })
     const { start: startStrategyMapSubscription, stop: stopStrategyMapSubscription } =
@@ -127,18 +136,26 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             onComplete: () => {
                 setLocalGenerating(false)
                 setGenerationError(null)
+                setGenerationProgress(null)
                 refetchAnalysis()
             },
             onFailed: () => {
                 setLocalGenerating(false)
+                setGenerationProgress(null)
                 setGenerationError("We couldn't generate your strategy map. Click Generate to try again.")
             },
+            onProgress: (percentage, label) => {
+                // Worker is alive and reporting phase-boundary progress.
+                // The placeholder watches this state and renders a
+                // moving bar instead of a static spinner.
+                setGenerationProgress({ percentage, label })
+            },
             onTimeout: () => {
-                // The 90s client-side fallback. The worker may have
-                // completed and the AppSync event was lost — refetch
-                // checks the persisted state. If the server still says
-                // `generating`, the next render re-enters this effect
-                // and re-subscribes.
+                // Sliding-window heartbeat miss — no event for a long
+                // time. Refetch as a sanity check; the subscription
+                // stays alive (per ``hasSubscription=true`` in the
+                // hook) so a late event can still drive us to a
+                // terminal state.
                 refetchAnalysis()
             },
         })
@@ -311,9 +328,11 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 strategyMap={data.strategyMap}
                 isGenerating={isGenerating}
                 generationError={generationError}
+                generationProgress={generationProgress}
                 onGenerationStarted={() => {
                     setLocalGenerating(true)
                     setGenerationError(null)
+                    setGenerationProgress(null)
                 }}
             />
 

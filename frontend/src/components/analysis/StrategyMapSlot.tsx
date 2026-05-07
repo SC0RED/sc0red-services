@@ -9,6 +9,12 @@ interface StrategyMapSlotProps {
     strategyMap?: StrategyMap | null
     isGenerating: boolean
     generationError: string | null
+    /** In-flight progress from the strategy-map worker. ``null`` when
+     *  no progress event has arrived yet — the placeholder falls back
+     *  to its static-spinner UX. Driven by AppSync
+     *  ``strategy_map_progress`` events through
+     *  ``useStrategyMapSubscription``'s ``onProgress`` callback. */
+    generationProgress: { percentage: number; label: string } | null
     onGenerationStarted: () => void
 }
 
@@ -34,6 +40,7 @@ export default function StrategyMapSlot({
     strategyMap,
     isGenerating,
     generationError,
+    generationProgress,
     onGenerationStarted,
 }: StrategyMapSlotProps) {
     if (strategyMap) {
@@ -52,7 +59,7 @@ export default function StrategyMapSlot({
     if (isGenerating) {
         return (
             <AnalysisSection id="strategy-map">
-                <StrategyMapGeneratingPlaceholder />
+                <StrategyMapGeneratingPlaceholder progress={generationProgress} />
             </AnalysisSection>
         )
     }

@@ -164,9 +164,29 @@ class GenerateStrategyMap(RequestStep):
                 # Keeps the legacy path's startup cost unchanged when the
                 # flag is OFF — matters because strategy_map_handler
                 # cold-start is on the user's first-click critical path.
+                from src.pipeline.appsync_notifier import notify_strategy_map_progress
                 from src.pipeline.pipeline_steps._strategy_map_perspectives import (
                     generate_perspectives_decomposed,
                 )
+
+                # Phase-boundary progress emission. The executor is
+                # created with request_id=analysis_id and scan_id=scan_id
+                # by the strategy-map worker (see
+                # ``strategy_map_handler._generate_and_persist``); both
+                # are required to route AppSync events to the right
+                # subscribed frontend.
+                analysis_id = self.request_executor.request_id
+                scan_id = self.request_executor.scan_id
+
+                def _emit_progress(progress: int, label: str) -> None:
+                    notify_strategy_map_progress(
+                        scan_id=scan_id,
+                        analysis_id=analysis_id,
+                        progress=progress,
+                        label=label,
+                    )
+
+                _emit_progress(15, "Generating perspective titles…")
 
                 (
                     financial_data,
@@ -179,6 +199,7 @@ class GenerateStrategyMap(RequestStep):
                     system_prompt=system_prompt,
                     context=context,
                     timer=timer,
+                    progress_emitter=_emit_progress,
                 )
             else:
                 results = self._steps_3_through_6_in_parallel(system_prompt, context, timer)

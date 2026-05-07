@@ -4,18 +4,23 @@
  *
  * The worker pushes events on the same `onScanProgress` channel the
  * analysis pipeline uses, distinguished by the `status` field
- * (`strategy_map_complete` / `strategy_map_failed`) and the `companyId`
- * field (= analysis_id). This hook:
+ * (`strategy_map_complete` / `strategy_map_failed` / `strategy_map_progress`)
+ * and the `companyId` field (= analysis_id). This hook:
  *
  *   1. Subscribes to AppSync filtered server-side by `scanId`.
  *   2. Client-side filters events to those carrying our `analysisId` in
  *      the `companyId` field AND a strategy-map status.
  *   3. Routes `strategy_map_complete` to `onComplete` (caller re-fetches
- *      the analysis), `strategy_map_failed` to `onFailed`.
- *   4. Implements a 90-second client-side fallback timer: if no event
- *      arrives within 90s of subscribing, fires a one-shot fallback
- *      callback so the caller can do a `GET /api/analysis/{id}` to
- *      check whether the worker completed despite a dropped subscription.
+ *      the analysis), `strategy_map_failed` to `onFailed`,
+ *      `strategy_map_progress` to `onProgress(percentage, label)`.
+ *   4. Maintains a sliding-window inactivity heartbeat (default 600 s).
+ *      EVERY matching event resets the timer, so as long as the worker
+ *      is reporting progress the timer never fires. When the window
+ *      DOES elapse without an event, `onTimeout` fires once but the
+ *      subscription stays alive so a late event can still drive the
+ *      slot to a terminal state — the caller's `onTimeout` typically
+ *      does a `router.refresh()` as a sanity check while the
+ *      subscription continues to listen.
  *
  * If AppSync isn't configured (local dev, tests), the hook is a no-op —
  * the caller's natural cold-load + refresh behaviour keeps working.
@@ -41,36 +46,53 @@ interface UseStrategyMapSubscriptionOptions {
     onComplete: () => void
     /** Fired when an `strategy_map_failed` event arrives for this analysis. */
     onFailed: () => void
-    /** Fired once if no event arrives within ``timeoutMs`` of subscribing.
-     *  Caller should do a one-shot `GET /api/analysis/{id}` to check whether
-     *  the worker completed despite a dropped subscription. */
+    /** Fired when an in-flight `strategy_map_progress` event arrives — used
+     *  to drive a moving progress bar inside the generating placeholder
+     *  instead of a static spinner. ``progress`` is a 0-100 integer. */
+    onProgress?: (progress: number, label: string) => void
+    /** Fired if no event arrives within ``timeoutMs`` of the LAST event
+     *  (sliding window). Distinct from ``onComplete`` / ``onFailed``,
+     *  which terminate the subscription. ``onTimeout`` is a heartbeat
+     *  miss — caller refetches the analysis as a sanity check; the
+     *  subscription keeps running so a late event can still arrive. */
     onTimeout?: () => void
-    /** Client-side fallback window before `onTimeout` fires. Default 90 s. */
+    /** Sliding-window heartbeat in ms. Default 600 s — comfortably
+     *  exceeds today's worst-case ~120s generation while still bounded
+     *  enough to recover from genuinely-dropped subscriptions. Each
+     *  inbound event resets the timer; only true silence triggers
+     *  ``onTimeout``. */
     timeoutMs?: number
 }
 
-const DEFAULT_TIMEOUT_MS = 90_000
+const DEFAULT_TIMEOUT_MS = 600_000
 
 /**
- * Schedules the 90-second client-side fallback. Mutates the timer ref
- * so `stop()` can clear it. Called from three branches inside `start()`:
- *   - happy path (subscription created)
- *   - config-fetch failure (no subscription)
- *   - AppSync not configured (no subscription)
- * In all three the caller wants the slot to eventually recover via a
- * `router.refresh()` triggered by `onTimeout`, so we schedule the timer
- * uniformly rather than duplicate the body inline.
+ * Sliding-window inactivity timer. Cleared + re-armed on every event
+ * received via the ``onData`` handler. Fires ``onTimeout`` when the
+ * window elapses with no events. Behaviour on fire depends on whether
+ * a live subscription is set up:
+ *
+ *   - ``hasSubscription=true`` (happy path): stay armed. AppSync
+ *     delivery can resume after a transient network blip; the caller's
+ *     ``onTimeout`` typically does a ``router.refresh()`` as a
+ *     cold-load fallback while the subscription stays alive.
+ *   - ``hasSubscription=false`` (config fetch failed / AppSync not
+ *     configured): tear down. No subscription means no recovery from
+ *     this side; the cold-load is the only escape hatch.
  */
-function scheduleFallbackTimeout(
-    timeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>,
-    optionsRef: MutableRefObject<UseStrategyMapSubscriptionOptions | null>,
-    stop: () => void,
+function scheduleFallbackTimeout(args: {
+    timeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>
+    optionsRef: MutableRefObject<UseStrategyMapSubscriptionOptions | null>
+    stop: () => void
     timeoutMs: number | undefined
-): void {
-    const ms = timeoutMs ?? DEFAULT_TIMEOUT_MS
-    timeoutRef.current = setTimeout(() => {
-        optionsRef.current?.onTimeout?.()
-        stop()
+    hasSubscription: boolean
+}): void {
+    const ms = args.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    args.timeoutRef.current = setTimeout(() => {
+        args.optionsRef.current?.onTimeout?.()
+        if (!args.hasSubscription) {
+            args.stop()
+        }
     }, ms)
 }
 
@@ -114,12 +136,16 @@ export function useStrategyMapSubscription(): {
                     appsyncApiKey?: string
                 }
             } catch {
-                // Config fetch failed — caller's fallback timer is set
-                // below by the timeout schedule, but only AFTER the
-                // subscription is created. With no subscription path,
-                // schedule the timeout directly so the slot still
-                // recovers via the parent's `onTimeout` → refresh.
-                scheduleFallbackTimeout(timeoutHandleRef, optionsRef, stop, options.timeoutMs)
+                // Config fetch failed — no subscription will be created,
+                // so this fallback is the slot's only escape hatch.
+                // ``hasSubscription=false`` → timer firing tears down.
+                scheduleFallbackTimeout({
+                    timeoutRef: timeoutHandleRef,
+                    optionsRef,
+                    stop,
+                    timeoutMs: options.timeoutMs,
+                    hasSubscription: false,
+                })
                 return false
             }
 
@@ -127,7 +153,13 @@ export function useStrategyMapSubscription(): {
                 // AppSync intentionally not configured (local dev / test).
                 // Same fallback-timeout treatment as the fetch-failure
                 // branch — the slot recovers via cold-load.
-                scheduleFallbackTimeout(timeoutHandleRef, optionsRef, stop, options.timeoutMs)
+                scheduleFallbackTimeout({
+                    timeoutRef: timeoutHandleRef,
+                    optionsRef,
+                    stop,
+                    timeoutMs: options.timeoutMs,
+                    hasSubscription: false,
+                })
                 return false
             }
 
@@ -151,6 +183,20 @@ export function useStrategyMapSubscription(): {
                     }
                 }`
 
+            const resetInactivityTimer = (): void => {
+                if (timeoutHandleRef.current) {
+                    clearTimeout(timeoutHandleRef.current)
+                    timeoutHandleRef.current = null
+                }
+                scheduleFallbackTimeout({
+                    timeoutRef: timeoutHandleRef,
+                    optionsRef,
+                    stop,
+                    timeoutMs: options.timeoutMs,
+                    hasSubscription: true,
+                })
+            }
+
             const unsubscribe = createAppSyncSubscription(
                 appSyncConfig,
                 query,
@@ -167,12 +213,18 @@ export function useStrategyMapSubscription(): {
                             return
                         }
 
+                        // Reset the sliding-window heartbeat: we're hearing
+                        // from the worker, no reason to fall back yet.
+                        resetInactivityTimer()
+
                         if (progress.status === 'strategy_map_complete') {
                             optionsRef.current?.onComplete()
                             stop()
                         } else if (progress.status === 'strategy_map_failed') {
                             optionsRef.current?.onFailed()
                             stop()
+                        } else if (progress.status === 'strategy_map_progress') {
+                            optionsRef.current?.onProgress?.(progress.progress, progress.progressLabel)
                         }
                         // Other statuses (`running`, `complete`, etc.) belong to the
                         // analysis pipeline and are ignored here.
@@ -187,7 +239,13 @@ export function useStrategyMapSubscription(): {
             )
 
             unsubscribeRef.current = unsubscribe
-            scheduleFallbackTimeout(timeoutHandleRef, optionsRef, stop, options.timeoutMs)
+            scheduleFallbackTimeout({
+                timeoutRef: timeoutHandleRef,
+                optionsRef,
+                stop,
+                timeoutMs: options.timeoutMs,
+                hasSubscription: true,
+            })
             return true
         },
         [stop]

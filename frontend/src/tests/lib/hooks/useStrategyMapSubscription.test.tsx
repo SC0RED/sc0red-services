@@ -38,6 +38,7 @@ describe('useStrategyMapSubscription', () => {
             scanId: 's-1',
             onComplete: vi.fn(),
             onFailed: vi.fn(),
+            onProgress: vi.fn(),
             onTimeout: vi.fn(),
         }
     }
@@ -245,9 +246,15 @@ describe('useStrategyMapSubscription', () => {
         })
 
         expect(options.onTimeout).toHaveBeenCalledTimes(1)
-        // Subscription torn down at timeout to prevent late events from
-        // calling stale callbacks.
-        expect(unsubscribe).toHaveBeenCalledTimes(1)
+        // Subscription stays ALIVE on timeout — sliding-window heartbeat
+        // means a late event can still arrive and drive the slot to a
+        // terminal state. The caller's onTimeout typically does a
+        // `router.refresh()` as a sanity check while the subscription
+        // continues to listen. (Pre-PR-#280 the subscription was torn
+        // down here, which caused the user-visible "stuck on Generating"
+        // bug when a worker took >90s — see the design rationale in
+        // `useStrategyMapSubscription.ts`'s `scheduleFallbackTimeout`.)
+        expect(unsubscribe).not.toHaveBeenCalled()
     })
 
     it('cancels the fallback timer when a terminal event arrives', async () => {
@@ -361,5 +368,95 @@ describe('useStrategyMapSubscription', () => {
 
         expect(started).toBe(false)
         expect(mockCreateSubscription).not.toHaveBeenCalled()
+    })
+
+    it('routes strategy_map_progress events to onProgress with percentage and label', async () => {
+        // Phase 2 of strategy-map-on-demand observability: the worker
+        // emits in-flight `strategy_map_progress` events at phase
+        // boundaries. The hook routes them to `onProgress` so the
+        // generating placeholder can render a moving bar.
+        configureAppSync()
+        let capturedOnData: ((data: Record<string, unknown>) => void) | null = null
+        mockCreateSubscription.mockImplementation((_config, _query, _vars, handlers) => {
+            capturedOnData = handlers.onData
+            return vi.fn()
+        })
+
+        const options = makeOptions()
+        const { result } = renderHook(() => useStrategyMapSubscription())
+        await act(async () => {
+            await result.current.start(options)
+        })
+
+        act(() => {
+            capturedOnData!({
+                onScanProgress: {
+                    scanId: 's-1',
+                    companyId: 'a-1',
+                    progress: 30,
+                    progressLabel: 'Elaborating perspective objectives…',
+                    status: 'strategy_map_progress',
+                },
+            })
+        })
+
+        expect(options.onProgress).toHaveBeenCalledTimes(1)
+        expect(options.onProgress).toHaveBeenCalledWith(30, 'Elaborating perspective objectives…')
+        // Progress events MUST NOT terminate the subscription.
+        expect(options.onComplete).not.toHaveBeenCalled()
+        expect(options.onFailed).not.toHaveBeenCalled()
+    })
+
+    it('resets the inactivity timer when any matching event arrives', async () => {
+        // Sliding-window heartbeat: each event resets the fallback timer.
+        // Without this, a long-running worker that emits intermediate
+        // progress events would still trip the timeout because the
+        // window measured time-since-subscribe rather than
+        // time-since-last-event.
+        configureAppSync()
+        let capturedOnData: ((data: Record<string, unknown>) => void) | null = null
+        mockCreateSubscription.mockImplementation((_config, _query, _vars, handlers) => {
+            capturedOnData = handlers.onData
+            return vi.fn()
+        })
+
+        const options = makeOptions()
+        const { result } = renderHook(() => useStrategyMapSubscription())
+        await act(async () => {
+            await result.current.start({ ...options, timeoutMs: 1000 })
+        })
+
+        // Advance halfway through the window, then deliver a progress
+        // event. The timer should reset.
+        act(() => {
+            vi.advanceTimersByTime(600)
+            capturedOnData!({
+                onScanProgress: {
+                    scanId: 's-1',
+                    companyId: 'a-1',
+                    progress: 30,
+                    progressLabel: 'Elaborating…',
+                    status: 'strategy_map_progress',
+                },
+            })
+        })
+
+        // Advance another 600ms (total 1200ms since subscribe — past
+        // the original 1000ms window). With a non-resetting timer
+        // onTimeout would have already fired. With the reset, we have
+        // 600ms remaining of the new window; onTimeout should NOT fire.
+        act(() => {
+            vi.advanceTimersByTime(600)
+        })
+
+        expect(options.onTimeout).not.toHaveBeenCalled()
+
+        // Advance another 500ms (total 1100ms since the last event,
+        // past the 1000ms window). NOW onTimeout fires.
+        act(() => {
+            vi.advanceTimersByTime(500)
+        })
+
+        expect(options.onTimeout).toHaveBeenCalledTimes(1)
     })
 })
