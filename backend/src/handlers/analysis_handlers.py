@@ -376,9 +376,7 @@ def handle_generate_strategy_map(
     # consistent (the user's click is acknowledged) but DON'T enqueue a
     # duplicate message that would race the in-flight one.
     if company.get("strategy_map_generation_state") == "generating":
-        return build_json_response(
-            {"status": "already_in_flight", "analysisId": analysis_id}, 202
-        )
+        return build_json_response({"status": "already_in_flight", "analysisId": analysis_id}, 202)
 
     # Mark generation in-flight BEFORE enqueueing so a refresh during the
     # narrow window between SQS send and worker pickup still shows the
