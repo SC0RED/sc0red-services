@@ -109,11 +109,11 @@ class StrategyMapSQSHandler:
                 logger.exception(
                     "Strategy-map worker failed on programming error for %s", message_id
                 )
-                receive_count_str = record.get("attributes", {}).get(
+                receive_count_string = record.get("attributes", {}).get(
                     "ApproximateReceiveCount", "1"
                 )
                 try:
-                    receive_count = int(receive_count_str)
+                    receive_count = int(receive_count_string)
                 except ValueError:
                     receive_count = 1
                 if receive_count >= self._MAX_RECEIVE_COUNT:
@@ -146,9 +146,7 @@ class StrategyMapSQSHandler:
         analysis_id = body.get("analysis_id")
         scan_id = body.get("scan_id", "")
         if not analysis_id:
-            logger.warning(
-                "Fail-safe cleanup skipped: message body missing analysis_id"
-            )
+            logger.warning("Fail-safe cleanup skipped: message body missing analysis_id")
             return
 
         try:
