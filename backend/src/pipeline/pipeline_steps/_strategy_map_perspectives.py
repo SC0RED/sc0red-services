@@ -31,6 +31,7 @@ existing single-call-per-perspective path runs unchanged.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from signalfield_core.utilities.future_manager import FutureManager
@@ -53,6 +54,14 @@ from src.pipeline.pipeline_steps._strategy_map_perspective_rounds import (
 if TYPE_CHECKING:
     from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
     from src.pipeline.step_timer import StepTimer
+
+# Caller passes a closure that emits user-visible progress (calls
+# `notify_strategy_map_progress` with scan_id / analysis_id captured)
+# or ``None`` to disable progress emission. The decomposed path emits
+# at three phase boundaries (after Round 1, after Round 2, after
+# Round 3) — granularity sized for "the user sees something move
+# every ~30s" without being noisy.
+ProgressEmitter = Callable[[int, str], None]
 
 # Cap on parallelism within Round 1. Round 2 / Round 3 caps live with
 # their implementations in ``_strategy_map_perspective_rounds.py``.
@@ -95,6 +104,7 @@ def generate_perspectives_decomposed(
     system_prompt: str,
     context: dict[str, Any],
     timer: StepTimer,
+    progress_emitter: ProgressEmitter | None = None,
 ) -> tuple[
     dict[str, Any],  # financial perspective ({"objectives": [...]})
     dict[str, Any],  # customer perspective ({"objectives": [...]})
@@ -111,7 +121,17 @@ def generate_perspectives_decomposed(
     The ``step`` argument is the GenerateStrategyMap instance whose
     ``_run_ai_call`` method we delegate to; this keeps all AI invocation
     funneled through one place (per CLAUDE.md mandatory pattern).
+
+    ``progress_emitter`` is an optional 0-100 percent / label callable
+    invoked at three phase boundaries so the frontend can replace its
+    static spinner with a moving progress bar. ``None`` disables
+    emission (used by tests + any caller that doesn't care).
     """
+
+    def _emit(progress: int, label: str) -> None:
+        if progress_emitter is not None:
+            progress_emitter(progress, label)
+
     # ── Round 1: 4 parallel title-list calls (one per perspective). ──
     round1_results = _run_round1_titles(
         step, system_prompt=system_prompt, context=context, timer=timer
@@ -120,6 +140,8 @@ def generate_perspectives_decomposed(
     customer_titles: list[str] = round1_results["customer"]["titles"]
     internal_themes_meta: list[dict[str, Any]] = round1_results["internal"]["themes"]
     capacity_titles: dict[str, str] = round1_results["capacity"]
+
+    _emit(30, "Elaborating perspective objectives…")
 
     # Sibling-text for Round 2's capacity detail prompts. Capacity is
     # bucket-keyed (3 fixed buckets), so each detail call sees ALL three
@@ -151,6 +173,8 @@ def generate_perspectives_decomposed(
     titles_per_theme = round2_results["titles_per_theme"]
     core_values = round2_results["core_values"]
 
+    _emit(60, "Mapping internal processes…")
+
     # ── Round 3: internal-processes per-objective details. ──
     details_per_theme = run_round3_internal_details(
         step,
@@ -162,6 +186,8 @@ def generate_perspectives_decomposed(
         themes_meta=internal_themes_meta,
         titles_per_theme=titles_per_theme,
     )
+
+    _emit(80, "Synthesising strategic priorities…")
 
     # Assemble per-perspective dicts in the shape ``assemble_strategy_map`` expects.
     financial = {"objectives": build_financial_objectives(financial_titles, financial_details)}

@@ -245,9 +245,16 @@ class StrategyMapSQSHandler:
         step.request_executor = executor
         step.entity_accessor = accessor
 
-        # Run generation. The step's execute() validates prerequisites and
-        # raises ValueError on missing data — we catch that in the outer try.
-        step.execute()
+        # Run generation via ``executor.execute_all()`` so the executor's
+        # post-step ``logger.info("[pipeline] completed …")`` summary fires
+        # — that's where the ``GenerateStrategyMap.timings`` block lands
+        # in CloudWatch (matching the analysis worker's logging contract).
+        # Calling ``step.execute()`` directly would bypass the summary.
+        # The step's execute() validates prerequisites and raises
+        # ValueError on missing data; ``execute_all()`` re-raises after
+        # recording the elapsed time and the outer try/except in
+        # ``_process_message`` translates that to AppSync failure.
+        executor.execute_all()
 
         # The step set the strategy map on the accessor; the in-pipeline
         # variant relies on PersistResults to actually write to DynamoDB,

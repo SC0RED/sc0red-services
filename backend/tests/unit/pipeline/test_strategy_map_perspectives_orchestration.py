@@ -258,3 +258,64 @@ class TestGeneratePerspectivesDecomposedEndToEnd:
         assert "ai_call_detail_financial_F1" in recorded_labels
         assert "ai_call_detail_internal_T1_O1" in recorded_labels
         assert "ai_call_core_values" in recorded_labels
+
+    def test_calls_progress_emitter_at_phase_boundaries(self) -> None:
+        # Phase 2 of strategy-map-on-demand observability: the
+        # decomposed orchestration emits a progress event after each
+        # round so the frontend can drive a moving bar. Three boundaries
+        # in this fixture: after Round 1 (titles), after Round 2
+        # (details + per-theme titles + core values), after Round 3
+        # (internal per-objective details).
+        perspectives._SCHEMA_CACHE.clear()
+        responses = self._build_responses()
+        step = _make_step_with_canned_responses(responses)
+        timer = MagicMock()
+        progress_emitter = MagicMock()
+
+        generate_perspectives_decomposed(
+            step,
+            system_prompt="sys",
+            context={
+                "company_name": "Acme",
+                "vision_statement": "Test vision",
+                "mission_statement": "Test mission",
+            },
+            timer=timer,
+            progress_emitter=progress_emitter,
+        )
+
+        # Three calls, in monotonically increasing percentage order.
+        # The exact percentages are tuned to spread roughly uniformly
+        # over the typical wall-clock budget; the test pins the count
+        # and ordering, not the literals (which the design comment
+        # documents and a future tweak might adjust).
+        assert progress_emitter.call_count == 3
+        percentages = [call.args[0] for call in progress_emitter.call_args_list]
+        assert percentages == sorted(percentages), (
+            "progress percentages must be monotonically non-decreasing across rounds"
+        )
+        assert all(0 < p < 100 for p in percentages), (
+            "in-flight percentages must be strictly between 0 and 100; "
+            "100 is reserved for the terminal `strategy_map_complete` event"
+        )
+
+    def test_progress_emitter_is_optional(self) -> None:
+        # Tests + any future caller that doesn't care about progress
+        # should be able to omit the emitter without orchestration
+        # changes. The default ``None`` skips emission.
+        perspectives._SCHEMA_CACHE.clear()
+        responses = self._build_responses()
+        step = _make_step_with_canned_responses(responses)
+        timer = MagicMock()
+
+        # Must NOT raise — progress emission is opt-in.
+        generate_perspectives_decomposed(
+            step,
+            system_prompt="sys",
+            context={
+                "company_name": "Acme",
+                "vision_statement": "Test vision",
+                "mission_statement": "Test mission",
+            },
+            timer=timer,
+        )

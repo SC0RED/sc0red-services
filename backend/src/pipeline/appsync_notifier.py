@@ -75,6 +75,35 @@ def notify_progress(
         logger.warning("AppSync notify failed for scan=%s", scan_id, exc_info=True)
 
 
+def notify_strategy_map_progress(
+    *,
+    scan_id: str,
+    analysis_id: str,
+    progress: int,
+    label: str,
+) -> None:
+    """Push an in-flight progress event for on-demand strategy-map generation.
+
+    Reuses the same `publishProgress` mutation as `notify_progress`,
+    distinguished by `status="strategy_map_progress"`. The frontend's
+    ``useStrategyMapSubscription`` filters by status and routes these
+    events to its ``onProgress`` callback so the generating placeholder
+    can show "what's happening now" instead of a static spinner.
+
+    `progress` is a 0-100 integer; `label` is short user-visible copy.
+    Fire-and-forget — same network failure semantics as
+    `notify_progress` (silent return on AppSync down; user-visible
+    behaviour falls back to the static placeholder).
+    """
+    notify_progress(
+        scan_id=scan_id,
+        company_id=analysis_id,
+        progress=progress,
+        label=label,
+        status="strategy_map_progress",
+    )
+
+
 def notify_strategy_map_complete(*, scan_id: str, analysis_id: str) -> None:
     """Push a `strategy_map_complete` event to AppSync (fire-and-forget).
 
