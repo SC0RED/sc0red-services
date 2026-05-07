@@ -49,9 +49,35 @@ def load_template(name: str) -> str:
     return _read(f"templates/{name}.md")
 
 
+def load_decomposed_template(name: str) -> str:
+    """Load a per-call template from `templates/decomposed/`.
+
+    Used by the optimize-strategy-map-latency Phase 1 path. Decomposed
+    templates correspond to ONE round of one perspective (e.g.
+    `round1_titles_financial`, `round2_detail_customer`,
+    `round3_detail_internal`). The `name` does not include the .md
+    suffix.
+    """
+    return _read(f"templates/decomposed/{name}.md")
+
+
 def load_schema() -> dict[str, Any]:
     """Load and parse the JSON schema for the strategy-map output."""
     raw = _read("schemas/strategy_map_output.json")
+    return json.loads(raw)
+
+
+def load_per_call_schema(name: str) -> dict[str, Any]:
+    """Load and parse a per-call JSON schema from `schemas/per_call/`.
+
+    Used by the optimize-strategy-map-latency Phase 1 path. Per-call
+    schemas are sliced subsets of the full strategy-map schema, one
+    per decomposed call shape (e.g. `financial_titles`,
+    `customer_objective_detail`). They omit the `id` field per
+    Decision §2 of the design — the assembly layer assigns positional
+    IDs from title-list order.
+    """
+    raw = _read(f"schemas/per_call/{name}.json")
     return json.loads(raw)
 
 

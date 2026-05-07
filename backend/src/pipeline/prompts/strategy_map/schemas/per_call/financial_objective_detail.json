@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "FinancialObjectiveDetail",
+    "description": "Per-call schema for the financial-perspective Round 2 elaboration. The `id` and `title` fields are NOT requested — `title` is provided to the call as input and `id` is assigned by assembly per Decision §2 of the optimize-strategy-map-latency design. Only the elaboration fields are emitted.",
+    "type": "object",
+    "required": ["definition", "category", "confidence", "rationale_source"],
+    "additionalProperties": false,
+    "properties": {
+        "definition": {
+            "type": "string",
+            "minLength": 50,
+            "maxLength": 1200
+        },
+        "category": {
+            "type": "string",
+            "enum": ["revenue_growth", "productivity"]
+        },
+        "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW"]
+        },
+        "rationale_source": {
+            "type": ["string", "null"],
+            "maxLength": 400
+        }
+    }
+}

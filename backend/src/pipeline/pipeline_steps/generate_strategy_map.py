@@ -31,6 +31,7 @@ Per CLAUDE.md mandatory patterns:
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.pipeline.step import RequestStep
@@ -67,6 +68,28 @@ STEP_NAME = "GenerateStrategyMap"
 
 PARALLEL_MAX_WORKERS = 4
 """Cap on concurrent AI calls during the Steps 3-6 parallel block."""
+
+DECOMPOSED_FLAG_ENV_VAR = "GENERATE_STRATEGY_MAP_DECOMPOSED"
+"""Env var that gates the decomposed (Phase 1) call shape.
+
+When set to ``"1"`` on the strategy-map worker Lambda, Steps 3-6
+delegate to ``_strategy_map_perspectives.generate_perspectives_decomposed``,
+which fans the four perspectives out into ~25 small parallel AI calls
+instead of the legacy 4-call-per-perspective pattern. Default OFF —
+the legacy single-call path runs unchanged. See
+``optimize-strategy-map-latency`` design Decision §0a for which
+Lambda receives this env var.
+"""
+
+
+def _decomposed_path_enabled() -> bool:
+    """Whether the decomposed Phase 1 call shape should run.
+
+    Reads the env var at call time (not import time) so test fixtures
+    can flip it via ``monkeypatch.setenv``.
+    """
+    return os.environ.get(DECOMPOSED_FLAG_ENV_VAR, "0") == "1"
+
 
 # Loaded once at module import. The same schema is passed to every
 # AI call — different steps populate different parts of the structure.
@@ -130,18 +153,46 @@ class GenerateStrategyMap(RequestStep):
             value_proposition_data = self._step_2_value_proposition(system_prompt, context, timer)
             context["value_proposition"] = summarise_value_proposition(value_proposition_data)
 
-            # Steps 3-6 — perspective generation in parallel via
-            # FutureManager (per CLAUDE.md mandatory pattern).
-            results = self._steps_3_through_6_in_parallel(system_prompt, context, timer)
+            # Steps 3-6 — perspective generation. Two paths:
+            # - Legacy: 4 single-call-per-perspective rounds in parallel.
+            # - Decomposed (Phase 1, feature-flagged): ~25 small calls
+            #   across Round 1 / 2 / 3 with positional-ID assignment in
+            #   the assembly layer. See `_strategy_map_perspectives.py`.
+            if _decomposed_path_enabled():
+                # Imported here (not at module top) so the import + its
+                # transitive schema-loading don't run on the legacy path.
+                # Keeps the legacy path's startup cost unchanged when the
+                # flag is OFF — matters because strategy_map_handler
+                # cold-start is on the user's first-click critical path.
+                from src.pipeline.pipeline_steps._strategy_map_perspectives import (
+                    generate_perspectives_decomposed,
+                )
 
-            # Some models wrap output under a top-level key; tolerate both.
-            financial_data = unwrap_perspective(results["financial"], "financial")
-            customer_data = unwrap_perspective(results["customer"], "customer")
-            internal_data = unwrap_perspective(results["internal_processes"], "internalProcesses")
-            capacity_data = unwrap_perspective(
-                results["organizational_capacity"], "organizationalCapacity"
-            )
-            core_values_data = extract_core_values(results["organizational_capacity"])
+                (
+                    financial_data,
+                    customer_data,
+                    internal_data,
+                    capacity_data,
+                    core_values_data,
+                ) = generate_perspectives_decomposed(
+                    self,
+                    system_prompt=system_prompt,
+                    context=context,
+                    timer=timer,
+                )
+            else:
+                results = self._steps_3_through_6_in_parallel(system_prompt, context, timer)
+
+                # Some models wrap output under a top-level key; tolerate both.
+                financial_data = unwrap_perspective(results["financial"], "financial")
+                customer_data = unwrap_perspective(results["customer"], "customer")
+                internal_data = unwrap_perspective(
+                    results["internal_processes"], "internalProcesses"
+                )
+                capacity_data = unwrap_perspective(
+                    results["organizational_capacity"], "organizationalCapacity"
+                )
+                core_values_data = extract_core_values(results["organizational_capacity"])
 
             # Update context for Step 7's prompt.
             context["financial_objectives"] = summarise_perspective(financial_data)
