@@ -1,9 +1,17 @@
 """Company analysis pipeline factory.
 
-Wires the 7-step single-company analysis pipeline:
+Wires the 6-step single-company analysis pipeline:
 ScrapeAndResolveURL → ParallelProfileRiskAndIdeation →
 DetailOpportunities → ComputeEbitdaTree → ComputeValueChain →
-GenerateStrategyMap → PersistResults
+PersistResults
+
+The strategy-map step that previously ran here was lifted to an
+on-demand SQS worker (per the ``strategy-map-on-demand`` change). The
+pipeline no longer auto-generates the map; users trigger generation via
+the "Generate strategy map" button on the analysis detail page, which
+hits ``handle_generate_strategy_map`` and enqueues the dedicated
+``janus-strategy-map-handler`` Lambda. See
+``backend/src/handlers/strategy_map_handler.py``.
 """
 
 from __future__ import annotations
@@ -15,7 +23,6 @@ from signalfield_core.pipeline.factory import PipelineFactory
 from src.pipeline.pipeline_steps.compute_ebitda_tree import ComputeEbitdaTree
 from src.pipeline.pipeline_steps.compute_value_chain import ComputeValueChain
 from src.pipeline.pipeline_steps.detail_opportunities import DetailOpportunities
-from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
@@ -65,9 +72,6 @@ class CompanyAnalysisFactory(PipelineFactory):
             ),
             ComputeEbitdaTree(),
             ComputeValueChain(),
-            GenerateStrategyMap(
-                ai_client_factory=self._ai_client_factory,
-            ),
             PersistResults(
                 company_repo=self._company_repo,
                 assessment_repo=self._assessment_repo,

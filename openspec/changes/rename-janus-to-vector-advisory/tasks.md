@@ -1,82 +1,172 @@
-## 1. Brand asset & copy preparation
+> **Status: blocked on leadership input.** See `proposal.md` "Open Questions for Leadership" — at minimum §1 (final name), §2 (tagline), and §3 (logo asset) must be answered before Phase 1 can begin. Phase 2 additionally needs §4 (Cognito split-brain acceptable?), §6 (hostname pattern), §10 (90-day dual-serve). Phase 3 needs §9 (reorder direction against the current post-#250 layout).
+>
+> Tasks are grouped by phase. Each phase ships as its own PR.
 
-- [ ] 1.1 Confirm the final product name with leadership ("Vector Advisory" vs. "Vector"), the tagline ("AI Risk & Strategic Intelligence" placeholder), and the email-footer phrasing. Capture the agreed strings in `design.md` Open Questions before any code change.
-- [ ] 1.2 Obtain the Vector Advisory logo asset (`vector-advisory-logo.png` and/or `.svg`) from leadership / design. If unavailable by implementation start, ship with a typographic-only wordmark and add the icon in a small follow-up commit.
-- [ ] 1.3 Audit `https://sc0red.github.io/website-redux/` for the design language: extract primary palette, typography, spacing scale, accent treatment. Capture as a short note in this folder (`visual/sc0red-design-tokens.md`) so the CSS-alignment task has a reference.
+---
 
-## 2. Bulk find-and-replace pass (mechanical)
+# Phase 1 — vector-advisory-brand-text
 
-- [ ] 2.1 Run `git grep "Janus"` over the repository to enumerate every occurrence. Generate a report committed as `visual/janus-occurrences-pre.txt` for traceability.
-- [ ] 2.2 Apply substitution `Janus → Vector Advisory` (and `janus → vector-advisory` ONLY for url path segments) across **the customer-visible scope only**:
-   - Include: `frontend/src/app/**/*.tsx`, `frontend/src/components/**/*.tsx` (excluding tests), `frontend/src/lib/auth/**`, `frontend/src/lib/hooks/useTheme.ts`, `backend/src/handlers/templates/*.html`, `README.md`, `DOCUMENTATION.md`.
-   - Exclude (no substitution): `infrastructure/**`, `backend/scripts/**`, `backend/tests/**`, `frontend/src/tests/**`, `frontend/e2e/**` setup files (URLs handled separately), `*.lock`, `cdk.out/**`, `.git/**`, `node_modules/**`, `package.json` / `pyproject.toml` (package names stay), `docker-compose*.yml` (container names stay), `.gitleaks.toml`.
-- [ ] 2.3 Inspect the diff after the bulk pass — flag any substitution that looks wrong (e.g., a comment that referenced "the Janus codebase" in a structural sense rather than the brand). Revert any false positives.
+*Customer-facing brand on the existing Janus host. Reversible. Low risk.*
 
-## 3. Hand-curated headline copy
+**Blocked on**: Open Questions §1, §2, §3, §7, §8.
 
-- [ ] 3.1 Update page titles in `frontend/src/app/layout.tsx` and any per-route metadata blocks (`dashboard/page.tsx`, `recently-deleted/page.tsx`, etc.) — final wording per task 1.1.
-- [ ] 3.2 Rewrite the marketing landing page hero, body copy, and footer in `frontend/src/app/page.tsx` to reflect Vector Advisory positioning. Include the "AI tools + advisory for mid-market PE" framing where appropriate.
-- [ ] 3.3 Update `backend/src/handlers/templates/invitation_email.html` — subject line, body copy, footer block. Verify the rendered email previews correctly (spawn a test invitation locally; eyeball the output).
-- [ ] 3.4 Replace logo file references: rename `frontend/public/janus-logo.png` to `frontend/public/vector-advisory-logo.png` (or the asset filename agreed in 1.2). Update `<img src=... alt="Janus">` → `<img src="/vector-advisory-logo.png" alt="Vector Advisory">` in all 5 component sites.
-- [ ] 3.5 Update the `useTheme.ts` docstring and any module-level docs that surface to developer-onboarding (CLAUDE.md header retitled "Vector Advisory — Claude Code Instructions").
-- [ ] 3.6 Add a dedicated paragraph in `CLAUDE.md` and `README.md` titled **"Naming convention: Vector Advisory (customer) vs. janus (internal)"** explaining that the customer-facing name is Vector Advisory but every AWS resource, CDK stack, package name, and the GitHub repo retains `janus-*` for historical reasons — this is intentional, not a TODO.
+## P1.1 Brand asset & copy preparation
 
-## 4. Analysis page section reorder
+- [ ] P1.1.1 Receive the final product name from leadership (Open Question §1) and the tagline (§2). Capture both as agreed strings in `design.md` Decisions.
+- [ ] P1.1.2 Receive the Vector Advisory logo asset (`vector-advisory-logo.png` and/or `.svg`) from leadership / design (Open Question §3). If unavailable, agree with leadership to ship typographic-only wordmark for v1 — log the decision and add the icon as a small follow-up commit later.
+- [ ] P1.1.3 Resolve Open Question §7 (email "from" sender display name) and §8 (CSS palette source of truth). If §8 = Figma → extract the token list. If §8 = visual audit → capture as a short note in `visual/sc0red-design-tokens.md`.
 
-- [ ] 4.1 In `frontend/src/app/(authenticated)/analysis/[analysisId]/AnalysisDetail.tsx`, reorder the JSX below the `<TopActionsCallout />` block so the section flow is: Top Actions → ValueChainDiagram → EbitdaSection → RiskBreakdown → ValueLeverSummary + OpportunitiesList + Sc0redCTABanner → re-analysis state + DocumentUpload (footer).
-- [ ] 4.2 Verify the conditional render guards (`{data.valueChain && data.valueChain.steps.length > 0 && …}`, `{data.ebitdaTree && …}`) move with their components and remain in place.
-- [ ] 4.3 Update the existing `tests/pages/AnalysisDetail.test.tsx` (if any present-section assertions encode order). Sub-component render assertions should not need changes; new section-order test if useful.
-- [ ] 4.4 Visually verify on `npm run dev` that the page reads correctly in the new order on a populated analysis and on a sparse one (no value chain / no ebitda).
+## P1.2 Bulk find-and-replace pass (mechanical)
 
-## 5. PDF section reorder
+- [ ] P1.2.1 Run `git grep -l "Janus"` over the repository to enumerate every occurrence. Generate a report committed as `visual/janus-occurrences-pre.txt` for traceability.
+- [ ] P1.2.2 Apply substitution `Janus → Vector Advisory` across the customer-visible scope only:
+  - **Include**: `frontend/src/app/**/*.tsx`, `frontend/src/components/**/*.tsx` (excluding tests), `frontend/src/lib/auth/**`, `frontend/src/lib/hooks/useTheme.ts`, `backend/src/handlers/templates/*.html`, `README.md`, `DOCUMENTATION.md`.
+  - **Exclude (no substitution)**: `infrastructure/**`, `backend/scripts/**`, `backend/tests/**`, `frontend/src/tests/**`, `frontend/e2e/**` (URLs handled in Phase 2), `*.lock`, `cdk.out/**`, `.git/**`, `node_modules/**`, `package.json` / `pyproject.toml` (package names stay), `docker-compose*.yml` (container names stay), `.gitleaks.toml`.
+- [ ] P1.2.3 Inspect the diff after the bulk pass — flag any substitution that looks wrong (e.g., a comment that referenced "the Janus codebase" in a structural sense). Revert false positives.
 
-- [ ] 5.1 In `frontend/src/app/print/[analysisId]/PrintReport.tsx`, reorder the print components: Cover → Executive Summary → Top Actions → **PrintValueChainList → PrintEbitdaOutline → PrintRiskTable → PrintOpportunityList** → Methodology Appendix → Back Cover.
-- [ ] 5.2 Update `frontend/src/tests/components/print/PrintReport.test.tsx` to reflect the new section order. Keep the empty-everything smoke test; just update expected order assertions.
-- [ ] 5.3 Run the full frontend test suite (`cd frontend && npm test`) — all 784+ tests must pass.
+## P1.3 Hand-curated headline copy
 
-## 6. Frontend infrastructure (Amplify, Cognito, NextAuth)
+- [ ] P1.3.1 Update page titles in `frontend/src/app/layout.tsx` and any per-route metadata blocks (`dashboard/page.tsx`, `recently-deleted/page.tsx`, etc.) — final wording from P1.1.1.
+- [ ] P1.3.2 Rewrite the marketing landing page hero, body copy, and footer in `frontend/src/app/page.tsx` to reflect Vector Advisory positioning. Include the "AI tools + advisory for mid-market PE" framing where appropriate.
+- [ ] P1.3.3 Update `backend/src/handlers/templates/invitation_email.html` — subject line, body copy, footer block. Verify the rendered email previews correctly (spawn a test invitation locally; eyeball the output).
+- [ ] P1.3.4 Replace logo file references: rename `frontend/public/janus-logo.png` to `frontend/public/vector-advisory-logo.png` (or the asset filename agreed in P1.1.2). Update `<img src=... alt="Janus">` → `<img src="/vector-advisory-logo.png" alt="Vector Advisory">` in all 5 component sites.
+- [ ] P1.3.5 Update the `useTheme.ts` docstring and any module-level docs that surface to developer-onboarding. CLAUDE.md header retitled.
+- [ ] P1.3.6 Add a dedicated paragraph in `CLAUDE.md` and `README.md` titled **"Naming convention: Vector Advisory (customer) vs. janus (internal)"** explaining that the customer-facing name is Vector Advisory but every AWS resource, CDK stack, package name, and the GitHub repo retains `janus-*` for historical reasons — this is intentional, not a TODO.
 
-- [ ] 6.1 In `infrastructure/stacks/amplify_construct.py`, add per-environment Vector hostnames (`dev.vector.sc0red.com`, `testing.vector.sc0red.com`, `vector.sc0red.com`) as Amplify branch domains. The old Janus hostnames stay configured (for the redirect step) but switch to redirect-mode.
-- [ ] 6.2 Update Cognito allowed redirect URIs and logout URIs in `infrastructure/stacks/cognito_construct.py` to include the new hosts. Both old and new hosts SHALL be allowed during the 90-day cutover window.
-- [ ] 6.3 Update CDK environment configs in `infrastructure/app.py` to read the new `FRONTEND_DOMAIN` (the Vector hostname) per environment. The variable name stays `FRONTEND_DOMAIN`; only the value changes.
-- [ ] 6.4 Update NextAuth configuration in the frontend if it depends on a hardcoded host (search `frontend/src/` for `janus.sc0red.com` / `dev.janus.sc0red.com` literals).
-- [ ] 6.5 ACM cert: ensure the new hosts are covered. If using a wildcard `*.vector.sc0red.com`, request and validate it. If using individual certs, add them to the Amplify domain config.
+## P1.4 CSS / brand palette alignment
 
-## 7. CSS / brand palette alignment
+- [ ] P1.4.1 Compare `frontend/src/app/globals.css` (and any per-component overrides) against the sc0red.com tokens captured in P1.1.3. List divergences.
+- [ ] P1.4.2 Update primary palette tokens (`--accent-blue`, `--accent-blue-glow`, etc.) where they materially diverge. Stay scoped to global CSS variables; do NOT restyle individual components.
+- [ ] P1.4.3 Update typography tokens (font family, scale) if the company site uses different fonts — check `next/font` import in `layout.tsx`.
+- [ ] P1.4.4 Visual smoke check across login page, dashboard, analysis detail, and the marketing landing page in both light and dark themes. Capture before/after screenshots in `visual/css-alignment/{before,after}/`.
 
-- [ ] 7.1 Compare `frontend/src/app/globals.css` (and any per-component overrides) against the sc0red.com tokens captured in 1.3. List divergences.
-- [ ] 7.2 Update primary palette tokens (`--accent-blue`, `--accent-blue-glow`, etc.) where they materially diverge. Stay scoped to global CSS variables; do NOT restyle individual components.
-- [ ] 7.3 Update typography tokens (font family, scale) if the company site uses different fonts — check `next/font` import in `layout.tsx`.
-- [ ] 7.4 Visual smoke check across login page, dashboard, analysis detail, and the marketing landing page in both light and dark themes. Capture before/after screenshots in `visual/css-alignment/{before,after}/`.
+## P1.5 Quality gates + ship
 
-## 8. Old-host redirect setup
+- [ ] P1.5.1 `cd frontend && npm run lint` clean; `npx tsc --noEmit` clean; `npm test` all green.
+- [ ] P1.5.2 `cd backend && uv run ruff check src/` clean; `uv run pytest tests/ -q` all green; coverage ≥ 95%.
+- [ ] P1.5.3 Architecture-reviewer agent on the diff. Resolve all CRITICAL findings; address or defer MEDIUM findings.
+- [ ] P1.5.4 Open PR `feat/vector-advisory-brand-text` against `development`. Include before/after screenshots (sidebar, marketing page, login).
+- [ ] P1.5.5 Merge to `development`. Soak 24h on dev.janus.sc0red.com (page now says Vector Advisory but URL is still Janus — expected during Phase 1 soak).
 
-- [ ] 8.1 Configure the old Janus Amplify domains (`dev.janus.sc0red.com` etc.) to serve HTTP 301 redirects to the matching Vector path. Verify with `curl -I -L` that the redirect chain resolves correctly to the new host's content.
-- [ ] 8.2 Document the 90-day decommission window in `visual/notes.md` with a calendar reminder for the Janus host removal task.
-- [ ] 8.3 Update the company website (separate repo, `sc0red.github.io/website-redux`) to link to the new Vector URL in the Vector Advisory product entry.
+---
 
-## 9. Tests, lint, type-check, architecture review
+# Phase 2 — vector-advisory-host-cutover
 
-- [ ] 9.1 `cd frontend && npm run lint` — clean.
-- [ ] 9.2 `cd frontend && npx tsc --noEmit` — clean.
-- [ ] 9.3 `cd frontend && npm test` — all tests pass; section-order tests updated.
-- [ ] 9.4 `cd backend && uv run ruff check src/` — clean.
-- [ ] 9.5 `cd backend && uv run pytest tests/ -q` — all tests pass; coverage ≥ 95%.
-- [ ] 9.6 `cd infrastructure && uv run cdk synth` — synth succeeds without diff that recreates AWS resources (this is the critical check that no resource rename leaked through). If `cdk diff` shows a Lambda / table / queue replace, STOP and find the rogue rename.
-- [ ] 9.7 Run the architecture-reviewer agent on the change set. Resolve all CRITICAL findings; address or defer MEDIUM findings.
+*Live-infrastructure change. Risky. Sequenced after Phase 1.*
 
-## 10. Visual verification (mirrors improve-pdf-export-content §7)
+**Blocked on**: Open Questions §4, §6, §10. Should also wait for Phase 1 to soak so the brand text is already correct on the new host when traffic flips.
 
-- [ ] 10.1 Pick three representative analyses (sparse / mid-size / deep EBITDA — same selection criteria as the PDF rebuild). Capture before-PDFs (current development state) and store under `openspec/changes/rename-janus-to-vector-advisory/visual/before/`.
-- [ ] 10.2 After implementation, capture after-PDFs from the rebranded development environment. Store under `visual/after/`.
-- [ ] 10.3 Page-by-page diff: confirm new section order, brand text, logo. Document any deviations in `visual/notes.md`.
+## P2.1 Infrastructure: new hosts, ACM cert, Cognito allowlist
 
-## 11. Rollout
+- [ ] P2.1.1 In `infrastructure/stacks/amplify_construct.py`, add per-environment Vector hostnames (`dev.vector.sc0red.com`, `testing.vector.sc0red.com`, `vector.sc0red.com`) as Amplify branch domains. The old Janus hostnames stay configured (for the redirect step) but switch to redirect-mode after P2.3.
+- [ ] P2.1.2 Update Cognito allowed redirect URIs and logout URIs in `infrastructure/stacks/cognito_construct.py` to include the new hosts. **Both old and new hosts SHALL be allowed during the 90-day cutover window.**
+- [ ] P2.1.3 Update CDK environment configs in `infrastructure/app.py` to read the new `FRONTEND_DOMAIN` (the Vector hostname) per environment. Variable name stays `FRONTEND_DOMAIN`; only the value changes.
+- [ ] P2.1.4 ACM cert: ensure the new hosts are covered. Recommended: wildcard `*.vector.sc0red.com`. Request and validate before P2.2.
 
-- [ ] 11.1 Open a PR against `development`. Include before/after screenshots in the PR description (sidebar brand, marketing page, analysis page section order, PDF cover).
-- [ ] 11.2 Merge to `development`. Verify on `dev.vector.sc0red.com` (new) and `dev.janus.sc0red.com` (redirects to new). Soak 24h.
-- [ ] 11.3 Open the `development → testing` promotion PR.
-- [ ] 11.4 After testing soak, open the `testing → production` promotion PR.
-- [ ] 11.5 Update sc0red.com company website to link to `vector.sc0red.com`.
-- [ ] 11.6 Calendar a follow-up task 90 days post-production-cutover to decommission the old Janus hosts (Amplify domain config + Route 53 records).
-- [ ] 11.7 Post-rollout: this change can archive at any time; it does not depend on `polished-pdf-export` or `improve-pdf-export-content` archive ordering, but its `polished-pdf-export` delta will resolve cleanly only after both prior PDF changes archive — note the dependency in the archive PR.
+## P2.2 Frontend NextAuth + e2e setup
+
+- [ ] P2.2.1 Update NextAuth configuration in the frontend if it depends on a hardcoded host (search `frontend/src/` for `janus.sc0red.com` / `dev.janus.sc0red.com` literals).
+- [ ] P2.2.2 Update Playwright E2E setup files in `frontend/e2e/` that reference the Janus host. Test fixtures pointing at `dev.janus.sc0red.com` flip to `dev.vector.sc0red.com`.
+
+## P2.3 Cutover gate
+
+- [ ] P2.3.1 Verify on `dev.vector.sc0red.com` that login + scan + analysis + PDF export all work end-to-end. Both hosts are serving at this point — the Vector host is the new home; the Janus host is still serving in parallel.
+- [ ] P2.3.2 Configure the old Janus Amplify domains (`dev.janus.sc0red.com` etc.) to serve HTTP 301 redirects to the matching Vector path. Verify with `curl -I -L` that the redirect chain resolves correctly.
+- [ ] P2.3.3 Document the 90-day decommission window in `visual/notes.md` with a calendar reminder for the Janus host removal task (P2.6.1).
+
+## P2.4 Document propagation
+
+- [ ] P2.4.1 Update the company website (separate repo, `sc0red.github.io/website-redux`) to link to the new Vector URL in the Vector Advisory product entry.
+- [ ] P2.4.2 Update README, CLAUDE.md, and any internal docs referencing the old host. (CLAUDE.md was already retitled in Phase 1; this is host-string updates only.)
+
+## P2.5 Quality gates + ship
+
+- [ ] P2.5.1 `cd infrastructure && uv run cdk synth` — synth succeeds without diff that recreates AWS resources. **CRITICAL CHECK**: if `cdk diff` shows a Lambda / table / queue replace, STOP — find the rogue rename.
+- [ ] P2.5.2 `cd frontend && npm test` — Playwright e2e setup updates pass.
+- [ ] P2.5.3 Smoke-test login on a preview build before cutover. Cognito + NextAuth callback end-to-end.
+- [ ] P2.5.4 Open PR `feat/vector-advisory-host-cutover` against `development`. Include the redirect smoke-test output and the cdk-diff "no resource recreation" verification.
+- [ ] P2.5.5 Merge to `development`. Promote dev → testing → production with redirects following the same per-env order.
+
+## P2.6 Decommission window
+
+- [ ] P2.6.1 90 days post-production-cutover, remove the old Janus hosts (Amplify domain config + Route 53 records) and remove the old Cognito redirect URIs. Open a separate `chore/decommission-janus-hosts` PR.
+
+---
+
+# Phase 3 — analysis-page-advisory-reorder
+
+*Independent of brand work. Section ordering decision against today's layout. Reversible.*
+
+**Blocked on**: Open Question §9. Phase 3 is independent of Phases 1 and 2 and can ship in any order relative to them.
+
+> **Scope update (2026-05-07, post-`strategy-map-on-demand`):** The
+> strategy-map slot was repositioned to Beat 6 (after opportunities) by
+> `strategy-map-on-demand` Phase B (PR #272). The Sc0red CTA banner was
+> repositioned to Beat 1.5 (between overview and top-actions) in the
+> same PR. **Phase 3 must NOT re-order either of those two sections** —
+> their positions are now owned by the strategy-map narrative, not by
+> the brand-rename narrative. P3.1.2 below should encode the existing
+> Beat 1.5 + Beat 6 placements and reorder ONLY the EBITDA / value
+> chain / risk breakdown / value lever / opportunities cluster (Beats
+> 3–5) per leadership's call. If leadership wants to move strategy-map
+> or Sc0red CTA, that's a new spec change scoped to those slots, not a
+> Phase 3 task.
+
+## P3.1 Design re-validation
+
+- [ ] P3.1.1 Receive Open Question §9 answer from leadership: against the current layout (post-`strategy-map-on-demand` Phase B with executive strap → overview → Sc0red CTA at Beat 1.5 → top-actions → EBITDA → value chain → risk breakdown → value lever → opportunities → strategy-map slot at Beat 6 → deep-dive CTA → document upload), what reorder do we want for the **Beats 3–5 cluster only**? The Beat 1.5 (Sc0red CTA) and Beat 6 (strategy map) positions are out of scope per the note above.
+- [ ] P3.1.2 Update `specs/polished-pdf-export/spec.md` and the `analysis-detail-narrative` canonical-spec delta to encode the leadership-confirmed order. Add an `analysis-detail-narrative` MODIFIED Requirement covering the section-ordering scenario. The MODIFIED Requirement should pin Beat 1.5 (Sc0red CTA) and Beat 6 (strategy-map slot) to their `strategy-map-on-demand`-determined positions and only re-encode the Beats 3–5 ordering.
+
+## P3.2 Implementation
+
+- [ ] P3.2.1 In `frontend/src/app/(authenticated)/analysis/[analysisId]/AnalysisDetail.tsx`, reorder ONLY the JSX between `<Sc0redCTABanner />` (Beat 1.5) and the strategy-map slot (Beat 6) per P3.1.1. Conditional render guards (`{data.valueChain && data.valueChain.steps.length > 0 && …}`, `{data.ebitdaTree && …}`) move with their components. Do NOT touch the `<StrategyMapSlot />` invocation or the `<Sc0redCTABanner />` placement.
+- [ ] P3.2.2 In `frontend/src/app/print/[analysisId]/PrintReport.tsx`, mirror the on-screen reorder for Beats 3–5. PDF section break rules (`print-section--break-before`) move with their components. Do NOT touch the strategy-map or Sc0red CTA section positions in the PDF.
+
+## P3.3 Tests
+
+- [ ] P3.3.1 Update the existing `frontend/src/tests/pages/AnalysisDetail.test.tsx` section-order assertions (test IDs of `analysis-section-{name}` already exist per PR #250 — assert the new order via `getAllByTestId`).
+- [ ] P3.3.2 Update `frontend/src/tests/components/print/PrintReport.test.tsx` to reflect the new section order.
+- [ ] P3.3.3 Run the full frontend test suite — all tests pass.
+
+## P3.4 Visual verification (mirrors improve-pdf-export-content §7)
+
+- [ ] P3.4.1 Pick three representative analyses (sparse / mid-size / deep EBITDA — same selection criteria as the PDF rebuild). Capture before-PDFs (current development state) and store under `visual/before/`.
+- [ ] P3.4.2 After implementation, capture after-PDFs from the rebranded development environment. Store under `visual/after/`.
+- [ ] P3.4.3 Page-by-page diff: confirm new section order. Document any deviations in `visual/notes.md`.
+
+## P3.5 Quality gates + ship
+
+- [ ] P3.5.1 `cd frontend && npm run lint && npx tsc --noEmit && npm test` — all clean.
+- [ ] P3.5.2 Architecture-reviewer agent on the diff. The diff is small (two files reordered) so review focus is "did anything besides JSX position change?"
+- [ ] P3.5.3 Open PR `feat/analysis-page-advisory-reorder` against `development`. Include before/after PDF screenshots.
+- [ ] P3.5.4 Merge to `development`. Promote dev → testing → production.
+
+---
+
+# Cross-phase rollout coordination
+
+- [ ] X.1 After Phase 1 + Phase 2 ship, archive this change once the spec deltas are synced. Phase 3 can ship before or after archive depending on §9 timing.
+- [ ] X.2 90-day decommission task (P2.6.1) is the only follow-up that crosses outside this proposal's scope.
+
+---
+
+# Order of operations summary
+
+```
+                      Open Q §1, §2, §3, §7, §8 answered
+                                  ↓
+                  Phase 1 — vector-advisory-brand-text
+                                  ↓
+                            soak on dev.janus
+                                  ↓
+                    Open Q §4, §6, §10 answered
+                                  ↓
+                  Phase 2 — vector-advisory-host-cutover
+                                  ↓
+                        cutover + 90-day window
+                                  ↓
+                          decommission janus hosts
+
+  In parallel (any time after Open Q §9 answered):
+                  Phase 3 — analysis-page-advisory-reorder
+```

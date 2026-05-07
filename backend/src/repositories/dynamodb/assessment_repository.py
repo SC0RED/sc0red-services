@@ -317,51 +317,32 @@ class DynamoDBAssessmentRepository:
         """Persist the AI-generated strategy map for the given assessment."""
         _assessment_subrecord_ops.save_strategy_map(self._table, assessment_id, data)
 
+    def clear_strategy_map(self, assessment_id: str) -> None:
+        """Remove the persisted strategy map for the given assessment.
+
+        Called by the re-analyse handler (strategy-map-on-demand spec) to
+        invalidate a stale map before regenerating the underlying diagnosis.
+        Idempotent — safe to call when no map exists.
+        """
+        _assessment_subrecord_ops.clear_strategy_map(self._table, assessment_id)
+
     def get_strategy_map(self, assessment_id: str) -> dict[str, Any] | None:
         """Return the strategy map for the given assessment, or None if not found."""
         return _assessment_subrecord_ops.get_strategy_map(self._table, assessment_id)
 
-    # ── Document operations ────────────────────────────────────────────
+    # ── Document operations (delegates to `_assessment_subrecord_ops.py`) ──
 
     def save_document(self, assessment_id: str, document: dict[str, Any]) -> None:
-        """Persist a document metadata + extracted text item for the given assessment."""
-        item = {
-            "pk": f"ASSESSMENT#{assessment_id}",
-            "sk": f"DOC#{document['id']}",
-            "entity_type": "document",
-            "assessment_id": assessment_id,
-            "id": document["id"],
-            "filename": document["filename"],
-            "file_type": document["file_type"],
-            "extracted_text": document["extracted_text"],
-            "char_count": document["char_count"],
-            "uploaded_at": document["uploaded_at"],
-        }
-        self._table.put_item(item)
+        """Persist a document metadata + extracted text item."""
+        _assessment_subrecord_ops.save_document(self._table, assessment_id, document)
 
     def get_documents(self, assessment_id: str) -> list[dict[str, Any]]:
         """Return all document items for the given assessment ID."""
-        items = self._table.query(
-            pk=f"ASSESSMENT#{assessment_id}",
-            sk_prefix="DOC#",
-        )
-        return [
-            {
-                "id": item["id"],
-                "filename": item["filename"],
-                "fileType": item["file_type"],
-                "charCount": item["char_count"],
-                "uploadedAt": item["uploaded_at"],
-            }
-            for item in items
-        ]
+        return _assessment_subrecord_ops.get_documents(self._table, assessment_id)
 
     def delete_document(self, assessment_id: str, document_id: str) -> None:
         """Delete a single document from the given assessment."""
-        self._table.delete_item(
-            pk=f"ASSESSMENT#{assessment_id}",
-            sk=f"DOC#{document_id}",
-        )
+        _assessment_subrecord_ops.delete_document(self._table, assessment_id, document_id)
 
     def get_combined_document_text(self, assessment_id: str) -> str:
         """Fetch all documents and return combined extracted text, capped at MAX_CHARS_COMBINED."""
@@ -374,14 +355,24 @@ class DynamoDBAssessmentRepository:
             return ""
         return join_document_texts(texts)
 
+    # Sort-key shapes the analysis-results section of an assessment uses:
+    #   - PREFIX_SK_PATTERNS: legitimately prefix-keyed (`RISK#cat`, `OPP#0`).
+    #   - EXACT_SK_VALUES: single-row blobs (one ebitda tree, one value chain,
+    #     one strategy map per assessment).
+    # Splitting the two prevents `startswith` from matching a future versioned
+    # sk like `STRATEGY_MAP_V2` or `EBITDA_TREE_HISTORICAL` and silently
+    # over-deleting. Exact-match strings stay exact-match.
+    _PREFIX_SK_PATTERNS = ("RISK#", "OPP#")
+    _EXACT_SK_VALUES = frozenset({"EBITDA_TREE", "VALUE_CHAIN", "STRATEGY_MAP"})
+
     def delete_analysis_results(self, assessment_id: str) -> None:
         """Delete risk scores, opps, EBITDA, value chain, strategy map; keep docs + metadata."""
         items = self._table.query(pk=f"ASSESSMENT#{assessment_id}")
-        prefixes = ("RISK#", "OPP#", "EBITDA_TREE", "VALUE_CHAIN", "STRATEGY_MAP")
         keys_to_delete = [
             {"pk": item["pk"], "sk": item["sk"]}
             for item in items
-            if item["sk"].startswith(prefixes)
+            if item["sk"].startswith(self._PREFIX_SK_PATTERNS)
+            or item["sk"] in self._EXACT_SK_VALUES
         ]
         if keys_to_delete:
             self._table.batch_delete(keys_to_delete)

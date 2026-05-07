@@ -27,6 +27,16 @@ _PROGRESS_MAP: dict[str, tuple[int, str]] = {
     "generate_opportunities": (80, "Gathering implementation details..."),
     "generate_ebitda_tree": (85, "Building EBITDA analysis..."),
     "compute_value_chain": (90, "Mapping value chain..."),
+    # NOTE: `generate_strategy_map` is intentionally absent. The strategy
+    # map ran in the auto-pipeline pre-`strategy-map-on-demand` and its
+    # progress entry sat at 92 here. Phase C of that change moved the
+    # step out of the auto-pipeline; it now runs in the dedicated SQS
+    # worker, which signals progress via `strategy_map_complete` /
+    # `strategy_map_failed` events on the `onScanProgress` channel
+    # instead of `notify_progress`. Re-introducing this entry would
+    # cause the worker to write a stale `pipeline_progress=92` to the
+    # company record AFTER the pipeline reached `persist_results=95`,
+    # which would surface as a backwards progress jump on cold loads.
     "persist_results": (95, "Saving results..."),
     # Portfolio discovery pipeline (async via SQS worker)
     "discover_portfolio": (10, "Finding portfolio companies..."),

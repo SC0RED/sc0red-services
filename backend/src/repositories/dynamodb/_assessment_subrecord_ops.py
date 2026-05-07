@@ -39,6 +39,16 @@ def save_strategy_map(table: DynamoDBTable, assessment_id: str, data: dict[str, 
     table.put_item(item)
 
 
+def clear_strategy_map(table: DynamoDBTable, assessment_id: str) -> None:
+    """Remove the persisted strategy map for the given assessment.
+
+    Used by the re-analyse handler (per the strategy-map-on-demand spec) to
+    invalidate a stale map before the analysis pipeline regenerates the
+    underlying diagnosis. Idempotent — safe to call when no map exists.
+    """
+    table.delete_item(pk=f"ASSESSMENT#{assessment_id}", sk="STRATEGY_MAP")
+
+
 def get_strategy_map(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] | None:
     """Return the strategy map for the given assessment, or None if not found.
 
@@ -103,3 +113,43 @@ def get_value_chain(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] 
         steps = json.loads(steps)
 
     return {"steps": steps, "summary": item["summary"]}
+
+
+# ── Documents ──────────────────────────────────────────────────────────────
+
+
+def save_document(table: DynamoDBTable, assessment_id: str, document: dict[str, Any]) -> None:
+    """Persist a document metadata + extracted text item for the given assessment."""
+    item = {
+        "pk": f"ASSESSMENT#{assessment_id}",
+        "sk": f"DOC#{document['id']}",
+        "entity_type": "document",
+        "assessment_id": assessment_id,
+        "id": document["id"],
+        "filename": document["filename"],
+        "file_type": document["file_type"],
+        "extracted_text": document["extracted_text"],
+        "char_count": document["char_count"],
+        "uploaded_at": document["uploaded_at"],
+    }
+    table.put_item(item)
+
+
+def get_documents(table: DynamoDBTable, assessment_id: str) -> list[dict[str, Any]]:
+    """Return all document items for the given assessment ID."""
+    items = table.query(pk=f"ASSESSMENT#{assessment_id}", sk_prefix="DOC#")
+    return [
+        {
+            "id": item["id"],
+            "filename": item["filename"],
+            "fileType": item["file_type"],
+            "charCount": item["char_count"],
+            "uploadedAt": item["uploaded_at"],
+        }
+        for item in items
+    ]
+
+
+def delete_document(table: DynamoDBTable, assessment_id: str, document_id: str) -> None:
+    """Delete a single document from the given assessment."""
+    table.delete_item(pk=f"ASSESSMENT#{assessment_id}", sk=f"DOC#{document_id}")

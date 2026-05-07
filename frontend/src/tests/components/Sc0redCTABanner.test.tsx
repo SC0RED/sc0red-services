@@ -30,7 +30,10 @@ describe('Sc0redCTABanner', () => {
     it('renders the collapsed heading by default', () => {
         render(<Sc0redCTABanner {...baseProps} />)
 
-        expect(screen.getByText('sc0red can help you capture these opportunities')).toBeInTheDocument()
+        // Per `strategy-map-on-demand` Phase B: copy reframed from
+        // opportunity-centric to analysis-centric since the banner now
+        // appears at Beat 1.5 (before opportunities are shown).
+        expect(screen.getByText('Dig deeper with a sc0red advisor')).toBeInTheDocument()
     })
 
     it('is collapsed initially (aria-expanded=false, pitch hidden)', () => {
@@ -47,7 +50,7 @@ describe('Sc0redCTABanner', () => {
         fireEvent.click(screen.getByRole('button'))
 
         expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
-        expect(screen.getByText(/Our AI specialists implement opportunities/i)).toBeInTheDocument()
+        expect(screen.getByText(/Our PE-experienced advisors take you/i)).toBeInTheDocument()
         expect(screen.getByRole('link', { name: /Start the conversation/i })).toBeInTheDocument()
     })
 
