@@ -77,6 +77,13 @@ class StrategyMapSQSHandler:
     _MAX_RECEIVE_COUNT = 3
 
     def handle(self, event: dict[str, Any]) -> dict[str, Any]:
+        """Public entry — delegates to ``_handle_implementation`` after a debug print."""
+        print(  # noqa: T201
+            "[STRATEGY-MAP-DEBUG] StrategyMapSQSHandler.handle entered", flush=True
+        )
+        return self._handle_implementation(event)
+
+    def _handle_implementation(self, event: dict[str, Any]) -> dict[str, Any]:
         """Process all SQS records in the event.
 
         Returns the standard ``{"batchItemFailures": [...]}`` shape so SQS
@@ -171,6 +178,7 @@ class StrategyMapSQSHandler:
 
     def _process_message(self, message: dict[str, Any]) -> None:
         """Run a single strategy-map generation job."""
+        print("[STRATEGY-MAP-DEBUG] _process_message entered", flush=True)  # noqa: T201
         if message.get("type") != "strategy_map_generation":
             # Defensive: the dedicated queue should only receive this type, but
             # if the dispatcher ever wires it onto a multiplexed queue, fail
@@ -182,6 +190,10 @@ class StrategyMapSQSHandler:
 
         analysis_id = message["analysis_id"]
         scan_id = message.get("scan_id", "")
+        print(  # noqa: T201
+            f"[STRATEGY-MAP-DEBUG] _process_message analysis_id={analysis_id} scan_id={scan_id}",
+            flush=True,
+        )
 
         # Worker-level checkpoint logs. These mirror the analysis worker's
         # ``sqs_handler.handle_async_analysis`` pattern (line 70 of
@@ -244,8 +256,14 @@ class StrategyMapSQSHandler:
         assessment_repo: DynamoDBAssessmentRepository,
     ) -> None:
         """Hydrate, generate, persist. Wrapped in a single try-block by the caller."""
+        print(  # noqa: T201
+            f"[STRATEGY-MAP-DEBUG] _generate_and_persist entered analysis={analysis_id}",
+            flush=True,
+        )
         # Hydrate the in-memory Company shape that GenerateStrategyMap expects.
+        print("[STRATEGY-MAP-DEBUG] before hydrate_company_for_strategy_map", flush=True)  # noqa: T201
         company = hydrate_company_for_strategy_map(self._storage, analysis_id)
+        print("[STRATEGY-MAP-DEBUG] hydrate_company_for_strategy_map returned", flush=True)  # noqa: T201
         # Hydration confirmation with shape facts — surfaces in CloudWatch
         # before the long-running ``executor.execute_all()`` so a hung AI
         # call can't make it look like the worker silently failed at
@@ -284,6 +302,8 @@ class StrategyMapSQSHandler:
         step.request_executor = executor
         step.entity_accessor = accessor
 
+        print("[STRATEGY-MAP-DEBUG] before executor.execute_all", flush=True)  # noqa: T201
+
         # Run generation via ``executor.execute_all()`` so the executor's
         # post-step ``logger.info("[pipeline] completed …")`` summary fires
         # — that's where the ``GenerateStrategyMap.timings`` block lands
@@ -294,6 +314,7 @@ class StrategyMapSQSHandler:
         # recording the elapsed time and the outer try/except in
         # ``_process_message`` translates that to AppSync failure.
         executor.execute_all()
+        print("[STRATEGY-MAP-DEBUG] executor.execute_all returned", flush=True)  # noqa: T201
 
         # The step set the strategy map on the accessor; the in-pipeline
         # variant relies on PersistResults to actually write to DynamoDB,
