@@ -18,8 +18,18 @@ from src.handlers._strategy_map_hydration import StrategyMapHydrationError
 from src.handlers.strategy_map_handler import StrategyMapSQSHandler
 
 
-def _make_message(analysis_id: str = "ana-1", scan_id: str = "scan-1") -> dict[str, Any]:
-    """Build an SQS event with a single strategy-map-generation message."""
+def _make_message(
+    analysis_id: str = "ana-1",
+    scan_id: str = "scan-1",
+    *,
+    receive_count: int = 1,
+) -> dict[str, Any]:
+    """Build an SQS event with a single strategy-map-generation message.
+
+    ``receive_count`` mirrors the real SQS ``ApproximateReceiveCount``
+    attribute — set to the queue's ``max_receive_count`` (3) to simulate
+    the final retry attempt before DLQ.
+    """
     body = json.dumps(
         {
             "type": "strategy_map_generation",
@@ -29,7 +39,15 @@ def _make_message(analysis_id: str = "ana-1", scan_id: str = "scan-1") -> dict[s
             "scan_id": scan_id,
         }
     )
-    return {"Records": [{"messageId": "msg-1", "body": body}]}
+    return {
+        "Records": [
+            {
+                "messageId": "msg-1",
+                "body": body,
+                "attributes": {"ApproximateReceiveCount": str(receive_count)},
+            }
+        ]
+    }
 
 
 def _make_storage() -> tuple[MagicMock, MagicMock, MagicMock]:
@@ -149,6 +167,132 @@ class TestStrategyMapSQSHandlerProgrammingError:
 
         # Programming error → record retries via batchItemFailures
         assert result == {"batchItemFailures": [{"itemIdentifier": "msg-1"}]}
+
+
+class TestStrategyMapSQSHandlerFailSafeCleanup:
+    """Last-retry fail-safe: clear stuck ``generating`` state + notify failure
+    so the user isn't permanently stuck on the spinner when a programming
+    error blows past max_receive_count and the message lands in the DLQ.
+    """
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_failed")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    def test_first_retry_attempt_does_not_trigger_fail_safe(
+        self,
+        mock_hydrate: MagicMock,
+        mock_notify_failed: MagicMock,
+    ):
+        # Receive count 1 — there are still retries left, so the worker
+        # should NOT clear state or notify failure. The user keeps seeing
+        # the generating placeholder while SQS retries.
+        storage, company_repo, _ = _make_storage()
+        mock_hydrate.side_effect = KeyError("unexpectedly missing field")
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        result = handler.handle(_make_message(receive_count=1))
+
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-1"}]}
+        company_repo.clear_strategy_map_generation_state.assert_not_called()
+        mock_notify_failed.assert_not_called()
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_failed")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    def test_intermediate_retry_attempt_does_not_trigger_fail_safe(
+        self,
+        mock_hydrate: MagicMock,
+        mock_notify_failed: MagicMock,
+    ):
+        # Boundary check: receive count 2 (not yet at max=3). An
+        # off-by-one in the comparison (e.g. ``> _MAX_RECEIVE_COUNT - 1``
+        # instead of ``>= _MAX_RECEIVE_COUNT``) would clear state too
+        # early, releasing the slot to the CTA while a retry is still
+        # in flight — this test pins the inequality.
+        storage, company_repo, _ = _make_storage()
+        mock_hydrate.side_effect = KeyError("unexpectedly missing field")
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        result = handler.handle(_make_message(receive_count=2))
+
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-1"}]}
+        company_repo.clear_strategy_map_generation_state.assert_not_called()
+        mock_notify_failed.assert_not_called()
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_failed")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    def test_final_retry_attempt_clears_state_and_notifies_failure(
+        self,
+        mock_hydrate: MagicMock,
+        mock_notify_failed: MagicMock,
+    ):
+        # Receive count 3 = max_receive_count. The message is going to
+        # the DLQ regardless of what we return. Run the fail-safe cleanup
+        # so the company record's "generating" marker is cleared and the
+        # frontend's strategy-map slot returns to the CTA state.
+        storage, company_repo, _ = _make_storage()
+        mock_hydrate.side_effect = KeyError("unexpectedly missing field")
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        result = handler.handle(_make_message(receive_count=3))
+
+        # Still surfaces to batchItemFailures — SQS routes to DLQ regardless,
+        # but signaling here keeps the message-ack contract correct so SQS
+        # doesn't accidentally treat the record as a successful consume.
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-1"}]}
+        company_repo.clear_strategy_map_generation_state.assert_called_once_with("ana-1")
+        mock_notify_failed.assert_called_once()
+        notify_kwargs = mock_notify_failed.call_args.kwargs
+        assert notify_kwargs["analysis_id"] == "ana-1"
+        assert notify_kwargs["scan_id"] == "scan-1"
+        assert "retry limit" in notify_kwargs["error_message"].lower()
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_failed")
+    @patch("src.handlers.strategy_map_handler.hydrate_company_for_strategy_map")
+    def test_fail_safe_swallows_its_own_errors(
+        self,
+        mock_hydrate: MagicMock,
+        mock_notify_failed: MagicMock,
+    ):
+        # The fail-safe MUST NOT mask the original programming error. If
+        # the cleanup itself errors (DynamoDB outage, AppSync down), we
+        # log + drop on the floor — the message still goes to the DLQ
+        # and ops gets the original programming-error stacktrace.
+        storage, company_repo, _ = _make_storage()
+        mock_hydrate.side_effect = KeyError("unexpectedly missing field")
+        company_repo.clear_strategy_map_generation_state.side_effect = RuntimeError(
+            "DynamoDB throttled"
+        )
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        # Must NOT raise — fail-safe internal failure is contained.
+        result = handler.handle(_make_message(receive_count=3))
+
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-1"}]}
+
+    @patch("src.handlers.strategy_map_handler.notify_strategy_map_failed")
+    def test_fail_safe_skips_when_message_body_lacks_analysis_id(
+        self,
+        mock_notify_failed: MagicMock,
+    ):
+        # A malformed message that survived JSON-parsing but is missing
+        # the required ``analysis_id`` field should not blow up the
+        # cleanup path — there's nothing to clear, log + skip.
+        storage, company_repo, _ = _make_storage()
+
+        handler = StrategyMapSQSHandler(storage, MagicMock())
+        bad_event = {
+            "Records": [
+                {
+                    "messageId": "msg-bad",
+                    "body": json.dumps({"type": "strategy_map_generation"}),
+                    "attributes": {"ApproximateReceiveCount": "3"},
+                }
+            ]
+        }
+        result = handler.handle(bad_event)
+
+        assert result == {"batchItemFailures": [{"itemIdentifier": "msg-bad"}]}
+        company_repo.clear_strategy_map_generation_state.assert_not_called()
+        mock_notify_failed.assert_not_called()
 
 
 class TestStrategyMapSQSHandlerMessageDispatch:

@@ -351,17 +351,11 @@ def handle_generate_strategy_map(
 ) -> LambdaResponse:
     """Handle POST /api/analysis/{analysis_id}/strategy-map.
 
-    Per the strategy-map-on-demand spec: validate access, mark generation
-    in-flight on the company record, enqueue an SQS message on the dedicated
-    ``janus-strategy-map-queue``, and return 202 Accepted immediately. The
-    SQS worker (``strategy_map_handler``) picks up the message, runs
-    ``GenerateStrategyMap`` against the persisted analysis, persists the
-    result, and pushes an AppSync ``strategy_map_complete`` event.
-
-    Returns 503 ``STRATEGY_MAP_FEATURE_DISABLED`` when ``queue_url`` is empty
-    — the API Lambda's CDK env var is unset (e.g., environment hasn't
-    deployed Phase A2 yet), and we'd rather fail cleanly than ParamValidationError
-    out of boto3 below.
+    Validates access, marks generation in-flight, enqueues SQS, returns
+    202. Idempotent on re-click — if state is already "generating",
+    returns 202 without re-enqueueing (avoids duplicate workers racing
+    on ``save_strategy_map``). Returns 503 when ``queue_url`` is empty
+    (CDK env var unset).
     """
     if not queue_url:
         return build_error(
@@ -376,6 +370,15 @@ def handle_generate_strategy_map(
         return error
 
     scan_id = company.get("scan_id", "")
+
+    # Idempotency guard: a generation is already in flight. Return 202
+    # so the frontend's optimistic generating-state behaviour stays
+    # consistent (the user's click is acknowledged) but DON'T enqueue a
+    # duplicate message that would race the in-flight one.
+    if company.get("strategy_map_generation_state") == "generating":
+        return build_json_response(
+            {"status": "already_in_flight", "analysisId": analysis_id}, 202
+        )
 
     # Mark generation in-flight BEFORE enqueueing so a refresh during the
     # narrow window between SQS send and worker pickup still shows the

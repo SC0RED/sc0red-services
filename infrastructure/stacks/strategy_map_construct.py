@@ -98,6 +98,13 @@ class StrategyMapConstruct(Construct):
             queue_name=f"janus-strategy-map-queue-{environment}",
             visibility_timeout=Duration.seconds(720),
             retention_period=Duration.days(4),
+            # ``max_receive_count`` MUST match
+            # ``StrategyMapSQSHandler._MAX_RECEIVE_COUNT`` in
+            # ``backend/src/handlers/strategy_map_handler.py``. The
+            # worker uses that constant to detect the final retry attempt
+            # and run its fail-safe state-clear before SQS routes the
+            # message to the DLQ. There is no automated drift guard
+            # across the CDK / runtime boundary — change both together.
             dead_letter_queue=sqs.DeadLetterQueue(queue=self.dlq, max_receive_count=3),
         )
 
@@ -124,9 +131,36 @@ class StrategyMapConstruct(Construct):
             )
 
         # Worker Lambda — runs `StrategyMapSQSHandler` against incoming
-        # messages. Memory + timeout sized for the today's ~55s call shape;
-        # post-decomposition (optimize-strategy-map-latency Phase 1+) the
-        # work shrinks but the Lambda config stays as-is.
+        # messages. Memory + timeout sized for OpenAI's tail-latency shape:
+        # the typical 7-call sequence runs in ~55s, but real-world traces
+        # have crossed 120s on tail-latency days (initial 120s timeout
+        # blew up in production on 2026-05-07 — the user's first dev click
+        # timed out at exactly the budget, message went to DLQ, state
+        # stuck "generating"). 300s gives ~2.5× margin over the typical
+        # call shape and absorbs OpenAI tail latency without leaking
+        # messages to the DLQ. Post-`optimize-strategy-map-latency` Phase 1
+        # the work drops to ~17s but the headroom stays useful.
+        #
+        # Queue visibility timeout is 720s (Decision in this construct
+        # above), which is ≥ Lambda timeout, satisfying the AWS SQS-Lambda
+        # event-source mapping constraint.
+        #
+        # **Coverage gap — Lambda timeout vs in-process fail-safe**: the
+        # ``StrategyMapSQSHandler`` fail-safe state-clear (in
+        # ``backend/src/handlers/strategy_map_handler.py``) only runs when
+        # a Python exception propagates out of ``_process_message``. A
+        # Lambda timeout SIGKILLs the process — no ``except`` block runs.
+        # The full coverage chain for the timeout case is: timeout →
+        # message reappears after queue visibility expiry → next attempt
+        # runs → if it ALSO times out (likely if root cause unfixed),
+        # SQS increments ``ApproximateReceiveCount`` → after 3 timeouts
+        # the worker would fail-safe IF it survived long enough — which
+        # it doesn't, because the timeout fires first. So timeout-only
+        # failures still leak to the DLQ with state stuck. The DLQ alarm
+        # (above) is the operator-facing signal for this case. A future
+        # follow-up could subscribe an EventBridge rule to Lambda
+        # timeout events and run a dedicated cleanup Lambda; not in
+        # scope for this hotfix.
         worker_environment = dict(common_environment)
         worker_environment["APPSYNC_ENDPOINT"] = appsync_endpoint
         worker_environment["APPSYNC_API_KEY"] = appsync_api_key
@@ -138,7 +172,7 @@ class StrategyMapConstruct(Construct):
             handler="src.handlers.strategy_map_worker_entry.handle_event",
             bundling=bundling,
             environment=worker_environment,
-            timeout_seconds=120,
+            timeout_seconds=300,
             memory_size=1024,
             architecture=lambda_architecture,
             log_retention_days=log_retention_days,

@@ -66,6 +66,15 @@ class StrategyMapSQSHandler:
         self._storage = storage
         self._ai_client_factory = ai_client_factory
 
+    # MUST match the SQS queue's ``max_receive_count`` configured at
+    # ``infrastructure/stacks/strategy_map_construct.py``'s ``StrategyMapQueue``
+    # ``DeadLetterQueue(max_receive_count=...)`` argument. The two values
+    # live in separate runtime contexts (Python Lambda vs CDK synthesis)
+    # and there is no automated drift guard — if you change one, change
+    # the other. The fail-safe cleanup below uses this constant to detect
+    # the final retry attempt before SQS routes to the DLQ.
+    _MAX_RECEIVE_COUNT = 3
+
     def handle(self, event: dict[str, Any]) -> dict[str, Any]:
         """Process all SQS records in the event.
 
@@ -73,6 +82,18 @@ class StrategyMapSQSHandler:
         retries only the records that hit programming errors. Domain errors
         are translated to AppSync ``strategy_map_failed`` events and the
         record is consumed (success).
+
+        On the FINAL retry attempt (receive count == max_receive_count),
+        a programming error triggers a fail-safe cleanup: the company's
+        ``strategy_map_generation_state`` is cleared and a
+        ``strategy_map_failed`` AppSync event is pushed so the frontend
+        UI returns to the CTA state. Without this, the message would
+        land in the DLQ with the company record's "generating" marker
+        still set, leaving the user permanently stuck on the spinner.
+        Lambda timeouts are NOT covered by this path (the process is
+        killed mid-execution); the queue's visibility timeout + the
+        Lambda timeout sizing in ``strategy_map_construct.py`` are
+        what protect against that mode.
         """
         records = event.get("Records", [])
         batch_item_failures: list[dict[str, str]] = []
@@ -88,10 +109,66 @@ class StrategyMapSQSHandler:
                 logger.exception(
                     "Strategy-map worker failed on programming error for %s", message_id
                 )
+                receive_count_str = record.get("attributes", {}).get(
+                    "ApproximateReceiveCount", "1"
+                )
+                try:
+                    receive_count = int(receive_count_str)
+                except ValueError:
+                    receive_count = 1
+                if receive_count >= self._MAX_RECEIVE_COUNT:
+                    # Last attempt — message will go to DLQ after this. Run
+                    # the fail-safe cleanup so the user isn't permanently
+                    # stuck on "Generating your strategy map…".
+                    self._fail_safe_cleanup_for_message(record)
                 if message_id:
                     batch_item_failures.append({"itemIdentifier": message_id})
 
         return {"batchItemFailures": batch_item_failures}
+
+    def _fail_safe_cleanup_for_message(self, record: dict[str, Any]) -> None:
+        """Clear stuck ``generating`` state on the final SQS retry.
+
+        Runs only when ``ApproximateReceiveCount`` has hit the queue's
+        ``max_receive_count`` — at that point SQS will route the message
+        to the DLQ regardless of what we return, so this is our last
+        chance to free the company record from the "generating" marker.
+
+        Body parsing + field extraction happen OUTSIDE the inner try so
+        a malformed body fails loudly (and gets caught by the outer
+        ``handle()`` except, which already logged the original error).
+        Only the DDB + AppSync calls are wrapped — those are the IO
+        operations whose transient failure (throttle, network) we
+        explicitly want to swallow rather than mask the original
+        programming error already in CloudWatch.
+        """
+        body = json.loads(record["body"])
+        analysis_id = body.get("analysis_id")
+        scan_id = body.get("scan_id", "")
+        if not analysis_id:
+            logger.warning(
+                "Fail-safe cleanup skipped: message body missing analysis_id"
+            )
+            return
+
+        try:
+            company_repo = self._storage.create_company_repository()
+            company_repo.clear_strategy_map_generation_state(analysis_id)
+            notify_strategy_map_failed(
+                scan_id=scan_id,
+                analysis_id=analysis_id,
+                error_message=(
+                    "Strategy-map generation hit the retry limit. "
+                    "Please try again — the analysis is ready to retry."
+                ),
+            )
+            logger.info(
+                "Fail-safe cleanup completed for analysis=%s scan=%s",
+                analysis_id,
+                scan_id,
+            )
+        except Exception:
+            logger.exception("Fail-safe cleanup itself failed; manual DLQ inspection required")
 
     def _process_message(self, message: dict[str, Any]) -> None:
         """Run a single strategy-map generation job."""
