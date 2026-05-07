@@ -1,0 +1,20 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "CustomerPerspectiveTitles",
+    "description": "Per-call schema for the customer perspective Round 1 (title list). 3-4 titles. IDs (C1..C4) assigned by assembly.",
+    "type": "object",
+    "required": ["titles"],
+    "additionalProperties": false,
+    "properties": {
+        "titles": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 4,
+            "items": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 200
+            }
+        }
+    }
+}

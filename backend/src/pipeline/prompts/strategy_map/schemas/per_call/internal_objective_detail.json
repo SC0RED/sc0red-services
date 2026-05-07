@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "InternalProcessObjectiveDetail",
+    "description": "Per-call schema for internal-processes Round 3 (per-objective elaboration). The `id` (I{theme_idx}.{obj_idx}) and `title` are NOT requested — both are determined by upstream context (theme position, title-list position).",
+    "type": "object",
+    "required": ["definition", "category", "confidence", "rationale_source"],
+    "additionalProperties": false,
+    "properties": {
+        "definition": {
+            "type": "string",
+            "minLength": 50,
+            "maxLength": 1200
+        },
+        "category": {
+            "type": "string",
+            "enum": ["innovation", "customer_management", "operational_excellence", "citizenship"]
+        },
+        "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW"]
+        },
+        "rationale_source": {
+            "type": ["string", "null"],
+            "maxLength": 400
+        }
+    }
+}

@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "CustomerObjectiveDetail",
+    "description": "Per-call schema for the customer-perspective Round 2 elaboration. Customer objectives use `panel` (consumer/channel/partner), NOT `category`. The `id` and `title` are not requested — assigned by assembly + provided as call input respectively.",
+    "type": "object",
+    "required": ["definition", "panel", "confidence", "rationale_source"],
+    "additionalProperties": false,
+    "properties": {
+        "definition": {
+            "type": "string",
+            "minLength": 50,
+            "maxLength": 1200
+        },
+        "panel": {
+            "type": "string",
+            "enum": ["consumer", "channel", "partner"]
+        },
+        "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW"]
+        },
+        "rationale_source": {
+            "type": ["string", "null"],
+            "maxLength": 400
+        }
+    }
+}
