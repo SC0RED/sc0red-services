@@ -1,0 +1,41 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ArrowYesNo",
+    "description": "Per-call schema for the decomposed arrow yes/no calls. Asks whether a candidate (from_id, to_id) pair represents a real cause-and-effect arrow in the strategy map. Many of these fire in parallel (one per candidate pair); the assembly layer filters to enables=true and constructs Arrow records. When enables is true, hypothesis MUST be a non-null string of 20-500 characters (matches the Arrow Pydantic model's non-nullable string constraint). When enables is false, hypothesis must be null.",
+    "type": "object",
+    "required": ["enables", "hypothesis"],
+    "additionalProperties": false,
+    "properties": {
+        "enables": {
+            "type": "boolean"
+        },
+        "hypothesis": {
+            "type": ["string", "null"],
+            "minLength": 20,
+            "maxLength": 500
+        }
+    },
+    "if": {
+        "properties": {
+            "enables": {
+                "const": true
+            }
+        }
+    },
+    "then": {
+        "properties": {
+            "hypothesis": {
+                "type": "string",
+                "minLength": 20,
+                "maxLength": 500
+            }
+        }
+    },
+    "else": {
+        "properties": {
+            "hypothesis": {
+                "type": "null"
+            }
+        }
+    }
+}

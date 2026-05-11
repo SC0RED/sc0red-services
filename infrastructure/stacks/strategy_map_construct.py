@@ -174,14 +174,25 @@ class StrategyMapConstruct(Construct):
         worker_environment["APPSYNC_API_KEY"] = appsync_api_key
 
         # Enable the optimize-strategy-map-latency Phase 1 decomposed
-        # call shape on the staging (= development AWS account) worker
-        # only. Per Decision §6 of that change's design.md, manual eval
-        # gates the rollout to testing/production. The flag is read by
+        # call shape on the staging (= development AWS account) and
+        # testing workers. Per Decision §6 of that change's design.md,
+        # manual eval gated the rollout — Phase 1 has been live on
+        # staging and testing since 2026-05-11. The flag is read by
         # ``GenerateStrategyMap.execute()`` at call time (not module
-        # import) so this take effect on the next user click after the
+        # import) so this takes effect on the next user click after the
         # next deploy.
-        if environment == "staging":
+        if environment in ("staging", "testing"):
             worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED"] = "1"
+
+        # Enable the decompose-strategy-map-synthesis Phase 2 decomposed
+        # call shape on the staging (= development AWS account) worker
+        # only. Layers on top of Phase 1 — Phase 2 reuses Phase 1's
+        # per-objective IDs for arrows enumeration. Per that change's
+        # design.md §6, manual eval gates rollout to testing and
+        # production; staging is the dev-side env where we run the
+        # 5-company side-by-side comparison.
+        if environment == "staging":
+            worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS"] = "1"
 
         self.worker = create_lambda(
             self,

@@ -1,0 +1,19 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ValuePropositionPrimary",
+    "description": "Per-call schema for the decomposed vp_primary classifier. Returns just the primary classification enum; rationale, secondary, and exemplar come from separate parallel calls.",
+    "type": "object",
+    "required": ["primary"],
+    "additionalProperties": false,
+    "properties": {
+        "primary": {
+            "type": "string",
+            "enum": [
+                "operational_excellence",
+                "customer_intimacy",
+                "product_leadership",
+                "hybrid"
+            ]
+        }
+    }
+}

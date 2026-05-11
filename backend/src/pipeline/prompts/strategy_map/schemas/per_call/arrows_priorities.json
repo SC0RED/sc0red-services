@@ -1,0 +1,32 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "StrategicPrioritiesOnly",
+    "description": "Per-call schema for the decomposed holistic priorities call. Replaces the strategicPriorities portion of the legacy 07_arrows_and_gaps call. Priorities map 1:1 to Internal Processes themes; the count matches the theme count (2-3).",
+    "type": "object",
+    "required": ["strategicPriorities"],
+    "additionalProperties": false,
+    "properties": {
+        "strategicPriorities": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "required": ["name", "result"],
+                "additionalProperties": false,
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 4,
+                        "maxLength": 60
+                    },
+                    "result": {
+                        "type": "string",
+                        "minLength": 20,
+                        "maxLength": 300
+                    }
+                }
+            }
+        }
+    }
+}
