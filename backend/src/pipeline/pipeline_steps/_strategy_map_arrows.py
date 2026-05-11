@@ -52,6 +52,24 @@ if TYPE_CHECKING:
 # overflow correctly.
 _ARROWS_MAX_WORKERS = 25
 
+# Hard cap on the final assembled arrow count. Matches the
+# ``StrategyMap.arrows`` Pydantic constraint (``max_length=12``). The
+# decomposed yes/no evaluation has no aggregate awareness — each call
+# evaluates one pair in isolation — so even with a tightened prompt
+# the model can over-shoot. Production hit 72 enables=true on the
+# first decomposed run; this filter caps the assembled output at 12,
+# balanced across the three causal levels for visual coherence on the
+# rendered strategy map.
+_MAX_ARROWS = 12
+
+# Per-causal-level allocation for the post-filter. 4 + 4 + 4 = 12
+# guarantees we always have a balanced top-to-bottom story flow if
+# more than 12 arrows survive the yes/no evaluation. If a causal level
+# returns fewer than its allotment, the remaining slots stay unfilled
+# (we do NOT redistribute to other levels) — keeping a balanced
+# distribution is more important than maximising the total.
+_PER_LEVEL_CAP = 4
+
 _SCHEMA_CACHE: dict[str, dict[str, Any]] = {}
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
@@ -267,8 +285,86 @@ def run_decomposed_arrows_and_gaps(
         message = "GenerateStrategyMap arrows: gaps call did not return"
         raise ValueError(message)
 
+    # Post-filter cap. The decomposed yes/no evaluation has no
+    # aggregate awareness so the model can return enables=true for
+    # significantly more pairs than the assembled ``StrategyMap.arrows``
+    # field's ``max_length=12`` permits. Cap deterministically with a
+    # balanced top-to-bottom distribution.
+    arrows = _cap_arrows_balanced(arrows)
+
     return {
         "strategicPriorities": priorities_payload["strategicPriorities"],
         "arrows": arrows,
         "whatsMissing": gaps_payload["whatsMissing"],
     }
+
+
+def _causal_level(from_id: str) -> str | None:
+    """Return the causal-level bucket name for a source objective ID.
+
+    - Capacity → Internal Processes:  source IDs start with ``"O."``
+      (``O.P``, ``O.T``, ``O.C``).
+    - Internal Processes → Customer:  source IDs start with ``"I"``.
+    - Customer → Financial:           source IDs start with ``"C"``.
+
+    Returns ``None`` if the ID shape doesn't match any expected level —
+    callers should treat this as a programming error in pair
+    enumeration.
+    """
+    if from_id.startswith("O."):
+        return "capacity_to_internal"
+    if from_id.startswith("I"):
+        return "internal_to_customer"
+    if from_id.startswith("C"):
+        return "customer_to_financial"
+    return None
+
+
+def _cap_arrows_balanced(arrows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cap the assembled arrows list at ``_MAX_ARROWS`` with balanced levels.
+
+    When the model returns more enables=true responses than the
+    assembled ``StrategyMap.arrows`` field permits (``max_length=12``),
+    we need a deterministic way to pick which arrows survive. The
+    balanced strategy:
+
+    - Bucket arrows by causal level (capacity→internal, internal→
+      customer, customer→financial) — the order arrows were added
+      already follows this enumeration order in ``enumerate_arrow_pairs``.
+    - Keep up to ``_PER_LEVEL_CAP`` arrows from each level, in the
+      order they were added (which itself follows the enumeration
+      order — so earlier-enumerated objective IDs are preferred).
+    - Concatenate the three level lists back in top-to-bottom order
+      so the assembled output narrates the strategy from capacity up
+      to financial outcomes.
+
+    If the total arrow count is already ``<= _MAX_ARROWS``, return the
+    input unchanged.
+    """
+    if len(arrows) <= _MAX_ARROWS:
+        return arrows
+
+    by_level: dict[str, list[dict[str, Any]]] = {
+        "capacity_to_internal": [],
+        "internal_to_customer": [],
+        "customer_to_financial": [],
+    }
+    for arrow in arrows:
+        level = _causal_level(arrow["from"])
+        if level is None:
+            # An arrow with an unrecognised source ID indicates a
+            # programming error in pair enumeration. Fail fast rather
+            # than silently drop it.
+            message = (
+                f"GenerateStrategyMap: arrow source ID {arrow['from']!r} does not "
+                f"match any known causal-level prefix (O./I/C); cannot bucket "
+                f"for post-filter."
+            )
+            raise ValueError(message)
+        by_level[level].append(arrow)
+
+    return (
+        by_level["capacity_to_internal"][:_PER_LEVEL_CAP]
+        + by_level["internal_to_customer"][:_PER_LEVEL_CAP]
+        + by_level["customer_to_financial"][:_PER_LEVEL_CAP]
+    )

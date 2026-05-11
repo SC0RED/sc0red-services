@@ -249,13 +249,127 @@ class TestRunDecomposedArrowsAndGaps:
             organizational_capacity=capacity,
         )
 
-        # 40 candidate pairs, half enabled → 20 arrows in the assembled output.
-        assert len(result["arrows"]) == 20
+        # 40 candidate pairs, half enabled = 20 arrows raw, then the
+        # post-filter cap (``_MAX_ARROWS = 12``) trims to 12 with a
+        # balanced distribution across the three causal levels.
+        assert len(result["arrows"]) == 12
         # Every arrow has the expected shape.
         for arrow in result["arrows"]:
             assert set(arrow.keys()) == {"from", "to", "hypothesis"}
             assert arrow["hypothesis"] is not None
             assert "Mechanism:" in arrow["hypothesis"]
+        # Balanced across causal levels: ≤4 capacity-source, ≤4 internal-
+        # source, ≤4 customer-source arrows.
+        capacity_arrows = [a for a in result["arrows"] if a["from"].startswith("O.")]
+        internal_arrows = [a for a in result["arrows"] if a["from"].startswith("I")]
+        customer_arrows = [a for a in result["arrows"] if a["from"].startswith("C")]
+        assert len(capacity_arrows) <= 4
+        assert len(internal_arrows) <= 4
+        assert len(customer_arrows) <= 4
+
+    def test_all_pairs_enabled_caps_to_twelve(self) -> None:
+        """When every candidate returns enables=true, output caps at 12."""
+        financial, customer, internal_processes, capacity = _fixture_perspectives()
+        pairs = enumerate_arrow_pairs(
+            financial=financial,
+            customer=customer,
+            internal_processes=internal_processes,
+            organizational_capacity=capacity,
+        )
+        # Every pair enabled. Without the cap this would produce 40
+        # arrows; with the cap we expect exactly 12 (balanced 4+4+4).
+        responses: dict[str, dict[str, Any]] = {
+            f"arrow_{from_id}_{to_id}": {
+                "enables": True,
+                "hypothesis": (
+                    f"Mechanism: {from_id} drives a specific outcome materially "
+                    f"advancing {to_id} in this strategy map."
+                ),
+            }
+            for from_id, _ft, to_id, _tt in pairs
+        }
+        responses["priorities"] = {"strategicPriorities": []}
+        responses["gaps"] = {"whatsMissing": []}
+
+        step = _make_step_with_canned_responses(responses)
+        timer = StepTimer("GenerateStrategyMap")
+        result = run_decomposed_arrows_and_gaps(
+            step,  # type: ignore[arg-type]
+            system_prompt="<system prompt>",
+            context={"company_name": "Acme"},
+            timer=timer,
+            financial=financial,
+            customer=customer,
+            internal_processes=internal_processes,
+            organizational_capacity=capacity,
+        )
+
+        assert len(result["arrows"]) == 12
+
+        # Balanced 4 + 4 + 4 distribution.
+        capacity_arrows = [a for a in result["arrows"] if a["from"].startswith("O.")]
+        internal_arrows = [a for a in result["arrows"] if a["from"].startswith("I")]
+        customer_arrows = [a for a in result["arrows"] if a["from"].startswith("C")]
+        assert len(capacity_arrows) == 4
+        assert len(internal_arrows) == 4
+        assert len(customer_arrows) == 4
+
+        # Output assembled in top-to-bottom narrative order:
+        # capacity-source first, then internal-source, then customer-source.
+        from_ids = [a["from"] for a in result["arrows"]]
+        capacity_indices = [i for i, fid in enumerate(from_ids) if fid.startswith("O.")]
+        internal_indices = [i for i, fid in enumerate(from_ids) if fid.startswith("I")]
+        customer_indices = [i for i, fid in enumerate(from_ids) if fid.startswith("C")]
+        assert max(capacity_indices) < min(internal_indices), (
+            "capacity-source arrows must come before internal-source"
+        )
+        assert max(internal_indices) < min(customer_indices), (
+            "internal-source arrows must come before customer-source"
+        )
+
+    def test_few_arrows_below_cap_pass_through_unchanged(self) -> None:
+        """When fewer than ``_MAX_ARROWS`` survive, output is unchanged.
+
+        The post-filter only trims; it does NOT pad to a minimum count
+        (the assembled-output Pydantic model's ``min_length=5`` will
+        raise if there are too few arrows; that's a separate concern).
+        """
+        financial, customer, internal_processes, capacity = _fixture_perspectives()
+        pairs = enumerate_arrow_pairs(
+            financial=financial,
+            customer=customer,
+            internal_processes=internal_processes,
+            organizational_capacity=capacity,
+        )
+        # Enable just 7 pairs — well under the cap.
+        responses: dict[str, dict[str, Any]] = {
+            f"arrow_{from_id}_{to_id}": {"enables": False, "hypothesis": None}
+            for from_id, _ft, to_id, _tt in pairs
+        }
+        for index in range(7):
+            from_id, _ft, to_id, _tt = pairs[index]
+            responses[f"arrow_{from_id}_{to_id}"] = {
+                "enables": True,
+                "hypothesis": f"Mechanism: {from_id} → {to_id} sample hypothesis text.",
+            }
+        responses["priorities"] = {"strategicPriorities": []}
+        responses["gaps"] = {"whatsMissing": []}
+
+        step = _make_step_with_canned_responses(responses)
+        timer = StepTimer("GenerateStrategyMap")
+        result = run_decomposed_arrows_and_gaps(
+            step,  # type: ignore[arg-type]
+            system_prompt="<system prompt>",
+            context={"company_name": "Acme"},
+            timer=timer,
+            financial=financial,
+            customer=customer,
+            internal_processes=internal_processes,
+            organizational_capacity=capacity,
+        )
+
+        # All 7 arrows survive — no trimming.
+        assert len(result["arrows"]) == 7
 
     def test_priorities_and_gaps_passed_through_unchanged(self) -> None:
         responses = self._build_responses()
