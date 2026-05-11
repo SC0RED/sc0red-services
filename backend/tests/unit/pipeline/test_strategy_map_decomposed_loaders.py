@@ -16,10 +16,10 @@ from src.pipeline.pipeline_steps._strategy_map_corpus import (
     load_per_call_schema,
 )
 
-
 # Names the orchestration module references at runtime. If any of these
 # stop loading the decomposed path is broken — pin them.
 _PER_CALL_SCHEMAS = [
+    # Phase 1 (optimize-strategy-map-latency)
     "financial_titles",
     "customer_titles",
     "capacity_titles",
@@ -30,9 +30,21 @@ _PER_CALL_SCHEMAS = [
     "internal_objective_detail",
     "capacity_objective_detail",
     "core_values",
+    # Phase 2 (decompose-strategy-map-synthesis)
+    "vision_text",
+    "mission_text",
+    "synth_yesno",
+    "vp_primary",
+    "vp_secondary",
+    "vp_exemplar",
+    "vp_rationale",
+    "arrow_yesno",
+    "arrows_priorities",
+    "arrows_gaps",
 ]
 
 _DECOMPOSED_TEMPLATES = [
+    # Phase 1
     "round1_titles_financial",
     "round1_titles_customer",
     "round1_titles_capacity",
@@ -43,7 +55,47 @@ _DECOMPOSED_TEMPLATES = [
     "round2_detail_capacity",
     "round2_titles_internal_per_theme",
     "round3_detail_internal",
+    # Phase 2
+    "vision_text",
+    "mission_text",
+    "vision_synth",
+    "mission_synth",
+    "vp_primary",
+    "vp_secondary",
+    "vp_exemplar",
+    "vp_rationale",
+    "arrow_yesno",
+    "arrows_priorities",
+    "arrows_gaps",
 ]
+
+# JSON Schema keywords that OpenAI's structured-output mode REJECTS with
+# a 400 invalid_json_schema error. ``if``/``then``/``else`` conditionals
+# and ``not``/``allOf`` are not in the supported subset for
+# `response_format: json_schema`. ``oneOf`` has restricted use that this
+# project does not need today.
+_OPENAI_STRUCTURED_OUTPUT_BANNED_KEYWORDS = {
+    "if",
+    "then",
+    "else",
+    "not",
+    "allOf",
+    "oneOf",
+}
+
+
+def _walk_schema(obj: object, path: str) -> list[str]:
+    """Return a list of paths where banned keywords appear in the schema."""
+    found: list[str] = []
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in _OPENAI_STRUCTURED_OUTPUT_BANNED_KEYWORDS:
+                found.append(f"{path}.{key}")
+            found.extend(_walk_schema(value, f"{path}.{key}"))
+    elif isinstance(obj, list):
+        for index, value in enumerate(obj):
+            found.extend(_walk_schema(value, f"{path}[{index}]"))
+    return found
 
 
 @pytest.mark.parametrize("name", _PER_CALL_SCHEMAS)
@@ -64,9 +116,14 @@ def test_decomposed_template_loads(name: str) -> None:
     template = load_decomposed_template(name)
     assert isinstance(template, str)
     assert len(template) > 0
-    # Sanity: every decomposed template includes the placeholder marker
-    # for `{company_name}` (all of them reference the company in inputs).
-    assert "{company_name}" in template
+    # Sanity: every decomposed template includes at least one
+    # ``{placeholder}`` substitution marker, otherwise the corpus
+    # loader's regex won't be doing any work and the call would be sent
+    # with un-contextualised prompt text. Phase 1 perspective templates
+    # use ``{company_name}`` specifically; Phase 2 synthesis templates
+    # that summarise already-generated content may reference
+    # ``{vision_statement}`` / ``{value_proposition}`` / etc. instead.
+    assert "{" in template and "}" in template
 
 
 def test_detail_schemas_omit_id_field() -> None:
@@ -115,3 +172,26 @@ def test_capacity_titles_schema_uses_fixed_bucket_keys() -> None:
     schema = load_per_call_schema("capacity_titles")
     properties = schema["properties"]
     assert {"people", "technology", "culture"}.issubset(properties.keys())
+
+
+@pytest.mark.parametrize("name", _PER_CALL_SCHEMAS)
+def test_per_call_schema_avoids_openai_banned_keywords(name: str) -> None:
+    """Regression guard against OpenAI structured-output schema rejection.
+
+    OpenAI's ``response_format=json_schema`` mode rejects schemas
+    containing ``if``/``then``/``else``/``not``/``allOf``/``oneOf`` with a
+    400 ``invalid_json_schema`` error at the first AI call. Phase 2's
+    ``arrow_yesno.json`` originally used ``if``/``then``/``else`` to
+    enforce a conditional shape (``enables=true → hypothesis non-null``)
+    and shipped silently because the unit tests don't exercise the
+    OpenAI client. The error surfaced only at staging deploy.
+
+    This test parametrises every per-call schema and asserts none of the
+    banned keywords appear at any nesting depth.
+    """
+    schema = load_per_call_schema(name)
+    found = _walk_schema(schema, name)
+    assert not found, (
+        f"OpenAI structured-output mode rejects these keywords; "
+        f"remove them or move the constraint to the assembly layer: {found}"
+    )
