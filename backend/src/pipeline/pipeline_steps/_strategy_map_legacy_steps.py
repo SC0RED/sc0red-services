@@ -52,9 +52,7 @@ def run_step_1_vision_mission(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run Step 1 and split the response into vision + mission halves."""
     prompt = render_template("01_vision_mission", context)
-    _label, content, elapsed = step._run_ai_call(
-        prompt, _SCHEMA, system_prompt, "vision_mission"
-    )
+    _label, content, elapsed = step._run_ai_call(prompt, _SCHEMA, system_prompt, "vision_mission")
     timer.record("ai_call_vision_mission", elapsed)
     if "vision" not in content or "mission" not in content:
         message = (
@@ -134,9 +132,7 @@ def run_step_7_arrows_and_gaps(
 ) -> dict[str, Any]:
     """Run Step 7 and return the finale dict (priorities + arrows + gaps)."""
     prompt = render_template("07_arrows_and_gaps", context)
-    _label, content, elapsed = step._run_ai_call(
-        prompt, _SCHEMA, system_prompt, "arrows_and_gaps"
-    )
+    _label, content, elapsed = step._run_ai_call(prompt, _SCHEMA, system_prompt, "arrows_and_gaps")
     timer.record("ai_call_arrows_and_gaps", elapsed)
     for required in ("strategicPriorities", "arrows", "whatsMissing"):
         if required not in content:
