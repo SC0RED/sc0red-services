@@ -12,7 +12,13 @@
             "maxItems": 4,
             "items": {
                 "type": "object",
-                "required": ["id", "title", "description", "deepDiveFraming"],
+                "required": [
+                    "id",
+                    "title",
+                    "description",
+                    "deepDiveFraming",
+                    "relatedObjectiveIds"
+                ],
                 "additionalProperties": false,
                 "properties": {
                     "id": {

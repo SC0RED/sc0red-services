@@ -51,8 +51,10 @@ to the deep-dive conversation, not a criticism of the company.
 - Each gap has a `deepDiveFraming` sentence in the form: "A Vector
   Advisory deep-dive would [specific action]." The action MUST be
   specific enough that the prospect can see what they'd get.
-- `relatedObjectiveIds` should be populated when the gap touches one
-  or more specific objectives by ID.
+- `relatedObjectiveIds` MUST always be present. Set it to `[]` (an
+  empty array) when the gap is general and does not touch any specific
+  objective by ID; otherwise populate it with the objective IDs the
+  gap touches.
 
 ## Example
 
