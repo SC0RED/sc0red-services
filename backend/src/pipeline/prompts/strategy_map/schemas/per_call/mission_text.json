@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "MissionTextOnly",
+    "description": "Per-call schema for the decomposed mission-text call. Used by the decompose-strategy-map-synthesis Phase 2 path. The synthesised flag and rationale come from a separate mission_synth call running in parallel — they are NOT part of this schema.",
+    "type": "object",
+    "required": ["statement"],
+    "additionalProperties": false,
+    "properties": {
+        "statement": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 300
+        }
+    }
+}

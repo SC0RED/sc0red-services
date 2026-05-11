@@ -1,0 +1,18 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "SynthYesNo",
+    "description": "Per-call schema shared by the decomposed vision_synth and mission_synth calls. The synth call decides whether the corresponding text-only call should be using a verbatim published statement (synthesised: false) or synthesising one (synthesised: true), and provides a one-sentence rationale.",
+    "type": "object",
+    "required": ["synthesised", "rationale"],
+    "additionalProperties": false,
+    "properties": {
+        "synthesised": {
+            "type": "boolean"
+        },
+        "rationale": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 300
+        }
+    }
+}
