@@ -32,7 +32,39 @@ from typing import Any
 
 import pytest
 
-from src.pipeline.pipeline_steps._strategy_map_corpus import load_schema
+from src.pipeline.pipeline_steps._strategy_map_corpus import (
+    load_per_call_schema,
+    load_schema,
+)
+
+# Every per-call schema used by the decomposed paths (Phase 1 + Phase 2).
+# Kept in sync with ``test_strategy_map_decomposed_loaders.py``'s
+# ``_PER_CALL_SCHEMAS`` list; both lists must contain every schema the
+# orchestration loads at runtime.
+_PER_CALL_SCHEMAS = [
+    # Phase 1 (optimize-strategy-map-latency)
+    "financial_titles",
+    "customer_titles",
+    "capacity_titles",
+    "internal_themes",
+    "internal_titles_per_theme",
+    "financial_objective_detail",
+    "customer_objective_detail",
+    "internal_objective_detail",
+    "capacity_objective_detail",
+    "core_values",
+    # Phase 2 (decompose-strategy-map-synthesis)
+    "vision_text",
+    "mission_text",
+    "synth_yesno",
+    "vp_primary",
+    "vp_secondary",
+    "vp_exemplar",
+    "vp_rationale",
+    "arrow_yesno",
+    "arrows_priorities",
+    "arrows_gaps",
+]
 
 
 def _is_object_schema(node: dict[str, Any]) -> bool:
@@ -141,3 +173,48 @@ class TestStrategyMapSchemaStrictMode:
         for segment in path.strip("/").split("/"):
             node = node[segment]
         return node
+
+
+class TestPerCallSchemaStrictMode:
+    """Strict-mode invariants applied to every per-call decomposed schema.
+
+    Production incident (2026-05-11, against `gpt-5.1`):
+
+        Invalid schema for response_format 'structured_response': In
+        context=('properties', 'whatsMissing', 'items'), 'required' is
+        required to be supplied and to be an array including every key
+        in properties. Missing 'relatedObjectiveIds'.
+
+    The strategy_map_output.json strict-mode tests above did not catch
+    this because the decomposed pipeline does NOT send the assembled
+    schema — it sends 30+ per-call schemas, each of which must
+    independently comply with OpenAI strict mode. This test class
+    parametrises every per-call schema and applies the same invariants.
+    """
+
+    @pytest.mark.parametrize("name", _PER_CALL_SCHEMAS)
+    def test_every_property_is_in_required(self, name: str) -> None:
+        """Every key in ``properties`` MUST appear in ``required``."""
+        schema = load_per_call_schema(name)
+        violations: list[str] = []
+        for path, node in _walk_object_schemas(schema):
+            properties = set(node["properties"].keys())
+            required = set(node.get("required", []))
+            missing = sorted(properties - required)
+            if missing:
+                violations.append(f"{name}{path}: properties not in required = {missing}")
+        assert not violations, (
+            "OpenAI strict-mode violations in per-call schema:\n  " + "\n  ".join(violations)
+        )
+
+    @pytest.mark.parametrize("name", _PER_CALL_SCHEMAS)
+    def test_additional_properties_is_false(self, name: str) -> None:
+        """Every object schema MUST set ``additionalProperties: false``."""
+        schema = load_per_call_schema(name)
+        violations: list[str] = []
+        for path, node in _walk_object_schemas(schema):
+            if node.get("additionalProperties") is not False:
+                violations.append(f"{name}{path}: additionalProperties is not false")
+        assert not violations, (
+            "OpenAI strict-mode violations in per-call schema:\n  " + "\n  ".join(violations)
+        )
