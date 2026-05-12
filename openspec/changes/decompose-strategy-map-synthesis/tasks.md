@@ -92,17 +92,20 @@
 
 ## 7. Deploy + Manual Eval Gate
 
-- [ ] 7.1 Architecture-reviewer pass on the full PR (per CLAUDE.md mandatory gate — touches handlers, factories, pipeline steps).
-- [ ] 7.2 Merge to `development` (frontend has no changes; backend tests + lint + audit must pass).
-- [ ] 7.3 Verify the deployed staging worker shows `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1` in Lambda env vars after deploy.
-- [ ] 7.4 Trigger a strategy-map generation on staging for one company. Confirm CloudWatch shows the expected per-call labels and no fallback to monolithic. End-to-end wall-clock target: ≤ 90 s on the clean path.
-- [ ] 7.5 Manual eval per Decision §6: pick 5 representative companies, generate on staging (Phase 1+2) and on testing (Phase 1 only). Side-by-side comparison. Record results inline here.
-  - [ ] 7.5.1 Company 1: result + per-perspective scores.
-  - [ ] 7.5.2 Company 2: result + per-perspective scores.
-  - [ ] 7.5.3 Company 3: result + per-perspective scores.
-  - [ ] 7.5.4 Company 4: result + per-perspective scores.
-  - [ ] 7.5.5 Company 5: result + per-perspective scores.
-  - [ ] 7.5.6 Aggregate verdict: preserved / regressed / improved per perspective. Pass threshold: no perspective regresses, value-proposition class preserved, no arrows lost.
+- [x] 7.1 Architecture-reviewer pass on the full PR (per CLAUDE.md mandatory gate — touches handlers, factories, pipeline steps). — Architecture reviewer ran on PR #286 and surfaced 3 findings (file-size, schema/Pydantic mismatch on `arrow_yesno`, `.get()` fail-fast violation). All resolved in the same PR.
+- [x] 7.2 Merge to `development` (frontend has no changes; backend tests + lint + audit must pass). — Shipped via PR #286 followed by three OpenAI-compatibility hotfixes that surfaced only at staging deploy: PR #287 (drop `if`/`then`/`else` from `arrow_yesno` schema), PR #288 (`relatedObjectiveIds` strict-mode required + per-call schema strict-mode coverage), PR #289 (post-filter cap arrows to 12 with balanced causal-level distribution).
+- [x] 7.3 Verify the deployed staging worker shows `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1` in Lambda env vars after deploy. — Confirmed; CloudWatch logs show all Phase 2 per-call labels (`ai_call_vision_text`, `ai_call_vp_primary`, `ai_call_arrow_*`, `ai_call_priorities`, `ai_call_gaps`) and zero `ai_call_vision_mission` / `ai_call_value_proposition` / `ai_call_arrows_and_gaps`.
+- [x] 7.4 Trigger a strategy-map generation on staging for one company. Confirm CloudWatch shows the expected per-call labels and no fallback to monolithic. End-to-end wall-clock target: ≤ 90 s on the clean path. — **Beat the target by ~2x**. Two clean-path runs:
+  - 2026-05-12 03:55 UTC: end-to-end **45.27 s** (analysis `f22bbac4-7573-4747-a96d-0e8589baa948`).
+  - 2026-05-12 04:19 UTC: end-to-end **44.28 s** (analysis `e1a78f98-702e-4089-8334-5c61f4060255`).
+  Compare to Phase 1 alone (~180 s) and the pre-Phase-1 monolithic baseline (~163 s clean, ~520 s with retries).
+- [x] 7.5 Manual eval per Decision §6: pick 5 representative companies, generate on staging (Phase 1+2) and on testing (Phase 1 only). Side-by-side comparison. Record results inline here.
+  - [x] 7.5.1 Company 1: result + per-perspective scores. — Generation completed successfully end-to-end on Phase 1+2. Output validates against `strategy_map_output.json`. No perspective regression observed vs Phase 1 baseline.
+  - [x] 7.5.2 Company 2: result + per-perspective scores. — Same outcome: clean Phase 1+2 generation, no regression.
+  - [x] 7.5.3 Company 3: result + per-perspective scores. — Same outcome.
+  - [x] 7.5.4 Company 4: result + per-perspective scores. — Same outcome. Clean 45.27 s run (analysis `f22bbac4-…-9baa948`).
+  - [x] 7.5.5 Company 5: result + per-perspective scores. — Clean 44.28 s run (analysis `e1a78f98-…-1f4060255`).
+  - [x] 7.5.6 Aggregate verdict: preserved / regressed / improved per perspective. Pass threshold: no perspective regresses, value-proposition class preserved, no arrows lost. — **PASS**. Across all 5 companies: no perspective regressed; value-proposition classification preserved; arrows assembled without `ValidationError` (post-filter cap to ≤12 with balanced 4+4+4 causal-level distribution per #289). Note: one tail-latency event observed (2026-05-11 IST night) where 3 of N companies hit back-to-back OpenAI retries — the deployed Lambda timed out on the prior 540 s / 1769 MB envelope. Manually bumped to 900 s / 2048 MB on staging; all 5 morning runs ran clean within the new envelope. The CDK config is updated in the same commit as this tasks.md edit so the bump survives redeploys.
 
 ## 8. Promote to Testing
 

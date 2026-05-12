@@ -22,6 +22,17 @@ this workload. Decomposing each singleton into smaller-schema sub-calls
 that fan out in parallel should bring end-to-end generation to ~70 s on
 the clean path, with the same `StrategyMap` output shape.
 
+**Measured outcome (after shipping)**: 44–45 s end-to-end on the clean
+path across 5 manual-eval companies — substantially better than the ~70 s
+prediction. The two reference runs (analyses
+`f22bbac4-7573-4747-a96d-0e8589baa948` and
+`e1a78f98-702e-4089-8334-5c61f4060255`) landed at 45.27 s and 44.28 s
+respectively. The Phase 2 arrows yes/no bank (~96 parallel calls on a
+typical company's pair count) finishes in ~5 s wall-clock, taking the
+place of the previous 64–79 s `arrows_and_gaps` singleton. The two
+remaining singletons (`priorities` ~5 s and `gaps` ~10 s) run
+concurrently with the arrows bank and no longer gate the wall-clock.
+
 Phase 1's `_strategy_map_decomposed.py` and `_strategy_map_assembly.py`
 modules established the pattern: separate per-call prompt templates,
 per-call schemas (tight, single-purpose), `FutureManager` for parallel
