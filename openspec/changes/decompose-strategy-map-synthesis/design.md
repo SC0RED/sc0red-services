@@ -278,15 +278,24 @@ This mirrors Phase 1's split between `_strategy_map_decomposed.py`
 4. Merge to `development`. Deploy to staging with `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1`.
 5. Run 5-company manual eval (dev = Phase 1+2; testing = Phase 1). Document
    results in `tasks.md` under the eval task.
-6. Promote to testing only after eval gate passes. 7-day soak on testing.
-7. Promote to production. 7-day soak on production.
+6. ~~Promote to testing only after eval gate passes. 7-day soak on testing.~~
+   **Updated 2026-05-12**: After the §6 manual-eval gate passed cleanly,
+   the user opted to skip the per-environment soak ordering and ship
+   Phase 2 to testing and production simultaneously. The CDK construct
+   now sets both flags unconditionally for every environment. Rationale:
+   the eval gate validated correctness across 5 representative companies
+   and the rollback path (flip the env var off) is a fast operator move.
+7. Promote to production with the same always-on flag config.
 8. Once stable on prod, schedule a cleanup change to remove the legacy
    monolithic call paths (also planned in the parent change's Phase 3
    cleanup).
 
-**Rollback**: flip the env var off on the affected environment.
-`GenerateStrategyMap.execute()` reads it at call time, so the next
-user-clicked generation falls back to Phase 1's call shape immediately.
+**Rollback**: edit `infrastructure/stacks/strategy_map_construct.py` to
+remove the flag from the affected environment and redeploy.
+`GenerateStrategyMap.execute()` reads the env var at call time, so the
+next user-clicked generation falls back to Phase 1's call shape (or
+fully monolithic if Phase 1 is also unset) immediately after the Lambda
+update propagates. No code revert needed for the rollback path.
 
 ## Open Questions
 

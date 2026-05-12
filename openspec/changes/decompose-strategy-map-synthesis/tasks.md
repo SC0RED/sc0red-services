@@ -109,16 +109,30 @@
 
 ## 8. Promote to Testing
 
-- [ ] 8.1 Open a dev → testing promotion PR after the §7.5 eval gate passes.
-- [ ] 8.2 After merge, verify the testing worker shows `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1` in Lambda env vars.
-- [ ] 8.3 Trigger a strategy-map generation on testing for one company. Confirm CloudWatch shows the expected labels.
-- [ ] 8.4 7-day soak on testing. Document any unexpected behaviour or failure modes here.
+> **Policy update (2026-05-12)**: Per user direction, Phase 2 is enabled
+> by default in every environment. The original design.md §Migration Plan
+> called for a 7-day soak on testing with Phase 1 alone before flipping
+> Phase 2 on testing. After the 5-company manual eval gate (§7.5) passed
+> cleanly on staging, the user opted to skip the per-environment soak
+> ordering and ship Phase 2 to testing and production simultaneously
+> with the rest of the deploy. The CDK construct now sets both
+> ``GENERATE_STRATEGY_MAP_DECOMPOSED`` and
+> ``GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS`` to ``"1"``
+> unconditionally for all environments.
+
+- [ ] 8.1 Open a dev → testing promotion PR after the §7.5 eval gate passes. — PR #290 open at the time of this edit; awaiting CI + merge.
+- [ ] 8.2 After merge, verify the testing worker shows BOTH `GENERATE_STRATEGY_MAP_DECOMPOSED=1` AND `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1` in Lambda env vars (policy update above).
+- [ ] 8.3 Trigger a strategy-map generation on testing for one company. Confirm CloudWatch shows the Phase 1+2 per-call labels (`ai_call_vision_text`, `ai_call_vp_primary`, `ai_call_arrow_*`, etc.).
+- [ ] 8.4 _Originally_: 7-day soak on testing before promoting. _Per policy update_: production rollout is no longer gated on a testing soak. The CloudWatch dashboards and the assembled-output Pydantic validation are now the operator-facing safety net.
 
 ## 9. Promote to Production
 
-- [ ] 9.1 Open a testing → production promotion PR after the §8 soak passes.
-- [ ] 9.2 After merge, verify the production worker shows `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1` in Lambda env vars.
-- [ ] 9.3 7-day soak on production. Watch CloudWatch dashboards for anomalies.
+> See policy update in §8 above. Production receives the same
+> always-on flag config as staging and testing.
+
+- [ ] 9.1 Open a testing → production promotion PR.
+- [ ] 9.2 After merge, verify the production worker shows BOTH flags in Lambda env vars.
+- [ ] 9.3 Watch CloudWatch dashboards for anomalies on the first few prod strategy-map clicks.
 
 ## 10. Cleanup (deferred — separate change)
 

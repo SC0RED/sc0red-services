@@ -181,26 +181,25 @@ class StrategyMapConstruct(Construct):
         worker_environment["APPSYNC_ENDPOINT"] = appsync_endpoint
         worker_environment["APPSYNC_API_KEY"] = appsync_api_key
 
-        # Enable the optimize-strategy-map-latency Phase 1 decomposed
-        # call shape on the staging (= development AWS account) and
-        # testing workers. Per Decision §6 of that change's design.md,
-        # manual eval gated the rollout — Phase 1 has been live on
-        # staging and testing since 2026-05-11. The flag is read by
-        # ``GenerateStrategyMap.execute()`` at call time (not module
-        # import) so this takes effect on the next user click after the
-        # next deploy.
-        if environment in ("staging", "testing"):
-            worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED"] = "1"
-
-        # Enable the decompose-strategy-map-synthesis Phase 2 decomposed
-        # call shape on the staging (= development AWS account) worker
-        # only. Layers on top of Phase 1 — Phase 2 reuses Phase 1's
-        # per-objective IDs for arrows enumeration. Per that change's
-        # design.md §6, manual eval gates rollout to testing and
-        # production; staging is the dev-side env where we run the
-        # 5-company side-by-side comparison.
-        if environment == "staging":
-            worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS"] = "1"
+        # Strategy-map latency optimisation feature flags. Both layers
+        # are enabled by default for every environment after the
+        # 2026-05-12 manual eval gate passed cleanly on staging
+        # (5 companies, end-to-end ~45 s per company, no perspective
+        # regression — see
+        # ``openspec/changes/decompose-strategy-map-synthesis/tasks.md``
+        # §7.5). The earlier per-environment gating (Phase 1 on
+        # staging+testing only, Phase 2 on staging only) was removed at
+        # the user's request to ship Phase 2 to all environments
+        # without an additional soak-then-flag-flip step.
+        #
+        # Both flags are read by ``GenerateStrategyMap.execute()`` at
+        # call time (not module import), so they take effect on the next
+        # user click after the next deploy. The flag-layering guard in
+        # ``execute()`` raises ``ValueError`` before any AI call if Phase
+        # 2 is set without Phase 1 — both are set here unconditionally
+        # so that invariant holds.
+        worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED"] = "1"
+        worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS"] = "1"
 
         self.worker = create_lambda(
             self,
