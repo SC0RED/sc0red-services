@@ -130,9 +130,9 @@
 > See policy update in §8 above. Production receives the same
 > always-on flag config as staging and testing.
 
-- [ ] 9.1 Open a testing → production promotion PR. — PR initiated 2026-05-12 immediately after §8.3 verification.
-- [ ] 9.2 After merge, verify the production worker shows BOTH flags in Lambda env vars.
-- [ ] 9.3 Watch CloudWatch dashboards for anomalies on the first few prod strategy-map clicks.
+- [x] 9.1 Open a testing → production promotion PR. — PR #291 opened 2026-05-12, all CI green, merged via REST API.
+- [x] 9.2 After merge, verify the production worker shows BOTH flags in Lambda env vars. — Verified post-deploy.
+- [x] 9.3 Watch CloudWatch dashboards for anomalies on the first few prod strategy-map clicks. — User-verified: production strategy-map generation runs cleanly end-to-end on the Phase 1+2 decomposed pipeline.
 
 ## 10. Cleanup (deferred — separate change)
 
