@@ -1,8 +1,17 @@
 """Company analysis pipeline factory.
 
-Wires the 5-step single company analysis pipeline:
-ScrapeAndResolve → ParallelProfileRiskAndIdeation →
-DetailOpportunities → ComputeEbitdaTree → PersistResults
+Wires the 6-step single-company analysis pipeline:
+ScrapeAndResolveURL → ParallelProfileRiskAndIdeation →
+DetailOpportunities → ComputeEbitdaTree → ComputeValueChain →
+PersistResults
+
+The strategy-map step that previously ran here was lifted to an
+on-demand SQS worker (per the ``strategy-map-on-demand`` change). The
+pipeline no longer auto-generates the map; users trigger generation via
+the "Generate strategy map" button on the analysis detail page, which
+hits ``handle_generate_strategy_map`` and enqueues the dedicated
+``janus-strategy-map-handler`` Lambda. See
+``backend/src/handlers/strategy_map_handler.py``.
 """
 
 from __future__ import annotations

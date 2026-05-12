@@ -8,6 +8,7 @@ from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnal
 from src.pipeline.pipeline_steps.compute_ebitda_tree import ComputeEbitdaTree
 from src.pipeline.pipeline_steps.compute_value_chain import ComputeValueChain
 from src.pipeline.pipeline_steps.detail_opportunities import DetailOpportunities
+from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
@@ -24,7 +25,12 @@ class TestCompanyAnalysisFactory:
             request_id="r-1",
         )
 
-    def test_get_pipeline_returns_five_steps(self):
+    def test_get_pipeline_returns_six_steps(self):
+        # Per `strategy-map-on-demand` Phase C the auto-gen
+        # `GenerateStrategyMap` step was lifted from this pipeline to a
+        # dedicated SQS worker. The persisted analysis pipeline is now 6
+        # steps (was 7) and the strategy-map artifact is generated
+        # on-demand via the "Generate strategy map" button.
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
         assert len(pipeline) == 6
@@ -34,6 +40,15 @@ class TestCompanyAnalysisFactory:
         assert isinstance(pipeline[3], ComputeEbitdaTree)
         assert isinstance(pipeline[4], ComputeValueChain)
         assert isinstance(pipeline[5], PersistResults)
+
+    def test_pipeline_does_not_contain_generate_strategy_map(self):
+        # Defends against an accidental re-introduction of the auto-gen
+        # step. The strategy-map worker uses the same `GenerateStrategyMap`
+        # class, so the import isn't dead — only the wiring into THIS
+        # pipeline must stay removed.
+        factory = self._make_factory()
+        pipeline = factory.get_pipeline()
+        assert not any(isinstance(step, GenerateStrategyMap) for step in pipeline)
 
     def test_build_executor_wires_accessor(self):
         factory = self._make_factory()

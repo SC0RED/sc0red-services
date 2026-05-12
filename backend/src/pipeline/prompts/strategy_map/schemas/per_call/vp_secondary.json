@@ -1,0 +1,18 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ValuePropositionSecondary",
+    "description": "Per-call schema for the decomposed vp_secondary classifier. Returns the secondary classification (which is only used when vp_primary returns 'hybrid'). 'hybrid' itself is excluded — secondary cannot be hybrid per the ValuePropositionClassification Pydantic model.",
+    "type": "object",
+    "required": ["secondary"],
+    "additionalProperties": false,
+    "properties": {
+        "secondary": {
+            "type": "string",
+            "enum": [
+                "operational_excellence",
+                "customer_intimacy",
+                "product_leadership"
+            ]
+        }
+    }
+}

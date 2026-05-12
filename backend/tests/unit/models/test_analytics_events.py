@@ -70,6 +70,59 @@ class TestAnalyticsEventWebEvents:
             AnalyticsEvent(**_web_event(active_lever_filter="Some Other Lever"))
 
 
+class TestAnalyticsEventStrategyMapEvents:
+    """Strategy-map CTA event types — web-source, no lever filter.
+
+    These events back the conversion funnel for the Vector Advisory
+    strategy-map product (see PR #239 review feedback). Surface
+    invariants: source='web', `active_lever_filter` MUST be null.
+    """
+
+    def test_rendered_strategy_map_event_parses(self) -> None:
+        event = AnalyticsEvent(
+            **_web_event(
+                event_type="sc0red_cta_rendered_strategy_map",
+                opportunity_count=0,
+                active_lever_filter=None,
+            )
+        )
+        assert event.event_type == "sc0red_cta_rendered_strategy_map"
+        assert event.source == "web"
+        assert event.active_lever_filter is None
+
+    def test_clicked_strategy_map_event_parses(self) -> None:
+        event = AnalyticsEvent(
+            **_web_event(
+                event_type="sc0red_cta_clicked_strategy_map",
+                opportunity_count=0,
+                active_lever_filter=None,
+            )
+        )
+        assert event.event_type == "sc0red_cta_clicked_strategy_map"
+
+    def test_strategy_map_event_with_lever_filter_rejected(self) -> None:
+        # The strategy-map surface has no lever-filter concept; a
+        # non-null filter would corrupt funnel queries that join across
+        # surfaces on event_type.
+        with pytest.raises(ValidationError, match="must not carry active_lever_filter"):
+            AnalyticsEvent(
+                **_web_event(
+                    event_type="sc0red_cta_rendered_strategy_map",
+                    active_lever_filter="Revenue Side",
+                )
+            )
+
+    def test_strategy_map_event_with_pdf_source_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="requires source='web'"):
+            AnalyticsEvent(
+                **_web_event(
+                    event_type="sc0red_cta_clicked_strategy_map",
+                    source="pdf",
+                    active_lever_filter=None,
+                )
+            )
+
+
 class TestAnalyticsEventPdfEvent:
     def test_pdf_render_event_parses(self) -> None:
         event = AnalyticsEvent(**_pdf_event())

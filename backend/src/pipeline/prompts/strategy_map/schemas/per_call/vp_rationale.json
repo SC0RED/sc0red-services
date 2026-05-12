@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ValuePropositionRationale",
+    "description": "Per-call schema for the decomposed vp_rationale call. Returns just the one-or-two-sentence rationale justifying the value-proposition classification.",
+    "type": "object",
+    "required": ["rationale"],
+    "additionalProperties": false,
+    "properties": {
+        "rationale": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 600
+        }
+    }
+}

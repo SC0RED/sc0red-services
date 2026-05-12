@@ -40,7 +40,15 @@ const mockOpportunities: Opportunity[] = [
 ]
 
 describe('ValueLeverSummary', () => {
-    it('returns null when no opportunities have value_lever', () => {
+    it('renders all three lever cards even when no opportunities have value_lever', () => {
+        // Pre-`analysis-detail-consistency-wrapper`, this component
+        // returned `null` when no opportunities had a `value_lever`
+        // field — the page rendered the wrapper unconditionally and
+        // the component had to defend against the empty case. With
+        // the new architecture, the page-level wrapper itself is
+        // gated on `hasValueLevers`, so this leaf no longer needs a
+        // null-guard. It always renders its three cards (with zero
+        // counts when no opportunities match a given lever).
         const noLeverOpps: Opportunity[] = [
             {
                 title: 'Old Opportunity',
@@ -52,13 +60,20 @@ describe('ValueLeverSummary', () => {
             },
         ]
         const onLeverChange = vi.fn()
-        const { container } = render(
+        render(
             <ValueLeverSummary opportunities={noLeverOpps} activeLever="All" onLeverChange={onLeverChange} />
         )
-        expect(container.innerHTML).toBe('')
+        expect(screen.getByText('Revenue Side')).toBeInTheDocument()
+        expect(screen.getByText('Cost Side')).toBeInTheDocument()
+        expect(screen.getByText('Both')).toBeInTheDocument()
+        // All three counts read 0 (no matches against the only opp).
+        const zeroes = screen.getAllByText('0')
+        expect(zeroes.length).toBe(3)
     })
 
-    it('shows 3 lever cards with correct counts', () => {
+    it('shows 3 lever cards with correct counts and no internal heading', () => {
+        // Per D3, "Value Impact" heading lives at the page level via
+        // `AnalysisSection`. The leaf renders only the cards.
         const onLeverChange = vi.fn()
         render(
             <ValueLeverSummary
@@ -68,7 +83,7 @@ describe('ValueLeverSummary', () => {
             />
         )
 
-        expect(screen.getByText('Value Impact')).toBeInTheDocument()
+        expect(screen.queryByText('Value Impact')).toBeNull()
         expect(screen.getByText('Revenue Side')).toBeInTheDocument()
         expect(screen.getByText('Cost Side')).toBeInTheDocument()
         expect(screen.getByText('Both')).toBeInTheDocument()

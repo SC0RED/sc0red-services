@@ -129,10 +129,26 @@ export async function renderPdf(options: RenderOptions): Promise<RenderResult> {
     } finally {
         if (browser) {
             try {
-                await browser.close()
+                // Do NOT `await browser.close()` — it can hang up to 30+
+                // seconds on pages with lingering connections (Next.js
+                // hydration, font loaders, analytics beacons). The
+                // `durationMs` metric is captured at the return-value
+                // evaluation above, but the handler's `totalDurationMs`
+                // includes this finally block — so a slow close pushes
+                // the Lambda past API Gateway's hard 29s integration
+                // timeout. Observed: 70s total handler time on an 8-page
+                // PDF whose `page.pdf()` itself takes ~15s.
+                //
+                // SIGKILL is fine: the response is already prepared, and
+                // the Lambda container's /tmp gets reclaimed when the
+                // container is recycled. We do NOT leak processes across
+                // invocations because Lambda owns the container lifecycle.
+                const proc = browser.process()
+                if (proc && !proc.killed) proc.kill('SIGKILL')
             } catch {
-                // Browser was already gone (e.g. timeout killed it). Don't
-                // mask the original error with a close-time failure.
+                // Already gone — ignore. The original error (if any)
+                // has already propagated up the try; we don't want to
+                // mask it with a close-time failure.
             }
         }
     }

@@ -43,8 +43,9 @@ test: ## Run backend tests with 95% coverage requirement
 
 security: ## Run security checks (bandit + pip-audit)
 	cd backend && bandit -r src/
-	# CVE-2026-4539 — pygments; CVE-2026-3219 — pip itself. No upstream fixes available.
-	cd backend && pip-audit --ignore-vuln CVE-2026-4539 --ignore-vuln CVE-2026-3219
+	# CVE-2026-4539 — pygments; CVE-2026-3219 / CVE-2026-6357 — pip itself.
+	# CVE-2026-6357 fix is in pip 26.1; GH Actions runner currently ships 26.0.1, so we ignore until the runner image catches up.
+	cd backend && pip-audit --ignore-vuln CVE-2026-4539 --ignore-vuln CVE-2026-3219 --ignore-vuln CVE-2026-6357
 
 naming: ## Check naming conventions, abbreviations, imports, and skip comments
 	@echo "$(BLUE)Checking naming conventions...$(NC)"

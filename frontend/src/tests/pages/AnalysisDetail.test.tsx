@@ -50,6 +50,16 @@ vi.mock('@/lib/hooks/useScanRealtime', () => ({
     }),
 }))
 
+const mockStrategyMapStart = vi.fn().mockResolvedValue(false)
+const mockStrategyMapStop = vi.fn()
+
+vi.mock('@/lib/hooks/useStrategyMapSubscription', () => ({
+    useStrategyMapSubscription: () => ({
+        start: mockStrategyMapStart,
+        stop: mockStrategyMapStop,
+    }),
+}))
+
 vi.mock('@/components/EbitdaTree', () => ({
     default: ({ treeData, opportunities }: { treeData: unknown[]; opportunities: unknown[] }) => (
         <div data-testid="ebitda-tree">
@@ -146,9 +156,12 @@ describe('AnalysisDetail — Value Lever', () => {
         expect(screen.getByText('Automate Support')).toBeInTheDocument()
         expect(screen.getByText('AI Platform')).toBeInTheDocument()
 
-        // Click the "Revenue Side" summary card (the one inside the Value Impact section)
-        const valueImpactHeading = screen.getByText('Value Impact')
-        const valueImpactSection = valueImpactHeading.parentElement!
+        // Click the "Revenue Side" summary card (the one inside the Value Impact section).
+        // Pre-`extract-definition-popover` this used `.parentElement!` from
+        // the heading text — that walked into `.section-header-row`, which
+        // no longer contains the lever cards. The testid wrapper is the
+        // stable handle.
+        const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const revenueSideCard = within(valueImpactSection).getAllByText('Revenue Side')[0]
         fireEvent.click(revenueSideCard.closest('[class*="card"]')!)
 
@@ -161,7 +174,7 @@ describe('AnalysisDetail — Value Lever', () => {
         const data = buildAnalysisData()
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        const valueImpactSection = screen.getByText('Value Impact').parentElement!
+        const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const costSideCard = within(valueImpactSection)
             .getAllByText('Cost Side')[0]
             .closest('[class*="card"]')!
@@ -201,8 +214,7 @@ describe('AnalysisDetail — Value Lever', () => {
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
         // Click "Competitive Moat" category filter — use the filter button, not the badge
-        const oppHeading = screen.getByText(/AI Opportunities/)
-        const oppSection = oppHeading.parentElement!
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
         const competitiveMoatButton = within(oppSection).getAllByText('Competitive Moat')[0]
         fireEvent.click(competitiveMoatButton)
 
@@ -210,7 +222,7 @@ describe('AnalysisDetail — Value Lever', () => {
         expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
 
         // Now also filter by "Cost Side" lever — intersection should be empty
-        const valueImpactSection = screen.getByText('Value Impact').parentElement!
+        const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const costSideCard = within(valueImpactSection)
             .getAllByText('Cost Side')[0]
             .closest('[class*="card"]')!
@@ -490,3 +502,806 @@ describe('AnalysisDetail — Reanalysis Polling', () => {
         expect(true).toBe(true)
     })
 })
+
+describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-narrative)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+    })
+
+    /**
+     * The headline DeepDiveCTA now renders IMMEDIATELY AFTER the
+     * StrategyMapView (which contains WhatsMissingPanel) — placing the
+     * upsell pitch at the moment of maximum buying intent ("we'll help
+     * you fill these strategic gaps") rather than asking for the
+     * upsell before any analysis content has loaded.
+     *
+     * This supersedes PR #239's design.md decision D6, which had hoisted
+     * the CTA above the strategy map "for visibility." That fix
+     * over-corrected — visibility came at the cost of asking before
+     * showing value. See redesign-analysis-detail-narrative D1 + D6.
+     */
+    it('renders the headline CTA AFTER the StrategyMapView in the DOM tree', () => {
+        const data = buildAnalysisData({
+            strategyMap: {
+                vision: {
+                    statement: 'Vision statement long enough to satisfy validation.',
+                    synthesised: false,
+                    rationale: 'Rationale long enough.',
+                },
+                mission: {
+                    statement: 'Mission statement long enough to satisfy validation.',
+                    synthesised: false,
+                    rationale: 'Rationale long enough.',
+                },
+                valueProposition: {
+                    primary: 'customer_intimacy',
+                    secondary: null,
+                    rationale: 'Public materials emphasise tailored deep-dives and partnership delivery.',
+                    exemplar_company: 'Wawa',
+                },
+                strategicPriorities: [
+                    {
+                        name: 'Theme A',
+                        result: 'Best-in-class outcome that satisfies the result min length.',
+                    },
+                    {
+                        name: 'Theme B',
+                        result: 'Industry-leading outcome that satisfies the result length.',
+                    },
+                ],
+                financial: {
+                    objectives: [
+                        {
+                            id: 'F1',
+                            title: 'Grow profitable revenue across markets',
+                            definition:
+                                'We will grow same-segment revenue by deepening engagement; supports F1 column.',
+                            category: 'revenue_growth',
+                            confidence: 'HIGH',
+                        },
+                        {
+                            id: 'F2',
+                            title: 'Drive operational efficiency further',
+                            definition:
+                                'We will improve cost-to-serve metrics by automating routine operations everywhere.',
+                            category: 'productivity',
+                            confidence: 'MEDIUM',
+                        },
+                        {
+                            id: 'F3',
+                            title: 'Maximise return on invested capital',
+                            definition:
+                                'We will allocate capital toward the highest-return store formats overall.',
+                            category: 'productivity',
+                            confidence: 'MEDIUM',
+                        },
+                    ],
+                },
+                customer: {
+                    objectives: [
+                        {
+                            id: 'C1',
+                            title: 'Offer me fresh products in a friendly environment',
+                            definition:
+                                'I rely on this brand for fast, friendly service and consistent quality.',
+                            panel: 'consumer',
+                            confidence: 'HIGH',
+                        },
+                        {
+                            id: 'C2',
+                            title: 'Recognise my loyalty and reward me appropriately',
+                            definition:
+                                'I expect the loyalty programme to acknowledge my repeated visits with rewards.',
+                            panel: 'consumer',
+                            confidence: 'MEDIUM',
+                        },
+                        {
+                            id: 'C3',
+                            title: 'Make my visit fast and convenient overall',
+                            definition: 'I want to get in, get what I need, and get out without friction.',
+                            panel: 'consumer',
+                            confidence: 'HIGH',
+                        },
+                    ],
+                },
+                internalProcesses: {
+                    themes: [
+                        {
+                            name: 'Theme A',
+                            supports_financial_objectives: ['F1'],
+                            objectives: [
+                                {
+                                    id: 'I1.1',
+                                    title: 'Develop signature offers',
+                                    definition:
+                                        'We will create and improve fresh food and beverage offers that differentiate.',
+                                    category: 'innovation',
+                                    confidence: 'HIGH',
+                                },
+                            ],
+                        },
+                        {
+                            name: 'Theme B',
+                            supports_financial_objectives: ['F2'],
+                            objectives: [
+                                {
+                                    id: 'I2.1',
+                                    title: 'Improve end-to-end throughput',
+                                    definition:
+                                        'We will continuously improve the throughput, quality and cost of our processes.',
+                                    category: 'operational_excellence',
+                                    confidence: 'HIGH',
+                                },
+                            ],
+                        },
+                    ],
+                },
+                organizationalCapacity: {
+                    people: {
+                        id: 'O.P',
+                        title: 'Develop our associates as ambassadors',
+                        definition:
+                            'We will invest in associate development through structured training programmes.',
+                        confidence: 'MEDIUM',
+                    },
+                    technology: {
+                        id: 'O.T',
+                        title: 'Deliver reliable systems and insight',
+                        definition:
+                            'We will provide consistently reliable technical products and support services.',
+                        confidence: 'MEDIUM',
+                    },
+                    culture: {
+                        id: 'O.C',
+                        title: 'Live our values in every interaction',
+                        definition: 'Our values are the foundation of how we work across the organisation.',
+                        confidence: 'LOW',
+                    },
+                },
+                arrows: [],
+                whatsMissing: [
+                    {
+                        id: 'G1',
+                        title: 'Cultural commitments not published',
+                        description:
+                            'Public materials reference associate ownership but do not articulate values.',
+                        deepDiveFraming:
+                            'A Vector Advisory deep-dive would interview leadership and frontline associates.',
+                    },
+                    {
+                        id: 'G2',
+                        title: 'Channel-relationship strategy unclear overall',
+                        description:
+                            'The company sells through multiple channels but the balance is not visible.',
+                        deepDiveFraming:
+                            'A Vector Advisory deep-dive would map the channel economics and design objectives.',
+                    },
+                ],
+                coreValues: {
+                    values: ['Care', 'Respect', 'Continuous improvement'],
+                    synthesised: true,
+                    rationale: 'Synthesised from public materials.',
+                },
+            },
+        })
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const cta = screen.getByTestId('strategy-map-cta')
+        const map = screen.getByTestId('strategy-map-view')
+
+        // The CTA must appear AFTER the strategy map in document order
+        // (i.e. it's later in the DOM tree). compareDocumentPosition
+        // returns DOCUMENT_POSITION_PRECEDING (2) when the argument
+        // precedes the receiver — i.e. `map` comes before `cta`.
+        const relationship = cta.compareDocumentPosition(map)
+        expect(relationship & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+    })
+
+    it('does NOT render the deep-dive CTA when the analysis has no strategy map', () => {
+        const data = buildAnalysisData()
+        // No strategyMap field on the data → DeepDiveCTA stays absent.
+        // Per `strategy-map-on-demand` Phase B the slot now shows the
+        // on-demand StrategyMapCTA instead — testid
+        // `strategy-map-on-demand-cta` — so we explicitly assert that
+        // the deep-dive testid is the one that's missing here.
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        expect(screen.queryByTestId('strategy-map-cta')).toBeNull()
+        expect(screen.getByTestId('strategy-map-on-demand-cta')).toBeInTheDocument()
+    })
+})
+
+describe('AnalysisDetail — strategy-map slot states (strategy-map-on-demand)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+        mockStrategyMapStart.mockClear().mockResolvedValue(false)
+        mockStrategyMapStop.mockClear()
+    })
+
+    /**
+     * Per the `strategy-map-on-demand` spec the slot has three
+     * mutually-exclusive states:
+     *   1. ABSENT     → <StrategyMapCTA/>  (testid `strategy-map-on-demand-cta`)
+     *   2. GENERATING → <StrategyMapGeneratingPlaceholder/>  (testid `strategy-map-generating`)
+     *   3. PRESENT    → <StrategyMapView/> + <DeepDiveCTA/>  (testid `strategy-map-cta`)
+     * The CTA must NOT render while a generation is in flight (otherwise
+     * users could enqueue duplicate jobs) and the generating placeholder
+     * must NOT linger once the persisted map is present.
+     */
+
+    it('shows the generating placeholder when the API reports strategyMapGenerationState=generating', () => {
+        const data = buildAnalysisData({
+            scanId: 'scan-1',
+            strategyMapGenerationState: 'generating',
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.getByTestId('strategy-map-generating')).toBeInTheDocument()
+        expect(screen.queryByTestId('strategy-map-on-demand-cta')).toBeNull()
+        expect(screen.queryByTestId('strategy-map-view')).toBeNull()
+    })
+
+    it('subscribes to AppSync only while the generating state is active', () => {
+        const data = buildAnalysisData({
+            scanId: 'scan-1',
+            strategyMapGenerationState: 'generating',
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(mockStrategyMapStart).toHaveBeenCalledTimes(1)
+        const args = mockStrategyMapStart.mock.calls[0][0] as {
+            analysisId: string
+            scanId: string
+        }
+        expect(args.analysisId).toBe('test-id')
+        expect(args.scanId).toBe('scan-1')
+    })
+
+    it('does NOT subscribe when no scanId is on the data', () => {
+        // The hook needs a scanId to drive the AppSync filter. If the
+        // backend somehow set generating without a scanId, the slot
+        // should still render the placeholder but the hook stays idle
+        // until a scanId arrives via refresh.
+        const data = buildAnalysisData({
+            scanId: undefined,
+            strategyMapGenerationState: 'generating',
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.getByTestId('strategy-map-generating')).toBeInTheDocument()
+        expect(mockStrategyMapStart).not.toHaveBeenCalled()
+    })
+
+    it('flips locally to generating when the user clicks the CTA', async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+            status: 202,
+            json: () => Promise.resolve({ status: 'queued', analysisId: 'test-id' }),
+        })
+
+        const data = buildAnalysisData({ scanId: 'scan-1' })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        // Starts in absent → CTA visible.
+        expect(screen.getByTestId('strategy-map-on-demand-cta')).toBeInTheDocument()
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Generate strategy map' }))
+        })
+
+        expect(screen.getByTestId('strategy-map-generating')).toBeInTheDocument()
+        expect(screen.queryByTestId('strategy-map-on-demand-cta')).toBeNull()
+        // Subscription started for the just-clicked generation.
+        expect(mockStrategyMapStart).toHaveBeenCalledTimes(1)
+    })
+
+    it('on AppSync complete, calls router.refresh and clears the local generating flag', async () => {
+        // Capture the start() args so we can manually invoke onComplete.
+        let capturedOnComplete: (() => void) | undefined
+        mockStrategyMapStart.mockImplementation(async (opts: { onComplete: () => void }) => {
+            capturedOnComplete = opts.onComplete
+            return false
+        })
+
+        const data = buildAnalysisData({
+            scanId: 'scan-1',
+            strategyMapGenerationState: 'generating',
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(capturedOnComplete).toBeDefined()
+        await act(async () => {
+            capturedOnComplete!()
+        })
+
+        expect(mockRefresh).toHaveBeenCalled()
+    })
+
+    it('on AppSync timeout, calls router.refresh so the slot recovers via cold-load', async () => {
+        // The 90s client-side fallback fires when the worker completed
+        // server-side but the AppSync event was lost (or the connection
+        // dropped silently). The component routes the timeout to a
+        // page-level refresh, which the parent server component will
+        // re-render with the persisted map (or a still-generating state
+        // if the worker is genuinely stuck — in which case the next
+        // render re-enters the effect and re-subscribes).
+        let capturedOnTimeout: (() => void) | undefined
+        mockStrategyMapStart.mockImplementation(async (opts: { onTimeout?: () => void }) => {
+            capturedOnTimeout = opts.onTimeout
+            return false
+        })
+
+        const data = buildAnalysisData({
+            scanId: 'scan-1',
+            strategyMapGenerationState: 'generating',
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(capturedOnTimeout).toBeDefined()
+        await act(async () => {
+            capturedOnTimeout!()
+        })
+
+        expect(mockRefresh).toHaveBeenCalled()
+    })
+
+    it('on AppSync failure, surfaces an inline error and returns the slot to the CTA state', async () => {
+        let capturedOnFailed: (() => void) | undefined
+        mockStrategyMapStart.mockImplementation(async (opts: { onFailed: () => void }) => {
+            capturedOnFailed = opts.onFailed
+            return false
+        })
+
+        // Start in localGenerating via a click rather than the API
+        // state — then trigger onFailed and confirm we drop back to the
+        // absent state with the failure message rendered.
+        global.fetch = vi.fn().mockResolvedValue({
+            status: 202,
+            json: () => Promise.resolve({ status: 'queued', analysisId: 'test-id' }),
+        })
+        const data = buildAnalysisData({ scanId: 'scan-1' })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Generate strategy map' }))
+        })
+
+        expect(capturedOnFailed).toBeDefined()
+        await act(async () => {
+            capturedOnFailed!()
+        })
+
+        expect(screen.queryByTestId('strategy-map-generating')).toBeNull()
+        expect(screen.getByTestId('strategy-map-on-demand-cta')).toBeInTheDocument()
+        expect(screen.getByRole('alert')).toHaveTextContent(/We couldn't generate your strategy map/i)
+    })
+})
+
+describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrative)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+    })
+
+    /**
+     * Asserts the page-level beat order specified in design D1. Each
+     * section is wrapped at the page level with a `data-testid` of the
+     * form `analysis-section-*` so the order test queries the wrappers
+     * by ID rather than relying on layout coordinates (jsdom doesn't
+     * lay out reliably) or fragile selector chains.
+     */
+    function getRenderedSectionIds() {
+        const wrappers = document.querySelectorAll<HTMLElement>('[data-testid^="analysis-section-"]')
+        return Array.from(wrappers).map((el) =>
+            el.getAttribute('data-testid')!.replace('analysis-section-', '')
+        )
+    }
+
+    it('renders all 13 sections in the prescribed beat order with full data', () => {
+        // Full-data fixture: builds the success-path analysis with every
+        // optional artifact present so all 13 sections render.
+        const data: AnalysisData = {
+            ...buildAnalysisData(),
+            analyzedAt: '2026-05-05T10:00:00Z',
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'r',
+                        label: 'Revenue',
+                        type: 'revenue',
+                        description: 'r',
+                        linked_opportunity_indices: [],
+                        children: [],
+                    },
+                ],
+                ebitdaEstimate: '$5M-$140M',
+            },
+            valueChain: {
+                summary: 'Value chain summary',
+                steps: [
+                    {
+                        id: 's1',
+                        label: 'Inbound',
+                        description: 'd',
+                        category: 'primary',
+                        risk_categories: [],
+                        opportunity_indices: [],
+                    },
+                ],
+            },
+            strategyMap: makeFullStrategyMap(),
+        }
+
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        // Per `strategy-map-on-demand` Phase B, the layout now is:
+        //   - Sc0red CTA hoisted to Beat 1.5 (between overview and
+        //     top-actions). It always renders (analysis-centric copy)
+        //     because the banner now appears before opportunities are
+        //     shown — there's no longer a "no opportunities" guard.
+        //   - Strategy-map slot moved to Beat 6 (after opportunities).
+        //     With a fully-populated strategy map present the slot
+        //     renders <StrategyMapView/> + <DeepDiveCTA/>.
+        const expectedOrder = [
+            'header',
+            'strap',
+            'overview',
+            'sc0red-cta',
+            'top-actions',
+            'ebitda',
+            'value-chain',
+            'risk-breakdown',
+            'value-lever',
+            'opportunities',
+            'strategy-map',
+            'deep-dive-cta',
+            'document-upload',
+        ]
+        expect(getRenderedSectionIds()).toEqual(expectedOrder)
+    })
+
+    it('preserves relative order when strategy map and EBITDA are absent', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const ids = getRenderedSectionIds()
+        // EBITDA + value chain absent — those sections drop entirely.
+        expect(ids).not.toContain('ebitda')
+        expect(ids).not.toContain('value-chain')
+        // Per `strategy-map-on-demand` Phase B, the strategy-map slot
+        // ALWAYS renders. When the analysis has no map, the slot shows
+        // the on-demand CTA (testid `analysis-section-strategy-map`
+        // wraps `strategy-map-on-demand-cta`). DeepDiveCTA only renders
+        // alongside a present map, so `deep-dive-cta` is still absent.
+        expect(ids).toContain('strategy-map')
+        expect(ids).not.toContain('deep-dive-cta')
+        // Remaining sections still in the same relative order. Sc0red
+        // CTA is now at Beat 1.5 (between overview and top-actions).
+        expect(ids).toEqual([
+            'header',
+            'strap',
+            'overview',
+            'sc0red-cta',
+            'top-actions',
+            'risk-breakdown',
+            'value-lever',
+            'opportunities',
+            'strategy-map',
+            'document-upload',
+        ])
+    })
+
+    it('keeps the Sc0red CTA at Beat 1.5 even when there are no opportunities', () => {
+        // Per `strategy-map-on-demand` Phase B, the Sc0red CTA was
+        // hoisted to Beat 1.5 (between overview and top-actions). It's
+        // no longer gated on opportunities being non-empty — the copy
+        // is analysis-centric, not opportunity-centric, so an empty
+        // opportunities list does not drop the banner.
+        const data = buildAnalysisData({ opportunities: [] })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const ids = getRenderedSectionIds()
+        expect(ids).toContain('sc0red-cta')
+        // Beat 1.5: Sc0red CTA sits between `overview` and `top-actions`.
+        const overviewIndex = ids.indexOf('overview')
+        const sc0redIndex = ids.indexOf('sc0red-cta')
+        const topActionsIndex = ids.indexOf('top-actions')
+        expect(sc0redIndex).toBe(overviewIndex + 1)
+        expect(topActionsIndex).toBe(sc0redIndex + 1)
+    })
+
+    it('renders the executive strap between header and overview cards', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        const ids = getRenderedSectionIds()
+        expect(ids[0]).toBe('header')
+        expect(ids[1]).toBe('strap')
+        expect(ids[2]).toBe('overview')
+        // Strap content includes the company name from buildAnalysisData
+        // and the opportunity count from the fixture (3).
+        expect(screen.getByTestId('analysis-executive-strap')).toBeInTheDocument()
+    })
+
+    it('renders the "Improve This Analysis" heading + lead at the page level (not inside DocumentUpload)', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        // Page-level framing per architecture-review fix: the heading +
+        // lead live in `AnalysisDetail` so the leaf `DocumentUpload` is
+        // reusable from `FailedAnalysisView` with its own framing.
+        expect(screen.getByText('Improve This Analysis')).toBeInTheDocument()
+        expect(
+            screen.getByText(/Upload financial statements, board decks, or product docs/)
+        ).toBeInTheDocument()
+    })
+
+    it('does NOT render an orphaned reanalyze progress block at the page level', () => {
+        const data = buildAnalysisData()
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        // The progress block only appears as a descendant of
+        // DocumentUpload (when reanalyzing); it must NEVER render as a
+        // top-level sibling on the page. Since reanalyzing is false in
+        // this fixture, no progress block exists at all.
+        expect(screen.queryByTestId('reanalyze-progress')).toBeNull()
+    })
+})
+
+describe('AnalysisDetail — section heading framing (analysis-detail-consistency-wrapper)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+    })
+
+    /**
+     * Per `analysis-detail-consistency-wrapper` D3, every migrated
+     * section's heading lives at the PAGE level (inside the
+     * `AnalysisSection` wrapper) rather than inside the leaf
+     * component. These tests pin the page-level rendering so a
+     * future regression that re-introduces an internal heading (or
+     * removes the page-level one) fails fast.
+     *
+     * Each assertion uses `within(wrapper).getByText(...)` so the
+     * test fails not just when the text is missing, but also if the
+     * text drifts to a different section's wrapper.
+     */
+    function buildFullData() {
+        return {
+            ...buildAnalysisData(),
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'r',
+                        label: 'Revenue',
+                        type: 'revenue' as const,
+                        description: 'r',
+                        linked_opportunity_indices: [],
+                        children: [],
+                    },
+                ],
+                ebitdaEstimate: '$2M-$8M',
+            },
+            valueChain: {
+                summary: 'Value chain summary',
+                steps: [
+                    {
+                        id: 's1',
+                        label: 'Inbound',
+                        description: 'd',
+                        category: 'primary' as const,
+                        risk_categories: [],
+                        opportunity_indices: [],
+                    },
+                ],
+            },
+        }
+    }
+
+    it('renders "Risk Breakdown" inside the page-level risk-breakdown wrapper', () => {
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-risk-breakdown')
+        expect(within(wrapper).getByRole('heading', { name: 'Risk Breakdown' })).toBeInTheDocument()
+    })
+
+    it('renders "EBITDA Impact Model" inside the page-level ebitda wrapper with a clean accessible name', () => {
+        // Two assertions, two roles:
+        //   1. Exact-match heading query — REGRESSION GUARD against
+        //      future drift where a contributor smuggles raw text or
+        //      another label into the title.
+        //   2. `heading.contains(helpButton)).toBe(false)` — the TRUE
+        //      structural proof that HelpTooltip is a sibling of the
+        //      <h2>, not a descendant. Under the old inside-h2
+        //      structure this would correctly fail.
+        // Note: the exact-match query alone is NOT a structural proof —
+        // `dom-accessibility-api` doesn't concatenate the descendant
+        // button's `aria-label` into the heading's name when the
+        // button's visible content is `aria-hidden`.
+        render(<AnalysisDetail data={buildFullData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-ebitda')
+        const heading = within(wrapper).getByRole('heading', { name: 'EBITDA Impact Model' })
+        expect(heading).toBeInTheDocument()
+        // Structural proof: help-tooltip button is INSIDE the section
+        // wrapper but OUTSIDE the heading element.
+        const helpButton = within(wrapper).getByRole('button', { name: /What is EBITDA Tree/i })
+        expect(helpButton).toBeInTheDocument()
+        expect(heading.contains(helpButton)).toBe(false)
+    })
+
+    it('renders "Value Chain Analysis" inside the page-level value-chain wrapper', () => {
+        render(<AnalysisDetail data={buildFullData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-value-chain')
+        expect(within(wrapper).getByRole('heading', { name: 'Value Chain Analysis' })).toBeInTheDocument()
+    })
+
+    it('renders "Value Impact" inside the page-level value-lever wrapper with a clean accessible name', () => {
+        // Same two-assertion pattern as the EBITDA test above:
+        // exact-match heading is a regression guard; `contains(...).toBe(false)`
+        // is the structural proof that HelpTooltip lives outside the <h2>.
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-value-lever')
+        const heading = within(wrapper).getByRole('heading', { name: 'Value Impact' })
+        expect(heading).toBeInTheDocument()
+        const helpButton = within(wrapper).getByRole('button', { name: /What is Value Lever/i })
+        expect(helpButton).toBeInTheDocument()
+        expect(heading.contains(helpButton)).toBe(false)
+    })
+
+    it('renders "AI Opportunities (3)" inside the page-level opportunities wrapper with a clean accessible name', () => {
+        // Title text includes the count badge ("AI Opportunities (3)")
+        // because the badge is a structural part of the heading text,
+        // not an interactive adornment. The HelpTooltip moves to the
+        // adornment slot. Same regression-guard + structural-proof
+        // pattern as above.
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-opportunities')
+        const heading = within(wrapper).getByRole('heading', { name: 'AI Opportunities (3)' })
+        expect(heading).toBeInTheDocument()
+        const helpButton = within(wrapper).getByRole('button', { name: /What is Impact Rating/i })
+        expect(helpButton).toBeInTheDocument()
+        expect(heading.contains(helpButton)).toBe(false)
+    })
+
+    it('renders "Improve This Analysis" inside the page-level document-upload wrapper', () => {
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-document-upload')
+        expect(within(wrapper).getByRole('heading', { name: 'Improve This Analysis' })).toBeInTheDocument()
+    })
+
+    it('renders the "Improve This Analysis" lead inside the same wrapper as the heading', () => {
+        // Pins the lead-paragraph containment so a regression that
+        // accidentally renders the lead as a sibling of the
+        // AnalysisSection (rather than inside it) fails. Closes a
+        // coverage gap noted by the architecture-reviewer.
+        render(<AnalysisDetail data={buildAnalysisData()} analysisId="test-id" />)
+        const wrapper = screen.getByTestId('analysis-section-document-upload')
+        expect(
+            within(wrapper).getByText(/Upload financial statements, board decks, or product docs/)
+        ).toBeInTheDocument()
+    })
+
+    it('omits the value-lever wrapper entirely when no opportunities have value_lever', () => {
+        // Page-level conditional rendering: when no value_lever data
+        // exists, the wrapper itself doesn't render — no empty
+        // testid'd element with just a heading and no body.
+        const data = buildAnalysisData({
+            opportunities: [
+                {
+                    title: 'Old Opportunity',
+                    description: 'No value lever set',
+                    impact_rating: 'High',
+                    timeline: 'Quick Win',
+                    strategic_category: 'Competitive Moat',
+                },
+            ],
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        expect(screen.queryByTestId('analysis-section-value-lever')).toBeNull()
+    })
+})
+
+/**
+ * Strategy-map fixture for ordering tests. Mirrors the shape required
+ * by `StrategyMapView` so the component renders without throwing during
+ * order assertions.
+ */
+function makeFullStrategyMap(): NonNullable<AnalysisData['strategyMap']> {
+    return {
+        vision: {
+            statement: 'Vision statement long enough to satisfy validation.',
+            synthesised: false,
+            rationale: 'r',
+        },
+        mission: {
+            statement: 'Mission statement long enough to satisfy validation.',
+            synthesised: false,
+            rationale: 'r',
+        },
+        valueProposition: {
+            primary: 'customer_intimacy',
+            secondary: null,
+            rationale: 'Public materials emphasise tailored deep-dives.',
+            exemplar_company: 'Wawa',
+        },
+        strategicPriorities: [
+            {
+                name: 'Theme A',
+                result: 'Best-in-class outcome that satisfies the result min length.',
+            },
+        ],
+        financial: {
+            objectives: [
+                {
+                    id: 'F1',
+                    title: 'Grow profitable revenue across markets',
+                    definition:
+                        'We will grow same-segment revenue by deepening engagement; supports F1 column.',
+                    category: 'revenue_growth',
+                    confidence: 'HIGH',
+                },
+            ],
+        },
+        customer: {
+            objectives: [
+                {
+                    id: 'C1',
+                    title: 'Offer me fresh products in a friendly environment',
+                    definition: 'I rely on this brand for fast, friendly service and consistent quality.',
+                    panel: 'consumer',
+                    confidence: 'HIGH',
+                },
+            ],
+        },
+        internalProcesses: {
+            themes: [
+                {
+                    name: 'Theme A',
+                    supports_financial_objectives: ['F1'],
+                    objectives: [
+                        {
+                            id: 'I1.1',
+                            title: 'Develop signature offers',
+                            definition:
+                                'We will create and improve fresh food and beverage offers that differentiate.',
+                            category: 'innovation',
+                            confidence: 'HIGH',
+                        },
+                    ],
+                },
+            ],
+        },
+        organizationalCapacity: {
+            people: {
+                id: 'O.P',
+                title: 'Develop our associates as ambassadors',
+                definition: 'We will invest in associate development through structured training programmes.',
+                confidence: 'MEDIUM',
+            },
+            technology: {
+                id: 'O.T',
+                title: 'Deliver reliable systems and insight',
+                definition: 'We will provide consistently reliable technical products and support services.',
+                confidence: 'MEDIUM',
+            },
+            culture: {
+                id: 'O.C',
+                title: 'Live our values in every interaction',
+                definition: 'Our values are the foundation of how we work across the organisation.',
+                confidence: 'LOW',
+            },
+        },
+        arrows: [],
+        whatsMissing: [
+            {
+                id: 'G1',
+                title: 'Cultural commitments not published',
+                description: 'Public materials reference associate ownership but do not articulate values.',
+                deepDiveFraming:
+                    'A Vector Advisory deep-dive would interview leadership and frontline associates.',
+            },
+        ],
+        coreValues: {
+            values: ['Care', 'Respect'],
+            synthesised: true,
+            rationale: 'Synthesised from public materials.',
+        },
+    }
+}

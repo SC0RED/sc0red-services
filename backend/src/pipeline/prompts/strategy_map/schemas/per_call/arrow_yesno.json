@@ -1,0 +1,18 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ArrowYesNo",
+    "description": "Per-call schema for the decomposed arrow yes/no calls. Asks whether a candidate (from_id, to_id) pair represents a real cause-and-effect arrow in the strategy map. Many of these fire in parallel (one per candidate pair); the assembly layer filters to enables=true and constructs Arrow records. NOTE: hypothesis is declared as ['string', 'null'] because OpenAI structured-output mode rejects JSON Schema `if`/`then`/`else` conditionals, so we cannot express 'hypothesis MUST be a non-null string when enables=true' at the schema level. The prompt instructs the model to set hypothesis to a non-null 20-500 char sentence when enables=true; the Python assembly layer in `_strategy_map_arrows.py` raises a named-pair ValueError if it sees `{enables: true, hypothesis: null}` so the schema-level slip surfaces immediately rather than blowing up later at Pydantic Arrow construction.",
+    "type": "object",
+    "required": ["enables", "hypothesis"],
+    "additionalProperties": false,
+    "properties": {
+        "enables": {
+            "type": "boolean"
+        },
+        "hypothesis": {
+            "type": ["string", "null"],
+            "minLength": 20,
+            "maxLength": 500
+        }
+    }
+}

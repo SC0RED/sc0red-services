@@ -60,7 +60,11 @@ const SAMPLE_OPPORTUNITIES: Opportunity[] = [
 ]
 
 describe('ValueChainDiagram', () => {
-    it('renders section header and summary', () => {
+    it('renders the summary without the internal section heading', () => {
+        // Per analysis-detail-consistency-wrapper D3, the "Value Chain
+        // Analysis" heading is rendered at the page level by
+        // `AnalysisSection`. The leaf component renders only the body
+        // (summary + activity rows).
         render(
             <ValueChainDiagram
                 steps={SAMPLE_STEPS}
@@ -68,7 +72,7 @@ describe('ValueChainDiagram', () => {
                 summary="Test Corp value chain: 3 primary and 1 support"
             />
         )
-        expect(screen.getByText('Value Chain Analysis')).toBeInTheDocument()
+        expect(screen.queryByText('Value Chain Analysis')).toBeNull()
         expect(screen.getByText(/Test Corp value chain/)).toBeInTheDocument()
     })
 

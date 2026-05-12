@@ -1,0 +1,25 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "OrganizationalCapacityTitles",
+    "description": "Per-call schema for organizational-capacity Round 1 (title list). Returns titles for the 3 fixed buckets (people, technology, culture) in that order. The buckets themselves are fixed; only the per-bucket title varies per company.",
+    "type": "object",
+    "required": ["people", "technology", "culture"],
+    "additionalProperties": false,
+    "properties": {
+        "people": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 200
+        },
+        "technology": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 200
+        },
+        "culture": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 200
+        }
+    }
+}

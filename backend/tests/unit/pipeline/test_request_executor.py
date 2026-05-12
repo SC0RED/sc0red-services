@@ -205,3 +205,40 @@ class TestRequestExecutorAppSyncIntegration:
         mock_notify.assert_not_called()
         # But company repo should still be updated
         company_repo.update.assert_called_once()
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_mark_question_complete_skips_for_strategy_map_post_on_demand(
+        self, mock_notify: MagicMock
+    ) -> None:
+        """Per ``strategy-map-on-demand`` Phase C/D, ``generate_strategy_map``
+        must NOT have a ``_PROGRESS_MAP`` entry — the strategy-map worker
+        signals progress via ``strategy_map_complete`` / ``strategy_map_failed``
+        on the ``onScanProgress`` AppSync channel, not via
+        ``notify_progress``. The legacy ``mark_question_complete`` call still
+        lives inside ``GenerateStrategyMap.execute()`` (touching that step
+        from a cleanup PR was deemed riskier than letting the call no-op);
+        this test guards the intentional no-op so a future contributor
+        adding the entry back doesn't reintroduce the
+        ``pipeline_progress=92`` write that would jump backwards from the
+        already-written ``persist_results=95``.
+        """
+        company_repo = MagicMock()
+        executor = JanusRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            company_repo=company_repo,
+            scan_id="scan-1",
+        )
+
+        executor.mark_question_complete("generate_strategy_map")
+
+        mock_notify.assert_not_called()
+        company_repo.update.assert_not_called()
+        # The question IS still tracked in the executor's internal
+        # `_completed_questions` set (`mark_question_complete` adds the
+        # key unconditionally; only the progress-emission side-effect
+        # skips on missing `_PROGRESS_MAP` entries). Document the full
+        # contract explicitly so a future reader doesn't assume the call
+        # was a complete no-op.
+        assert executor.is_question_complete("generate_strategy_map") is True

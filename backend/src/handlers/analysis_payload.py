@@ -49,6 +49,7 @@ def build_analysis_payload(
     top_actions: list[str] = []
     ebitda_tree: dict[str, Any] | None = None
     value_chain: dict[str, Any] | None = None
+    strategy_map: dict[str, Any] | None = None
     documents: list[dict[str, Any]] = []
 
     if assessments:
@@ -63,6 +64,7 @@ def build_analysis_payload(
         opportunities = assessment_repo.get_opportunities(assessment_id)
         ebitda_tree = assessment_repo.get_ebitda_tree(assessment_id)
         value_chain = assessment_repo.get_value_chain(assessment_id)
+        strategy_map = assessment_repo.get_strategy_map(assessment_id)
         documents = assessment_repo.get_documents(assessment_id)
 
     metadata_json = company.get("metadata_json", "")
@@ -84,6 +86,12 @@ def build_analysis_payload(
         "opportunities": opportunities,
         "ebitdaTree": ebitda_tree,
         "valueChain": value_chain,
+        "strategyMap": strategy_map,
+        # In-flight on-demand strategy-map generation flag (per the
+        # strategy-map-on-demand spec). Populated when the SQS worker is
+        # processing a generation job; cleared on success or failure.
+        # Frontend renders the generating placeholder when this is "generating".
+        "strategyMapGenerationState": company.get("strategy_map_generation_state"),
         "documents": documents,
         "pipelineProgress": company.get("pipeline_progress", 0),
         "pipelineLabel": company.get("pipeline_label", ""),

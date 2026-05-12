@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ValuePropositionExemplar",
+    "description": "Per-call schema for the decomposed vp_exemplar call. Returns just the famous-brand exemplar that illustrates the value-proposition classification.",
+    "type": "object",
+    "required": ["exemplar_company"],
+    "additionalProperties": false,
+    "properties": {
+        "exemplar_company": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+        }
+    }
+}

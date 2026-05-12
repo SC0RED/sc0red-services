@@ -125,7 +125,7 @@ export default function Sc0redCTABanner({
                                 color: 'var(--text-primary)',
                             }}
                         >
-                            sc0red can help you capture these opportunities
+                            Dig deeper with a sc0red advisor
                         </span>
                     </div>
                     <svg
@@ -159,8 +159,9 @@ export default function Sc0redCTABanner({
                             marginBottom: '1.25rem',
                         }}
                     >
-                        Our AI specialists implement opportunities like these end-to-end — from strategy
-                        through production deployment — moving faster than traditional enterprise timelines.
+                        Our PE-experienced advisors take you from this analysis to operational results — from
+                        positioning strategy through production deployment, faster than traditional advisory
+                        timelines.
                     </p>
                     <a
                         href={contactUrl}

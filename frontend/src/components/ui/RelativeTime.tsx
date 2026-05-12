@@ -3,27 +3,14 @@
 import { format, formatDistanceToNow } from 'date-fns'
 import { useEffect, useMemo, useState } from 'react'
 
+import { formatAbsoluteUTC, parseIsoDate } from '@/lib/utils/dateFormat'
+
 interface RelativeTimeProps {
     /** ISO 8601 timestamp string (or null/undefined). */
     value: string | null | undefined
     /** Rendered when `value` is missing or invalid. Defaults to em-dash. */
     fallback?: string
 }
-
-const MONTH_ABBREV = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-] as const
 
 /**
  * Renders a timestamp as a relative-time label ("3 hours ago", "just now").
@@ -48,7 +35,7 @@ export default function RelativeTime({ value, fallback = '—' }: RelativeTimePr
     // a primitive workaround like `date?.getTime()` (and silence the
     // exhaustive-deps lint rule). Memoising lets us depend on `date`
     // directly and keeps the lint signal honest.
-    const date = useMemo(() => parseDate(value), [value])
+    const date = useMemo(() => parseIsoDate(value), [value])
 
     // Seed `label` with the deterministic absolute on SSR / first paint.
     // After mount, the effect overwrites it with the relative phrase.
@@ -76,21 +63,6 @@ export default function RelativeTime({ value, fallback = '—' }: RelativeTimePr
             {label}
         </time>
     )
-}
-
-function parseDate(value: string | null | undefined): Date | null {
-    if (!value) return null
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? null : date
-}
-
-/**
- * Deterministic absolute formatter used only for the SSR / pre-mount label.
- * Manually composed in UTC so server (any TZ) and client (any TZ) produce
- * identical strings — avoids React hydration mismatches.
- */
-function formatAbsoluteUTC(date: Date): string {
-    return `${MONTH_ABBREV[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`
 }
 
 /**

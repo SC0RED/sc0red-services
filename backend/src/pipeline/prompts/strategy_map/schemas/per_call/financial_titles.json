@@ -1,0 +1,20 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "FinancialPerspectiveTitles",
+    "description": "Per-call schema for the financial perspective Round 1 (title list). Used by the decomposed strategy-map generation path. The per-call model only emits the array of titles; positional IDs (F1/F2/F3) are assigned by `_strategy_map_assembly.py`. Excludes `id` per Decision §2 of the optimize-strategy-map-latency design.",
+    "type": "object",
+    "required": ["titles"],
+    "additionalProperties": false,
+    "properties": {
+        "titles": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 120
+            }
+        }
+    }
+}

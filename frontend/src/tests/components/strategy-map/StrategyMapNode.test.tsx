@@ -1,0 +1,406 @@
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
+
+// Mock @xyflow/react before importing the component so the `NodeToolbar`
+// passthrough is in place when `StrategyMapNode` is loaded.
+//
+// Why mock at all: in production `NodeToolbar` portals its children
+// through React Flow's internal store, which only contains nodes that
+// React Flow itself has rendered (via `<ReactFlow nodes={[...]}/>`).
+// Standalone test renders never populate that store, so the production
+// `NodeToolbar` returns null unconditionally — making it impossible to
+// assert tooltip content without spinning up a full ReactFlow canvas
+// (which jsdom can't lay out — see EbitdaTree.test.tsx for the same
+// constraint). The mock renders children as a plain `<div>` when
+// `isVisible` is true, restoring testability.
+//
+// The mock attaches `data-toolbar-position` so tests can also assert
+// which side of the chip the tooltip would render on (the capacity-band
+// chips flip to `Position.Top` to avoid overflowing past the canvas
+// bottom — see `StrategyMapNode.tsx`).
+vi.mock('@xyflow/react', async () => {
+    const actual = await vi.importActual<typeof import('@xyflow/react')>('@xyflow/react')
+    return {
+        ...actual,
+        NodeToolbar: ({
+            isVisible,
+            children,
+            position,
+        }: {
+            isVisible?: boolean
+            children?: ReactNode
+            position?: string
+        }) =>
+            isVisible ? (
+                <div data-testid="strategy-map-node-toolbar" data-toolbar-position={position}>
+                    {children}
+                </div>
+            ) : null,
+    }
+})
+
+import { ReactFlowProvider } from '@xyflow/react'
+
+import StrategyMapNode from '@/components/strategy-map/StrategyMapNode'
+import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
+
+// React Flow's <Handle> registers store listeners and requires a
+// `ReactFlowProvider` ancestor; without it, every render throws "[React
+// Flow]: Seems like you have not used zustand provider as an ancestor."
+// Tests don't exercise the provider's behaviour — they just need it
+// present in the tree.
+const renderInProvider = (ui: ReactNode) => render(<ReactFlowProvider>{ui}</ReactFlowProvider>)
+
+/**
+ * `StrategyMapNode` is a React Flow custom node. It expects the
+ * `NodeProps` shape but in tests we render it directly with a synthetic
+ * props object — React Flow's runtime handles (top/bottom Handles)
+ * render harmlessly outside a ReactFlowProvider in tests because they
+ * only register listeners.
+ */
+
+const baseData: StrategyMapNodeData = {
+    objectiveId: 'F1',
+    perspective: 'financial',
+    title: 'Grow profitable revenue across markets',
+    definition: 'We will grow same-segment revenue by deepening engagement with current customers.',
+    confidence: 'HIGH',
+    rationaleSource: null,
+    customerVoice: false,
+    inSharedLane: false,
+}
+
+// Minimal NodeProps stub. Many fields are unused by the component so we
+// cast to the bits we care about; the component reads `data` and `selected`.
+const nodeProps = (overrides: Partial<{ data: StrategyMapNodeData; selected: boolean }> = {}) =>
+    ({
+        id: (overrides.data ?? baseData).objectiveId,
+        data: overrides.data ?? baseData,
+        selected: overrides.selected ?? false,
+        type: 'strategyMap',
+        zIndex: 0,
+        isConnectable: false,
+        positionAbsoluteX: 0,
+        positionAbsoluteY: 0,
+        dragging: false,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any
+
+describe('StrategyMapNode — default chip state', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    it('renders the objective ID and the title', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        expect(screen.getByText('F1')).toBeInTheDocument()
+        expect(screen.getByText(/Grow profitable revenue/)).toBeInTheDocument()
+    })
+
+    it('does not render the full definition until hover', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        expect(screen.queryByText(/We will grow same-segment revenue/)).toBeNull()
+    })
+
+    it('exposes role=button + aria-label for screen readers', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        const node = screen.getByRole('button', {
+            name: 'F1: Grow profitable revenue across markets',
+        })
+        expect(node).toBeInTheDocument()
+    })
+})
+
+describe('StrategyMapNode — hover surfaces tooltip', () => {
+    it('surfaces the full definition + ConfidenceIndicator when hovered', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        const node = screen.getByRole('button')
+        fireEvent.mouseEnter(node)
+
+        expect(screen.getByRole('tooltip')).toBeInTheDocument()
+        expect(screen.getByText(/We will grow same-segment revenue/)).toBeInTheDocument()
+        // ConfidenceIndicator surfaces confidence via aria-label, not
+        // visible text — there's no longer a literal "HIGH" / "MEDIUM" /
+        // "LOW" label visible on the chip (that was the legacy
+        // ConfidenceChip's anti-pattern, which used the risk-tier
+        // palette). One indicator renders in the chip header (small
+        // size) and a second renders in the tooltip body (default size),
+        // so we expect at least 2 instances when hovered.
+        const indicators = screen.getAllByLabelText(/Confidence: high/i)
+        expect(indicators.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('shows the rationale_source when supplied', () => {
+        const data: StrategyMapNodeData = {
+            ...baseData,
+            rationaleSource: 'EBITDA tree revenue branch.',
+        }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        fireEvent.mouseEnter(screen.getByRole('button'))
+        expect(screen.getByText(/Source: EBITDA tree revenue branch/)).toBeInTheDocument()
+    })
+
+    it('hides the tooltip after the safe-transit delay when the pointer leaves', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+            // mouseLeave starts a hover-intent timer (HOVER_CLOSE_DELAY_MS,
+            // currently 200 ms). The tooltip stays open during the grace
+            // period so the user can transit from chip → tooltip without
+            // it dismissing under them.
+            fireEvent.mouseLeave(node)
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+            // After the grace period the tooltip closes.
+            act(() => {
+                vi.advanceTimersByTime(250)
+            })
+            expect(screen.queryByRole('tooltip')).toBeNull()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('treats React Flow `selected` (touch tap) the same as hover', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps({ selected: true })} />)
+        // No mouseEnter — selected alone should expose the tooltip.
+        expect(screen.getByRole('tooltip')).toBeInTheDocument()
+        expect(screen.getByText(/We will grow same-segment revenue/)).toBeInTheDocument()
+    })
+})
+
+describe('StrategyMapNode — confidence indicator (no risk-tier palette)', () => {
+    // Replaces the legacy "confidence dot palette" tests. Per
+    // `ai-output-trust-markers`, the chip header renders a
+    // `ConfidenceIndicator` (3-dot scale, neutral palette) — NOT the
+    // risk-tier-colored dot. The component itself is unit-tested in
+    // `ConfidenceIndicator.test.tsx`; here we just verify it's wired
+    // into the chip header via accessible name.
+
+    it('renders an indicator with "Confidence: High" in the chip header for HIGH', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        // The chip header has a small ConfidenceIndicator; the tooltip
+        // would have a default-size one, but the tooltip is hidden
+        // until hover. So pre-hover, exactly 1 indicator renders.
+        expect(screen.getAllByLabelText('Confidence: High').length).toBe(1)
+    })
+
+    it('renders an indicator with "Confidence: Medium" for MEDIUM', () => {
+        const data: StrategyMapNodeData = { ...baseData, confidence: 'MEDIUM' }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        expect(screen.getAllByLabelText('Confidence: Medium').length).toBe(1)
+    })
+
+    it('renders an indicator with "Confidence: Low" for LOW', () => {
+        const data: StrategyMapNodeData = { ...baseData, confidence: 'LOW' }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        expect(screen.getAllByLabelText('Confidence: Low').length).toBe(1)
+    })
+})
+
+describe('StrategyMapNode — customer-voice formatting', () => {
+    it('wraps the title in curly quotes for customerVoice chips', () => {
+        const data: StrategyMapNodeData = {
+            ...baseData,
+            objectiveId: 'C1',
+            perspective: 'customer',
+            customerVoice: true,
+            title: 'Offer me fresh products',
+        }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        // Curly quote marks bracket the rendered title.
+        expect(screen.getAllByText(/“Offer me fresh products”/).length).toBeGreaterThan(0)
+    })
+
+    it('renders capacity chips with their bucket label', () => {
+        const data: StrategyMapNodeData = {
+            ...baseData,
+            objectiveId: 'O.P',
+            perspective: 'capacity',
+            capacityBucket: 'People',
+        }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        expect(screen.getByText('People')).toBeInTheDocument()
+    })
+})
+
+describe('StrategyMapNode — shared-lane visual marker', () => {
+    /**
+     * Centre-lane chips (those the layout helper couldn't anchor to a
+     * theme column) get a dashed left-border instead of solid so the
+     * reader spots them at a glance. Behaviour disappears under the
+     * planned `β` follow-up where every objective has a deterministic
+     * theme.
+     */
+    it('renders solid left-border for chips with a real theme column', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        const node = screen.getByRole('button')
+        expect(node).toHaveStyle({ borderLeft: '3px solid var(--accent-blue)' })
+    })
+
+    it('renders dashed left-border for chips in the shared centre lane', () => {
+        const data: StrategyMapNodeData = { ...baseData, inSharedLane: true }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        const node = screen.getByRole('button')
+        expect(node).toHaveStyle({ borderLeft: '3px dashed var(--accent-blue)' })
+    })
+})
+
+describe('StrategyMapNode — tooltip hover-intent (safe transit)', () => {
+    /**
+     * The user reported on PR #244 that the tooltip's scroll bar was
+     * unreachable: moving the cursor toward it triggered chip
+     * mouseLeave first (because the NodeToolbar portal lives in a
+     * different DOM tree from the chip and there's a small visual gap
+     * between them), which closed the tooltip mid-transit.
+     *
+     * Hover-intent fix: chip mouseLeave starts a 200 ms close timer
+     * that the tooltip's own mouseEnter cancels. So the tooltip stays
+     * open as long as the cursor is on EITHER the chip or the tooltip.
+     */
+    it('tooltip mouseEnter cancels the pending close so the user can scroll', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            const tooltip = screen.getByRole('tooltip')
+
+            // Cursor leaves the chip → close timer scheduled.
+            fireEvent.mouseLeave(node)
+            // Mid-transit: cursor reaches the tooltip and cancels the close.
+            fireEvent.mouseEnter(tooltip)
+            // Even after the grace period elapses the tooltip stays open
+            // because the timer was cancelled.
+            act(() => {
+                vi.advanceTimersByTime(500)
+            })
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('tooltip mouseLeave schedules a close (so leaving the tooltip closes it)', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            const tooltip = screen.getByRole('tooltip')
+
+            // User transits chip → tooltip → away.
+            fireEvent.mouseLeave(node)
+            fireEvent.mouseEnter(tooltip)
+            fireEvent.mouseLeave(tooltip)
+            expect(screen.getByRole('tooltip')).toBeInTheDocument() // still inside grace
+            act(() => {
+                vi.advanceTimersByTime(250)
+            })
+            expect(screen.queryByRole('tooltip')).toBeNull()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('chip mouseEnter during the grace period cancels the close (cursor returns)', () => {
+        vi.useFakeTimers()
+        try {
+            renderInProvider(<StrategyMapNode {...nodeProps()} />)
+            const node = screen.getByRole('button')
+            fireEvent.mouseEnter(node)
+            // Cursor briefly leaves then comes back to the chip.
+            fireEvent.mouseLeave(node)
+            fireEvent.mouseEnter(node)
+            act(() => {
+                vi.advanceTimersByTime(500)
+            })
+            // Still open — the second mouseEnter cancelled the timer.
+            expect(screen.getByRole('tooltip')).toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+})
+
+describe('StrategyMapNode — tooltip wheel events bypass canvas zoom', () => {
+    /**
+     * React Flow's default behaviour is "wheel = zoom canvas". When the
+     * cursor is over the tooltip (which has overflow-y: auto for long
+     * definitions), the user expects "wheel = scroll the tooltip", not
+     * "wheel = zoom the canvas". The tooltip wrapper carries the
+     * `nowheel` class — React Flow's official escape hatch — so its
+     * zoom-on-scroll handler skips wheel events on the tooltip subtree
+     * entirely. The browser's native scroll on the inner
+     * `overflow-y: auto` region then handles the user's gesture.
+     */
+    it('marks the tooltip with the React Flow `nowheel` class so wheel-zoom is bypassed', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        fireEvent.mouseEnter(screen.getByRole('button'))
+        const tooltip = screen.getByRole('tooltip')
+
+        // See the `noWheelClassName = 'nowheel'` default on `<ReactFlow>`:
+        // any element with this class (or a descendant) is excluded from
+        // the zoom path. `stopPropagation` on its own wasn't enough —
+        // React Flow checks for the class on the wheel event's target
+        // before its zoom handler runs.
+        expect(tooltip.classList.contains('nowheel')).toBe(true)
+    })
+})
+
+describe('StrategyMapNode — tooltip max-height (long-definition overflow)', () => {
+    /**
+     * Production data surfaced a chip with a multi-paragraph definition
+     * (~600 chars). The tooltip's intrinsic height extended past the
+     * canvas's bottom edge AND past the bottom of the page section,
+     * overlaying the gaps panel beneath. Bounded the wrapper at 320 px
+     * with internal scroll so the UI is consistent regardless of how
+     * verbose the AI was.
+     */
+    it('caps the tooltip wrapper at maxHeight: 320', () => {
+        renderInProvider(<StrategyMapNode {...nodeProps()} />)
+        fireEvent.mouseEnter(screen.getByRole('button'))
+        const tooltip = screen.getByRole('tooltip')
+        expect(tooltip).toHaveStyle({ maxHeight: '320px' })
+    })
+})
+
+describe('StrategyMapNode — tooltip side flips for the bottom band', () => {
+    /**
+     * The strategy-map canvas has 4 horizontal perspective bands; the
+     * Capacity band is the bottom one. A NodeToolbar with the default
+     * `Position.Bottom` would render below the chip, which on a capacity
+     * chip means below the canvas's bottom edge — overlaying the gaps
+     * panel and CTA underneath. Capacity chips flip the tooltip to
+     * `Position.Top` so the toolbar renders above the chip, inside the
+     * canvas's vertical range.
+     */
+    it('uses Position.Bottom for chips in financial / customer / internal bands', () => {
+        for (const perspective of ['financial', 'customer', 'internal'] as const) {
+            const data: StrategyMapNodeData = { ...baseData, perspective }
+            const { unmount } = renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+            fireEvent.mouseEnter(screen.getByRole('button'))
+            const toolbar = screen.getByTestId('strategy-map-node-toolbar')
+            expect(toolbar.getAttribute('data-toolbar-position')).toBe('bottom')
+            unmount()
+        }
+    })
+
+    it('uses Position.Top for capacity chips (avoids overflowing past canvas bottom)', () => {
+        const data: StrategyMapNodeData = {
+            ...baseData,
+            objectiveId: 'O.P',
+            perspective: 'capacity',
+            capacityBucket: 'People',
+        }
+        renderInProvider(<StrategyMapNode {...nodeProps({ data })} />)
+        fireEvent.mouseEnter(screen.getByRole('button'))
+        const toolbar = screen.getByTestId('strategy-map-node-toolbar')
+        expect(toolbar.getAttribute('data-toolbar-position')).toBe('top')
+    })
+})
