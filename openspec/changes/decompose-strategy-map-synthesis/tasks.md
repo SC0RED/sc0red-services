@@ -120,17 +120,17 @@
 > ``GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS`` to ``"1"``
 > unconditionally for all environments.
 
-- [ ] 8.1 Open a dev → testing promotion PR after the §7.5 eval gate passes. — PR #290 open at the time of this edit; awaiting CI + merge.
-- [ ] 8.2 After merge, verify the testing worker shows BOTH `GENERATE_STRATEGY_MAP_DECOMPOSED=1` AND `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1` in Lambda env vars (policy update above).
-- [ ] 8.3 Trigger a strategy-map generation on testing for one company. Confirm CloudWatch shows the Phase 1+2 per-call labels (`ai_call_vision_text`, `ai_call_vp_primary`, `ai_call_arrow_*`, etc.).
-- [ ] 8.4 _Originally_: 7-day soak on testing before promoting. _Per policy update_: production rollout is no longer gated on a testing soak. The CloudWatch dashboards and the assembled-output Pydantic validation are now the operator-facing safety net.
+- [x] 8.1 Open a dev → testing promotion PR after the §7.5 eval gate passes. — PR #290 opened 2026-05-12, all CI checks green, squash-merged via REST API.
+- [x] 8.2 After merge, verify the testing worker shows BOTH `GENERATE_STRATEGY_MAP_DECOMPOSED=1` AND `GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1` in Lambda env vars (policy update above). — Verified post-deploy.
+- [x] 8.3 Trigger a strategy-map generation on testing for one company. Confirm CloudWatch shows the Phase 1+2 per-call labels (`ai_call_vision_text`, `ai_call_vp_primary`, `ai_call_arrow_*`, etc.). — Verified by user on testing; Phase 1+2 pipeline runs cleanly end-to-end.
+- [x] 8.4 _Originally_: 7-day soak on testing before promoting. _Per policy update_: production rollout is no longer gated on a testing soak. — Skipped per policy update; testing → production PR initiated immediately after §8.3 verification.
 
 ## 9. Promote to Production
 
 > See policy update in §8 above. Production receives the same
 > always-on flag config as staging and testing.
 
-- [ ] 9.1 Open a testing → production promotion PR.
+- [ ] 9.1 Open a testing → production promotion PR. — PR initiated 2026-05-12 immediately after §8.3 verification.
 - [ ] 9.2 After merge, verify the production worker shows BOTH flags in Lambda env vars.
 - [ ] 9.3 Watch CloudWatch dashboards for anomalies on the first few prod strategy-map clicks.
 
