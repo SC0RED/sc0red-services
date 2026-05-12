@@ -35,7 +35,6 @@ import os
 from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.pipeline.step import RequestStep
-from signalfield_core.utilities.future_manager import FutureManager
 
 from src.pipeline.pipeline_steps._strategy_map_assembly import (
     assemble_strategy_map,
@@ -48,10 +47,12 @@ from src.pipeline.pipeline_steps._strategy_map_context import (
     summarise_value_proposition,
     unwrap_perspective,
 )
-from src.pipeline.pipeline_steps._strategy_map_corpus import (
-    compose_system_prompt,
-    load_schema,
-    render_template,
+from src.pipeline.pipeline_steps._strategy_map_corpus import compose_system_prompt
+from src.pipeline.pipeline_steps._strategy_map_legacy_steps import (
+    run_step_1_vision_mission,
+    run_step_2_value_proposition,
+    run_step_7_arrows_and_gaps,
+    run_steps_3_through_6_in_parallel,
 )
 from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
 from src.pipeline.step_timer import StepTimer
@@ -66,9 +67,6 @@ logger = logging.getLogger(__name__)
 STEP_NAME = "GenerateStrategyMap"
 """CloudWatch log filter prefix and metric label."""
 
-PARALLEL_MAX_WORKERS = 4
-"""Cap on concurrent AI calls during the Steps 3-6 parallel block."""
-
 DECOMPOSED_FLAG_ENV_VAR = "GENERATE_STRATEGY_MAP_DECOMPOSED"
 """Env var that gates the decomposed (Phase 1) call shape.
 
@@ -81,6 +79,30 @@ the legacy single-call path runs unchanged. See
 Lambda receives this env var.
 """
 
+DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR = "GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS"
+"""Env var that gates the decomposed (Phase 2) synthesis call shape.
+
+When set to ``"1"`` ON TOP OF ``GENERATE_STRATEGY_MAP_DECOMPOSED=1``:
+- Step 1 (Vision/Mission) delegates to
+  ``_strategy_map_synthesis.run_decomposed_vision_mission`` (4 parallel
+  sub-calls).
+- Step 2 (Value Proposition) delegates to
+  ``_strategy_map_synthesis.run_decomposed_value_proposition`` (4 parallel
+  sub-calls).
+- Step 7 (Arrows + Priorities + Gaps) delegates to
+  ``_strategy_map_arrows.run_decomposed_arrows_and_gaps`` (~15-25 parallel
+  per-pair yes/no calls + 2 holistic singletons).
+
+This flag MUST NOT be set without ``GENERATE_STRATEGY_MAP_DECOMPOSED=1``
+— ``execute()`` raises a ``ValueError`` before any AI call is made if
+synthesis decomposition is requested while Phase 1 is off. The arrows
+module reuses the Phase 1 decomposed perspective output for candidate
+pair enumeration; without Phase 1's per-objective IDs the arrows
+fan-out would be ill-defined.
+
+Default OFF — Phase 1 alone (or fully monolithic) runs unchanged.
+"""
+
 
 def _decomposed_path_enabled() -> bool:
     """Whether the decomposed Phase 1 call shape should run.
@@ -91,11 +113,14 @@ def _decomposed_path_enabled() -> bool:
     return os.environ.get(DECOMPOSED_FLAG_ENV_VAR, "0") == "1"
 
 
-# Loaded once at module import. The same schema is passed to every
-# AI call — different steps populate different parts of the structure.
-# Final assembly + Pydantic validation in `assemble_strategy_map()`
-# is the gating check.
-_SCHEMA = load_schema()
+def _decomposed_synthesis_enabled() -> bool:
+    """Whether the decomposed Phase 2 synthesis call shape should run.
+
+    Reads the env var at call time. Callers MUST also verify
+    ``_decomposed_path_enabled()`` — the synthesis path requires the
+    Phase 1 perspective output to enumerate arrow candidate pairs.
+    """
+    return os.environ.get(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, "0") == "1"
 
 
 class GenerateStrategyMap(RequestStep):
@@ -139,18 +164,66 @@ class GenerateStrategyMap(RequestStep):
         # prompts.
         context = build_shared_context(company)
 
+        # Feature-flag validation. Phase 2 (synthesis decomposition)
+        # MUST run on top of Phase 1 (perspective decomposition). The
+        # arrows module reuses Phase 1's per-objective IDs (F1..F3,
+        # C1..C4, I*.*, O.P/O.T/O.C) to enumerate candidate pairs —
+        # without Phase 1 these IDs may not have stable shapes.
+        synthesis_decomposed = _decomposed_synthesis_enabled()
+        phase1_decomposed = _decomposed_path_enabled()
+        if synthesis_decomposed and not phase1_decomposed:
+            message = (
+                "Cannot enable GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1 "
+                "without GENERATE_STRATEGY_MAP_DECOMPOSED=1. The synthesis "
+                "decomposition reuses Phase 1's perspective output."
+            )
+            raise ValueError(message)
+
         # ``StepTimer`` collects per-AI-call elapsed times; we always emit the
         # collected timings to ``request_executor`` even on the failure path so
         # CloudWatch shows which calls completed before the exception.
         timer = StepTimer(STEP_NAME)
         try:
-            # Step 1 — Vision and Mission
-            vision_data, mission_data = self._step_1_vision_mission(system_prompt, context, timer)
+            # Step 1 — Vision and Mission. Two paths:
+            # - Decomposed (Phase 2): 4 parallel sub-calls in
+            #   ``_strategy_map_synthesis.run_decomposed_vision_mission``.
+            # - Monolithic: today's single AI call.
+            if synthesis_decomposed:
+                from src.pipeline.pipeline_steps._strategy_map_synthesis import (
+                    run_decomposed_vision_mission,
+                )
+
+                vision_data, mission_data = run_decomposed_vision_mission(
+                    self,
+                    system_prompt=system_prompt,
+                    context=context,
+                    timer=timer,
+                )
+            else:
+                vision_data, mission_data = run_step_1_vision_mission(
+                    self, system_prompt, context, timer
+                )
             context["vision_statement"] = vision_data["statement"]
             context["mission_statement"] = mission_data["statement"]
 
-            # Step 2 — Customer Value Proposition classification
-            value_proposition_data = self._step_2_value_proposition(system_prompt, context, timer)
+            # Step 2 — Customer Value Proposition classification. Two paths:
+            # - Decomposed (Phase 2): 4 parallel sub-calls.
+            # - Monolithic: today's single AI call.
+            if synthesis_decomposed:
+                from src.pipeline.pipeline_steps._strategy_map_synthesis import (
+                    run_decomposed_value_proposition,
+                )
+
+                value_proposition_data = run_decomposed_value_proposition(
+                    self,
+                    system_prompt=system_prompt,
+                    context=context,
+                    timer=timer,
+                )
+            else:
+                value_proposition_data = run_step_2_value_proposition(
+                    self, system_prompt, context, timer
+                )
             context["value_proposition"] = summarise_value_proposition(value_proposition_data)
 
             # Steps 3-6 — perspective generation. Two paths:
@@ -202,7 +275,7 @@ class GenerateStrategyMap(RequestStep):
                     progress_emitter=_emit_progress,
                 )
             else:
-                results = self._steps_3_through_6_in_parallel(system_prompt, context, timer)
+                results = run_steps_3_through_6_in_parallel(self, system_prompt, context, timer)
 
                 # Some models wrap output under a top-level key; tolerate both.
                 financial_data = unwrap_perspective(results["financial"], "financial")
@@ -224,8 +297,27 @@ class GenerateStrategyMap(RequestStep):
                 financial_data, customer_data, internal_data, capacity_data
             )
 
-            # Step 7 — Arrows + Strategic Priorities + What's Missing
-            finale_data = self._step_7_arrows_and_gaps(system_prompt, context, timer)
+            # Step 7 — Arrows + Strategic Priorities + What's Missing. Two paths:
+            # - Decomposed (Phase 2): per-pair yes/no arrows bank +
+            #   holistic priorities + holistic gaps, all in parallel.
+            # - Monolithic: today's single AI call.
+            if synthesis_decomposed:
+                from src.pipeline.pipeline_steps._strategy_map_arrows import (
+                    run_decomposed_arrows_and_gaps,
+                )
+
+                finale_data = run_decomposed_arrows_and_gaps(
+                    self,
+                    system_prompt=system_prompt,
+                    context=context,
+                    timer=timer,
+                    financial=financial_data,
+                    customer=customer_data,
+                    internal_processes=internal_data,
+                    organizational_capacity=capacity_data,
+                )
+            else:
+                finale_data = run_step_7_arrows_and_gaps(self, system_prompt, context, timer)
 
             # Assemble + validate the full StrategyMap.
             strategy_map = assemble_strategy_map(
@@ -247,108 +339,6 @@ class GenerateStrategyMap(RequestStep):
             self.request_executor.add_details(timer.to_details())
 
         self.request_executor.mark_question_complete("generate_strategy_map")
-
-    # ── Step runners ────────────────────────────────────────────────────────
-
-    def _step_1_vision_mission(
-        self,
-        system_prompt: str,
-        context: dict[str, Any],
-        timer: StepTimer,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Run Step 1 and split the response into vision + mission halves."""
-        prompt = render_template("01_vision_mission", context)
-        _label, content, elapsed = self._run_ai_call(
-            prompt, _SCHEMA, system_prompt, "vision_mission"
-        )
-        timer.record("ai_call_vision_mission", elapsed)
-        if "vision" not in content or "mission" not in content:
-            message = (
-                f"[{STEP_NAME}] Step 1 response missing vision or mission keys: "
-                f"got keys={list(content.keys())}"
-            )
-            raise ValueError(message)
-        return content["vision"], content["mission"]
-
-    def _step_2_value_proposition(
-        self,
-        system_prompt: str,
-        context: dict[str, Any],
-        timer: StepTimer,
-    ) -> dict[str, Any]:
-        """Run Step 2 and return the classification dict."""
-        prompt = render_template("02_value_proposition_classify", context)
-        _label, content, elapsed = self._run_ai_call(
-            prompt, _SCHEMA, system_prompt, "value_proposition"
-        )
-        timer.record("ai_call_value_proposition", elapsed)
-        # Some models wrap the answer under `valueProposition`; tolerate both.
-        if "primary" in content:
-            return content
-        if "valueProposition" in content:
-            return content["valueProposition"]
-        message = (
-            f"[{STEP_NAME}] Step 2 response missing 'primary' classification: "
-            f"got keys={list(content.keys())}"
-        )
-        raise ValueError(message)
-
-    def _steps_3_through_6_in_parallel(
-        self,
-        system_prompt: str,
-        context: dict[str, Any],
-        timer: StepTimer,
-    ) -> dict[str, dict[str, Any]]:
-        """Run the four perspective generations concurrently, collected by label."""
-        # Initialise outside the `with` so pyright sees `collected` as
-        # always-bound when we read it afterwards. The FutureManager's
-        # `wait_for_all_and_collect_results` returns synchronously
-        # before the context exits, but the static analyser doesn't
-        # know that.
-        collected: list[tuple[str, dict[str, Any], float]] = []
-        with FutureManager(name=STEP_NAME, max_workers=PARALLEL_MAX_WORKERS) as manager:
-            for label, template_name in (
-                ("financial", "03_financial_perspective"),
-                ("customer", "04_customer_perspective"),
-                ("internal_processes", "05_internal_processes"),
-                ("organizational_capacity", "06_organizational_capacity"),
-            ):
-                manager.submit_task(
-                    self._run_ai_call,
-                    render_template(template_name, context),
-                    _SCHEMA,
-                    system_prompt,
-                    label,
-                )
-            collected = manager.wait_for_all_and_collect_results()
-
-        # Record per-call elapsed before returning. Each label is the perspective
-        # name; ``StepTimer`` keys land in CloudWatch as ``ai_call_{perspective}``.
-        for label, _data, elapsed in collected:
-            timer.record(f"ai_call_{label}", elapsed)
-
-        return {label: data for label, data, _elapsed in collected}
-
-    def _step_7_arrows_and_gaps(
-        self,
-        system_prompt: str,
-        context: dict[str, Any],
-        timer: StepTimer,
-    ) -> dict[str, Any]:
-        """Run Step 7 and return the finale dict (priorities + arrows + gaps)."""
-        prompt = render_template("07_arrows_and_gaps", context)
-        _label, content, elapsed = self._run_ai_call(
-            prompt, _SCHEMA, system_prompt, "arrows_and_gaps"
-        )
-        timer.record("ai_call_arrows_and_gaps", elapsed)
-        for required in ("strategicPriorities", "arrows", "whatsMissing"):
-            if required not in content:
-                message = (
-                    f"[{STEP_NAME}] Step 7 response missing '{required}': "
-                    f"got keys={list(content.keys())}"
-                )
-                raise ValueError(message)
-        return content
 
     # ── AI plumbing ─────────────────────────────────────────────────────────
 

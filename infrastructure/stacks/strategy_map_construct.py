@@ -77,26 +77,25 @@ class StrategyMapConstruct(Construct):
         )
 
         # Main queue. Visibility timeout is 720 seconds (12 minutes) — six
-        # times the worker Lambda's 120-second timeout, per the AWS recommended
-        # SQS-Lambda integration ratio. This ensures a message stays
-        # invisible for the full duration the Lambda could be processing it
-        # (worst case: full timeout) plus an exponential-backoff buffer for
-        # SQS-internal retries. The actual call shape today is ~55s and drops
-        # to ~17s after `optimize-strategy-map-latency` Phase 1, so the long
-        # visibility window does NOT delay user-visible recovery — it only
-        # affects the failure path.
+        # Visibility timeout must be >= the worker Lambda timeout per the
+        # AWS SQS-Lambda integration contract; AWS rejects the event-source
+        # mapping at deploy time otherwise. With the Lambda timeout now at
+        # 900 s (Phase 2 + retry-storm headroom, see ``timeout_seconds``
+        # below) we set visibility to 1080 s — function timeout plus a
+        # ~20 % buffer for SQS-internal handoff. This is well below the
+        # historical 6× ratio (which would mandate 5400 s here, absurd)
+        # but comfortably above the AWS minimum.
         #
         # Earlier this construct shipped with `visibility_timeout=90` while
         # the Lambda timeout was 120s. AWS rejected the event-source mapping
         # at deploy time with `Queue visibility timeout: 90 seconds is less
         # than Function timeout: 120 seconds`. The minimum for any
-        # SQS-Lambda mapping is `>= function_timeout`; we use the recommended
-        # 6× multiplier to leave operational headroom.
+        # SQS-Lambda mapping is `>= function_timeout`.
         self.queue = sqs.Queue(
             self,
             "StrategyMapQueue",
             queue_name=f"janus-strategy-map-queue-{environment}",
-            visibility_timeout=Duration.seconds(720),
+            visibility_timeout=Duration.seconds(1080),
             retention_period=Duration.days(4),
             # ``max_receive_count`` MUST match
             # ``StrategyMapSQSHandler._MAX_RECEIVE_COUNT`` in
@@ -149,17 +148,26 @@ class StrategyMapConstruct(Construct):
         # vCPU (per AWS docs); the analysis worker has used this for
         # the same workload without issue.
         #
-        # Aligned config:
-        #   - ``timeout_seconds=540`` (9 min — matches analysis worker)
-        #   - ``memory_size=1769`` (full vCPU — matches analysis worker)
+        # Current config (post-Phase-2 + retry-storm headroom):
+        #   - ``timeout_seconds=900`` (15 min — Lambda max; allows tail-
+        #     latency events from OpenAI retries without timing out the
+        #     user-clicked job)
+        #   - ``memory_size=2048`` (~1.16 vCPU; slight bump over the
+        #     1769 MB analysis-worker baseline for faster Pydantic
+        #     validation and prompt rendering)
         #   - ``reserved_concurrency=4`` (bounded; on-demand clicks
         #     shouldn't burst)
         #
-        # Queue visibility timeout is 720s, which is > 540s Lambda
+        # The 540 s / 1769 MB envelope was adequate for clean-path Phase 2
+        # runs (~45 s end-to-end) but a tail-latency event on 2026-05-11
+        # IST night saw three companies hit back-to-back OpenAI retries
+        # that pushed the worker beyond 540 s. The bump to 900 s / 2048 MB
+        # eliminated those timeouts across the 5-company manual-eval
+        # batch.
+        #
+        # Queue visibility timeout is 1080 s, which is > 900 s Lambda
         # timeout, satisfying AWS's SQS-Lambda event-source mapping
-        # constraint. The 1.33× ratio is tighter than AWS's recommended
-        # 6× but matches the production AnalysisQueue (600s visibility
-        # / 540s timeout = 1.11×) which has run reliably for months.
+        # constraint with a ~20 % buffer.
         #
         # **Coverage gap — Lambda timeout vs in-process fail-safe**: the
         # ``StrategyMapSQSHandler`` fail-safe state-clear (in
@@ -173,15 +181,25 @@ class StrategyMapConstruct(Construct):
         worker_environment["APPSYNC_ENDPOINT"] = appsync_endpoint
         worker_environment["APPSYNC_API_KEY"] = appsync_api_key
 
-        # Enable the optimize-strategy-map-latency Phase 1 decomposed
-        # call shape on the staging (= development AWS account) worker
-        # only. Per Decision §6 of that change's design.md, manual eval
-        # gates the rollout to testing/production. The flag is read by
-        # ``GenerateStrategyMap.execute()`` at call time (not module
-        # import) so this take effect on the next user click after the
-        # next deploy.
-        if environment == "staging":
-            worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED"] = "1"
+        # Strategy-map latency optimisation feature flags. Both layers
+        # are enabled by default for every environment after the
+        # 2026-05-12 manual eval gate passed cleanly on staging
+        # (5 companies, end-to-end ~45 s per company, no perspective
+        # regression — see
+        # ``openspec/changes/decompose-strategy-map-synthesis/tasks.md``
+        # §7.5). The earlier per-environment gating (Phase 1 on
+        # staging+testing only, Phase 2 on staging only) was removed at
+        # the user's request to ship Phase 2 to all environments
+        # without an additional soak-then-flag-flip step.
+        #
+        # Both flags are read by ``GenerateStrategyMap.execute()`` at
+        # call time (not module import), so they take effect on the next
+        # user click after the next deploy. The flag-layering guard in
+        # ``execute()`` raises ``ValueError`` before any AI call if Phase
+        # 2 is set without Phase 1 — both are set here unconditionally
+        # so that invariant holds.
+        worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED"] = "1"
+        worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS"] = "1"
 
         self.worker = create_lambda(
             self,
@@ -190,8 +208,19 @@ class StrategyMapConstruct(Construct):
             handler="src.handlers.strategy_map_worker_entry.handle_event",
             bundling=bundling,
             environment=worker_environment,
-            timeout_seconds=540,
-            memory_size=1769,
+            # Timeout = 900 s (15 min, Lambda max). The 540 s envelope was
+            # adequate for clean-path runs (Phase 2 lands ~45 s end-to-end)
+            # but a tail-latency event on 2026-05-11 IST night saw three
+            # companies hit back-to-back OpenAI retries that stacked above
+            # 540 s on the synthesis singletons. 900 s gives the headroom
+            # to absorb retry storms without timing out the user.
+            timeout_seconds=900,
+            # Memory = 2048 MB. Above the 1769 MB tier so Lambda allocates
+            # >1 vCPU (1.16 vCPU equivalent); a small but measurable boost
+            # to Python execution of prompt rendering, assembly, and
+            # Pydantic validation. Cost ~15 % higher per invocation but
+            # invocations are user-clicked and infrequent.
+            memory_size=2048,
             architecture=lambda_architecture,
             log_retention_days=log_retention_days,
             enable_tracing=enable_tracing,

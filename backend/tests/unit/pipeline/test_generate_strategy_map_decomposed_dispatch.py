@@ -24,8 +24,10 @@ from src.models.model_company import (
 )
 from src.pipeline.pipeline_steps.generate_strategy_map import (
     DECOMPOSED_FLAG_ENV_VAR,
+    DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR,
     GenerateStrategyMap,
     _decomposed_path_enabled,
+    _decomposed_synthesis_enabled,
 )
 
 
@@ -102,10 +104,10 @@ class TestDispatchRouting:
 
     @patch("src.pipeline.pipeline_steps.generate_strategy_map.assemble_strategy_map")
     @patch("src.pipeline.pipeline_steps.generate_strategy_map.extract_core_values")
-    @patch.object(GenerateStrategyMap, "_step_7_arrows_and_gaps")
-    @patch.object(GenerateStrategyMap, "_steps_3_through_6_in_parallel")
-    @patch.object(GenerateStrategyMap, "_step_2_value_proposition")
-    @patch.object(GenerateStrategyMap, "_step_1_vision_mission")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_7_arrows_and_gaps")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_steps_3_through_6_in_parallel")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_2_value_proposition")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_1_vision_mission")
     def test_flag_off_takes_legacy_parallel_path(
         self,
         mock_step1: MagicMock,
@@ -125,7 +127,12 @@ class TestDispatchRouting:
             "financial": {"objectives": []},
             "customer": {"objectives": []},
             "internal_processes": {"themes": []},
-            "organizational_capacity": {"people": {}, "technology": {}, "culture": {}, "coreValues": {}},
+            "organizational_capacity": {
+                "people": {},
+                "technology": {},
+                "culture": {},
+                "coreValues": {},
+            },
         }
         mock_extract_core_values.return_value = {}
         mock_step7.return_value = {"strategicPriorities": [], "arrows": [], "whatsMissing": []}
@@ -137,10 +144,10 @@ class TestDispatchRouting:
         mock_steps_3_6.assert_called_once()  # Legacy path was taken.
 
     @patch("src.pipeline.pipeline_steps.generate_strategy_map.assemble_strategy_map")
-    @patch.object(GenerateStrategyMap, "_step_7_arrows_and_gaps")
-    @patch.object(GenerateStrategyMap, "_steps_3_through_6_in_parallel")
-    @patch.object(GenerateStrategyMap, "_step_2_value_proposition")
-    @patch.object(GenerateStrategyMap, "_step_1_vision_mission")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_7_arrows_and_gaps")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_steps_3_through_6_in_parallel")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_2_value_proposition")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_1_vision_mission")
     # Patch the SOURCE module's symbol, not the importer's. The dispatch
     # uses a lazy `from ... import generate_perspectives_decomposed`
     # inside `execute()`; the resolved name is never bound on
@@ -182,3 +189,150 @@ class TestDispatchRouting:
         mock_decomposed.assert_called_once()
         # Legacy path MUST NOT run when the flag is ON.
         mock_steps_3_6_legacy.assert_not_called()
+
+
+class TestDecomposedSynthesisFlagEnv:
+    """Phase 2 flag: layered on top of Phase 1."""
+
+    def test_default_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, raising=False)
+        assert _decomposed_synthesis_enabled() is False
+
+    def test_enabled_only_for_exact_string_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for value in ("1",):
+            monkeypatch.setenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, value)
+            assert _decomposed_synthesis_enabled() is True
+
+        for value in ("0", "true", "yes", "on", "True", ""):
+            monkeypatch.setenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, value)
+            assert _decomposed_synthesis_enabled() is False
+
+
+class TestPhase2FlagLayering:
+    """Tasks 5.4.1 - 5.4.4: flag-layering matrix for ``execute()``.
+
+    Verifies the matrix in design Decision §4:
+    - Both off → monolithic.
+    - Phase 1 only → Phase 1.
+    - Both on → Phase 1 + Phase 2.
+    - Phase 2 only → ValueError raised before any AI call.
+    """
+
+    def _make_step(self) -> GenerateStrategyMap:
+        ai_factory = MagicMock()
+        step = GenerateStrategyMap(ai_client_factory=ai_factory)
+        step.entity_accessor = _make_accessor()  # type: ignore[assignment]
+        step.request_executor = MagicMock()
+        return step
+
+    def test_synthesis_flag_without_phase1_raises(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Phase 2 on, Phase 1 off → must raise before any AI call.
+        monkeypatch.delenv(DECOMPOSED_FLAG_ENV_VAR, raising=False)
+        monkeypatch.setenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, "1")
+
+        step = self._make_step()
+        with pytest.raises(ValueError, match="DECOMPOSED_SYNTHESIS"):
+            step.execute()
+
+        # Confirm no AI call was attempted — the ai_client_factory's
+        # ``get_client`` method should never have been touched.
+        ai_factory = step._ai_client_factory  # type: ignore[attr-defined]
+        ai_factory.get_client.assert_not_called()
+
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.assemble_strategy_map")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_7_arrows_and_gaps")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_2_value_proposition")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_1_vision_mission")
+    @patch(
+        "src.pipeline.pipeline_steps._strategy_map_perspectives.generate_perspectives_decomposed"
+    )
+    def test_phase1_only_runs_phase1_paths(
+        self,
+        mock_decomposed: MagicMock,
+        mock_step1: MagicMock,
+        mock_step2: MagicMock,
+        mock_step7: MagicMock,
+        mock_assemble: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv(DECOMPOSED_FLAG_ENV_VAR, "1")
+        monkeypatch.delenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, raising=False)
+
+        mock_step1.return_value = ({"statement": "v"}, {"statement": "m"})
+        mock_step2.return_value = {"primary": "operational_excellence"}
+        mock_decomposed.return_value = (
+            {"objectives": []},
+            {"objectives": []},
+            {"themes": []},
+            {"people": {}, "technology": {}, "culture": {}},
+            {},
+        )
+        mock_step7.return_value = {"strategicPriorities": [], "arrows": [], "whatsMissing": []}
+        mock_assemble.return_value = MagicMock()
+
+        step = self._make_step()
+        step.execute()
+
+        # Phase 1 monolithic Step 1, Step 2, Step 7 all ran.
+        mock_step1.assert_called_once()
+        mock_step2.assert_called_once()
+        mock_step7.assert_called_once()
+        mock_decomposed.assert_called_once()
+
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.assemble_strategy_map")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_7_arrows_and_gaps")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_2_value_proposition")
+    @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_1_vision_mission")
+    @patch("src.pipeline.pipeline_steps._strategy_map_arrows.run_decomposed_arrows_and_gaps")
+    @patch("src.pipeline.pipeline_steps._strategy_map_synthesis.run_decomposed_value_proposition")
+    @patch("src.pipeline.pipeline_steps._strategy_map_synthesis.run_decomposed_vision_mission")
+    @patch(
+        "src.pipeline.pipeline_steps._strategy_map_perspectives.generate_perspectives_decomposed"
+    )
+    def test_both_flags_on_runs_phase1_plus_phase2(
+        self,
+        mock_decomposed_perspectives: MagicMock,
+        mock_decomposed_vm: MagicMock,
+        mock_decomposed_vp: MagicMock,
+        mock_decomposed_arrows: MagicMock,
+        mock_step1: MagicMock,
+        mock_step2: MagicMock,
+        mock_step7: MagicMock,
+        mock_assemble: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv(DECOMPOSED_FLAG_ENV_VAR, "1")
+        monkeypatch.setenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, "1")
+
+        mock_decomposed_vm.return_value = ({"statement": "v"}, {"statement": "m"})
+        mock_decomposed_vp.return_value = {"primary": "operational_excellence"}
+        mock_decomposed_perspectives.return_value = (
+            {"objectives": []},
+            {"objectives": []},
+            {"themes": []},
+            {"people": {}, "technology": {}, "culture": {}},
+            {},
+        )
+        mock_decomposed_arrows.return_value = {
+            "strategicPriorities": [],
+            "arrows": [],
+            "whatsMissing": [],
+        }
+        mock_assemble.return_value = MagicMock()
+
+        step = self._make_step()
+        step.execute()
+
+        # Phase 2 paths ran.
+        mock_decomposed_vm.assert_called_once()
+        mock_decomposed_vp.assert_called_once()
+        mock_decomposed_arrows.assert_called_once()
+        # Phase 1 perspectives ran.
+        mock_decomposed_perspectives.assert_called_once()
+        # Phase 1 monolithic paths MUST NOT run when Phase 2 is also on.
+        mock_step1.assert_not_called()
+        mock_step2.assert_not_called()
+        mock_step7.assert_not_called()
