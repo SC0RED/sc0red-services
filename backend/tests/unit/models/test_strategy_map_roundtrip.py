@@ -16,12 +16,15 @@ camelCase JSON wire shape:
   - StrategyMap.strategic_priorities       ↔ "strategicPriorities"
   - StrategyMap.internal_processes         ↔ "internalProcesses"
   - StrategyMap.organizational_capacity    ↔ "organizationalCapacity"
-  - StrategyMap.whats_missing              ↔ "whatsMissing"
   - StrategyMap.core_values                ↔ "coreValues"
   - Arrow.from_id                          ↔ "from"
   - Arrow.to_id                            ↔ "to"
-  - Gap.deep_dive_framing                  ↔ "deepDiveFraming"
-  - Gap.related_objective_ids              ↔ "relatedObjectiveIds"
+
+The ``whatsMissing`` field (and its ``Gap`` model) was removed from the
+StrategyMap end-to-end under the ``redesign-strategy-map`` Phase 2
+change. Legacy persisted records that still carry ``whatsMissing`` data
+load without error (the model uses ``extra="allow"``) — see
+``TestLegacyTolerance``.
 
 A regression in any alias breaks the wire shape silently — JSON
 serialises with one name and a downstream consumer expects another.
@@ -244,33 +247,6 @@ def _make_full_strategy_map_dict() -> dict:
                 ),
             },
         ],
-        "whatsMissing": [
-            {
-                "id": "G1",
-                "title": "Cultural commitments not explicitly published",
-                "description": (
-                    "Public materials reference associate ownership but do not "
-                    "articulate specific values or expected behaviours."
-                ),
-                "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would interview leadership and "
-                    "frontline associates to articulate the working culture."
-                ),
-                "relatedObjectiveIds": ["O.C"],
-            },
-            {
-                "id": "G2",
-                "title": "Channel-relationship strategy unclear",
-                "description": (
-                    "The company sells through multiple channels but the strategic "
-                    "balance is not visible in public materials."
-                ),
-                "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would map channel economics and "
-                    "design Customer-perspective objectives for each."
-                ),
-            },
-        ],
         "coreValues": {
             "values": ["Care for customers", "Respect for associates", "Continuous improvement"],
             "synthesised": True,
@@ -300,7 +276,6 @@ class TestStrategyMapRoundtrip:
             "strategicPriorities",
             "internalProcesses",
             "organizationalCapacity",
-            "whatsMissing",
             "coreValues",
         ):
             assert required in dumped
@@ -310,10 +285,12 @@ class TestStrategyMapRoundtrip:
             "strategic_priorities",
             "internal_processes",
             "organizational_capacity",
-            "whats_missing",
             "core_values",
         ):
             assert forbidden not in dumped
+        # whatsMissing is removed end-to-end and must not appear in fresh dumps.
+        assert "whatsMissing" not in dumped
+        assert "whats_missing" not in dumped
 
     def test_arrow_uses_from_to_keys(self):
         """Arrow's `from_id`/`to_id` aliases must serialise as `from`/`to`."""
@@ -325,17 +302,6 @@ class TestStrategyMapRoundtrip:
             assert "from_id" not in arrow
             assert "to_id" not in arrow
 
-    def test_gap_uses_camel_case_aliases(self):
-        sm = StrategyMap.model_validate(_make_full_strategy_map_dict())
-        dumped = sm.model_dump(by_alias=True)
-        for gap in dumped["whatsMissing"]:
-            assert "deepDiveFraming" in gap
-            assert "deep_dive_framing" not in gap
-            if "relatedObjectiveIds" in gap or "related_objective_ids" in gap:
-                # Either the aliased form is present, or neither.
-                assert "relatedObjectiveIds" in gap
-                assert "related_objective_ids" not in gap
-
     def test_json_dumps_loads_roundtrip(self):
         """The full DynamoDB persistence path: dump → json.dumps → json.loads → re-validate."""
         payload = _make_full_strategy_map_dict()
@@ -345,6 +311,45 @@ class TestStrategyMapRoundtrip:
         decoded = json.loads(wire)
         re_validated = StrategyMap.model_validate(decoded)
         assert re_validated.model_dump(by_alias=True) == dumped
+
+
+class TestLegacyTolerance:
+    """Persisted records from before ``redesign-strategy-map`` Phase 2
+    may still carry a ``whatsMissing`` array on the strategy-map JSON.
+    The model uses ``extra="allow"``, so those records continue to load
+    without error.
+
+    Note: Pydantic's ``extra="allow"`` causes ``model_dump()`` to
+    PRESERVE the extra field on re-dump rather than dropping it. No
+    production code path round-trips legacy records through Pydantic
+    after the load (the load path goes directly to the API response),
+    so the field is never inadvertently re-persisted.
+    """
+
+    def test_legacy_payload_with_whats_missing_loads_cleanly(self):
+        payload = _make_full_strategy_map_dict()
+        payload["whatsMissing"] = [
+            {
+                "id": "G1",
+                "title": "Legacy gap title",
+                "description": (
+                    "This gap was generated by a pre-Phase-2 run and persisted to "
+                    "DynamoDB. The new code should accept it without error."
+                ),
+                "deepDiveFraming": (
+                    "A Vector Advisory deep-dive would explore this legacy area."
+                ),
+                "relatedObjectiveIds": ["O.C"],
+            },
+        ]
+        # Loading the legacy shape must NOT raise.
+        sm = StrategyMap.model_validate(payload)
+        # The model accepts the field via ``extra="allow"`` — it lives on
+        # the instance but isn't part of the typed schema.
+        # The canonical re-dump may or may not preserve the extra field
+        # depending on Pydantic's behaviour; the contract this test pins
+        # is that legacy data doesn't crash the load path.
+        assert sm.financial.objectives[0].id == "F1"  # rest of the model intact
 
 
 class TestStrategyMapNullableOptionalFields:

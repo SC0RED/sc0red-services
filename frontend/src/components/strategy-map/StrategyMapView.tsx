@@ -5,7 +5,6 @@ import type { StrategyMap } from '@/lib/types/api'
 
 import StrategyMapCanvas from './StrategyMapCanvas'
 import StrategyMapHeader from './StrategyMapHeader'
-import WhatsMissingPanel from './WhatsMissingPanel'
 
 interface StrategyMapViewProps {
     strategyMap: StrategyMap
@@ -24,10 +23,12 @@ interface StrategyMapViewProps {
  *                                  objective chips, and arrows
  *   3. `CoreValuesStrip`         — bottom strip listing the company's
  *                                  values
- *   4. `WhatsMissingPanel`       — collapsed gap rows; click to expand
  *
- * The deep-dive CTA was previously rendered below this section; it
- * has been relocated to the top of `AnalysisDetail` (above the page).
+ * The "What's Missing" / gaps panel was previously rendered below the
+ * canvas; it has been removed end-to-end as part of the
+ * ``redesign-strategy-map`` Phase 2 change. The deep-dive CTA was
+ * previously rendered below this section; it has been relocated to
+ * the top of `AnalysisDetail` (above the page).
  *
  * Print rendering uses `PrintStrategyMap.tsx` (untouched by this
  * redesign) — paper has no scroll constraint, the verbose layout is
@@ -55,7 +56,6 @@ export default function StrategyMapView({ strategyMap }: StrategyMapViewProps) {
                 values={strategyMap.coreValues.values}
                 synthesised={strategyMap.coreValues.synthesised}
             />
-            <WhatsMissingPanel gaps={strategyMap.whatsMissing} />
         </section>
     )
 }

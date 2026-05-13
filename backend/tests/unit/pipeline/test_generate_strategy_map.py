@@ -308,38 +308,6 @@ def _step7_response() -> dict:
                 ),
             },
         ],
-        "whatsMissing": [
-            {
-                "id": "G1",
-                "title": "Cultural commitments not explicitly published",
-                "description": (
-                    "Public materials reference associate ownership and a "
-                    "values-driven culture but do not articulate specific "
-                    "values, expected behaviours, or cultural commitments. "
-                    "The map's Culture objective is therefore inferred."
-                ),
-                "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would interview leadership "
-                    "and frontline associates to articulate the working "
-                    "culture and translate it into Capacity objectives."
-                ),
-                "relatedObjectiveIds": ["O.C"],
-            },
-            {
-                "id": "G2",
-                "title": "Channel-relationship strategy unclear",
-                "description": (
-                    "The company sells through multiple channels but the "
-                    "strategic balance between them is not visible in "
-                    "public materials."
-                ),
-                "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would map the channel "
-                    "economics and design Customer-perspective objectives "
-                    "for each channel to align incentives."
-                ),
-            },
-        ],
     }
 
 
@@ -498,7 +466,7 @@ class TestGenerateStrategyMap:
         assert sm.organizational_capacity.technology.id == "O.T"
         assert sm.organizational_capacity.culture.id == "O.C"
 
-    def test_strategy_map_includes_arrows_and_gaps(self):
+    def test_strategy_map_includes_arrows(self):
         company = _make_company()
         accessor = CompanyAccessor(company)
 
@@ -510,7 +478,6 @@ class TestGenerateStrategyMap:
         sm = company.strategy_map
         assert sm is not None
         assert len(sm.arrows) >= 5
-        assert len(sm.whats_missing) >= 2
         # Arrows reference real objective IDs
         all_ids = {sm.organizational_capacity.people.id, sm.organizational_capacity.technology.id, sm.organizational_capacity.culture.id}
         all_ids.update(o.id for o in sm.financial.objectives)

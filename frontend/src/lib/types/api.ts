@@ -207,14 +207,6 @@ export interface Arrow {
     hypothesis: string
 }
 
-export interface Gap {
-    id: string
-    title: string
-    description: string
-    deepDiveFraming: string
-    relatedObjectiveIds?: string[]
-}
-
 export interface CoreValues {
     values: string[]
     synthesised: boolean
@@ -231,7 +223,6 @@ export interface StrategyMap {
     internalProcesses: { themes: InternalProcessTheme[] }
     organizationalCapacity: OrganizationalCapacityPerspective
     arrows: Arrow[]
-    whatsMissing: Gap[]
     coreValues: CoreValues
 }
 

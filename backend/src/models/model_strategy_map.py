@@ -30,9 +30,7 @@ ConfidenceMarker = Literal["HIGH", "MEDIUM", "LOW"]
             objective derived from EBITDA tree numerics).
 - MEDIUM — typical of similar companies in this industry; pattern-
             matched but not directly observed for this company.
-- LOW    — inferred from absence; reasonable but unverified. LOW
-            objectives are natural candidates for the "What's Missing?"
-            panel.
+- LOW    — inferred from absence; reasonable but unverified.
 """
 
 # ── Vision and Mission ─────────────────────────────────────────────────────
@@ -232,25 +230,6 @@ class Arrow(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class Gap(BaseModel):
-    """A "What's Missing?" gap — a deep-dive conversation starter.
-
-    Per K&N's Mobil case study: strategy maps EXPOSE strategic gaps.
-    Each gap has a deep-dive framing sentence in the form
-    "A Vector Advisory deep-dive would [specific action]." The
-    `relatedObjectiveIds` list ties the gap back to the objective(s)
-    that prompted it.
-    """
-
-    id: str = Field(pattern=r"^G[1-9]$")
-    title: str = Field(min_length=4, max_length=100)
-    description: str = Field(min_length=30, max_length=600)
-    deep_dive_framing: str = Field(min_length=30, max_length=400, alias="deepDiveFraming")
-    related_objective_ids: list[str] = Field(default_factory=list, alias="relatedObjectiveIds")
-
-    model_config = {"populate_by_name": True}
-
-
 class CoreValues(BaseModel):
     """Core values strip rendered at the bottom of the map.
 
@@ -288,7 +267,12 @@ class StrategyMap(BaseModel):
         alias="organizationalCapacity"
     )
     arrows: list[Arrow] = Field(min_length=5, max_length=12)
-    whats_missing: list[Gap] = Field(min_length=2, max_length=4, alias="whatsMissing")
     core_values: CoreValues = Field(alias="coreValues")
 
-    model_config = {"populate_by_name": True}
+    # ``populate_by_name`` lets callers construct via either snake_case
+    # (Python convention) or the camelCase alias (wire format). ``extra="allow"``
+    # tolerates legacy persisted records that may still carry a
+    # ``whatsMissing`` field from before this change — Pydantic keeps the
+    # field on the model instance but no consumer reads it, and the
+    # canonical schema export drops it.
+    model_config = {"populate_by_name": True, "extra": "allow"}

@@ -511,10 +511,10 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-nar
 
     /**
      * The headline DeepDiveCTA now renders IMMEDIATELY AFTER the
-     * StrategyMapView (which contains WhatsMissingPanel) — placing the
-     * upsell pitch at the moment of maximum buying intent ("we'll help
-     * you fill these strategic gaps") rather than asking for the
-     * upsell before any analysis content has loaded.
+     * StrategyMapView — placing the upsell pitch at the moment of
+     * maximum buying intent ("we'll help you operationalise this
+     * strategy") rather than asking for the upsell before any
+     * analysis content has loaded.
      *
      * This supersedes PR #239's design.md decision D6, which had hoisted
      * the CTA above the strategy map "for visibility." That fix
@@ -660,24 +660,6 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-nar
                     },
                 },
                 arrows: [],
-                whatsMissing: [
-                    {
-                        id: 'G1',
-                        title: 'Cultural commitments not published',
-                        description:
-                            'Public materials reference associate ownership but do not articulate values.',
-                        deepDiveFraming:
-                            'A Vector Advisory deep-dive would interview leadership and frontline associates.',
-                    },
-                    {
-                        id: 'G2',
-                        title: 'Channel-relationship strategy unclear overall',
-                        description:
-                            'The company sells through multiple channels but the balance is not visible.',
-                        deepDiveFraming:
-                            'A Vector Advisory deep-dive would map the channel economics and design objectives.',
-                    },
-                ],
                 coreValues: {
                     values: ['Care', 'Respect', 'Continuous improvement'],
                     synthesised: true,
@@ -1289,15 +1271,6 @@ function makeFullStrategyMap(): NonNullable<AnalysisData['strategyMap']> {
             },
         },
         arrows: [],
-        whatsMissing: [
-            {
-                id: 'G1',
-                title: 'Cultural commitments not published',
-                description: 'Public materials reference associate ownership but do not articulate values.',
-                deepDiveFraming:
-                    'A Vector Advisory deep-dive would interview leadership and frontline associates.',
-            },
-        ],
         coreValues: {
             values: ['Care', 'Respect'],
             synthesised: true,

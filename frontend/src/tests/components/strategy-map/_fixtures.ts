@@ -172,25 +172,6 @@ export const fullStrategyMap: StrategyMap = {
             hypothesis: 'Reliable systems enable disciplined process improvement.',
         },
     ],
-    whatsMissing: [
-        {
-            id: 'G1',
-            title: 'Cultural commitments not explicitly published',
-            description:
-                'Public materials reference associate ownership but do not articulate specific values.',
-            deepDiveFraming:
-                'A Vector Advisory deep-dive would interview leadership and frontline associates to articulate the working culture.',
-            relatedObjectiveIds: ['O.C'],
-        },
-        {
-            id: 'G2',
-            title: 'Channel-relationship strategy unclear',
-            description:
-                'The company sells through multiple channels but the strategic balance is not visible publicly.',
-            deepDiveFraming:
-                'A Vector Advisory deep-dive would map the channel economics and design Customer-perspective objectives for each.',
-        },
-    ],
     coreValues: {
         values: ['Care for customers', 'Respect for associates', 'Continuous improvement'],
         synthesised: true,
