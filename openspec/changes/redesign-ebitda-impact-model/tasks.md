@@ -26,4 +26,4 @@
 - [x] 4.3 Run the ``architecture-reviewer`` agent (touches 3+ frontend files + a dependency); resolve CRITICAL + MEDIUM findings before commit.
 - [ ] 4.4 Visual verification on testing env: the section renders without zoom, has no top/bottom whitespace, the five subtotals + four connector labels are readable at default zoom, and leaves are visibly attached to their parent.
 - [ ] 4.5 Mobile verification on testing env (or browser devtools at 375 px width): leaves stack below their parent, no horizontal scroll, all five subtotals reachable by vertical scroll.
-- [ ] 4.6 Commit, push, open PR against ``development``.
+- [x] 4.6 Commit, push, open PR against ``development``.
