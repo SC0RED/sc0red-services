@@ -50,16 +50,6 @@ vi.mock('@/lib/hooks/useScanRealtime', () => ({
     }),
 }))
 
-const mockStrategyMapStart = vi.fn().mockResolvedValue(false)
-const mockStrategyMapStop = vi.fn()
-
-vi.mock('@/lib/hooks/useStrategyMapSubscription', () => ({
-    useStrategyMapSubscription: () => ({
-        start: mockStrategyMapStart,
-        stop: mockStrategyMapStop,
-    }),
-}))
-
 vi.mock('@/components/EbitdaTree', () => ({
     default: ({ treeData, opportunities }: { treeData: unknown[]; opportunities: unknown[] }) => (
         <div data-testid="ebitda-tree">
@@ -683,180 +673,13 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-nar
 
     it('does NOT render the deep-dive CTA when the analysis has no strategy map', () => {
         const data = buildAnalysisData()
-        // No strategyMap field on the data → DeepDiveCTA stays absent.
-        // Per `strategy-map-on-demand` Phase B the slot now shows the
-        // on-demand StrategyMapCTA instead — testid
-        // `strategy-map-on-demand-cta` — so we explicitly assert that
-        // the deep-dive testid is the one that's missing here.
+        // No ``strategyMap`` on the data → ``StrategyMapSlot`` returns
+        // ``null`` (per ``redesign-strategy-map`` Phase 4). Both the
+        // strategy-map section wrapper AND the deep-dive CTA wrapper
+        // are absent from the DOM.
         render(<AnalysisDetail data={data} analysisId="test-id" />)
-        expect(screen.queryByTestId('strategy-map-cta')).toBeNull()
-        expect(screen.getByTestId('strategy-map-on-demand-cta')).toBeInTheDocument()
-    })
-})
-
-describe('AnalysisDetail — strategy-map slot states (strategy-map-on-demand)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks()
-        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
-        mockStrategyMapStart.mockClear().mockResolvedValue(false)
-        mockStrategyMapStop.mockClear()
-    })
-
-    /**
-     * Per the `strategy-map-on-demand` spec the slot has three
-     * mutually-exclusive states:
-     *   1. ABSENT     → <StrategyMapCTA/>  (testid `strategy-map-on-demand-cta`)
-     *   2. GENERATING → <StrategyMapGeneratingPlaceholder/>  (testid `strategy-map-generating`)
-     *   3. PRESENT    → <StrategyMapView/> + <DeepDiveCTA/>  (testid `strategy-map-cta`)
-     * The CTA must NOT render while a generation is in flight (otherwise
-     * users could enqueue duplicate jobs) and the generating placeholder
-     * must NOT linger once the persisted map is present.
-     */
-
-    it('shows the generating placeholder when the API reports strategyMapGenerationState=generating', () => {
-        const data = buildAnalysisData({
-            scanId: 'scan-1',
-            strategyMapGenerationState: 'generating',
-        })
-        render(<AnalysisDetail data={data} analysisId="test-id" />)
-
-        expect(screen.getByTestId('strategy-map-generating')).toBeInTheDocument()
-        expect(screen.queryByTestId('strategy-map-on-demand-cta')).toBeNull()
-        expect(screen.queryByTestId('strategy-map-view')).toBeNull()
-    })
-
-    it('subscribes to AppSync only while the generating state is active', () => {
-        const data = buildAnalysisData({
-            scanId: 'scan-1',
-            strategyMapGenerationState: 'generating',
-        })
-        render(<AnalysisDetail data={data} analysisId="test-id" />)
-
-        expect(mockStrategyMapStart).toHaveBeenCalledTimes(1)
-        const args = mockStrategyMapStart.mock.calls[0][0] as {
-            analysisId: string
-            scanId: string
-        }
-        expect(args.analysisId).toBe('test-id')
-        expect(args.scanId).toBe('scan-1')
-    })
-
-    it('does NOT subscribe when no scanId is on the data', () => {
-        // The hook needs a scanId to drive the AppSync filter. If the
-        // backend somehow set generating without a scanId, the slot
-        // should still render the placeholder but the hook stays idle
-        // until a scanId arrives via refresh.
-        const data = buildAnalysisData({
-            scanId: undefined,
-            strategyMapGenerationState: 'generating',
-        })
-        render(<AnalysisDetail data={data} analysisId="test-id" />)
-
-        expect(screen.getByTestId('strategy-map-generating')).toBeInTheDocument()
-        expect(mockStrategyMapStart).not.toHaveBeenCalled()
-    })
-
-    it('flips locally to generating when the user clicks the CTA', async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-            status: 202,
-            json: () => Promise.resolve({ status: 'queued', analysisId: 'test-id' }),
-        })
-
-        const data = buildAnalysisData({ scanId: 'scan-1' })
-        render(<AnalysisDetail data={data} analysisId="test-id" />)
-
-        // Starts in absent → CTA visible.
-        expect(screen.getByTestId('strategy-map-on-demand-cta')).toBeInTheDocument()
-
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Generate strategy map' }))
-        })
-
-        expect(screen.getByTestId('strategy-map-generating')).toBeInTheDocument()
-        expect(screen.queryByTestId('strategy-map-on-demand-cta')).toBeNull()
-        // Subscription started for the just-clicked generation.
-        expect(mockStrategyMapStart).toHaveBeenCalledTimes(1)
-    })
-
-    it('on AppSync complete, calls router.refresh and clears the local generating flag', async () => {
-        // Capture the start() args so we can manually invoke onComplete.
-        let capturedOnComplete: (() => void) | undefined
-        mockStrategyMapStart.mockImplementation(async (opts: { onComplete: () => void }) => {
-            capturedOnComplete = opts.onComplete
-            return false
-        })
-
-        const data = buildAnalysisData({
-            scanId: 'scan-1',
-            strategyMapGenerationState: 'generating',
-        })
-        render(<AnalysisDetail data={data} analysisId="test-id" />)
-
-        expect(capturedOnComplete).toBeDefined()
-        await act(async () => {
-            capturedOnComplete!()
-        })
-
-        expect(mockRefresh).toHaveBeenCalled()
-    })
-
-    it('on AppSync timeout, calls router.refresh so the slot recovers via cold-load', async () => {
-        // The 90s client-side fallback fires when the worker completed
-        // server-side but the AppSync event was lost (or the connection
-        // dropped silently). The component routes the timeout to a
-        // page-level refresh, which the parent server component will
-        // re-render with the persisted map (or a still-generating state
-        // if the worker is genuinely stuck — in which case the next
-        // render re-enters the effect and re-subscribes).
-        let capturedOnTimeout: (() => void) | undefined
-        mockStrategyMapStart.mockImplementation(async (opts: { onTimeout?: () => void }) => {
-            capturedOnTimeout = opts.onTimeout
-            return false
-        })
-
-        const data = buildAnalysisData({
-            scanId: 'scan-1',
-            strategyMapGenerationState: 'generating',
-        })
-        render(<AnalysisDetail data={data} analysisId="test-id" />)
-
-        expect(capturedOnTimeout).toBeDefined()
-        await act(async () => {
-            capturedOnTimeout!()
-        })
-
-        expect(mockRefresh).toHaveBeenCalled()
-    })
-
-    it('on AppSync failure, surfaces an inline error and returns the slot to the CTA state', async () => {
-        let capturedOnFailed: (() => void) | undefined
-        mockStrategyMapStart.mockImplementation(async (opts: { onFailed: () => void }) => {
-            capturedOnFailed = opts.onFailed
-            return false
-        })
-
-        // Start in localGenerating via a click rather than the API
-        // state — then trigger onFailed and confirm we drop back to the
-        // absent state with the failure message rendered.
-        global.fetch = vi.fn().mockResolvedValue({
-            status: 202,
-            json: () => Promise.resolve({ status: 'queued', analysisId: 'test-id' }),
-        })
-        const data = buildAnalysisData({ scanId: 'scan-1' })
-        render(<AnalysisDetail data={data} analysisId="test-id" />)
-
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: 'Generate strategy map' }))
-        })
-
-        expect(capturedOnFailed).toBeDefined()
-        await act(async () => {
-            capturedOnFailed!()
-        })
-
-        expect(screen.queryByTestId('strategy-map-generating')).toBeNull()
-        expect(screen.getByTestId('strategy-map-on-demand-cta')).toBeInTheDocument()
-        expect(screen.getByRole('alert')).toHaveTextContent(/We couldn't generate your strategy map/i)
+        expect(screen.queryByTestId('analysis-section-strategy-map')).toBeNull()
+        expect(screen.queryByTestId('analysis-section-deep-dive-cta')).toBeNull()
     })
 })
 
@@ -951,15 +774,13 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         // EBITDA + value chain absent — those sections drop entirely.
         expect(ids).not.toContain('ebitda')
         expect(ids).not.toContain('value-chain')
-        // Per `strategy-map-on-demand` Phase B, the strategy-map slot
-        // ALWAYS renders. When the analysis has no map, the slot shows
-        // the on-demand CTA (testid `analysis-section-strategy-map`
-        // wraps `strategy-map-on-demand-cta`). DeepDiveCTA only renders
-        // alongside a present map, so `deep-dive-cta` is still absent.
-        expect(ids).toContain('strategy-map')
+        // Per ``redesign-strategy-map`` Phase 4, the strategy-map slot
+        // returns ``null`` when the map is absent — both the slot
+        // wrapper and its DeepDiveCTA companion drop from the DOM.
+        expect(ids).not.toContain('strategy-map')
         expect(ids).not.toContain('deep-dive-cta')
         // Remaining sections still in the same relative order. Sc0red
-        // CTA is now at Beat 1.5 (between overview and top-actions).
+        // CTA sits at Beat 1.5 (between overview and top-actions).
         expect(ids).toEqual([
             'header',
             'strap',
@@ -969,7 +790,6 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'risk-breakdown',
             'value-lever',
             'opportunities',
-            'strategy-map',
             'document-upload',
         ])
     })

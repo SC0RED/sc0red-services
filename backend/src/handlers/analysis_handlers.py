@@ -13,10 +13,7 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
-from src.handlers.sqs_messages import (
-    build_reanalysis_message,
-    build_strategy_map_message,
-)
+from src.handlers.sqs_messages import build_reanalysis_message
 from src.utilities.scan_summary import build_company_summary
 
 if TYPE_CHECKING:
@@ -307,10 +304,12 @@ def handle_reanalyze(
 ) -> LambdaResponse:
     """Handle POST /api/analysis/{analysis_id}/reanalyze.
 
-    Per ``strategy-map-on-demand`` Phase C, the persisted strategy map
-    is invalidated up-front (before SQS enqueue) so the slot returns to
-    the on-demand CTA state. Otherwise a stale map grounded in the
-    prior diagnosis would persist alongside the refreshed analysis.
+    The persisted strategy map is invalidated up-front (before SQS
+    enqueue) so a stale map grounded in the prior diagnosis doesn't
+    linger alongside the refreshed analysis. The inline
+    ``GenerateStrategyMap`` step in the re-analysis pipeline regenerates
+    the map; on failure the slot simply renders nothing until the next
+    successful run.
     """
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
@@ -339,57 +338,3 @@ def handle_reanalyze(
     )
 
     return build_json_response({"status": "queued", "scanId": scan_id}, 202)
-
-
-def handle_generate_strategy_map(
-    _event: dict[str, Any],
-    authentication: AuthContext,
-    storage: DynamoDBStorageProvider,
-    sqs: Any,
-    queue_url: str,
-    analysis_id: str,
-) -> LambdaResponse:
-    """Handle POST /api/analysis/{analysis_id}/strategy-map.
-
-    Validates access, marks generation in-flight, enqueues SQS, returns
-    202. Idempotent on re-click — if state is already "generating",
-    returns 202 without re-enqueueing (avoids duplicate workers racing
-    on ``save_strategy_map``). Returns 503 when ``queue_url`` is empty
-    (CDK env var unset).
-    """
-    if not queue_url:
-        return build_error(
-            "Strategy-map generation queue not configured for this environment",
-            status=503,
-            code="STRATEGY_MAP_FEATURE_DISABLED",
-        )
-
-    company_repo = storage.create_company_repository()
-    company = company_repo.get_by_id(analysis_id)
-    if error := check_org_access(company, authentication):
-        return error
-
-    scan_id = company.get("scan_id", "")
-
-    # Idempotency guard: a generation is already in flight. Return 202
-    # so the frontend's optimistic generating-state behaviour stays
-    # consistent (the user's click is acknowledged) but DON'T enqueue a
-    # duplicate message that would race the in-flight one.
-    if company.get("strategy_map_generation_state") == "generating":
-        return build_json_response({"status": "already_in_flight", "analysisId": analysis_id}, 202)
-
-    # Mark generation in-flight BEFORE enqueueing so a refresh during the
-    # narrow window between SQS send and worker pickup still shows the
-    # generating placeholder rather than the CTA. The worker clears the
-    # field on success or failure.
-    company_repo.set_strategy_map_generation_state(analysis_id, "generating")
-
-    sqs.send_message(
-        QueueUrl=queue_url,
-        MessageBody=build_strategy_map_message(
-            analysis_id=analysis_id,
-            scan_id=scan_id,
-        ),
-    )
-
-    return build_json_response({"status": "queued", "analysisId": analysis_id}, 202)

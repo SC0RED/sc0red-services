@@ -1,76 +1,36 @@
 import AnalysisSection from '@/components/analysis/AnalysisSection'
-import StrategyMapCTA from '@/components/analysis/StrategyMapCTA'
-import StrategyMapGeneratingPlaceholder from '@/components/analysis/StrategyMapGeneratingPlaceholder'
 import { DeepDiveCTA, StrategyMapView } from '@/components/strategy-map'
 import type { StrategyMap } from '@/lib/types/api'
 
 interface StrategyMapSlotProps {
     analysisId: string
     strategyMap?: StrategyMap | null
-    isGenerating: boolean
-    generationError: string | null
-    /** In-flight progress from the strategy-map worker. ``null`` when
-     *  no progress event has arrived yet — the placeholder falls back
-     *  to its static-spinner UX. Driven by AppSync
-     *  ``strategy_map_progress`` events through
-     *  ``useStrategyMapSubscription``'s ``onProgress`` callback. */
-    generationProgress: { percentage: number; label: string } | null
-    onGenerationStarted: () => void
 }
 
 /**
- * The Beat-6 strategy-map slot. Three mutually-exclusive states (per the
- * `strategy-map-on-demand` spec scenario "Strategy-map slot renders
- * three distinct states"):
+ * The Beat-6 strategy-map slot.
  *
- *   1. PRESENT     → `StrategyMapView` + `DeepDiveCTA`
- *   2. GENERATING  → placeholder + status message
- *   3. ABSENT      → on-demand CTA
- *
- * The CTA does NOT render while a generation is in flight — otherwise
- * users could enqueue duplicate jobs. Extracted from `AnalysisDetail`
- * to keep the parent component under the 360-line frontend file-size
- * limit (CLAUDE.md). Each branch wraps in `AnalysisSection` with the
- * appropriate testid so the page-level beat-order tests still see the
- * `analysis-section-strategy-map` (and, when present, the
- * `analysis-section-deep-dive-cta`) wrappers.
+ * Strategy maps are now generated inline during the scan pipeline
+ * (per ``redesign-strategy-map`` Phase 4) — when the user lands on
+ * the analysis detail page, the map is either already persisted
+ * (rendered with the ``DeepDiveCTA`` follow-up) or absent (legacy
+ * analyses produced before Phase 4; the slot is omitted entirely).
+ * There is no longer an in-flight "generating…" state, an on-demand
+ * CTA, or a "regenerate" affordance — re-analysing the company
+ * regenerates the map as part of the scan.
  */
-export default function StrategyMapSlot({
-    analysisId,
-    strategyMap,
-    isGenerating,
-    generationError,
-    generationProgress,
-    onGenerationStarted,
-}: StrategyMapSlotProps) {
-    if (strategyMap) {
-        return (
-            <>
-                <AnalysisSection id="strategy-map">
-                    <StrategyMapView strategyMap={strategyMap} />
-                </AnalysisSection>
-                <AnalysisSection id="deep-dive-cta">
-                    <DeepDiveCTA analysisId={analysisId} />
-                </AnalysisSection>
-            </>
-        )
+export default function StrategyMapSlot({ analysisId, strategyMap }: StrategyMapSlotProps) {
+    if (!strategyMap) {
+        return null
     }
-
-    if (isGenerating) {
-        return (
-            <AnalysisSection id="strategy-map">
-                <StrategyMapGeneratingPlaceholder progress={generationProgress} />
-            </AnalysisSection>
-        )
-    }
-
     return (
-        <AnalysisSection id="strategy-map">
-            <StrategyMapCTA
-                analysisId={analysisId}
-                failureMessage={generationError}
-                onGenerationStarted={onGenerationStarted}
-            />
-        </AnalysisSection>
+        <>
+            <AnalysisSection id="strategy-map">
+                <StrategyMapView strategyMap={strategyMap} />
+            </AnalysisSection>
+            <AnalysisSection id="deep-dive-cta">
+                <DeepDiveCTA analysisId={analysisId} />
+            </AnalysisSection>
+        </>
     )
 }

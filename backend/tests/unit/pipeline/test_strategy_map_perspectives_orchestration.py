@@ -295,8 +295,7 @@ class TestGeneratePerspectivesDecomposedEndToEnd:
             "progress percentages must be monotonically non-decreasing across rounds"
         )
         assert all(0 < p < 100 for p in percentages), (
-            "in-flight percentages must be strictly between 0 and 100; "
-            "100 is reserved for the terminal `strategy_map_complete` event"
+            "in-flight percentages must be strictly between 0 and 100"
         )
 
     def test_progress_emitter_is_optional(self) -> None:

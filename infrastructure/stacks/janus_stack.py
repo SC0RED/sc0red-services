@@ -26,7 +26,6 @@ from stacks.stack_resources import (
     create_table,
 )
 from stacks.step_functions_construct import StepFunctionsConstruct
-from stacks.strategy_map_construct import StrategyMapConstruct
 
 
 class JanusStack(Stack):
@@ -229,29 +228,6 @@ class JanusStack(Stack):
         api_handler.add_environment("APPSYNC_ENDPOINT", observability.appsync_url)
         api_handler.add_environment("APPSYNC_API_KEY", observability.appsync_api_key)
 
-        # ── On-demand strategy-map worker (strategy-map-on-demand spec) ──
-        # Dedicated SQS queue + Lambda. Isolated from the main analysis worker
-        # so a strategy-map crash doesn't drain into the analysis pipeline.
-        strategy_map = StrategyMapConstruct(
-            self,
-            "StrategyMap",
-            environment=environment,
-            bundling=bundling,
-            common_environment=common_environment,
-            table=table,
-            lambda_architecture=lambda_architecture,
-            log_retention_days=log_retention_days,
-            enable_tracing=enable_tracing,
-            enable_monitoring=bool(config.get("enable_monitoring")),
-            appsync_endpoint=observability.appsync_url,
-            appsync_api_key=observability.appsync_api_key,
-        )
-        # API Lambda enqueues; worker Lambda is wired internally to consume.
-        strategy_map.queue.grant_send_messages(api_handler)
-        api_handler.add_environment(
-            "STRATEGY_MAP_QUEUE_URL", strategy_map.queue.queue_url
-        )
-
         # ── Step Functions for portfolio batch coordination ──────────
         batch_coordinator = StepFunctionsConstruct(
             self,
@@ -275,9 +251,6 @@ class JanusStack(Stack):
         CfnOutput(self, "TableName", value=table.table_name)
         CfnOutput(self, "QueueUrl", value=queue.queue_url)
         CfnOutput(self, "DlqUrl", value=dlq.queue_url)
-        CfnOutput(self, "StrategyMapQueueUrl", value=strategy_map.queue.queue_url)
-        CfnOutput(self, "StrategyMapDlqUrl", value=strategy_map.dlq.queue_url)
-        CfnOutput(self, "StrategyMapWorkerLambdaName", value=strategy_map.worker.function_name)
         CfnOutput(self, "BucketName", value=documents_bucket.bucket_name)
         CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
         CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)

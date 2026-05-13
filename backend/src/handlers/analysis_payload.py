@@ -87,11 +87,6 @@ def build_analysis_payload(
         "ebitdaTree": ebitda_tree,
         "valueChain": value_chain,
         "strategyMap": strategy_map,
-        # In-flight on-demand strategy-map generation flag (per the
-        # strategy-map-on-demand spec). Populated when the SQS worker is
-        # processing a generation job; cleared on success or failure.
-        # Frontend renders the generating placeholder when this is "generating".
-        "strategyMapGenerationState": company.get("strategy_map_generation_state"),
         "documents": documents,
         "pipelineProgress": company.get("pipeline_progress", 0),
         "pipelineLabel": company.get("pipeline_label", ""),
