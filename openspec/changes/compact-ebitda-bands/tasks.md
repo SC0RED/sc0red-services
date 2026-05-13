@@ -30,4 +30,4 @@
 - [x] 4.3 Run the ``architecture-reviewer`` agent (touches 2-3 frontend files, no dependency change); resolve CRITICAL + MEDIUM findings before commit.
 - [ ] 4.4 Visual verification on testing env: the EBITDA section is ≤ ⅓ the height of the today's PR #299 rendering, band headers carry a colored left strip, leaves are compact chips ≤ 200 × 110 px arranged horizontally, no hover tooltip overlaps the next row.
 - [ ] 4.5 Mobile verification (375 px width): chips wrap to multiple rows inside the band; no horizontal scroll; band header still readable.
-- [ ] 4.6 Commit, push, open PR against ``development``.
+- [x] 4.6 Commit, push, open PR against ``development``.
