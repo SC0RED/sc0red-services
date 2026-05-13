@@ -1,30 +1,25 @@
-"""End-to-end integration test for the decomposed synthesis pipeline.
+"""End-to-end integration test for the decomposed strategy-map pipeline.
 
-Runs ``GenerateStrategyMap.execute()`` with both Phase 1 and Phase 2
-flags set, using a fixture ``Company`` populated with realistic
-profile / risks / opportunities / EBITDA / value-chain inputs. The
-``_run_ai_call`` layer is mocked to return canned responses for every
-expected per-call label, covering:
+Runs ``GenerateStrategyMap.execute()`` using a fixture ``Company``
+populated with realistic profile / risks / opportunities / EBITDA /
+value-chain inputs. The ``_run_ai_call`` layer is mocked to return
+canned responses for every expected per-call label, covering:
 
-- 4 Phase 2 vision/mission sub-calls.
-- 4 Phase 2 value-proposition sub-calls.
-- 4 Phase 1 round-1 perspective title calls.
-- 7 Phase 1 round-2 detail + theme-title + core-values calls (3 fin +
-  3 cap + 3 internal titles, but capped at 3 internal-titles for this
-  2-theme fixture, plus core_values).
-- 4 Phase 1 round-3 internal-objective detail calls (2 themes x 2
-  objectives each).
-- N Phase 2 arrow yes/no calls (computed from the fixture's pair count).
-- 1 Phase 2 priorities call.
-- 1 Phase 2 gaps call.
+- 4 vision/mission sub-calls (text + synth-yes/no per side).
+- 4 value-proposition sub-calls (primary + secondary + exemplar + rationale).
+- The Phase 1 perspective orchestrator (mocked at the import site).
+- N per-pair arrow yes/no calls (computed from the fixture's pair count).
+- 1 holistic priorities call.
 
 The test asserts:
 - The assembled ``StrategyMap`` validates against the Pydantic shape.
 - The ``GenerateStrategyMap.timings`` detail block contains the expected
   per-call labels and no legacy monolithic labels.
-- All four Phase 2 vision/mission labels are present.
-- All four Phase 2 value-proposition labels are present.
-- N per-pair arrow labels + holistic priorities + gaps labels are present.
+- All four vision/mission labels are present.
+- All four value-proposition labels are present.
+- N per-pair arrow labels + holistic priorities label are present.
+- The ``ai_call_gaps`` label is absent (removed under
+  ``redesign-strategy-map`` Phase 2).
 """
 
 from __future__ import annotations
@@ -33,6 +28,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from signalfield_core.utilities.future_manager import FutureManagerError
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import (
@@ -44,11 +40,7 @@ from src.models.model_company import (
     RiskScore,
 )
 from src.pipeline.pipeline_steps._strategy_map_arrows import enumerate_arrow_pairs
-from src.pipeline.pipeline_steps.generate_strategy_map import (
-    DECOMPOSED_FLAG_ENV_VAR,
-    DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR,
-    GenerateStrategyMap,
-)
+from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 
 
 def _make_accessor() -> CompanyAccessor:
@@ -287,14 +279,14 @@ def _build_phase2_canned_responses(
     internal_processes: dict[str, Any],
     organizational_capacity: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    """Build the canned ``_run_ai_call`` responses for the Phase 2 calls.
+    """Build the canned ``_run_ai_call`` responses for the synthesis calls.
 
-    Phase 1 perspectives are mocked at module level, so we only need
-    canned responses for Phase 2 calls:
+    The Phase 1 perspectives orchestrator is mocked at module level, so
+    we only need canned responses for the synthesis + arrows calls:
       - 4 vision/mission sub-calls.
       - 4 value-proposition sub-calls.
       - N arrow yes/no sub-calls (from enumerate_arrow_pairs).
-      - 1 priorities, 1 gaps.
+      - 1 priorities.
     """
     responses: dict[str, dict[str, Any]] = {
         # Vision/Mission bank.
@@ -322,7 +314,7 @@ def _build_phase2_canned_responses(
                 "associates, signature products) AND operational efficiency."
             )
         },
-        # Priorities + Gaps.
+        # Priorities (gaps removed under redesign-strategy-map Phase 2).
         "priorities": {
             "strategicPriorities": [
                 {
@@ -365,19 +357,15 @@ def _build_phase2_canned_responses(
 
 
 class TestSynthesisDecompositionIntegration:
-    """Full execute() with both Phase 1 and Phase 2 flags ON."""
+    """Full execute() — decomposed path, no feature flags."""
 
     @patch(
-        "src.pipeline.pipeline_steps._strategy_map_perspectives.generate_perspectives_decomposed"
+        "src.pipeline.pipeline_steps.generate_strategy_map.generate_perspectives_decomposed"
     )
     def test_assembles_validated_strategy_map(
         self,
         mock_phase1_perspectives: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv(DECOMPOSED_FLAG_ENV_VAR, "1")
-        monkeypatch.setenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, "1")
-
         # Phase 1 perspectives mocked — Phase 2 work runs end-to-end.
         financial, customer, internal_processes, capacity, core_values = (
             _build_phase1_perspective_results()
@@ -465,3 +453,124 @@ class TestSynthesisDecompositionIntegration:
             "ai_call_arrows_and_gaps",
         ):
             assert legacy_label not in timings, f"legacy label {legacy_label} leaked"
+
+
+class TestPrerequisiteValidation:
+    """Sanity gates in ``execute()`` that fail-fast before any AI call.
+
+    The decomposed chain MUST reject missing prereqs early — every gate
+    raises a ``ValueError`` before the AI client is touched. These
+    guards are the only way to avoid producing a half-baked strategy
+    map when an upstream pipeline step failed.
+    """
+
+    def _make_step(self) -> tuple[GenerateStrategyMap, CompanyAccessor, MagicMock]:
+        ai_factory = MagicMock()
+        accessor = _make_accessor()
+        step = GenerateStrategyMap(ai_client_factory=ai_factory)
+        step.entity_accessor = accessor  # type: ignore[assignment]
+        step.request_executor = MagicMock()
+        return step, accessor, ai_factory
+
+    def test_missing_profile_raises(self) -> None:
+        step, accessor, ai_factory = self._make_step()
+        accessor.company.profile = None
+
+        with pytest.raises(ValueError, match="profile missing"):
+            step.execute()
+        ai_factory.get_client.assert_not_called()
+
+    def test_missing_risk_assessment_raises(self) -> None:
+        step, accessor, ai_factory = self._make_step()
+        accessor.company.risk_assessment = None
+
+        with pytest.raises(ValueError, match="risk assessment missing"):
+            step.execute()
+        ai_factory.get_client.assert_not_called()
+
+    def test_missing_opportunities_raises(self) -> None:
+        step, accessor, ai_factory = self._make_step()
+        accessor.company.opportunity_result = None
+
+        with pytest.raises(ValueError, match="opportunity result missing"):
+            step.execute()
+        ai_factory.get_client.assert_not_called()
+
+
+class TestPartialTimingsOnFailure:
+    """Per ai-strategy-map spec: a failed AI call still emits partial timings.
+
+    The ``finally`` block in ``execute()`` always calls
+    ``request_executor.add_details(timer.to_details())`` — so successful
+    call labels recorded before the failure are visible in CloudWatch
+    even when a later call raises.
+    """
+
+    @patch(
+        "src.pipeline.pipeline_steps.generate_strategy_map.generate_perspectives_decomposed"
+    )
+    def test_emits_partial_timings_when_synthesis_fails(
+        self,
+        mock_phase1_perspectives: MagicMock,
+    ) -> None:
+        # Phase 1 perspectives never reached — synthesis (Step 1) fails first.
+        # We still mock it so the test fails loud if the failure mode regresses.
+        financial, customer, internal_processes, capacity, core_values = (
+            _build_phase1_perspective_results()
+        )
+        mock_phase1_perspectives.return_value = (
+            financial,
+            customer,
+            internal_processes,
+            capacity,
+            core_values,
+        )
+
+        # Vision-text call succeeds; mission-text call raises. Both are
+        # sub-calls in the same Vision/Mission parallel bank — the bank
+        # waits for both before returning, so the second raises and the
+        # first's timing is recorded.
+        call_log: list[str] = []
+
+        def fake_run_ai_call(
+            _user_prompt: str,
+            _schema: dict[str, Any],
+            _system_prompt: str,
+            label: str,
+        ) -> tuple[str, dict[str, Any], float]:
+            call_log.append(label)
+            if label == "mission_text":
+                msg = "simulated AI failure"
+                raise RuntimeError(msg)
+            # Other labels return a minimal canned response — they're
+            # all sub-calls inside the synchronous Vision/Mission bank,
+            # which fails as soon as any task raises.
+            return label, {"statement": "v", "synthesised": False, "rationale": "r"}, 0.1
+
+        ai_factory = MagicMock()
+        accessor = _make_accessor()
+        step = GenerateStrategyMap(ai_client_factory=ai_factory)
+        step.entity_accessor = accessor  # type: ignore[assignment]
+        step.request_executor = MagicMock()
+        step._run_ai_call = MagicMock(side_effect=fake_run_ai_call)  # type: ignore[method-assign]
+
+        # ``FutureManager`` wraps the worker's ``RuntimeError`` in a
+        # ``FutureManagerError`` so the synthesis bank's ``manager.wait_for_all_*``
+        # call surfaces a single aggregated exception. The underlying
+        # message is preserved in the wrapper.
+        with pytest.raises(FutureManagerError, match="simulated AI failure"):
+            step.execute()
+
+        # ``add_details`` still ran once with a ``GenerateStrategyMap.timings``
+        # block — the ``finally`` clause guarantees telemetry on failure.
+        add_details_calls = step.request_executor.add_details.call_args_list
+        timings_calls = [
+            call
+            for call in add_details_calls
+            if "GenerateStrategyMap.timings" in (call.args[0] if call.args else {})
+        ]
+        assert len(timings_calls) == 1
+        timings = timings_calls[0].args[0]["GenerateStrategyMap.timings"]
+        assert "total" in timings
+        # mission_text raised → its timing was NOT recorded.
+        assert "ai_call_mission_text" not in timings

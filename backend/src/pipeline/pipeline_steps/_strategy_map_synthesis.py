@@ -1,8 +1,5 @@
 """Decomposed vision/mission and value-proposition generation for the strategy-map step.
 
-Implements `decompose-strategy-map-synthesis` Phase 2 — replaces Steps 1
-and 2 (single-call each) with two parallel banks of small sub-calls:
-
   Vision/Mission bank (4 calls in parallel):
     - vision_text       → vision prose only
     - mission_text      → mission prose only
@@ -17,13 +14,7 @@ and 2 (single-call each) with two parallel banks of small sub-calls:
 
 Each call goes through ``run_structured_ai_call``, parallel blocks use
 ``FutureManager``, and per-call elapsed times are recorded on the
-shared ``StepTimer``. See ``decompose-strategy-map-synthesis`` design
-Decisions §1 and §2 for the full rationale.
-
-This module is invoked from ``generate_strategy_map.py`` ONLY when BOTH
-``GENERATE_STRATEGY_MAP_DECOMPOSED=1`` (Phase 1) and
-``GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1`` (Phase 2) are set.
-Otherwise the existing call paths run unchanged.
+shared ``StepTimer``.
 """
 
 from __future__ import annotations

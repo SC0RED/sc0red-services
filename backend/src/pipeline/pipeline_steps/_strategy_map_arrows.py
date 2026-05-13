@@ -1,8 +1,5 @@
 """Decomposed arrows + priorities generation for the strategy-map step.
 
-Implements `decompose-strategy-map-synthesis` Phase 2 — replaces Step 7
-(single ``arrows_and_gaps`` call) with:
-
   Arrows bank (per-pair yes/no, ~15-25 calls in parallel):
     For every candidate ``(from_objective, to_objective)`` pair across
     the causal hierarchy
@@ -22,10 +19,6 @@ from the filtered results.
 The "What's Missing" / gaps holistic call that previously ran alongside
 priorities was removed end-to-end by the ``redesign-strategy-map``
 Phase 2 change.
-
-This module is invoked from ``generate_strategy_map.py`` ONLY when BOTH
-``GENERATE_STRATEGY_MAP_DECOMPOSED=1`` (Phase 1) and
-``GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1`` (Phase 2) are set.
 """
 
 from __future__ import annotations

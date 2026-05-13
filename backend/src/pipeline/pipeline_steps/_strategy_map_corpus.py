@@ -13,7 +13,6 @@ performance pattern the parent loader uses.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -44,25 +43,27 @@ def load_exemplar(name: str) -> str:
     return _read(f"exemplars/{name}.md")
 
 
-def load_template(name: str) -> str:
-    """Load a named template from `templates/`. `name` does not include the .md suffix."""
-    return _read(f"templates/{name}.md")
-
-
 def load_decomposed_template(name: str) -> str:
     """Load a per-call template from `templates/decomposed/`.
 
-    Used by the optimize-strategy-map-latency Phase 1 path. Decomposed
-    templates correspond to ONE round of one perspective (e.g.
+    Strategy-map generation is fully decomposed; each template
+    corresponds to ONE round of one perspective (e.g.
     `round1_titles_financial`, `round2_detail_customer`,
-    `round3_detail_internal`). The `name` does not include the .md
-    suffix.
+    `round3_detail_internal`) or one synthesis sub-call. The `name`
+    does not include the .md suffix.
     """
     return _read(f"templates/decomposed/{name}.md")
 
 
 def load_schema() -> dict[str, Any]:
-    """Load and parse the JSON schema for the strategy-map output."""
+    """Load and parse the JSON schema for the assembled strategy-map output.
+
+    The assembled-output schema documents the full ``StrategyMap``
+    shape and is the source for strict-mode invariant tests
+    (``test_strategy_map_schema_strict_mode.py``). The per-call schemas
+    used by individual AI calls live under ``schemas/per_call/`` and
+    are loaded via ``load_per_call_schema``.
+    """
     raw = _read("schemas/strategy_map_output.json")
     return json.loads(raw)
 
@@ -70,12 +71,10 @@ def load_schema() -> dict[str, Any]:
 def load_per_call_schema(name: str) -> dict[str, Any]:
     """Load and parse a per-call JSON schema from `schemas/per_call/`.
 
-    Used by the optimize-strategy-map-latency Phase 1 path. Per-call
-    schemas are sliced subsets of the full strategy-map schema, one
-    per decomposed call shape (e.g. `financial_titles`,
-    `customer_objective_detail`). They omit the `id` field per
-    Decision §2 of the design — the assembly layer assigns positional
-    IDs from title-list order.
+    Per-call schemas are sliced subsets of the full strategy-map
+    schema, one per decomposed call shape (e.g. `financial_titles`,
+    `customer_objective_detail`). They omit the `id` field —
+    the assembly layer assigns positional IDs from title-list order.
     """
     raw = _read(f"schemas/per_call/{name}.json")
     return json.loads(raw)
@@ -100,35 +99,3 @@ def compose_system_prompt() -> str:
             + load_exemplar("wawa_2011"),
         ]
     )
-
-
-_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
-"""Pattern matching a `{key}` placeholder. Only single-token names
-qualify — JSON braces (`{ "field": …}` with whitespace inside) are
-ignored, which lets us paste JSON examples directly into templates."""
-
-
-def render_template(name: str, context: dict[str, Any]) -> str:
-    """Load a per-step template and substitute context values.
-
-    Templates contain `{key_name}` placeholders that get replaced
-    with `context[key_name]`. Missing keys are replaced with the
-    literal string ``(unknown)`` rather than raising — early-stage
-    steps don't have every context variable populated yet (e.g.
-    Step 1 doesn't have a value_proposition).
-
-    Note: we use a regex-based substitution rather than
-    `str.format_map` so JSON examples in the template (which contain
-    literal `{` and `}`) don't collide with the placeholder syntax.
-    Only `{single_token_name}` patterns are recognised; JSON braces
-    with whitespace or nested content are left untouched.
-    """
-    template = load_template(name)
-
-    def replace(match: re.Match[str]) -> str:
-        key = match.group(1)
-        if key in context:
-            return str(context[key])
-        return "(unknown)"
-
-    return _PLACEHOLDER_RE.sub(replace, template)

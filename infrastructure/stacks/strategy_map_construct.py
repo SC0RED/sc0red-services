@@ -181,25 +181,11 @@ class StrategyMapConstruct(Construct):
         worker_environment["APPSYNC_ENDPOINT"] = appsync_endpoint
         worker_environment["APPSYNC_API_KEY"] = appsync_api_key
 
-        # Strategy-map latency optimisation feature flags. Both layers
-        # are enabled by default for every environment after the
-        # 2026-05-12 manual eval gate passed cleanly on staging
-        # (5 companies, end-to-end ~45 s per company, no perspective
-        # regression — see
-        # ``openspec/changes/decompose-strategy-map-synthesis/tasks.md``
-        # §7.5). The earlier per-environment gating (Phase 1 on
-        # staging+testing only, Phase 2 on staging only) was removed at
-        # the user's request to ship Phase 2 to all environments
-        # without an additional soak-then-flag-flip step.
-        #
-        # Both flags are read by ``GenerateStrategyMap.execute()`` at
-        # call time (not module import), so they take effect on the next
-        # user click after the next deploy. The flag-layering guard in
-        # ``execute()`` raises ``ValueError`` before any AI call if Phase
-        # 2 is set without Phase 1 — both are set here unconditionally
-        # so that invariant holds.
-        worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED"] = "1"
-        worker_environment["GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS"] = "1"
+        # The decomposed strategy-map generation path is the only path
+        # — the legacy monolithic step runners and the
+        # ``GENERATE_STRATEGY_MAP_DECOMPOSED`` / ``…_SYNTHESIS`` feature
+        # flags were removed end-to-end by the ``redesign-strategy-map``
+        # Phase 3 change.
 
         self.worker = create_lambda(
             self,

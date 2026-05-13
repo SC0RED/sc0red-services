@@ -99,14 +99,12 @@ def extract_core_values(capacity_response: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(message)
 
 
-# ── Positional ID assignment (optimize-strategy-map-latency Phase 1) ─────────
+# ── Positional ID assignment ─────────────────────────────────────────────────
 #
-# When generation is decomposed (feature flag GENERATE_STRATEGY_MAP_DECOMPOSED=1),
-# the per-call schemas under `prompts/strategy_map/schemas/per_call/` omit
+# Per-call schemas under `prompts/strategy_map/schemas/per_call/` omit
 # the `id` field — parallel calls cannot reliably know their position in
 # the title list. The assembly layer assigns IDs deterministically from
-# the title-list order returned by Round 1. See Decision §2 of the
-# optimize-strategy-map-latency design for the full rationale.
+# the title-list order returned by Round 1.
 
 
 def build_financial_objectives(
