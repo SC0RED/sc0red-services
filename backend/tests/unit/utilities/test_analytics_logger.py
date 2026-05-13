@@ -24,13 +24,13 @@ if TYPE_CHECKING:
 def _sample_enriched_event() -> EnrichedAnalyticsEvent:
     client = AnalyticsEvent(
         event_id="uuid-1",
-        event_type="sc0red_cta_banner_expanded",
+        event_type="sc0red_cta_rendered_strategy_map",
         timestamp="2026-04-24T12:00:00.000Z",
         analytics_version="1",
         source="web",
         analysis_id="assess-1",
         opportunity_count=3,
-        active_lever_filter="Revenue Side",
+        active_lever_filter=None,
     )
     return EnrichedAnalyticsEvent.from_client_event(client, user_id="user-1", org_id="org-1")
 
@@ -99,10 +99,13 @@ class TestLogEventSuccess:
         assert isinstance(entry["timestamp"], int)
         assert entry["timestamp"] > 0
         payload = json.loads(entry["message"])
-        assert payload["event_type"] == "sc0red_cta_banner_expanded"
+        assert payload["event_type"] == "sc0red_cta_rendered_strategy_map"
         assert payload["user_id"] == "user-1"
         assert payload["org_id"] == "org-1"
-        assert payload["active_lever_filter"] == "Revenue Side"
+        # Strategy-map CTA events MUST carry a null lever filter — the
+        # surface has no lever-filter concept and non-null would corrupt
+        # cross-surface funnel queries that join on ``event_type``.
+        assert payload["active_lever_filter"] is None
 
     def test_stream_is_created_only_once_per_process(self, monkeypatch: MonkeyPatch) -> None:
         monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/janus/staging/analytics-events")

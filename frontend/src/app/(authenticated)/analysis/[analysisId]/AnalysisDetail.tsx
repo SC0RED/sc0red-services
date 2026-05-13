@@ -1,12 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
 
 import DocumentUpload from '@/components/DocumentUpload'
 import RiskBreakdown from '@/components/RiskBreakdown'
-import Sc0redCTABanner from '@/components/Sc0redCTABanner'
 import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisExecutiveStrap from '@/components/analysis/AnalysisExecutiveStrap'
@@ -19,13 +17,10 @@ import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import HelpTooltip from '@/components/ui/HelpTooltip'
 import { LoadingSpinner } from '@/components/ui'
-import { getSc0redContactUrl } from '@/lib/config'
 import { useReanalyze } from '@/lib/hooks/useReanalyze'
-import { useStrategyMapSubscription } from '@/lib/hooks/useStrategyMapSubscription'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
 import { getRiskTier } from '@/lib/utils/riskUtils'
 import type { AnalysisData, DocumentInfo } from '@/lib/types/api'
-import type { ActiveLeverFilter } from '@/lib/types/analytics'
 
 const ValueChainDiagram = dynamic(() => import('@/components/ValueChainDiagram'), {
     loading: () => (
@@ -37,138 +32,43 @@ const ValueChainDiagram = dynamic(() => import('@/components/ValueChainDiagram')
 })
 
 /**
- * Map the screen-level lever filter ("All" / "Revenue Side" / "Cost
- * Side" / "Both") down to the analytics enum the CTA banner emits.
- * Only the two named levers are tracked as filters; "All", "Both",
- * or anything else collapses to null. Mirrors the previous helper that
- * lived inline in `OpportunitiesList` before the CTA was lifted to
- * this parent surface.
- */
-function toActiveLeverFilter(activeLever: string): ActiveLeverFilter | null {
-    if (activeLever === 'Revenue Side' || activeLever === 'Cost Side') {
-        return activeLever
-    }
-    return null
-}
-
-/**
- * Top-to-bottom narrative ordering on this page is governed by the
- * `analysis-detail-narrative` capability spec. Order rules (post
- * `strategy-map-on-demand` Phase B):
+ * Top-to-bottom narrative ordering on this page (per
+ * ``redesign-strategy-map`` Phase 5):
  *
- *   Beat 1   — IDENTITY:    Header → ExecutiveStrap → OverviewCards
- *   Beat 1.5 — DEEP DIVE:   Sc0redCTABanner (advisor consultation)
- *   Beat 2   — SYNTHESIS:   TopActionsCallout
- *   Beat 3   — MONEY:       EbitdaSection → ValueChainDiagram (paired)
- *   Beat 4   — RISK:        RiskBreakdown
- *   Beat 5   — OPPORTUNITY: ValueLever → Opportunities
- *   Beat 6   — STRATEGY:    StrategyMapCTA / generating / StrategyMapView
- *                           + DeepDiveCTA (only when map is present)
- *   Beat 7   — IMPROVE:     DocumentUpload
+ *   Beat 1 — IDENTITY:    Header → ExecutiveStrap → OverviewCards
+ *   Beat 2 — SYNTHESIS:   TopActionsCallout (top-3 immediate actions)
+ *   Beat 3 — STRATEGY:    StrategyMapView + DeepDiveCTA (when present)
+ *   Beat 4 — MONEY:       EbitdaSection → ValueChainDiagram (paired)
+ *   Beat 5 — RISK:        RiskBreakdown
+ *   Beat 6 — OPPORTUNITY: ValueLever → Opportunities
+ *   Beat 7 — IMPROVE:     DocumentUpload
  *
- * The strategy-map slot has three states (per the strategy-map-on-demand
- * spec): CTA when absent and not generating, generating placeholder while
- * the worker is running, full StrategyMapView + DeepDiveCTA when the map
- * is persisted. The states are mutually exclusive — the CTA does NOT
- * render while a generation is in flight (otherwise users could enqueue
- * duplicate jobs).
+ * The strategy map sits IMMEDIATELY after the top-3 immediate actions
+ * so the visual story is "here's what to do → here's the strategic
+ * frame that makes it coherent → here's the supporting evidence
+ * (money / risk / opportunities)". Previously the map lived at the
+ * very bottom (Beat 6) where users rarely scrolled to it.
+ *
+ * The standalone ``Sc0redCTABanner`` ("Dig deeper with a sc0red
+ * advisor") that previously sat at Beat 1.5 was deleted in Phase 5 —
+ * the ``DeepDiveCTA`` rendered alongside the strategy map ("Want a
+ * deeper analysis?") now sits high enough on the page to serve the
+ * same conversion role without a second banner.
+ *
+ * The Beat-3 strategy-map slot collapses to two states: PRESENT
+ * (``StrategyMapView`` + ``DeepDiveCTA``) or ABSENT (slot omitted).
+ * Maps are generated inline during the scan pipeline (Phase 4); the
+ * absent case only applies to legacy analyses produced before that
+ * change, which can recover via "Re-analyze".
  *
  * Section framing (testid + heading + lead) is owned by the shared
- * `AnalysisSection` wrapper. Sections that have a heading pass it via
- * `title`; sections that don't (StrategyMapView, Sc0redCTABanner,
- * DeepDiveCTA, TopActionsCallout, AnalysisOverviewCards,
- * AnalysisExecutiveStrap, AnalysisHeader, StrategyMapCTA,
- * StrategyMapGeneratingPlaceholder) wrap with no `title` — testid-only
- * render. See `analysis-detail-consistency-wrapper` D3.
+ * ``AnalysisSection`` wrapper. See ``analysis-detail-consistency-wrapper`` D3.
  */
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
     const [activeLever, setActiveLever] = useState<string>('All')
     const [documents, setDocuments] = useState<DocumentInfo[]>(data.documents ?? [])
-    // Local override of the API-served generation state. Lets the CTA
-    // optimistically flip to "generating" the moment the user clicks,
-    // before the next /api/analysis/{id} fetch confirms the server-side
-    // state. Cleared on AppSync complete/failed events.
-    const [localGenerating, setLocalGenerating] = useState<boolean>(false)
-    const [generationError, setGenerationError] = useState<string | null>(null)
-    // In-flight progress reported by the strategy-map worker via AppSync
-    // ``strategy_map_progress`` events. Drives the moving progress bar
-    // inside ``StrategyMapGeneratingPlaceholder``. ``null`` means we
-    // haven't heard from the worker yet (or AppSync isn't configured)
-    // so the placeholder falls back to its static spinner copy.
-    const [generationProgress, setGenerationProgress] = useState<{
-        percentage: number
-        label: string
-    } | null>(null)
 
     const reanalyze = useReanalyze({ analysisId, analyzedAt: data.analyzedAt })
-    const { start: startStrategyMapSubscription, stop: stopStrategyMapSubscription } =
-        useStrategyMapSubscription()
-    const router = useRouter()
-
-    // The strategy-map slot derives its state from three signals:
-    // (a) the persisted map on `data` (== present), (b) the API-served
-    // `strategyMapGenerationState` on `data` (== generating), and
-    // (c) the `localGenerating` override (== just-clicked, not yet
-    // round-tripped). Any of (b) or (c) flips to generating; the AppSync
-    // events flip back.
-    const isGenerating = localGenerating || data.strategyMapGenerationState === 'generating'
-
-    // Re-fetch the SSR-rendered analysis page so the persisted map (or
-    // refreshed `strategyMapGenerationState`) is reflected. `router.refresh()`
-    // re-runs the server component without dropping ephemeral client state
-    // — matches the pattern used by `useReanalyze`.
-    const refetchAnalysis = useCallback(() => {
-        router.refresh()
-    }, [router])
-
-    // Subscribe to AppSync when the slot is in the generating state.
-    // Dep array uses the destructured `start`/`stop` callbacks from the
-    // hook (both `useCallback`-stable across renders) rather than the
-    // hook return object — wrapping them in an object literal would be a
-    // new reference on every render and would tear down the subscription
-    // on every parent re-render.
-    useEffect(() => {
-        if (!isGenerating || !data.scanId) return
-
-        void startStrategyMapSubscription({
-            analysisId,
-            scanId: data.scanId,
-            onComplete: () => {
-                setLocalGenerating(false)
-                setGenerationError(null)
-                setGenerationProgress(null)
-                refetchAnalysis()
-            },
-            onFailed: () => {
-                setLocalGenerating(false)
-                setGenerationProgress(null)
-                setGenerationError("We couldn't generate your strategy map. Click Generate to try again.")
-            },
-            onProgress: (percentage, label) => {
-                // Worker is alive and reporting phase-boundary progress.
-                // The placeholder watches this state and renders a
-                // moving bar instead of a static spinner.
-                setGenerationProgress({ percentage, label })
-            },
-            onTimeout: () => {
-                // Sliding-window heartbeat miss — no event for a long
-                // time. Refetch as a sanity check; the subscription
-                // stays alive (per ``hasSubscription=true`` in the
-                // hook) so a late event can still drive us to a
-                // terminal state.
-                refetchAnalysis()
-            },
-        })
-
-        return () => stopStrategyMapSubscription()
-    }, [
-        isGenerating,
-        analysisId,
-        data.scanId,
-        startStrategyMapSubscription,
-        stopStrategyMapSubscription,
-        refetchAnalysis,
-    ])
 
     const handleDocumentsChange = useCallback(async () => {
         reanalyze.clearError()
@@ -247,29 +147,26 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 <AnalysisOverviewCards data={data} />
             </AnalysisSection>
 
-            {/* Beat 1.5 — DEEP DIVE.
-                sc0red advisor CTA repositioned from after-OpportunitiesList to
-                here, with analysis-centric copy ("Dig deeper with a sc0red
-                advisor"). Always renders — the banner is a deep-dive
-                affordance for the analysis as a whole, not contingent on
-                opportunities being non-empty. See `strategy-map-on-demand`
-                spec scenario "Banner appears at Beat 4 regardless of
-                analysis state". */}
-            <AnalysisSection id="sc0red-cta">
-                <Sc0redCTABanner
-                    contactUrl={getSc0redContactUrl()}
-                    analysisId={analysisId}
-                    opportunityCount={opportunities.length}
-                    activeLeverFilter={toActiveLeverFilter(activeLever)}
-                />
-            </AnalysisSection>
-
             {/* Beat 2 — SYNTHESIS (top actions = "so what?") */}
             <AnalysisSection id="top-actions">
                 <TopActionsCallout actions={data.topActions ?? []} />
             </AnalysisSection>
 
-            {/* Beat 3 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
+            {/* Beat 3 — STRATEGIC FRAME. Sits directly under the top-3
+                immediate actions so the user sees the strategic story
+                (Vision / Mission / Value Proposition / Strategic
+                Priorities + the perspectives map) before the
+                supporting evidence. The ``DeepDiveCTA`` rendered by
+                the slot doubles as the page-level deep-dive
+                affordance (the standalone ``Sc0redCTABanner`` at
+                Beat 1.5 was deleted in Phase 5 as redundant).
+                Renders nothing when no strategy map is persisted
+                — legacy analyses produced before
+                ``redesign-strategy-map`` Phase 4 inlined map
+                generation into the scan. */}
+            <StrategyMapSlot analysisId={analysisId} strategyMap={data.strategyMap} />
+
+            {/* Beat 4 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
                 lenses on the same question: where does value sit and how
                 is it produced?) */}
             {data.ebitdaTree && (
@@ -292,7 +189,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 </AnalysisSection>
             )}
 
-            {/* Beat 5 — RISK + OPPORTUNITY EVIDENCE */}
+            {/* Beat 5 — RISK + Beat 6 — OPPORTUNITY EVIDENCE */}
             <AnalysisSection id="risk-breakdown" title="Risk Breakdown">
                 <RiskBreakdown riskScores={riskScores} />
             </AnalysisSection>
@@ -318,23 +215,6 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             >
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
             </AnalysisSection>
-
-            {/* Beat 6 — STRATEGIC FRAME (on-demand). See `StrategyMapSlot`
-                for the three-state branching (present / generating /
-                absent). Extracted to a sibling component so this
-                top-level page stays under the 360-line file-size limit. */}
-            <StrategyMapSlot
-                analysisId={analysisId}
-                strategyMap={data.strategyMap}
-                isGenerating={isGenerating}
-                generationError={generationError}
-                generationProgress={generationProgress}
-                onGenerationStarted={() => {
-                    setLocalGenerating(true)
-                    setGenerationError(null)
-                    setGenerationProgress(null)
-                }}
-            />
 
             {/* Beat 7 — IMPROVE THIS ANALYSIS. The reanalyze progress bar
                 and any reanalyze polling errors render INSIDE the

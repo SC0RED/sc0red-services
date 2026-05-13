@@ -13,7 +13,6 @@
         "internalProcesses",
         "organizationalCapacity",
         "arrows",
-        "whatsMissing",
         "coreValues"
     ],
     "additionalProperties": false,
@@ -148,26 +147,6 @@
                     "from": { "type": "string", "minLength": 2, "maxLength": 10 },
                     "to": { "type": "string", "minLength": 2, "maxLength": 10 },
                     "hypothesis": { "type": "string", "minLength": 20, "maxLength": 500 }
-                }
-            }
-        },
-        "whatsMissing": {
-            "type": "array",
-            "minItems": 2,
-            "maxItems": 4,
-            "items": {
-                "type": "object",
-                "required": ["id", "title", "description", "deepDiveFraming", "relatedObjectiveIds"],
-                "additionalProperties": false,
-                "properties": {
-                    "id": { "type": "string", "pattern": "^G[1-9]$" },
-                    "title": { "type": "string", "minLength": 4, "maxLength": 100 },
-                    "description": { "type": "string", "minLength": 30, "maxLength": 600 },
-                    "deepDiveFraming": { "type": "string", "minLength": 30, "maxLength": 400 },
-                    "relatedObjectiveIds": {
-                        "type": "array",
-                        "items": { "type": "string", "minLength": 2, "maxLength": 10 }
-                    }
                 }
             }
         },

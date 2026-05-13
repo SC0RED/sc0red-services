@@ -320,9 +320,9 @@ class DynamoDBAssessmentRepository:
     def clear_strategy_map(self, assessment_id: str) -> None:
         """Remove the persisted strategy map for the given assessment.
 
-        Called by the re-analyse handler (strategy-map-on-demand spec) to
-        invalidate a stale map before regenerating the underlying diagnosis.
-        Idempotent — safe to call when no map exists.
+        Called by the re-analyse handler to invalidate a stale map
+        before regenerating the underlying diagnosis. Idempotent —
+        safe to call when no map exists.
         """
         _assessment_subrecord_ops.clear_strategy_map(self._table, assessment_id)
 

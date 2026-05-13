@@ -79,11 +79,6 @@ class DetailOpportunities(RequestStep):
                 i,
                 DETAIL_SYSTEM_PROMPT,
             )
-            logger.info(
-                "[DetailOpportunities:detail_%d] user_prompt:\n%s",
-                i,
-                prompt,
-            )
 
         timer = StepTimer("DetailOpportunities")
 

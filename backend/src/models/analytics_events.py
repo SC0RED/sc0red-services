@@ -1,4 +1,4 @@
-"""Analytics event models for the sc0red CTA banner funnel.
+"""Analytics event models for the sc0red CTA funnel (strategy-map + PDF surfaces).
 
 Two models:
 - `AnalyticsEvent`: the envelope a client posts to `POST /analytics/events`.
@@ -7,8 +7,16 @@ Two models:
   `user_id` and `org_id`, which the backend derives from the authenticated
   JWT and MUST NOT accept from the request body.
 
-See `openspec/changes/opportunities-cta-analytics/design.md` for the full
-design rationale (sink, privacy posture, schema versioning).
+The three opportunities-list banner events
+(``sc0red_cta_banner_expanded``, ``_collapsed``, ``sc0red_cta_clicked``)
+that this funnel originally tracked were removed end-to-end under
+``redesign-strategy-map`` Phase 5 when the standalone
+``Sc0redCTABanner`` was deleted from the analysis page. The surviving
+event types track the strategy-map deep-dive CTA (web) and the PDF
+render variant.
+
+See `openspec/changes/opportunities-cta-analytics/design.md` for the
+original sink / privacy posture / schema versioning design rationale.
 """
 
 from __future__ import annotations
@@ -18,16 +26,15 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 AnalyticsEventType = Literal[
-    "sc0red_cta_banner_expanded",
-    "sc0red_cta_banner_collapsed",
-    "sc0red_cta_clicked",
+    # ``_rendered_in_pdf`` is emitted by the PDF renderer when the
+    # strategy-map deep-dive CTA appears on the printable export.
     "sc0red_cta_rendered_in_pdf",
-    # Strategy-map deep-dive CTA — `_rendered_strategy_map` fires on
-    # component mount (the CTA is always-visible below the map),
-    # `_clicked_strategy_map` fires on the contact-link click. Both
-    # are web-source. Strategy-map has no lever-filter concept, so
-    # `active_lever_filter` MUST be null for these events
-    # (enforced in the model_validator below).
+    # Strategy-map deep-dive CTA on the analysis page —
+    # ``_rendered_strategy_map`` fires on component mount (the CTA is
+    # always-visible below the map), ``_clicked_strategy_map`` fires
+    # on the contact-link click. Both are web-source. Strategy-map
+    # has no lever-filter concept, so ``active_lever_filter`` MUST
+    # be null for these events (enforced in the model_validator below).
     "sc0red_cta_rendered_strategy_map",
     "sc0red_cta_clicked_strategy_map",
 ]

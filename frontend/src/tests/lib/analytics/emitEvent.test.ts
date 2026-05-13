@@ -21,10 +21,10 @@ describe('emit (browser)', () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }))
         globalThis.fetch = fetchMock as typeof fetch
 
-        await emit('sc0red_cta_banner_expanded', {
+        await emit('sc0red_cta_rendered_strategy_map', {
             analysisId: 'assess-1',
             opportunityCount: 3,
-            activeLeverFilter: 'Revenue Side',
+            activeLeverFilter: null,
         })
 
         expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -37,12 +37,12 @@ describe('emit (browser)', () => {
         })
         const body = JSON.parse(init.body as string)
         expect(body).toMatchObject({
-            event_type: 'sc0red_cta_banner_expanded',
+            event_type: 'sc0red_cta_rendered_strategy_map',
             source: 'web',
             analytics_version: '1',
             analysis_id: 'assess-1',
             opportunity_count: 3,
-            active_lever_filter: 'Revenue Side',
+            active_lever_filter: null,
             timestamp: '2026-04-24T12:00:00.000Z',
         })
         expect(body.event_id).toBeTruthy()
@@ -53,7 +53,7 @@ describe('emit (browser)', () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }))
         globalThis.fetch = fetchMock as typeof fetch
 
-        await emit('sc0red_cta_clicked', {
+        await emit('sc0red_cta_clicked_strategy_map', {
             analysisId: 'assess-1',
             opportunityCount: 0,
             activeLeverFilter: null,
@@ -61,7 +61,7 @@ describe('emit (browser)', () => {
 
         const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
         expect(body.active_lever_filter).toBeNull()
-        expect(body.event_type).toBe('sc0red_cta_clicked')
+        expect(body.event_type).toBe('sc0red_cta_clicked_strategy_map')
     })
 
     it('does not throw when the network request fails', async () => {
@@ -70,7 +70,7 @@ describe('emit (browser)', () => {
         vi.stubEnv('NODE_ENV', 'development')
 
         await expect(
-            emit('sc0red_cta_banner_expanded', {
+            emit('sc0red_cta_rendered_strategy_map', {
                 analysisId: 'assess-1',
                 opportunityCount: 1,
                 activeLeverFilter: null,
@@ -86,7 +86,7 @@ describe('emit (browser)', () => {
         vi.stubEnv('NODE_ENV', 'development')
 
         await expect(
-            emit('sc0red_cta_banner_expanded', {
+            emit('sc0red_cta_rendered_strategy_map', {
                 analysisId: 'assess-1',
                 opportunityCount: 1,
                 activeLeverFilter: null,
@@ -101,7 +101,7 @@ describe('emit (browser)', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
         vi.stubEnv('NODE_ENV', 'production')
 
-        await emit('sc0red_cta_banner_expanded', {
+        await emit('sc0red_cta_rendered_strategy_map', {
             analysisId: 'assess-1',
             opportunityCount: 1,
             activeLeverFilter: null,

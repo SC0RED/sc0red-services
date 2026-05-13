@@ -93,8 +93,6 @@ export default function PrintStrategyMap({ strategyMap }: PrintStrategyMapProps)
                 values={strategyMap.coreValues.values}
                 synthesised={strategyMap.coreValues.synthesised}
             />
-
-            <PrintWhatsMissing gaps={strategyMap.whatsMissing} />
         </section>
     )
 }
@@ -231,32 +229,6 @@ function PrintCoreValuesStrip({ values, synthesised }: { values: string[]; synth
                     <ProvenanceMarker kind="inferred" />
                 </span>
             ) : null}
-        </div>
-    )
-}
-
-// ── Strategic gaps ───────────────────────────────────────────────────────
-
-function PrintWhatsMissing({ gaps }: { gaps: StrategyMap['whatsMissing'] }) {
-    if (gaps.length === 0) return null
-    return (
-        <div
-            style={{
-                marginTop: '14px',
-                padding: '12px 14px',
-                background: 'var(--bg-surface-3)',
-                borderRadius: '4px',
-            }}
-        >
-            <h3 style={{ fontSize: '0.85rem', margin: '0 0 8px' }}>Strategic gaps to address</h3>
-            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.75rem', lineHeight: 1.6 }}>
-                {gaps.map((gap) => (
-                    <li key={gap.id} style={{ marginBottom: '6px' }}>
-                        <strong>{gap.title}:</strong>{' '}
-                        <span style={{ color: 'var(--text-secondary)' }}>{gap.description}</span>
-                    </li>
-                ))}
-            </ul>
         </div>
     )
 }

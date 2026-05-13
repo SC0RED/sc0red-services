@@ -32,9 +32,6 @@ export const ANALYTICS_VERSION = '1'
  * extracted set, breaking parity. Put narrative here, members below.
  */
 export type AnalyticsEventType =
-    | 'sc0red_cta_banner_expanded'
-    | 'sc0red_cta_banner_collapsed'
-    | 'sc0red_cta_clicked'
     | 'sc0red_cta_rendered_in_pdf'
     | 'sc0red_cta_rendered_strategy_map'
     | 'sc0red_cta_clicked_strategy_map'

@@ -48,8 +48,7 @@ describe('DeepDiveCTA', () => {
     //
     // The strategy map is positioned as the headline conversion artifact for
     // Vector Advisory. The CTA must produce funnel signal — without these
-    // events, the new product's conversion path is unmeasurable. Mirrors the
-    // pattern in `Sc0redCTABanner` (the opportunities-list CTA).
+    // events, the new product's conversion path is unmeasurable.
 
     it('emits sc0red_cta_rendered_strategy_map on mount (headline)', () => {
         render(<DeepDiveCTA analysisId="analysis-rm-1" />)

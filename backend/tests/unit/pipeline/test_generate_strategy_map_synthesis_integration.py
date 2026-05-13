@@ -1,30 +1,25 @@
-"""End-to-end integration test for the decomposed synthesis pipeline.
+"""End-to-end integration test for the decomposed strategy-map pipeline.
 
-Runs ``GenerateStrategyMap.execute()`` with both Phase 1 and Phase 2
-flags set, using a fixture ``Company`` populated with realistic
-profile / risks / opportunities / EBITDA / value-chain inputs. The
-``_run_ai_call`` layer is mocked to return canned responses for every
-expected per-call label, covering:
+Runs ``GenerateStrategyMap.execute()`` using a fixture ``Company``
+populated with realistic profile / risks / opportunities / EBITDA /
+value-chain inputs. The ``_run_ai_call`` layer is mocked to return
+canned responses for every expected per-call label, covering:
 
-- 4 Phase 2 vision/mission sub-calls.
-- 4 Phase 2 value-proposition sub-calls.
-- 4 Phase 1 round-1 perspective title calls.
-- 7 Phase 1 round-2 detail + theme-title + core-values calls (3 fin +
-  3 cap + 3 internal titles, but capped at 3 internal-titles for this
-  2-theme fixture, plus core_values).
-- 4 Phase 1 round-3 internal-objective detail calls (2 themes x 2
-  objectives each).
-- N Phase 2 arrow yes/no calls (computed from the fixture's pair count).
-- 1 Phase 2 priorities call.
-- 1 Phase 2 gaps call.
+- 4 vision/mission sub-calls (text + synth-yes/no per side).
+- 4 value-proposition sub-calls (primary + secondary + exemplar + rationale).
+- The Phase 1 perspective orchestrator (mocked at the import site).
+- N per-pair arrow yes/no calls (computed from the fixture's pair count).
+- 1 holistic priorities call.
 
 The test asserts:
 - The assembled ``StrategyMap`` validates against the Pydantic shape.
 - The ``GenerateStrategyMap.timings`` detail block contains the expected
   per-call labels and no legacy monolithic labels.
-- All four Phase 2 vision/mission labels are present.
-- All four Phase 2 value-proposition labels are present.
-- N per-pair arrow labels + holistic priorities + gaps labels are present.
+- All four vision/mission labels are present.
+- All four value-proposition labels are present.
+- N per-pair arrow labels + holistic priorities label are present.
+- The ``ai_call_gaps`` label is absent (removed under
+  ``redesign-strategy-map`` Phase 2).
 """
 
 from __future__ import annotations
@@ -33,6 +28,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from signalfield_core.utilities.future_manager import FutureManagerError
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import (
@@ -44,11 +40,7 @@ from src.models.model_company import (
     RiskScore,
 )
 from src.pipeline.pipeline_steps._strategy_map_arrows import enumerate_arrow_pairs
-from src.pipeline.pipeline_steps.generate_strategy_map import (
-    DECOMPOSED_FLAG_ENV_VAR,
-    DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR,
-    GenerateStrategyMap,
-)
+from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 
 
 def _make_accessor() -> CompanyAccessor:
@@ -287,14 +279,14 @@ def _build_phase2_canned_responses(
     internal_processes: dict[str, Any],
     organizational_capacity: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    """Build the canned ``_run_ai_call`` responses for the Phase 2 calls.
+    """Build the canned ``_run_ai_call`` responses for the synthesis calls.
 
-    Phase 1 perspectives are mocked at module level, so we only need
-    canned responses for Phase 2 calls:
+    The Phase 1 perspectives orchestrator is mocked at module level, so
+    we only need canned responses for the synthesis + arrows calls:
       - 4 vision/mission sub-calls.
       - 4 value-proposition sub-calls.
       - N arrow yes/no sub-calls (from enumerate_arrow_pairs).
-      - 1 priorities, 1 gaps.
+      - 1 priorities.
     """
     responses: dict[str, dict[str, Any]] = {
         # Vision/Mission bank.
@@ -322,7 +314,7 @@ def _build_phase2_canned_responses(
                 "associates, signature products) AND operational efficiency."
             )
         },
-        # Priorities + Gaps.
+        # Priorities (gaps removed under redesign-strategy-map Phase 2).
         "priorities": {
             "strategicPriorities": [
                 {
@@ -332,37 +324,6 @@ def _build_phase2_canned_responses(
                 {
                     "name": "Streamline",
                     "result": "Industry-leading cost-per-transaction across the store network.",
-                },
-            ]
-        },
-        "gaps": {
-            "whatsMissing": [
-                {
-                    "id": "G1",
-                    "title": "Cultural commitments not published",
-                    "description": (
-                        "The company has not published explicit cultural commitments. "
-                        "Public materials emphasise customer focus but the underlying "
-                        "cultural values are not visible to public-data analysis."
-                    ),
-                    "deepDiveFraming": (
-                        "A Vector Advisory deep-dive would interview leadership and "
-                        "frontline associates to articulate the working culture."
-                    ),
-                    "relatedObjectiveIds": ["O.C"],
-                },
-                {
-                    "id": "G2",
-                    "title": "Channel strategy unclear",
-                    "description": (
-                        "The company sells through both direct retail and franchise "
-                        "channels but the strategic balance between them is unclear."
-                    ),
-                    "deepDiveFraming": (
-                        "A Vector Advisory deep-dive would map channel economics and "
-                        "design customer-perspective objectives for each channel."
-                    ),
-                    "relatedObjectiveIds": ["C2"],
                 },
             ]
         },
@@ -396,19 +357,15 @@ def _build_phase2_canned_responses(
 
 
 class TestSynthesisDecompositionIntegration:
-    """Full execute() with both Phase 1 and Phase 2 flags ON."""
+    """Full execute() — decomposed path, no feature flags."""
 
     @patch(
-        "src.pipeline.pipeline_steps._strategy_map_perspectives.generate_perspectives_decomposed"
+        "src.pipeline.pipeline_steps.generate_strategy_map.generate_perspectives_decomposed"
     )
     def test_assembles_validated_strategy_map(
         self,
         mock_phase1_perspectives: MagicMock,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv(DECOMPOSED_FLAG_ENV_VAR, "1")
-        monkeypatch.setenv(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, "1")
-
         # Phase 1 perspectives mocked — Phase 2 work runs end-to-end.
         financial, customer, internal_processes, capacity, core_values = (
             _build_phase1_perspective_results()
@@ -474,9 +431,10 @@ class TestSynthesisDecompositionIntegration:
         ):
             assert label in timings, f"missing {label}"
 
-        # Holistic priorities + gaps.
+        # Holistic priorities. ``ai_call_gaps`` was removed end-to-end
+        # by the ``redesign-strategy-map`` Phase 2 change.
         assert "ai_call_priorities" in timings
-        assert "ai_call_gaps" in timings
+        assert "ai_call_gaps" not in timings
 
         # N per-pair arrow labels.
         pairs = enumerate_arrow_pairs(
@@ -495,3 +453,166 @@ class TestSynthesisDecompositionIntegration:
             "ai_call_arrows_and_gaps",
         ):
             assert legacy_label not in timings, f"legacy label {legacy_label} leaked"
+
+
+class TestPrerequisiteValidation:
+    """Prereq gates degrade gracefully (no map, no exception).
+
+    When upstream pipeline output is missing (profile, risk assessment,
+    opportunities), ``GenerateStrategyMap`` is a soft-fail step — it
+    logs the gap, sets ``strategy_map=None`` on the accessor, and lets
+    ``PersistResults`` save the rest of the analysis. The user gets
+    every other artifact even when the map could not be produced.
+
+    Programming errors (``AttributeError`` etc.) still propagate so
+    SQS retries and CloudWatch surfaces the stack trace.
+    """
+
+    def _make_step(self) -> tuple[GenerateStrategyMap, CompanyAccessor, MagicMock]:
+        ai_factory = MagicMock()
+        accessor = _make_accessor()
+        step = GenerateStrategyMap(ai_client_factory=ai_factory)
+        step.entity_accessor = accessor  # type: ignore[assignment]
+        step.request_executor = MagicMock()
+        return step, accessor, ai_factory
+
+    def test_missing_profile_skips_generation_and_clears_map(self) -> None:
+        step, accessor, ai_factory = self._make_step()
+        accessor.company.profile = None
+
+        # Soft-fail: ``execute()`` returns normally, AI client untouched.
+        step.execute()
+
+        ai_factory.get_client.assert_not_called()
+        assert accessor.company.strategy_map is None
+        # The step still completes (degraded) — progress advances.
+        step.request_executor.mark_question_complete.assert_called_with(
+            "generate_strategy_map"
+        )
+
+    def test_missing_risk_assessment_skips_generation_and_clears_map(self) -> None:
+        step, accessor, ai_factory = self._make_step()
+        accessor.company.risk_assessment = None
+
+        step.execute()
+
+        ai_factory.get_client.assert_not_called()
+        assert accessor.company.strategy_map is None
+
+    def test_missing_opportunities_skips_generation_and_clears_map(self) -> None:
+        step, accessor, ai_factory = self._make_step()
+        accessor.company.opportunity_result = None
+
+        step.execute()
+
+        ai_factory.get_client.assert_not_called()
+        assert accessor.company.strategy_map is None
+
+
+class TestDomainErrorDegradesGracefully:
+    """AI domain failures leave the analysis intact with no strategy map.
+
+    The ``GenerateStrategyMap`` step is inline in the scan pipeline
+    (per ``redesign-strategy-map`` Phase 4). To preserve the failure
+    isolation the old dedicated worker provided, domain errors
+    (``EngineError`` / ``FutureManagerError`` / ``ValueError`` /
+    ``RuntimeError``) are caught inside the step. The user's risk
+    scores, opportunities, EBITDA tree, and value chain are then
+    persisted by ``PersistResults`` and the strategy-map slot on the
+    analysis page simply doesn't render.
+    """
+
+    @patch(
+        "src.pipeline.pipeline_steps.generate_strategy_map.generate_perspectives_decomposed"
+    )
+    def test_synthesis_runtime_error_is_caught_and_map_is_cleared(
+        self,
+        mock_phase1_perspectives: MagicMock,
+    ) -> None:
+        # Phase 1 perspectives never reached — synthesis (Step 1) fails first.
+        # We still mock it so the test fails loud if the failure mode regresses.
+        financial, customer, internal_processes, capacity, core_values = (
+            _build_phase1_perspective_results()
+        )
+        mock_phase1_perspectives.return_value = (
+            financial,
+            customer,
+            internal_processes,
+            capacity,
+            core_values,
+        )
+
+        def fake_run_ai_call(
+            _user_prompt: str,
+            _schema: dict[str, Any],
+            _system_prompt: str,
+            label: str,
+        ) -> tuple[str, dict[str, Any], float]:
+            if label == "mission_text":
+                msg = "simulated AI failure"
+                raise RuntimeError(msg)
+            return label, {"statement": "v", "synthesised": False, "rationale": "r"}, 0.1
+
+        ai_factory = MagicMock()
+        accessor = _make_accessor()
+        step = GenerateStrategyMap(ai_client_factory=ai_factory)
+        step.entity_accessor = accessor  # type: ignore[assignment]
+        step.request_executor = MagicMock()
+        step._run_ai_call = MagicMock(side_effect=fake_run_ai_call)  # type: ignore[method-assign]
+
+        # Soft-fail: ``execute()`` returns normally; the strategy map
+        # on the accessor is ``None`` so ``PersistResults`` skips it.
+        step.execute()
+
+        assert accessor.company.strategy_map is None
+        # ``add_details`` still ran once with a ``GenerateStrategyMap.timings``
+        # block — the ``finally`` clause guarantees telemetry on the
+        # degraded path.
+        add_details_calls = step.request_executor.add_details.call_args_list
+        timings_calls = [
+            call
+            for call in add_details_calls
+            if "GenerateStrategyMap.timings" in (call.args[0] if call.args else {})
+        ]
+        assert len(timings_calls) == 1
+        timings = timings_calls[0].args[0]["GenerateStrategyMap.timings"]
+        assert "total" in timings
+        # mission_text raised → its timing was NOT recorded.
+        assert "ai_call_mission_text" not in timings
+        # Step completion still fires so the progress bar advances.
+        step.request_executor.mark_question_complete.assert_called_with(
+            "generate_strategy_map"
+        )
+
+    def test_malformed_ai_response_key_error_is_caught_and_map_is_cleared(self) -> None:
+        """A ``KeyError`` raised when accessing AI response data (e.g.
+        ``vision_data["statement"]`` against a malformed response) is a
+        DOMAIN error, not a programming bug — the AI returned a dict
+        that doesn't conform to its schema. The soft-fail catches it
+        and degrades. This guards the catch list against drift.
+        """
+        ai_factory = MagicMock()
+        accessor = _make_accessor()
+        step = GenerateStrategyMap(ai_client_factory=ai_factory)
+        step.entity_accessor = accessor  # type: ignore[assignment]
+        step.request_executor = MagicMock()
+
+        def fake_run_ai_call(
+            _user_prompt: str,
+            _schema: dict[str, Any],
+            _system_prompt: str,
+            label: str,
+        ) -> tuple[str, dict[str, Any], float]:
+            # Return a dict missing the ``statement`` key that the
+            # synthesis caller subscripts. ``vision_data["statement"]``
+            # raises ``KeyError`` outside any ``FutureManager`` block.
+            return label, {"synthesised": False, "rationale": "r"}, 0.1
+
+        step._run_ai_call = MagicMock(side_effect=fake_run_ai_call)  # type: ignore[method-assign]
+
+        step.execute()
+
+        assert accessor.company.strategy_map is None
+        step.request_executor.mark_question_complete.assert_called_with(
+            "generate_strategy_map"
+        )

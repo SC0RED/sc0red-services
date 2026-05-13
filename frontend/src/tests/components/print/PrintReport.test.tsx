@@ -192,22 +192,12 @@ describe('PrintReport composition', () => {
                 },
             },
             arrows: [],
-            whatsMissing: [
-                {
-                    id: 'G1',
-                    title: 'Cultural commitments not published',
-                    description:
-                        'Public materials reference associate ownership but do not articulate specific values.',
-                    deepDiveFraming:
-                        'A Vector Advisory deep-dive would interview leadership to articulate the working culture.',
-                },
-            ],
             coreValues: { values: ['a', 'b', 'c'], synthesised: true, rationale: 'r' },
         }
         render(<PrintReport analysis={{ ...fullAnalysis, strategyMap }} generatedDate="May 1, 2026" />)
         expect(screen.getByText('Strategy Map')).toBeInTheDocument()
-        // Spot-check that the deep-dive framing is the print-only "Strategic gaps" header,
-        // not the screen "What's Missing?" headline.
-        expect(screen.getByText('Strategic gaps to address')).toBeInTheDocument()
+        // The "Strategic gaps to address" print-only section was removed
+        // by the ``redesign-strategy-map`` Phase 2 change.
+        expect(screen.queryByText('Strategic gaps to address')).not.toBeInTheDocument()
     })
 })

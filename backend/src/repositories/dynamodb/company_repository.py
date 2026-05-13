@@ -104,31 +104,6 @@ class DynamoDBCompanyRepository:
         """Serialize and store arbitrary metadata on a company item."""
         self.update(company_id, {"metadata_json": json.dumps(metadata)})
 
-    def set_strategy_map_generation_state(self, company_id: str, state: str) -> None:
-        """Mark on-demand strategy-map generation as in flight on the company record.
-
-        Per the strategy-map-on-demand spec, the SQS handler sets
-        ``state="generating"`` on enqueue so ``GET /api/analysis/{id}``
-        responses surface the generating placeholder during cold load /
-        refresh while the worker is processing.
-        """
-        self.update(company_id, {"strategy_map_generation_state": state})
-
-    def clear_strategy_map_generation_state(self, company_id: str) -> None:
-        """Remove the in-flight strategy-map-generation flag from the company record.
-
-        DynamoDB requires REMOVE (not SET-to-None) to clear an attribute so
-        ``analysis_payload``'s ``company.get("strategy_map_generation_state")``
-        returns ``None`` for the absent case (vs. an explicit ``None`` value
-        which would also be falsy but represent an "in-flight then cleared"
-        state we'd rather have indistinguishable from "never started").
-        """
-        self._table.remove_attributes(
-            pk=f"COMPANY#{company_id}",
-            sk="COMPANY#METADATA",
-            attribute_names=["strategy_map_generation_state"],
-        )
-
     def delete(self, company_id: str) -> None:
         """Hard-delete the company metadata item.
 

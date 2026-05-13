@@ -24,19 +24,17 @@ _PROGRESS_MAP: dict[str, tuple[int, str]] = {
     "extract_profile": (30, "Extracting company profile..."),
     "assess_risk": (45, "Running AI risk assessment..."),
     "ideate_opportunities": (55, "Generating opportunity ideas..."),
-    "generate_opportunities": (80, "Gathering implementation details..."),
-    "generate_ebitda_tree": (85, "Building EBITDA analysis..."),
-    "compute_value_chain": (90, "Mapping value chain..."),
-    # NOTE: `generate_strategy_map` is intentionally absent. The strategy
-    # map ran in the auto-pipeline pre-`strategy-map-on-demand` and its
-    # progress entry sat at 92 here. Phase C of that change moved the
-    # step out of the auto-pipeline; it now runs in the dedicated SQS
-    # worker, which signals progress via `strategy_map_complete` /
-    # `strategy_map_failed` events on the `onScanProgress` channel
-    # instead of `notify_progress`. Re-introducing this entry would
-    # cause the worker to write a stale `pipeline_progress=92` to the
-    # company record AFTER the pipeline reached `persist_results=95`,
-    # which would surface as a backwards progress jump on cold loads.
+    "generate_opportunities": (65, "Gathering implementation details..."),
+    "generate_ebitda_tree": (70, "Building EBITDA analysis..."),
+    "compute_value_chain": (75, "Mapping value chain..."),
+    # The strategy-map step adds ~35 s on top of the ~30 s analysis
+    # body, so the bar sits at 80 % for the largest single chunk of
+    # wall-clock time. The label changes ("Generating strategy map…")
+    # so the user sees progress is alive even though the percentage
+    # holds. Re-introduced into the auto-pipeline by the
+    # ``redesign-strategy-map`` Phase 4 change, which deleted the
+    # on-demand SQS worker.
+    "generate_strategy_map": (80, "Generating strategy map..."),
     "persist_results": (95, "Saving results..."),
     # Portfolio discovery pipeline (async via SQS worker)
     "discover_portfolio": (10, "Finding portfolio companies..."),

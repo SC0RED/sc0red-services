@@ -88,7 +88,7 @@
   - Click CTA → optimistic transition → AppSync push → present
   - Re-analyse → CTA returns
   - Pre-existing analysis with strategy map → renders in present state at Beat 6
-- [ ] B.5.3 Promote dev → testing → production with normal cadence.
+- [x] B.5.3 Promote dev → testing → production with normal cadence. — Shipped to all environments via PR #272 (dev), PR #285 (dev → testing 2026-05-07), and PR #291 (testing → production 2026-05-12).
 
 ---
 
@@ -118,7 +118,7 @@
 - [x] C.3.4 PR #273 opened. Landed on development. Smoke-test deferred to first user interaction post-deploy:
   - Fresh analysis → CTA at Beat 6 (no auto-gen)
   - Re-analyse on an existing analysis with a map → map clears; CTA returns
-- [ ] C.3.5 Promote dev → testing → production.
+- [x] C.3.5 Promote dev → testing → production. — Shipped to all environments via PR #273 (dev), PR #285 (dev → testing 2026-05-07), and PR #291 (testing → production 2026-05-12).
 
 ---
 
