@@ -10,17 +10,19 @@ import type { EbitdaNode } from '@/lib/types/api'
  *
  * The five top-level rollups (Total Revenue, Cost of Revenue, Gross
  * Profit, Operating Expenses, EBITDA) appear top-to-bottom in P&L
- * order. Between each adjacent pair sits a "minus" or "equals"
- * connector that names the arithmetic relationship. Each subtotal's
- * leaves render to the right of the parent card on viewports
- * ≥ 768 px and stack below the parent on viewports < 768 px (driven
- * entirely by ``flex-wrap``; no JS-driven layout).
+ * order. Each subtotal renders as a **band**: a single-row colored-
+ * strip header on top, followed by a horizontal row of compact leaf
+ * chips beneath. Between each adjacent band sits a "minus" or
+ * "equals" connector that names the arithmetic relationship. Chips
+ * inside each band ``flex-wrap`` — flowing left-to-right on wide
+ * viewports and wrapping to additional rows (single-column at the
+ * narrowest) on mobile, without any JS-driven layout.
  *
- * This replaces a React Flow + dagre canvas (pan/zoom/fit affordances)
- * that consistently rendered too small to read by default. The new
- * layout is sized to the content; there is nothing to fit and
- * nothing to expand. See ``openspec/changes/redesign-ebitda-impact-model/``
- * for the design.
+ * History: ``redesign-ebitda-impact-model`` replaced a React Flow
+ * canvas with this static waterfall. ``compact-ebitda-bands`` then
+ * collapsed parent cards into band headers and leaf cards into
+ * compact chips. See ``openspec/changes/compact-ebitda-bands/`` for
+ * the current design.
  */
 
 /** Connector labels between adjacent subtotals. The backend emits the
@@ -79,9 +81,7 @@ function SubtotalRow({
     return (
         <li style={subtotalRowItemStyle}>
             <div style={subtotalRowContentStyle}>
-                <div style={parentCardWrapperStyle}>
-                    <EbitdaNodeComponent {...nodeToCardProps(subtotal, opportunities)} isSubtotalHeading />
-                </div>
+                <EbitdaNodeComponent {...nodeToCardProps(subtotal, opportunities)} isSubtotalHeading />
                 {leaves.length > 0 && (
                     <ul aria-label={`Drivers of ${subtotal.label}`} style={leafListStyle}>
                         {leaves.map((leaf) => (
@@ -187,46 +187,39 @@ const waterfallStyle: CSSProperties = {
 const subtotalRowItemStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
+    alignItems: 'stretch',
     width: '100%',
 }
 
-/** Parent card on the left, leaves wrap to the right (desktop) or
- *  below (mobile). The flex container itself stays centered in the
- *  column so subtotals with no leaves (Gross Profit, EBITDA) sit
- *  centered while subtotals with leaves push their leaves outward.
- *
- *  ``alignItems: 'flex-start'`` keeps the parent card aligned to the
- *  top of the leaf stack when the leaf list is taller than the parent. */
+/** Each band row is a vertical flex: band header on top, then the
+ *  horizontal chip row of leaves beneath. The band itself takes the
+ *  full available width; the chips inside flex-wrap when the
+ *  container is narrow. */
 const subtotalRowContentStyle: CSSProperties = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    gap: '20px',
-    width: '100%',
-}
-
-const parentCardWrapperStyle: CSSProperties = {
-    flex: '0 0 auto',
-    minWidth: '240px',
-    maxWidth: '320px',
-}
-
-const leafListStyle: CSSProperties = {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0,
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
-    flex: '1 1 280px',
-    maxWidth: '420px',
-    minWidth: '240px',
+    width: '100%',
+}
+
+/** Chip row inside a band. ``flex-wrap`` is the entire mobile-stack
+ *  mechanism — chips flow left-to-right on desktop, wrap to a second
+ *  row when the container is narrow (375 px viewports stack the chips
+ *  in a single column without any horizontal scroll). */
+const leafListStyle: CSSProperties = {
+    listStyle: 'none',
+    padding: '0 0 0 18px',
+    margin: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: '12px',
+    width: '100%',
 }
 
 const leafListItemStyle: CSSProperties = {
     display: 'block',
+    flex: '0 1 auto',
 }
 
 const connectorStyle: CSSProperties = {

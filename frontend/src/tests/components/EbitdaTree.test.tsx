@@ -1,25 +1,26 @@
 /**
  * Tests for the static-waterfall ``EbitdaTree`` renderer.
  *
- * Phase 5 of ``redesign-strategy-map`` (sibling) — specifically the
- * ``redesign-ebitda-impact-model`` change — replaced the React Flow
- * canvas with a static vertical waterfall. These tests pin the spec
- * requirements:
+ * Renderer history:
+ *   - ``redesign-ebitda-impact-model`` replaced a React Flow canvas
+ *     with a static vertical waterfall.
+ *   - ``compact-ebitda-bands`` collapsed parent cards into band
+ *     headers and leaf cards into compact chips arranged horizontally
+ *     inside each band.
  *
- *   - Five subtotal rows in P&L order inside a single ``<ol>``.
+ * These tests pin the resulting spec requirements:
+ *   - Five band rows in P&L order inside a single ``<ol>``.
  *   - Four connectors labelled ``minus``, ``equals``, ``minus``, ``equals``
  *     in that order, each with the label exposed as plain text.
  *   - No pan / zoom / fit / expand controls in the DOM.
  *   - Container height equals content height (no fixed-height canvas).
  *   - Semantic HTML: ``<section>`` with an accessible name, leaves
- *     under each parent grouped in an ``<ul>`` with a parent-referencing
- *     ``aria-label``.
+ *     under each parent grouped in a single ``<ul>`` with a
+ *     parent-referencing ``aria-label`` and ``flex-direction: row`` +
+ *     ``flex-wrap: wrap`` so chips flow horizontally and wrap on
+ *     narrow viewports.
  *   - Mobile (375 px): no horizontal scroll on the waterfall.
  *   - Confidence chip + opportunity-link affordance preserved.
- *
- * The ``flattenNodes`` utility is also re-tested — it's still exported
- * from this module for any caller that wants a flat traversal of the
- * tree.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -358,6 +359,23 @@ describe('EbitdaTree — responsive layout (spec requirement 3, mobile branch)',
             return /overflow-x\s*:\s*scroll/i.test(style) || /overflow\s*:\s*scroll/i.test(style)
         })
         expect(offending).toHaveLength(0)
+    })
+
+    it("renders all of a parent's leaves inside a single flex-wrap <ul>", () => {
+        // Per ``compact-ebitda-bands``: leaves are compact chips arranged
+        // horizontally inside the band, NOT a vertical stack. Each
+        // parent's leaf list is a single ``<ul>`` with ``flex-direction:
+        // row`` + ``flex-wrap: wrap``. This regression pins that
+        // structural contract so a future change can't accidentally
+        // split a parent's leaves across multiple lists.
+        render(<EbitdaTree treeData={FULL_TREE} opportunities={OPPS} />)
+        const revenueLeafList = screen.getByRole('list', { name: 'Drivers of Total Revenue' })
+        expect(revenueLeafList.tagName).toBe('UL')
+        const style = revenueLeafList.getAttribute('style') ?? ''
+        expect(/flex-direction\s*:\s*row/i.test(style)).toBe(true)
+        expect(/flex-wrap\s*:\s*wrap/i.test(style)).toBe(true)
+        // All 2 fixture leaves under Total Revenue land in this one list.
+        expect(revenueLeafList.querySelectorAll(':scope > li')).toHaveLength(2)
     })
 })
 

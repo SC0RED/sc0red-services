@@ -1,30 +1,33 @@
-'use client'
-
-import { useState } from 'react'
+import type { CSSProperties } from 'react'
 
 import ConfidenceIndicator from '@/components/analysis/ConfidenceIndicator'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 
 /**
- * Single P&L line-item card used by the EBITDA Impact Model section.
+ * Single P&L line-item used by the EBITDA Impact Model section.
  *
- * Renders one of:
- *   - A *subtotal* card (Total Revenue, Cost of Revenue, Gross Profit,
- *     Operating Expenses, EBITDA) — sits in the centre of the
- *     waterfall column.
- *   - A *leaf* card (e.g. Subscriptions under Total Revenue) — flanks
- *     its parent subtotal on the right (desktop) or stacks below
- *     (mobile) per ``ebitda-impact-model`` Requirement 3.
+ * The component branches on ``isSubtotalHeading`` between two
+ * structurally different variants (per ``ebitda-impact-model``
+ * Modified Requirements after the ``compact-ebitda-bands`` change):
  *
- * Visual treatment is unchanged from the pre-Phase-4 React-Flow node
- * (label, value range, percentage-of-parent, confidence chip,
- * opportunity dots, hover description). The structural change is
- * that the component is now a plain ``<article>`` — no
- * ``@xyflow/react`` ``Handle`` / ``Position`` plumbing — so it
- * renders in any container without a ``ReactFlowProvider`` parent.
+ *   - ``isSubtotalHeading: true`` — **band header**: a single-row
+ *     element with a colored left-edge strip, the subtotal label in
+ *     ``<h3>`` (preserves screen-reader heading navigation), and the
+ *     value range inline. No confidence chip, no opportunity dots,
+ *     no description tooltip — subtotals don't carry those surfaces.
  *
- * The component name is retained for diff hygiene; semantically this
- * is now an EBITDA *card*, not a graph node.
+ *   - ``isSubtotalHeading: false`` (default) — **compact chip**:
+ *     dimensioned to fit beside its siblings inside the band row
+ *     (~150-200 px wide, ~80-100 px tall). Surfaces the label,
+ *     value range, percentage-of-parent, ``ConfidenceIndicator``,
+ *     and opportunity-link indicator dots. The long-form
+ *     ``description`` is surfaced via the native HTML ``title``
+ *     attribute on the chip's outer element — no custom
+ *     absolutely-positioned overlay (kills the overlap bug from
+ *     the pre-``compact-ebitda-bands`` design).
+ *
+ * Both variants share the same ``NODE_COLORS`` palette keyed on
+ * ``type``.
  */
 export interface EbitdaCardProps {
     label: string
@@ -40,127 +43,175 @@ export interface EbitdaCardProps {
     /** Human-readable explanation of which build inputs drove the
      *  figure; surfaced as a native ``title`` tooltip on the chip. */
     confidenceBasis?: string | null
-    /** When ``true`` the label renders inside an ``<h3>`` so screen
-     *  readers can navigate between the five P&L subtotals by heading.
-     *  Per ``ebitda-impact-model`` Requirement §6. Leaves render the
-     *  label in a non-heading element so the heading scale isn't
-     *  polluted with up to ~12 driver rows. Defaults to ``false``. */
+    /** When ``true`` the component renders the band-header variant
+     *  (single row, colored left strip, ``<h3>`` label, no surfaces
+     *  beyond label + value range). When ``false`` (default) the
+     *  component renders the compact-chip variant. */
     isSubtotalHeading?: boolean
 }
 
-const NODE_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
+const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
     revenue: {
-        bg: 'rgba(34, 197, 94, 0.12)',
-        border: 'rgba(34, 197, 94, 0.4)',
+        bg: 'rgba(34, 197, 94, 0.10)',
+        border: 'rgba(34, 197, 94, 0.35)',
         text: '#22C55E',
-        glow: 'rgba(34, 197, 94, 0.15)',
     },
     cost: {
-        bg: 'rgba(239, 68, 68, 0.12)',
-        border: 'rgba(239, 68, 68, 0.4)',
+        bg: 'rgba(239, 68, 68, 0.10)',
+        border: 'rgba(239, 68, 68, 0.35)',
         text: '#EF4444',
-        glow: 'rgba(239, 68, 68, 0.15)',
     },
     margin: {
-        bg: 'rgba(59, 123, 246, 0.12)',
-        border: 'rgba(59, 123, 246, 0.4)',
+        bg: 'rgba(59, 123, 246, 0.10)',
+        border: 'rgba(59, 123, 246, 0.35)',
         text: '#3B7BF6',
-        glow: 'rgba(59, 123, 246, 0.15)',
     },
     subtotal: {
-        bg: 'rgba(245, 158, 11, 0.12)',
-        border: 'rgba(245, 158, 11, 0.4)',
+        bg: 'rgba(245, 158, 11, 0.10)',
+        border: 'rgba(245, 158, 11, 0.35)',
         text: '#F59E0B',
-        glow: 'rgba(245, 158, 11, 0.15)',
     },
 }
 
 export default function EbitdaNodeComponent(props: EbitdaCardProps) {
-    const [hovered, setHovered] = useState(false)
-    const colors = NODE_COLORS[props.type] || NODE_COLORS.margin
+    // The TypeScript discriminated union on ``type`` guarantees a hit
+    // in ``NODE_COLORS`` — no fallback. A future contributor who adds
+    // a new ``type`` value MUST add a ``NODE_COLORS`` entry; otherwise
+    // they'll get a loud ``undefined.text`` at render time instead of
+    // a silently-wrong blue palette.
+    const colors = NODE_COLORS[props.type]
+    if (props.isSubtotalHeading) {
+        return <BandHeader {...props} accentColor={colors.text} />
+    }
+    return <LeafChip {...props} colors={colors} />
+}
 
-    // Show a confidence chip when the backend supplied a level AND this is a
-    // leaf (revenue/cost) node. Subtotal / margin rollups carry no own
-    // confidence per the ebitda-tree-confidence spec — they inherit visually
-    // via their children's chips.
-    const showConfidenceChip =
-        (props.confidenceLevel === 'high' ||
-            props.confidenceLevel === 'medium' ||
-            props.confidenceLevel === 'low') &&
-        props.type !== 'subtotal' &&
-        props.type !== 'margin'
-
+/** Band-header variant — one-row P&L subtotal anchor.
+ *
+ *  Visual treatment mirrors the strategy-map perspective-band
+ *  headers: a thick colored left strip, the label in ``<h3>``, the
+ *  value range surfaced inline to the right. No confidence chip
+ *  (subtotals carry no own confidence per ``ebitda-tree-confidence``).
+ *  No opportunity dots (subtotals don't carry ``linked_opportunity_indices``
+ *  in production). No description overlay (subtotal descriptions
+ *  duplicate the band's role). */
+function BandHeader({ label, valueRange, accentColor }: EbitdaCardProps & { accentColor: string }) {
     return (
-        /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
-        <article
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
+        <div
             style={{
-                padding: '0.875rem 1.125rem',
-                background: colors.bg,
-                border: `1.5px solid ${hovered ? colors.text : colors.border}`,
-                borderRadius: '10px',
-                minWidth: '200px',
-                position: 'relative',
-                boxShadow: hovered
-                    ? `0 0 30px ${colors.glow}, 0 4px 20px rgba(0,0,0,0.3)`
-                    : `0 0 20px ${colors.glow}`,
-                backdropFilter: 'blur(8px)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px 14px',
+                borderLeft: `4px solid ${accentColor}`,
+                background: 'var(--bg-surface-2, rgba(255,255,255,0.02))',
+                borderRadius: '6px',
+                width: '100%',
             }}
         >
-            {props.isSubtotalHeading ? (
-                <h3 style={labelStyle(colors.text)}>{props.label}</h3>
-            ) : (
-                <div style={labelStyle(colors.text)}>{props.label}</div>
-            )}
-            {props.valueRange && (
-                <div
+            <h3
+                style={{
+                    margin: 0,
+                    fontSize: '0.95rem',
+                    fontWeight: 700,
+                    color: accentColor,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    flex: '0 0 auto',
+                }}
+            >
+                {label}
+            </h3>
+            {valueRange && (
+                <span
                     style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        fontSize: '1rem',
+                        marginLeft: 'auto',
+                        fontSize: '0.95rem',
                         fontWeight: 600,
                         color: 'var(--text-primary)',
-                        marginBottom: '0.25rem',
                     }}
                 >
-                    <span>{props.valueRange}</span>
-                    {showConfidenceChip && props.confidenceLevel && (
+                    {valueRange}
+                </span>
+            )}
+        </div>
+    )
+}
+
+/** Compact-chip variant — leaf driver of a subtotal.
+ *
+ *  ~150-180 px wide, ~80-100 px tall. Surfaces:
+ *  label / value range / percentage / confidence indicator /
+ *  opportunity-link dot row. The leaf's long-form ``description``
+ *  is delivered via the native HTML ``title`` attribute on the chip
+ *  itself — no custom overlay. */
+function LeafChip({
+    label,
+    type,
+    valueRange,
+    percentageOfParent,
+    description,
+    linkedOpportunities,
+    confidenceLevel,
+    confidenceBasis,
+    colors,
+}: EbitdaCardProps & { colors: (typeof NODE_COLORS)[string] }) {
+    // Show a confidence chip when the backend supplied a level AND
+    // this is a leaf (revenue/cost) node. Subtotal / margin rollups
+    // carry no own confidence per ebitda-tree-confidence.
+    const showConfidenceChip =
+        (confidenceLevel === 'high' || confidenceLevel === 'medium' || confidenceLevel === 'low') &&
+        type !== 'subtotal' &&
+        type !== 'margin'
+
+    return (
+        <article
+            // Chip MUST be reachable in keyboard tab order between the
+            // band header above and the next connector below per
+            // ``ebitda-impact-model`` spec. A chip with no confidence
+            // chip + no opportunity dots would otherwise have zero
+            // focusable surface and be skipped by Tab navigation.
+            tabIndex={0}
+            // The native ``title`` attribute delivers the long-form
+            // description as a browser tooltip when the chip is
+            // hovered or focused. Replaces the custom absolutely-
+            // positioned overlay that overflowed neighbouring rows.
+            title={description || undefined}
+            style={chipStyle(colors)}
+        >
+            <div style={chipLabelStyle(colors.text)}>{label}</div>
+            {valueRange && (
+                <div style={chipValueRowStyle}>
+                    <span>{valueRange}</span>
+                    {showConfidenceChip && confidenceLevel && (
                         <span
                             data-testid="ebitda-confidence-chip"
                             tabIndex={0}
-                            // Native HTML title gives a hover/focus tooltip
-                            // for free; ConfidenceIndicator's own aria-label
-                            // still provides the level to screen readers.
-                            title={props.confidenceBasis ?? undefined}
+                            // The chip's ``aria-label`` already comes from
+                            // ``ConfidenceIndicator``; the native ``title``
+                            // here adds the basis text for sighted users.
+                            title={confidenceBasis ?? undefined}
                             style={{ display: 'inline-flex', cursor: 'help' }}
                         >
                             <ConfidenceIndicator
-                                confidence={props.confidenceLevel.toUpperCase() as 'HIGH' | 'MEDIUM' | 'LOW'}
+                                confidence={confidenceLevel.toUpperCase() as 'HIGH' | 'MEDIUM' | 'LOW'}
                                 size="small"
                             />
                         </span>
                     )}
                 </div>
             )}
-            {props.percentageOfParent != null && (
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                    {props.percentageOfParent}% of parent
-                </div>
+            {percentageOfParent != null && (
+                <div style={chipPercentStyle}>{percentageOfParent}% of parent</div>
             )}
-
-            {props.linkedOpportunities.length > 0 && (
-                <div
-                    data-testid="ebitda-linked-opportunity-dots"
-                    style={{ display: 'flex', gap: '4px', marginTop: '0.5rem', flexWrap: 'wrap' }}
-                >
-                    {props.linkedOpportunities.map((opp, i) => (
+            {linkedOpportunities.length > 0 && (
+                <div data-testid="ebitda-linked-opportunity-dots" style={chipOpportunityDotRowStyle}>
+                    {linkedOpportunities.map((opp, i) => (
                         <div
                             key={i}
                             style={{
-                                width: '10px',
-                                height: '10px',
+                                width: '8px',
+                                height: '8px',
                                 borderRadius: '50%',
                                 background: LEVER_COLORS[opp.valueLever] || 'var(--text-secondary)',
                             }}
@@ -169,88 +220,53 @@ export default function EbitdaNodeComponent(props: EbitdaCardProps) {
                     ))}
                 </div>
             )}
-
-            {hovered && props.description && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        marginTop: '8px',
-                        padding: '0.75rem 0.875rem',
-                        background: 'var(--bg-surface-3)',
-                        border: '1px solid var(--border-strong)',
-                        borderRadius: '8px',
-                        fontSize: '0.8125rem',
-                        color: 'var(--text-primary)',
-                        width: '260px',
-                        zIndex: 50,
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                        lineHeight: 1.6,
-                    }}
-                >
-                    <div style={{ marginBottom: '0.375rem' }}>{props.description}</div>
-                    {props.linkedOpportunities.length > 0 && (
-                        <div
-                            style={{
-                                borderTop: '1px solid rgba(255,255,255,0.06)',
-                                paddingTop: '0.375rem',
-                                marginTop: '0.25rem',
-                            }}
-                        >
-                            <div
-                                style={{
-                                    fontSize: '0.75rem',
-                                    color: 'var(--text-secondary)',
-                                    fontWeight: 600,
-                                    marginBottom: '0.25rem',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.05em',
-                                }}
-                            >
-                                AI Opportunities
-                            </div>
-                            {props.linkedOpportunities.map((opp, i) => (
-                                <div
-                                    key={i}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.375rem',
-                                        marginBottom: '0.25rem',
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            width: '7px',
-                                            height: '7px',
-                                            borderRadius: '50%',
-                                            flexShrink: 0,
-                                            background:
-                                                LEVER_COLORS[opp.valueLever] || 'var(--text-secondary)',
-                                        }}
-                                    />
-                                    <span style={{ fontSize: '0.75rem' }}>{opp.title}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
         </article>
     )
 }
 
-/** Shared style for the card's label so the ``<h3>`` vs ``<div>``
- *  branch (driven by ``isSubtotalHeading``) doesn't drift visually.
- *  The browser's default ``<h3>`` margins are stripped here. */
-function labelStyle(textColor: string): React.CSSProperties {
+// ── chip styles ─────────────────────────────────────────────────────────────
+
+function chipStyle(colors: (typeof NODE_COLORS)[string]): CSSProperties {
     return {
-        fontWeight: 700,
-        fontSize: '0.9375rem',
-        color: textColor,
-        marginTop: 0,
-        marginBottom: '0.375rem',
+        padding: '8px 12px',
+        background: colors.bg,
+        border: `1px solid ${colors.border}`,
+        borderRadius: '8px',
+        minWidth: '150px',
+        maxWidth: '200px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
     }
+}
+
+function chipLabelStyle(textColor: string): CSSProperties {
+    return {
+        fontSize: '0.8125rem',
+        fontWeight: 700,
+        color: textColor,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+    }
+}
+
+const chipValueRowStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+}
+
+const chipPercentStyle: CSSProperties = {
+    fontSize: '0.75rem',
+    color: 'var(--text-secondary)',
+}
+
+const chipOpportunityDotRowStyle: CSSProperties = {
+    display: 'flex',
+    gap: '4px',
+    flexWrap: 'wrap',
 }
