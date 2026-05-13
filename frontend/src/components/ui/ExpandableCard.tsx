@@ -53,13 +53,10 @@ interface ExpandableCardProps {
  * surface on the analysis-detail page.
  *
  * Replaces hand-rolled button/card patterns in `RiskBreakdown` and
- * `OpportunitiesList` per UX Audit 2. `ValueChainDiagram` and
- * `WhatsMissingPanel` are explicitly deferred — the former because
- * its horizontal Porter's-value-chain visual is fundamentally
- * different from a list of cards, the latter because its
- * accent-strip aesthetic intentionally diverges from the
- * `.card.card--list` glassmorphism surface. Both wait on follow-up
- * proposals that handle their visual model separately.
+ * `OpportunitiesList` per UX Audit 2. `ValueChainDiagram` is
+ * explicitly deferred because its horizontal Porter's-value-chain
+ * visual is fundamentally different from a list of cards and waits
+ * on a follow-up proposal that handles its visual model separately.
  *
  * The body always renders in the DOM (with the `hidden` HTML
  * attribute when closed, NOT conditional rendering) so the

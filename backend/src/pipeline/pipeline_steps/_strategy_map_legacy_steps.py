@@ -134,7 +134,14 @@ def run_step_7_arrows_and_gaps(
     prompt = render_template("07_arrows_and_gaps", context)
     _label, content, elapsed = step._run_ai_call(prompt, _SCHEMA, system_prompt, "arrows_and_gaps")
     timer.record("ai_call_arrows_and_gaps", elapsed)
-    for required in ("strategicPriorities", "arrows", "whatsMissing"):
+    # Note: the legacy monolithic Step 7 prompt still asks for
+    # ``whatsMissing`` because the prompt template is shared across
+    # phases. The assembled output drops it (see
+    # ``assemble_strategy_map`` — field removed by the
+    # ``redesign-strategy-map`` Phase 2 change). We DON'T require it
+    # here so that a future prompt-only revision can stop generating
+    # gaps without changing this guard.
+    for required in ("strategicPriorities", "arrows"):
         if required not in content:
             message = (
                 f"[{_STEP_NAME}] Step 7 response missing '{required}': "

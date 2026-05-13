@@ -335,37 +335,6 @@ def _build_phase2_canned_responses(
                 },
             ]
         },
-        "gaps": {
-            "whatsMissing": [
-                {
-                    "id": "G1",
-                    "title": "Cultural commitments not published",
-                    "description": (
-                        "The company has not published explicit cultural commitments. "
-                        "Public materials emphasise customer focus but the underlying "
-                        "cultural values are not visible to public-data analysis."
-                    ),
-                    "deepDiveFraming": (
-                        "A Vector Advisory deep-dive would interview leadership and "
-                        "frontline associates to articulate the working culture."
-                    ),
-                    "relatedObjectiveIds": ["O.C"],
-                },
-                {
-                    "id": "G2",
-                    "title": "Channel strategy unclear",
-                    "description": (
-                        "The company sells through both direct retail and franchise "
-                        "channels but the strategic balance between them is unclear."
-                    ),
-                    "deepDiveFraming": (
-                        "A Vector Advisory deep-dive would map channel economics and "
-                        "design customer-perspective objectives for each channel."
-                    ),
-                    "relatedObjectiveIds": ["C2"],
-                },
-            ]
-        },
     }
 
     # Arrow yes/no calls — one per candidate pair.
@@ -474,9 +443,10 @@ class TestSynthesisDecompositionIntegration:
         ):
             assert label in timings, f"missing {label}"
 
-        # Holistic priorities + gaps.
+        # Holistic priorities. ``ai_call_gaps`` was removed end-to-end
+        # by the ``redesign-strategy-map`` Phase 2 change.
         assert "ai_call_priorities" in timings
-        assert "ai_call_gaps" in timings
+        assert "ai_call_gaps" not in timings
 
         # N per-pair arrow labels.
         pairs = enumerate_arrow_pairs(

@@ -14,7 +14,6 @@ Generation runs as a 7-step chain:
   Step 5 — Internal Processes (themed)         -- via FutureManager
   Step 6 — Organizational Capacity (P/T/C)     /
   Step 7 — Arrows + Strategic Priorities       (single AI call)
-                + "What's Missing?" gaps
 
 The corpus that grounds generation lives at `prompts/strategy_map/`
 and is loaded via `_strategy_map_corpus.py`. Context construction
@@ -89,9 +88,11 @@ When set to ``"1"`` ON TOP OF ``GENERATE_STRATEGY_MAP_DECOMPOSED=1``:
 - Step 2 (Value Proposition) delegates to
   ``_strategy_map_synthesis.run_decomposed_value_proposition`` (4 parallel
   sub-calls).
-- Step 7 (Arrows + Priorities + Gaps) delegates to
-  ``_strategy_map_arrows.run_decomposed_arrows_and_gaps`` (~15-25 parallel
-  per-pair yes/no calls + 2 holistic singletons).
+- Step 7 (Arrows + Priorities) delegates to
+  ``_strategy_map_arrows.run_decomposed_arrows_and_priorities`` (~15-25
+  parallel per-pair yes/no calls + 1 holistic priorities call). The
+  legacy "What's Missing" / gaps section was removed by the
+  ``redesign-strategy-map`` Phase 2 change.
 
 This flag MUST NOT be set without ``GENERATE_STRATEGY_MAP_DECOMPOSED=1``
 — ``execute()`` raises a ``ValueError`` before any AI call is made if
@@ -297,16 +298,19 @@ class GenerateStrategyMap(RequestStep):
                 financial_data, customer_data, internal_data, capacity_data
             )
 
-            # Step 7 — Arrows + Strategic Priorities + What's Missing. Two paths:
+            # Step 7 — Arrows + Strategic Priorities. Two paths:
             # - Decomposed (Phase 2): per-pair yes/no arrows bank +
-            #   holistic priorities + holistic gaps, all in parallel.
-            # - Monolithic: today's single AI call.
+            #   holistic priorities, run in parallel.
+            # - Monolithic: today's single AI call (still produces a
+            #   ``whatsMissing`` block; the assembly drops it).
+            # The What's Missing / gaps section is removed end-to-end
+            # under the ``redesign-strategy-map`` Phase 2 change.
             if synthesis_decomposed:
                 from src.pipeline.pipeline_steps._strategy_map_arrows import (
-                    run_decomposed_arrows_and_gaps,
+                    run_decomposed_arrows_and_priorities,
                 )
 
-                finale_data = run_decomposed_arrows_and_gaps(
+                finale_data = run_decomposed_arrows_and_priorities(
                     self,
                     system_prompt=system_prompt,
                     context=context,

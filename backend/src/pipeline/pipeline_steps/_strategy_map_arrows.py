@@ -1,4 +1,4 @@
-"""Decomposed arrows/priorities/gaps generation for the strategy-map step.
+"""Decomposed arrows + priorities generation for the strategy-map step.
 
 Implements `decompose-strategy-map-synthesis` Phase 2 — replaces Step 7
 (single ``arrows_and_gaps`` call) with:
@@ -15,12 +15,13 @@ Implements `decompose-strategy-map-synthesis` Phase 2 — replaces Step 7
     Strategic priorities for the top header band — matches the 2-3
     Internal Process themes from Step 5.
 
-  Gaps (1 holistic call):
-    "What's Missing?" deep-dive gap candidates.
-
-The three banks run concurrently (no inter-dependency). Assembly
+The two banks run concurrently (no inter-dependency). Assembly
 filters arrows to ``enables == true`` and constructs ``Arrow`` records
 from the filtered results.
+
+The "What's Missing" / gaps holistic call that previously ran alongside
+priorities was removed end-to-end by the ``redesign-strategy-map``
+Phase 2 change.
 
 This module is invoked from ``generate_strategy_map.py`` ONLY when BOTH
 ``GENERATE_STRATEGY_MAP_DECOMPOSED=1`` (Phase 1) and
@@ -155,7 +156,7 @@ def enumerate_arrow_pairs(
     return pairs
 
 
-def run_decomposed_arrows_and_gaps(
+def run_decomposed_arrows_and_priorities(
     step: GenerateStrategyMap,
     *,
     system_prompt: str,
@@ -166,15 +167,13 @@ def run_decomposed_arrows_and_gaps(
     internal_processes: dict[str, Any],
     organizational_capacity: dict[str, Any],
 ) -> dict[str, Any]:
-    """Run the arrows bank + holistic priorities + holistic gaps.
+    """Run the arrows yes/no bank + holistic priorities call.
 
-    Returns a dict shaped like the existing Step 7 output — keys
-    ``strategicPriorities``, ``arrows``, ``whatsMissing`` — so the
-    calling site in ``generate_strategy_map.py`` is identical regardless
-    of whether the decomposed or monolithic path produced it.
-
-    All three banks (arrows yes/no, priorities, gaps) run concurrently
-    under a single ``FutureManager``.
+    Returns a dict shaped for ``assemble_strategy_map``'s ``finale``
+    parameter — keys ``strategicPriorities`` and ``arrows``. The
+    previously-emitted ``whatsMissing`` field is removed (see the
+    ``redesign-strategy-map`` Phase 2 change). The two banks (arrows
+    yes/no, priorities) run concurrently under a single ``FutureManager``.
     """
     pairs = enumerate_arrow_pairs(
         financial=financial,
@@ -185,7 +184,6 @@ def run_decomposed_arrows_and_gaps(
 
     arrow_schema = _schema("arrow_yesno")
     priorities_schema = _schema("arrows_priorities")
-    gaps_schema = _schema("arrows_gaps")
 
     collected: list[tuple[str, dict[str, Any], float]] = []
     with FutureManager(
@@ -209,8 +207,7 @@ def run_decomposed_arrows_and_gaps(
                 f"arrow_{from_id}_{to_id}",
             )
 
-        # Holistic priorities + gaps — run concurrently with the yes/no
-        # bank.
+        # Holistic priorities — runs concurrently with the yes/no bank.
         manager.submit_task(
             step._run_ai_call,
             _render("arrows_priorities", context),
@@ -218,31 +215,21 @@ def run_decomposed_arrows_and_gaps(
             system_prompt,
             "priorities",
         )
-        manager.submit_task(
-            step._run_ai_call,
-            _render("arrows_gaps", context),
-            gaps_schema,
-            system_prompt,
-            "gaps",
-        )
 
         collected = manager.wait_for_all_and_collect_results()
 
     # Record per-call elapsed. Labels:
     # - ``ai_call_arrow_{from_id}_{to_id}`` per yes/no call
-    # - ``ai_call_priorities``, ``ai_call_gaps`` for the holistic calls
+    # - ``ai_call_priorities`` for the holistic priorities call
     for label, _data, elapsed in collected:
         timer.record(f"ai_call_{label}", elapsed)
 
     # Partition results by label prefix.
     arrows: list[dict[str, Any]] = []
     priorities_payload: dict[str, Any] | None = None
-    gaps_payload: dict[str, Any] | None = None
     for label, data, _elapsed in collected:
         if label == "priorities":
             priorities_payload = data
-        elif label == "gaps":
-            gaps_payload = data
         elif label.startswith("arrow_"):
             # Reconstruct (from_id, to_id) from the label suffix.
             # Label form is ``arrow_{from_id}_{to_id}``. IDs are
@@ -281,9 +268,6 @@ def run_decomposed_arrows_and_gaps(
     if priorities_payload is None:
         message = "GenerateStrategyMap arrows: priorities call did not return"
         raise ValueError(message)
-    if gaps_payload is None:
-        message = "GenerateStrategyMap arrows: gaps call did not return"
-        raise ValueError(message)
 
     # Post-filter cap. The decomposed yes/no evaluation has no
     # aggregate awareness so the model can return enables=true for
@@ -295,7 +279,6 @@ def run_decomposed_arrows_and_gaps(
     return {
         "strategicPriorities": priorities_payload["strategicPriorities"],
         "arrows": arrows,
-        "whatsMissing": gaps_payload["whatsMissing"],
     }
 
 

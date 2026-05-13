@@ -1,14 +1,16 @@
-"""Tests for the decomposed arrows + priorities + gaps module.
+"""Tests for the decomposed arrows + priorities module.
 
 Covers ``_strategy_map_arrows.enumerate_arrow_pairs`` and
-``run_decomposed_arrows_and_gaps`` end-to-end with a mocked AI call
+``run_decomposed_arrows_and_priorities`` end-to-end with a mocked AI call
 layer. Pins:
   - Candidate pair enumeration across the causal hierarchy.
   - Internal-to-internal cross-theme pairs are excluded (Open Question §3).
   - Yes/no filtering: only enables=true survives into the arrows list.
-  - Priorities and gaps are passed through unchanged.
+  - Priorities are passed through unchanged.
   - Per-call labels follow the ``ai_call_arrow_{from_id}_{to_id}``,
-    ``ai_call_priorities``, ``ai_call_gaps`` convention.
+    ``ai_call_priorities`` convention. The What's Missing / gaps section
+    was removed end-to-end under the ``redesign-strategy-map`` Phase 2
+    change — no ``ai_call_gaps`` label, no ``whatsMissing`` field.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from unittest.mock import MagicMock
 
 from src.pipeline.pipeline_steps._strategy_map_arrows import (
     enumerate_arrow_pairs,
-    run_decomposed_arrows_and_gaps,
+    run_decomposed_arrows_and_priorities,
 )
 from src.pipeline.step_timer import StepTimer
 
@@ -168,9 +170,9 @@ class TestEnumerateArrowPairs:
             assert all(isinstance(field, str) for field in pair)
 
 
-class TestRunDecomposedArrowsAndGaps:
+class TestRunDecomposedArrowsAndPriorities:
     def _build_responses(self) -> dict[str, dict[str, Any]]:
-        """Cover all 40 candidate pairs + priorities + gaps."""
+        """Cover all 40 candidate pairs + the holistic priorities call."""
         financial, customer, internal_processes, capacity = _fixture_perspectives()
         pairs = enumerate_arrow_pairs(
             financial=financial,
@@ -200,36 +202,6 @@ class TestRunDecomposedArrowsAndGaps:
                 {"name": "Streamline", "result": "Industry-leading cost-per-transaction."},
             ]
         }
-        responses["gaps"] = {
-            "whatsMissing": [
-                {
-                    "id": "G1",
-                    "title": "Cultural commitments not published",
-                    "description": (
-                        "The company has not published explicit cultural commitments. "
-                        "Public materials emphasise customer focus but not the underlying values."
-                    ),
-                    "deepDiveFraming": (
-                        "A Vector Advisory deep-dive would interview leadership and frontline "
-                        "associates to articulate the working culture."
-                    ),
-                    "relatedObjectiveIds": ["O.C"],
-                },
-                {
-                    "id": "G2",
-                    "title": "Channel strategy unclear",
-                    "description": (
-                        "The company sells through both direct retail and franchise channels "
-                        "but the strategic balance is not visible in public materials."
-                    ),
-                    "deepDiveFraming": (
-                        "A Vector Advisory deep-dive would map channel economics across the "
-                        "go-to-market."
-                    ),
-                    "relatedObjectiveIds": ["C2"],
-                },
-            ]
-        }
         return responses
 
     def test_only_enables_true_pairs_become_arrows(self) -> None:
@@ -238,7 +210,7 @@ class TestRunDecomposedArrowsAndGaps:
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
 
-        result = run_decomposed_arrows_and_gaps(
+        result = run_decomposed_arrows_and_priorities(
             step,  # type: ignore[arg-type]
             system_prompt="<system prompt>",
             context={"company_name": "Acme"},
@@ -289,11 +261,10 @@ class TestRunDecomposedArrowsAndGaps:
             for from_id, _ft, to_id, _tt in pairs
         }
         responses["priorities"] = {"strategicPriorities": []}
-        responses["gaps"] = {"whatsMissing": []}
 
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
-        result = run_decomposed_arrows_and_gaps(
+        result = run_decomposed_arrows_and_priorities(
             step,  # type: ignore[arg-type]
             system_prompt="<system prompt>",
             context={"company_name": "Acme"},
@@ -353,11 +324,10 @@ class TestRunDecomposedArrowsAndGaps:
                 "hypothesis": f"Mechanism: {from_id} → {to_id} sample hypothesis text.",
             }
         responses["priorities"] = {"strategicPriorities": []}
-        responses["gaps"] = {"whatsMissing": []}
 
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
-        result = run_decomposed_arrows_and_gaps(
+        result = run_decomposed_arrows_and_priorities(
             step,  # type: ignore[arg-type]
             system_prompt="<system prompt>",
             context={"company_name": "Acme"},
@@ -371,13 +341,13 @@ class TestRunDecomposedArrowsAndGaps:
         # All 7 arrows survive — no trimming.
         assert len(result["arrows"]) == 7
 
-    def test_priorities_and_gaps_passed_through_unchanged(self) -> None:
+    def test_priorities_passed_through_unchanged(self) -> None:
         responses = self._build_responses()
         financial, customer, internal_processes, capacity = _fixture_perspectives()
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
 
-        result = run_decomposed_arrows_and_gaps(
+        result = run_decomposed_arrows_and_priorities(
             step,  # type: ignore[arg-type]
             system_prompt="<system prompt>",
             context={"company_name": "Acme"},
@@ -389,7 +359,8 @@ class TestRunDecomposedArrowsAndGaps:
         )
 
         assert result["strategicPriorities"] == responses["priorities"]["strategicPriorities"]
-        assert result["whatsMissing"] == responses["gaps"]["whatsMissing"]
+        # ``whatsMissing`` is no longer produced — Phase 2 removed it.
+        assert "whatsMissing" not in result
 
     def test_per_pair_labels_follow_convention(self) -> None:
         responses = self._build_responses()
@@ -397,7 +368,7 @@ class TestRunDecomposedArrowsAndGaps:
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
 
-        run_decomposed_arrows_and_gaps(
+        run_decomposed_arrows_and_priorities(
             step,  # type: ignore[arg-type]
             system_prompt="<system prompt>",
             context={"company_name": "Acme"},
@@ -415,9 +386,10 @@ class TestRunDecomposedArrowsAndGaps:
         # Spot-check a few specific labels.
         assert "ai_call_arrow_O.P_I1.1" in timings
         assert "ai_call_arrow_C1_F1" in timings
-        # Holistic labels present.
+        # Holistic priorities label present.
         assert "ai_call_priorities" in timings
-        assert "ai_call_gaps" in timings
+        # Gaps no longer generated (Phase 2 removed What's Missing).
+        assert "ai_call_gaps" not in timings
         # Legacy monolithic label absent.
         assert "ai_call_arrows_and_gaps" not in timings
 
@@ -441,13 +413,12 @@ class TestRunDecomposedArrowsAndGaps:
             for from_id, _ft, to_id, _tt in pairs
         }
         responses["priorities"] = {"strategicPriorities": []}
-        responses["gaps"] = {"whatsMissing": []}
 
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
 
         with pytest.raises(ValueError, match="hypothesis=null"):
-            run_decomposed_arrows_and_gaps(
+            run_decomposed_arrows_and_priorities(
                 step,  # type: ignore[arg-type]
                 system_prompt="<system prompt>",
                 context={"company_name": "Acme"},
@@ -479,13 +450,12 @@ class TestRunDecomposedArrowsAndGaps:
         first_from_id, _, first_to_id, _ = pairs[0]
         responses[f"arrow_{first_from_id}_{first_to_id}"] = {"hypothesis": "x"}
         responses["priorities"] = {"strategicPriorities": []}
-        responses["gaps"] = {"whatsMissing": []}
 
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
 
         with pytest.raises(KeyError, match="enables"):
-            run_decomposed_arrows_and_gaps(
+            run_decomposed_arrows_and_priorities(
                 step,  # type: ignore[arg-type]
                 system_prompt="<system prompt>",
                 context={"company_name": "Acme"},
@@ -496,13 +466,13 @@ class TestRunDecomposedArrowsAndGaps:
                 organizational_capacity=capacity,
             )
 
-    def test_fires_one_call_per_pair_plus_two_holistic(self) -> None:
+    def test_fires_one_call_per_pair_plus_priorities(self) -> None:
         responses = self._build_responses()
         financial, customer, internal_processes, capacity = _fixture_perspectives()
         step = _make_step_with_canned_responses(responses)
         timer = StepTimer("GenerateStrategyMap")
 
-        run_decomposed_arrows_and_gaps(
+        run_decomposed_arrows_and_priorities(
             step,  # type: ignore[arg-type]
             system_prompt="<system prompt>",
             context={"company_name": "Acme"},
@@ -513,5 +483,7 @@ class TestRunDecomposedArrowsAndGaps:
             organizational_capacity=capacity,
         )
 
-        # 40 pairs + 1 priorities + 1 gaps = 42 calls.
-        assert step._run_ai_call.call_count == 42
+        # 40 pairs + 1 priorities = 41 calls. The ``gaps`` holistic call
+        # was removed end-to-end by the ``redesign-strategy-map`` Phase 2
+        # change.
+        assert step._run_ai_call.call_count == 41

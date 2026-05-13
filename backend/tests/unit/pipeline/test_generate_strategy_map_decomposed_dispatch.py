@@ -135,7 +135,7 @@ class TestDispatchRouting:
             },
         }
         mock_extract_core_values.return_value = {}
-        mock_step7.return_value = {"strategicPriorities": [], "arrows": [], "whatsMissing": []}
+        mock_step7.return_value = {"strategicPriorities": [], "arrows": []}
         mock_assemble.return_value = MagicMock()
 
         step, _ = self._make_step()
@@ -180,7 +180,7 @@ class TestDispatchRouting:
             {"people": {}, "technology": {}, "culture": {}},
             {},
         )
-        mock_step7.return_value = {"strategicPriorities": [], "arrows": [], "whatsMissing": []}
+        mock_step7.return_value = {"strategicPriorities": [], "arrows": []}
         mock_assemble.return_value = MagicMock()
 
         step, _ = self._make_step()
@@ -270,7 +270,7 @@ class TestPhase2FlagLayering:
             {"people": {}, "technology": {}, "culture": {}},
             {},
         )
-        mock_step7.return_value = {"strategicPriorities": [], "arrows": [], "whatsMissing": []}
+        mock_step7.return_value = {"strategicPriorities": [], "arrows": []}
         mock_assemble.return_value = MagicMock()
 
         step = self._make_step()
@@ -286,7 +286,7 @@ class TestPhase2FlagLayering:
     @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_7_arrows_and_gaps")
     @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_2_value_proposition")
     @patch("src.pipeline.pipeline_steps.generate_strategy_map.run_step_1_vision_mission")
-    @patch("src.pipeline.pipeline_steps._strategy_map_arrows.run_decomposed_arrows_and_gaps")
+    @patch("src.pipeline.pipeline_steps._strategy_map_arrows.run_decomposed_arrows_and_priorities")
     @patch("src.pipeline.pipeline_steps._strategy_map_synthesis.run_decomposed_value_proposition")
     @patch("src.pipeline.pipeline_steps._strategy_map_synthesis.run_decomposed_vision_mission")
     @patch(
@@ -319,7 +319,6 @@ class TestPhase2FlagLayering:
         mock_decomposed_arrows.return_value = {
             "strategicPriorities": [],
             "arrows": [],
-            "whatsMissing": [],
         }
         mock_assemble.return_value = MagicMock()
 

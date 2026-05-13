@@ -12,11 +12,10 @@ import { fullStrategyMap } from './_fixtures'
  * jsdom DOM until the canvas measures itself (which it can't in a
  * headless test). What we CAN reliably assert at this level:
  *   - the section's structural elements render (header, canvas
- *     container, core-values strip, gaps panel)
+ *     container, core-values strip)
  *   - the three header sections render as <details> disclosures
  *   - default state is closed; clicking a summary opens that section
- *     and closes any other (single-open accordion, mirrors
- *     `WhatsMissingPanel`)
+ *     and closes any other (single-open accordion)
  *
  * Detailed rendering of individual chips (titles, confidence dots,
  * tooltips) is covered by `StrategyMapNode.test.tsx`. The graph data
@@ -78,9 +77,11 @@ describe('StrategyMapView — structural composition', () => {
         expect(screen.getByText('Strategy Map')).toBeInTheDocument()
     })
 
-    it('renders the gaps panel below the canvas', () => {
+    it("does not render a gaps panel (Phase 2 removed What's Missing)", () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} />)
-        expect(screen.getByTestId('strategy-map-whats-missing')).toBeInTheDocument()
+        // The whatsMissing / gaps section was removed end-to-end by the
+        // ``redesign-strategy-map`` Phase 2 change.
+        expect(screen.queryByTestId('strategy-map-whats-missing')).not.toBeInTheDocument()
     })
 
     it('renders the core-values strip with a ProvenanceMarker for synthesised values', () => {
@@ -106,7 +107,7 @@ describe('StrategyMapView — header disclosures (single-open accordion)', () =>
         const { container } = render(<StrategyMapView strategyMap={fullStrategyMap} />)
         const detailsElements = container.querySelectorAll('details')
         expect(detailsElements.length).toBe(3)
-        // Default state is CLOSED — same as WhatsMissingPanel's gap rows.
+        // Default state is CLOSED — single-open accordion pattern.
         // User clicks a summary to open one section; opening a different
         // section auto-closes the previous one (single-open accordion).
         for (const details of detailsElements) {

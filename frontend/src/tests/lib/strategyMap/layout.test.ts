@@ -175,7 +175,6 @@ function buildFourSlotInternalThemeFixture(): StrategyMap {
             },
         },
         arrows: [],
-        whatsMissing: [],
         coreValues: {
             values: ['Quality', 'Speed', 'Care'],
             synthesised: true,
