@@ -8,16 +8,16 @@ interface StrategyMapSlotProps {
 }
 
 /**
- * The Beat-6 strategy-map slot.
+ * The Beat-3 strategy-map slot (immediately after the Top-3 immediate
+ * actions per ``redesign-strategy-map`` Phase 5).
  *
- * Strategy maps are now generated inline during the scan pipeline
- * (per ``redesign-strategy-map`` Phase 4) — when the user lands on
- * the analysis detail page, the map is either already persisted
- * (rendered with the ``DeepDiveCTA`` follow-up) or absent (legacy
- * analyses produced before Phase 4; the slot is omitted entirely).
- * There is no longer an in-flight "generating…" state, an on-demand
- * CTA, or a "regenerate" affordance — re-analysing the company
- * regenerates the map as part of the scan.
+ * Strategy maps are generated inline during the scan pipeline (Phase
+ * 4) — when the user lands on the analysis detail page, the map is
+ * either already persisted (rendered with the ``DeepDiveCTA``
+ * follow-up) or absent (legacy analyses produced before Phase 4; the
+ * slot is omitted entirely). There is no in-flight "generating…"
+ * state, no on-demand CTA, and no "regenerate" affordance —
+ * re-analysing the company regenerates the map as part of the scan.
  */
 export default function StrategyMapSlot({ analysisId, strategyMap }: StrategyMapSlotProps) {
     if (!strategyMap) {

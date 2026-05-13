@@ -27,13 +27,13 @@ describe('POST /api/analytics/events', () => {
         mockBackendFetch.mockResolvedValue({ accepted: true })
         const payload = {
             event_id: 'uuid-1',
-            event_type: 'sc0red_cta_banner_expanded',
+            event_type: 'sc0red_cta_rendered_strategy_map',
             timestamp: '2026-04-24T12:00:00.000Z',
             analytics_version: '1',
             source: 'web',
             analysis_id: 'assess-1',
             opportunity_count: 3,
-            active_lever_filter: 'Revenue Side',
+            active_lever_filter: null,
         }
 
         const response = await POST(makeRequest(payload))
