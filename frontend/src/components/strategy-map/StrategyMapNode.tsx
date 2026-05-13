@@ -4,7 +4,7 @@ import { Handle, type NodeProps, NodeToolbar, Position, type Node } from '@xyflo
 
 import ConfidenceIndicator from '@/components/analysis/ConfidenceIndicator'
 import { useHoverIntent } from '@/lib/hooks/useHoverIntent'
-import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
+import { CHIP_HEIGHT, CHIP_WIDTH, type StrategyMapNodeData } from '@/lib/strategyMap/layout'
 
 /**
  * Custom React Flow node for the strategy-map canvas.
@@ -40,9 +40,6 @@ import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
  *     canvas's `overflow: hidden` and got clipped.
  * The `NodeToolbar` portal escapes both issues at once.
  */
-
-const CHIP_WIDTH = 220
-const CHIP_HEIGHT = 64
 
 /** Slight visual differentiation per perspective via a left-border accent. */
 const PERSPECTIVE_ACCENT: Record<StrategyMapNodeData['perspective'], string> = {

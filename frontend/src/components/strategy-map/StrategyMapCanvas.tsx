@@ -14,11 +14,12 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import {
-    BAND_HEIGHT,
     COLUMN_WIDTH,
+    type StrategyMapBand,
     type StrategyMapEdgeData,
     type StrategyMapNodeData,
     buildStrategyMapGraph,
+    totalCanvasHeight,
 } from '@/lib/strategyMap/layout'
 import type { StrategyMap } from '@/lib/types/api'
 
@@ -26,15 +27,25 @@ import StrategyMapNode from './StrategyMapNode'
 
 const NODE_TYPES = { strategyMap: StrategyMapNode }
 
-const PERSPECTIVE_LABELS: ReadonlyArray<{ label: string; tagline: string }> = [
-    { label: 'Financial', tagline: 'Returns we generate' },
-    { label: 'Customer', tagline: 'What customers experience' },
-    { label: 'Internal Processes', tagline: 'What we do operationally' },
-    { label: 'Organizational Capacity', tagline: 'People · Technology · Culture' },
-]
+/**
+ * Display labels for each band, keyed by the layout's perspective name.
+ * The canvas reads ``StrategyMapGraph.bands`` (one entry per perspective
+ * in top-to-bottom narrative order) and looks up the label here. Keeps
+ * label content separate from the geometry computation so the layout
+ * helper has no opinion on copy.
+ */
+const PERSPECTIVE_LABELS: Record<StrategyMapBand['perspective'], { label: string; tagline: string }> = {
+    financial: { label: 'Financial', tagline: 'Returns we generate' },
+    customer: { label: 'Customer', tagline: 'What customers experience' },
+    internal: { label: 'Internal Processes', tagline: 'What we do operationally' },
+    capacity: {
+        label: 'Organizational Capacity',
+        tagline: 'People · Technology · Culture',
+    },
+}
 
-/** Default canvas height (4 bands × BAND_HEIGHT + a bit of padding). */
-const CANVAS_HEIGHT = 4 * BAND_HEIGHT + 32
+/** Extra padding below the bottom band so the canvas border doesn't crowd the last chip. */
+const CANVAS_BOTTOM_PADDING = 32
 
 /**
  * React Flow canvas hosting the four-band strategy-map graph.
@@ -55,14 +66,14 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
     // tooltip positioning details + the scroll-tracking rationale.
     const canvasRef = useRef<HTMLDivElement | null>(null)
 
-    const { nodes, edges } = useMemo(() => {
+    const { nodes, edges, bands } = useMemo(() => {
         const graph = buildStrategyMapGraph(strategyMap)
         const styledEdges = graph.edges.map((edge) => ({
             ...edge,
             style: { stroke: 'var(--text-tertiary)', strokeWidth: 1.5, strokeOpacity: 0.45 },
             markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--text-tertiary)' },
         }))
-        return { nodes: graph.nodes, edges: styledEdges }
+        return { nodes: graph.nodes, edges: styledEdges, bands: graph.bands }
     }, [strategyMap])
 
     // Total label-row width = the rightmost x of any node + a chip's
@@ -75,6 +86,11 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
         return maxX + COLUMN_WIDTH
     }, [nodes])
 
+    // Canvas height grows with the band geometry. Replaces the old
+    // ``4 * BAND_HEIGHT + 32`` constant — bands are now dynamic so the
+    // total height must follow.
+    const canvasHeight = useMemo(() => totalCanvasHeight(bands) + CANVAS_BOTTOM_PADDING, [bands])
+
     return (
         <div
             ref={canvasRef}
@@ -82,7 +98,7 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
             style={{
                 position: 'relative',
                 width: '100%',
-                height: `${CANVAS_HEIGHT}px`,
+                height: `${canvasHeight}px`,
                 background: 'var(--bg-surface-2)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: '8px',
@@ -93,6 +109,7 @@ export default function StrategyMapCanvas({ strategyMap }: { strategyMap: Strate
                     canvasRef={canvasRef}
                     nodes={nodes}
                     edges={edges}
+                    bands={bands}
                     labelRowWidth={labelRowWidth}
                 />
             </ReactFlowProvider>
@@ -104,11 +121,13 @@ function CanvasInner({
     canvasRef,
     nodes,
     edges,
+    bands,
     labelRowWidth,
 }: {
     canvasRef: React.RefObject<HTMLDivElement | null>
     nodes: Node<StrategyMapNodeData>[]
     edges: Edge<StrategyMapEdgeData>[]
+    bands: StrategyMapBand[]
     labelRowWidth: number
 }) {
     const [edgeTooltip, setEdgeTooltip] = useState<{ x: number; y: number; hypothesis: string } | null>(null)
@@ -161,7 +180,7 @@ function CanvasInner({
                  * cursor's view of the chips unchanged.
                  */}
                 <ViewportPortal>
-                    <BandLabels rowWidth={labelRowWidth} />
+                    <BandLabels bands={bands} rowWidth={labelRowWidth} />
                 </ViewportPortal>
                 <Controls position="bottom-right" showInteractive={false} />
             </ReactFlow>
@@ -203,57 +222,61 @@ function EdgeTooltip({ x, y, hypothesis }: { x: number; y: number; hypothesis: s
 
 /**
  * Decorative band labels rendered INSIDE the React Flow viewport via
- * `<ViewportPortal>` so they pan + zoom with the chips. Each band has
- * its own absolute-positioned label at the band's `y` in world
- * coordinates, with a dashed bottom-border that spans the full label
- * row width (= the rightmost chip's column + a column's worth of
- * padding).
+ * `<ViewportPortal>` so they pan + zoom with the chips. Each band gets
+ * its own absolute-positioned label at the band's `top` in world
+ * coordinates (driven by the dynamic geometry computed in
+ * ``buildStrategyMapGraph``), with a dashed bottom-border that spans
+ * the full label row width (= the rightmost chip's column + a column's
+ * worth of padding).
  *
  * `aria-hidden` because the same labels are also encoded into each
  * chip's `perspective` field and the chip's `aria-label`; screen
  * readers don't need them twice. `pointer-events: none` so the labels
  * never intercept mouse events meant for chips or edges.
  */
-function BandLabels({ rowWidth }: { rowWidth: number }) {
+function BandLabels({ bands, rowWidth }: { bands: StrategyMapBand[]; rowWidth: number }) {
     return (
         <div aria-hidden="true">
-            {PERSPECTIVE_LABELS.map((band, bandIndex) => (
-                <div
-                    key={band.label}
-                    style={{
-                        position: 'absolute',
-                        // World-coordinate positioning: label at the top of
-                        // its band. ViewportPortal applies the React Flow
-                        // viewport's transform (pan + zoom) on top.
-                        top: bandIndex * BAND_HEIGHT,
-                        left: 0,
-                        width: rowWidth,
-                        height: BAND_HEIGHT,
-                        borderBottom: '1px dashed var(--border-subtle)',
-                        padding: '4px 8px',
-                        fontSize: '0.65rem',
-                        fontWeight: 700,
-                        color: 'var(--text-tertiary)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        pointerEvents: 'none',
-                    }}
-                >
-                    {band.label}
-                    <span
+            {bands.map((band) => {
+                const labels = PERSPECTIVE_LABELS[band.perspective]
+                return (
+                    <div
+                        key={band.perspective}
                         style={{
-                            marginLeft: '8px',
-                            fontWeight: 400,
-                            textTransform: 'none',
-                            letterSpacing: 0,
+                            position: 'absolute',
+                            // World-coordinate positioning: label at the top
+                            // of its band. ViewportPortal applies the React
+                            // Flow viewport's transform (pan + zoom) on top.
+                            top: band.top,
+                            left: 0,
+                            width: rowWidth,
+                            height: band.height,
+                            borderBottom: '1px dashed var(--border-subtle)',
+                            padding: '4px 8px',
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
                             color: 'var(--text-tertiary)',
-                            opacity: 0.7,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            pointerEvents: 'none',
                         }}
                     >
-                        {band.tagline}
-                    </span>
-                </div>
-            ))}
+                        {labels.label}
+                        <span
+                            style={{
+                                marginLeft: '8px',
+                                fontWeight: 400,
+                                textTransform: 'none',
+                                letterSpacing: 0,
+                                color: 'var(--text-tertiary)',
+                                opacity: 0.7,
+                            }}
+                        >
+                            {labels.tagline}
+                        </span>
+                    </div>
+                )
+            })}
         </div>
     )
 }

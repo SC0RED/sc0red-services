@@ -88,9 +88,29 @@ export interface StrategyMapEdgeData extends Record<string, unknown> {
     hypothesis: string
 }
 
+/**
+ * Per-band layout metadata. One entry per perspective in
+ * top-to-bottom order. ``top`` is the band's y in world coordinates;
+ * ``height`` is the band's rendered height (dynamic — grows to fit
+ * the tallest column in that band). Consumers (the canvas component,
+ * the band-label renderer) use this so band labels and the canvas
+ * height stay in sync with the chip layout.
+ */
+export interface StrategyMapBand {
+    perspective: Perspective
+    top: number
+    height: number
+}
+
 export interface StrategyMapGraph {
     nodes: Node<StrategyMapNodeData>[]
     edges: Edge<StrategyMapEdgeData>[]
+    /**
+     * Per-band geometry — exposed so the canvas can size itself and
+     * position band labels without re-deriving the math. Length = 4
+     * (one per perspective in top-to-bottom narrative order).
+     */
+    bands: StrategyMapBand[]
 }
 
 // ── Layout constants ──────────────────────────────────────────────────────
@@ -98,41 +118,62 @@ export interface StrategyMapGraph {
 // Slots stack VERTICALLY within a column (canonical K&N pattern: when a
 // theme has multiple objectives in one perspective, they're listed
 // downward inside the band). Earlier versions stacked horizontally with
-// a per-slot x-offset, but with `CHIP_WIDTH = 220` and `COLUMN_WIDTH =
-// 280` the slot-1 chip would extend past the column boundary and visually
-// overlap the next column's chip — exactly the production bug surfaced
-// in the screenshot. Vertical stacking keeps each column's chips inside
-// their column at the cost of a slightly taller band.
+// a per-slot x-offset, but with ``CHIP_WIDTH = 220`` and
+// ``COLUMN_WIDTH = 280`` the slot-1 chip would extend past the column
+// boundary and visually overlap the next column's chip (the production
+// bug from PR #239). Vertical stacking keeps each column's chips inside
+// their column at the cost of a band that grows to fit its tallest
+// column.
 
-/** Vertical distance between perspective bands. */
-export const BAND_HEIGHT = 180
+/** Pixel width of a chip. Drives column geometry and text truncation. */
+export const CHIP_WIDTH = 220
+
+/** Pixel height of a chip. Drives band-height computation. */
+export const CHIP_HEIGHT = 64
 
 /** Horizontal distance between theme columns. */
 export const COLUMN_WIDTH = 280
 
 /**
  * Vertical offset between successive slots in the same (band, column).
- * Sized to fit two slots cleanly inside `BAND_HEIGHT` with a small gap.
- * Three-slot columns (rare) extend slightly past the band line — the
- * dashed band-divider absorbs the visual overflow without crowding
- * adjacent bands' chips.
+ * One slot's worth of space = the chip's height plus a small gap; the
+ * gap is intentionally narrow so multi-slot columns stay visually
+ * grouped within their band.
  */
 export const SLOT_Y_OFFSET = 76
 
-/** Vertical offset within a band (gives the chip room above the band line). */
+/**
+ * Minimum band height. Bands with a single short slot would otherwise
+ * look cramped against the band-divider rules; this floor preserves
+ * visual rhythm across bands of varying objective counts.
+ */
+export const MIN_BAND_HEIGHT = 180
+
+/**
+ * Vertical padding inside a band (above the first chip and below the
+ * last). Used both for chip y-positioning within a band and for the
+ * band-height calculation.
+ */
 const BAND_PADDING = 24
 
 /**
- * The four perspective bands rendered top→bottom. Index = `y / BAND_HEIGHT`.
- * Order matches K&N canonical: financial outcomes at the top, capacity
- * (the underlying enabler) at the bottom.
+ * The four perspective bands rendered top→bottom. Order matters for
+ * the rendered narrative and for the cumulative-top calculation when
+ * bands grow to fit their chips.
  */
-const PERSPECTIVE_ROW: Record<Perspective, number> = {
-    financial: 0,
-    customer: 1,
-    internal: 2,
-    capacity: 3,
-}
+const PERSPECTIVE_ORDER: ReadonlyArray<Perspective> = ['financial', 'customer', 'internal', 'capacity']
+
+/**
+ * Compatibility export — kept so existing tests + callers that reference
+ * the historical fixed band height continue to compile. New code SHOULD
+ * use ``StrategyMapGraph.bands[i].height`` (per-band dynamic height) or
+ * ``MIN_BAND_HEIGHT`` (the floor used by the dynamic calculation)
+ * instead.
+ *
+ * @deprecated Use ``MIN_BAND_HEIGHT`` for the floor, or read the actual
+ * band height from ``StrategyMapGraph.bands``.
+ */
+export const BAND_HEIGHT = MIN_BAND_HEIGHT
 
 // ── Public entry point ────────────────────────────────────────────────────
 
@@ -152,14 +193,74 @@ export function buildStrategyMapGraph(strategyMap: StrategyMap): StrategyMapGrap
     // chips are appended; the final pixel offset is computed below.
     const placements = assignPlacements(strategyMap, totalColumns)
 
-    // Second pass — compute pixel coordinates and build React Flow nodes.
-    const nodes = placements.map((p) => buildNode(p, totalColumns))
+    // Second pass — compute dynamic band geometry from the placements.
+    // Each band's height grows to fit the column with the most slots
+    // in that band. The cumulative band top is the sum of all prior
+    // band heights. Bands are returned in top-to-bottom order.
+    const bands = computeBandGeometry(placements)
+    const bandLookup = new Map<Perspective, StrategyMapBand>(bands.map((band) => [band.perspective, band]))
 
-    // Third pass — validate and build edges.
+    // Third pass — compute pixel coordinates and build React Flow nodes.
+    const nodes = placements.map((p) => buildNode(p, totalColumns, bandLookup))
+
+    // Fourth pass — validate and build edges.
     const objectiveIdSet = new Set(placements.map((p) => p.data.objectiveId))
     const edges = buildEdges(strategyMap.arrows, objectiveIdSet)
 
-    return { nodes, edges }
+    return { nodes, edges, bands }
+}
+
+// ── Band-geometry pass ────────────────────────────────────────────────────
+
+/**
+ * Total canvas height = sum of all per-band heights. Convenience for
+ * the canvas component which needs to size its container.
+ */
+export function totalCanvasHeight(bands: StrategyMapBand[]): number {
+    if (bands.length === 0) return MIN_BAND_HEIGHT * PERSPECTIVE_ORDER.length
+    const lastBand = bands[bands.length - 1]
+    return lastBand.top + lastBand.height
+}
+
+/**
+ * Compute per-band geometry from the placements list.
+ *
+ * For each perspective we find the maximum slot count across all its
+ * (column-keyed) groups — that's how tall the tallest column in that
+ * band is. The band's height grows to fit it (clamped to a minimum
+ * floor for visual rhythm). Heights stack to produce the band tops.
+ */
+function computeBandGeometry(placements: ChipPlacement[]): StrategyMapBand[] {
+    // For each perspective, track the maximum slot count seen across
+    // any (column) within that band. Slot index is zero-based, so the
+    // count is ``maxSlot + 1``.
+    const maxSlotByPerspective: Record<Perspective, number> = {
+        financial: 0,
+        customer: 0,
+        internal: 0,
+        capacity: 0,
+    }
+    for (const placement of placements) {
+        const current = maxSlotByPerspective[placement.data.perspective]
+        if (placement.slot + 1 > current) {
+            maxSlotByPerspective[placement.data.perspective] = placement.slot + 1
+        }
+    }
+
+    let cumulativeTop = 0
+    const bands: StrategyMapBand[] = []
+    for (const perspective of PERSPECTIVE_ORDER) {
+        const slotCount = Math.max(1, maxSlotByPerspective[perspective])
+        // Height = top padding + (slot 0 chip) + ((slotCount - 1) gaps) + bottom padding.
+        // Each subsequent slot adds SLOT_Y_OFFSET; the chip itself is
+        // CHIP_HEIGHT tall; padding sits above the first chip and below
+        // the last. Clamp to MIN_BAND_HEIGHT for visual rhythm.
+        const requiredHeight = BAND_PADDING + (slotCount - 1) * SLOT_Y_OFFSET + CHIP_HEIGHT + BAND_PADDING
+        const height = Math.max(MIN_BAND_HEIGHT, requiredHeight)
+        bands.push({ perspective, top: cumulativeTop, height })
+        cumulativeTop += height
+    }
+    return bands
 }
 
 // ── Placement pass ────────────────────────────────────────────────────────
@@ -416,11 +517,24 @@ class SlotCounter {
 
 // ── Pixel-coordinate computation ──────────────────────────────────────────
 
-function buildNode(placement: ChipPlacement, totalColumns: number): Node<StrategyMapNodeData> {
-    const row = PERSPECTIVE_ROW[placement.data.perspective]
+function buildNode(
+    placement: ChipPlacement,
+    totalColumns: number,
+    bandLookup: Map<Perspective, StrategyMapBand>
+): Node<StrategyMapNodeData> {
+    const band = bandLookup.get(placement.data.perspective)
+    if (band === undefined) {
+        // Programming error — every perspective is in PERSPECTIVE_ORDER
+        // and therefore in the bandLookup. Fail loudly rather than place
+        // a chip at an unknown y.
+        throw new Error(
+            `Strategy-map layout: no band geometry found for perspective ${placement.data.perspective}`
+        )
+    }
     const baseX = columnBaseX(placement.column, totalColumns)
-    // Slots stack vertically inside their (band, column) — see the
-    // SLOT_Y_OFFSET docs and the layout-constants section comment.
+    // Slots stack vertically inside their (band, column). The y is the
+    // band's dynamic top plus the in-band padding plus this slot's
+    // offset within the band.
     const slotYOffset = placement.slot * SLOT_Y_OFFSET
 
     return {
@@ -429,7 +543,7 @@ function buildNode(placement: ChipPlacement, totalColumns: number): Node<Strateg
         // (x, y) is the top-left of the node.
         position: {
             x: baseX,
-            y: row * BAND_HEIGHT + BAND_PADDING + slotYOffset,
+            y: band.top + BAND_PADDING + slotYOffset,
         },
         // Mark centre-lane chips so the renderer can apply a visual marker.
         // `column === null` is the canonical signal — see ChipPlacement.
