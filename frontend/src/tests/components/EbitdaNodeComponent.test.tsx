@@ -1,33 +1,23 @@
 /**
- * Component tests for the EBITDA tree node renderer (`EbitdaNodeComponent`).
+ * Component tests for the EBITDA card renderer (``EbitdaNodeComponent``).
  *
- * These tests focus on the parts of the component that don't require
- * ReactFlow's browser internals — specifically the chip-rendering logic and
- * the keyboard/screen-reader hooks for the new `confidence_level` /
- * `confidence_basis` fields. The full ReactFlow integration is exercised in
- * the page-level Playwright suite.
- *
- * The `Handle` calls inside the component need a ReactFlowProvider to avoid
- * crashing — we wrap with a thin provider stub via `@xyflow/react`'s named
- * `ReactFlowProvider`.
+ * Phase 5 stripped this component of its ``@xyflow/react`` bindings
+ * (no more ``Handle`` / ``Position`` / ``NodeProps``). It now takes
+ * direct props and renders as a plain ``<article>``. These tests cover:
+ *   - The confidence chip rendering rules (per ``ebitda-tree-confidence``).
+ *   - The chip's keyboard + tooltip accessibility.
+ *   - The opportunity-linked indicator dots.
+ *   - The hover-description tooltip.
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ReactFlowProvider } from '@xyflow/react'
 
-import EbitdaNodeComponent, { type EbitdaNodeData } from '@/components/EbitdaNodeComponent'
+import EbitdaNodeComponent, { type EbitdaCardProps } from '@/components/EbitdaNodeComponent'
 
-// ReactFlow uses ResizeObserver internally; jsdom doesn't ship it.
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-}))
-
-function makeNodeProps(overrides: Partial<EbitdaNodeData> = {}) {
-    const data: EbitdaNodeData = {
+function makeProps(overrides: Partial<EbitdaCardProps> = {}): EbitdaCardProps {
+    return {
         label: 'Subscriptions',
         type: 'revenue',
         valueRange: '$8M-$40M',
@@ -36,87 +26,75 @@ function makeNodeProps(overrides: Partial<EbitdaNodeData> = {}) {
         linkedOpportunities: [],
         ...overrides,
     }
-    // The component takes the full xyflow NodeProps shape; we cast through
-    // unknown because only `data` is read by the component under test.
-    return {
-        id: 'node-1',
-        type: 'ebitdaNode',
-        data,
-        selected: false,
-        dragging: false,
-        zIndex: 0,
-        isConnectable: false,
-        positionAbsoluteX: 0,
-        positionAbsoluteY: 0,
-        sourcePosition: 'bottom',
-        targetPosition: 'top',
-    } as unknown as Parameters<typeof EbitdaNodeComponent>[0]
-}
-
-function renderNode(props: Parameters<typeof EbitdaNodeComponent>[0]) {
-    return render(
-        <ReactFlowProvider>
-            <EbitdaNodeComponent {...props} />
-        </ReactFlowProvider>
-    )
 }
 
 describe('EbitdaNodeComponent — confidence chip', () => {
     it('renders a chip when confidenceLevel is high', () => {
-        renderNode(makeNodeProps({ confidenceLevel: 'high', confidenceBasis: 'Test high.' }))
+        render(
+            <EbitdaNodeComponent {...makeProps({ confidenceLevel: 'high', confidenceBasis: 'Test high.' })} />
+        )
         const chip = screen.getByTestId('ebitda-confidence-chip')
         expect(chip).toBeInTheDocument()
         // ConfidenceIndicator renders an aria-label for the level
-        const indicator = screen.getByLabelText('Confidence: High')
-        expect(indicator).toBeInTheDocument()
+        expect(screen.getByLabelText('Confidence: High')).toBeInTheDocument()
     })
 
     it('renders a chip when confidenceLevel is medium', () => {
-        renderNode(makeNodeProps({ confidenceLevel: 'medium', confidenceBasis: 'Test medium.' }))
+        render(
+            <EbitdaNodeComponent
+                {...makeProps({ confidenceLevel: 'medium', confidenceBasis: 'Test medium.' })}
+            />
+        )
         expect(screen.getByLabelText('Confidence: Medium')).toBeInTheDocument()
     })
 
     it('renders a chip when confidenceLevel is low', () => {
-        renderNode(makeNodeProps({ confidenceLevel: 'low', confidenceBasis: 'Test low.' }))
+        render(
+            <EbitdaNodeComponent {...makeProps({ confidenceLevel: 'low', confidenceBasis: 'Test low.' })} />
+        )
         expect(screen.getByLabelText('Confidence: Low')).toBeInTheDocument()
     })
 
     it('suppresses the chip when confidenceLevel is null', () => {
-        renderNode(makeNodeProps({ confidenceLevel: null, confidenceBasis: null }))
+        render(<EbitdaNodeComponent {...makeProps({ confidenceLevel: null, confidenceBasis: null })} />)
         expect(screen.queryByTestId('ebitda-confidence-chip')).toBeNull()
     })
 
     it('suppresses the chip when confidenceLevel is undefined', () => {
-        renderNode(makeNodeProps({}))
+        render(<EbitdaNodeComponent {...makeProps({})} />)
         expect(screen.queryByTestId('ebitda-confidence-chip')).toBeNull()
     })
 
     it('suppresses the chip on subtotal nodes even if confidenceLevel is present', () => {
         // Defensive: the spec says rollups carry no confidence — backend
         // shouldn't emit it for subtotals — but the frontend filters anyway.
-        renderNode(
-            makeNodeProps({
-                type: 'subtotal',
-                confidenceLevel: 'high',
-                confidenceBasis: 'Should not show on subtotals.',
-            })
+        render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    type: 'subtotal',
+                    confidenceLevel: 'high',
+                    confidenceBasis: 'Should not show on subtotals.',
+                })}
+            />
         )
         expect(screen.queryByTestId('ebitda-confidence-chip')).toBeNull()
     })
 
     it('suppresses the chip on margin nodes even if confidenceLevel is present', () => {
-        renderNode(
-            makeNodeProps({
-                type: 'margin',
-                confidenceLevel: 'high',
-                confidenceBasis: 'Should not show on margin rollups.',
-            })
+        render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    type: 'margin',
+                    confidenceLevel: 'high',
+                    confidenceBasis: 'Should not show on margin rollups.',
+                })}
+            />
         )
         expect(screen.queryByTestId('ebitda-confidence-chip')).toBeNull()
     })
 
     it('suppresses the chip when no value range is present (nothing to attach to)', () => {
-        renderNode(makeNodeProps({ valueRange: undefined, confidenceLevel: 'high' }))
+        render(<EbitdaNodeComponent {...makeProps({ valueRange: undefined, confidenceLevel: 'high' })} />)
         // Chip lives inside the value-range row; without a value range, the
         // row doesn't render at all.
         expect(screen.queryByTestId('ebitda-confidence-chip')).toBeNull()
@@ -125,13 +103,15 @@ describe('EbitdaNodeComponent — confidence chip', () => {
 
 describe('EbitdaNodeComponent — chip a11y', () => {
     it('exposes the basis via the title attribute for hover/focus tooltip', () => {
-        renderNode(
-            makeNodeProps({
-                confidenceLevel: 'medium',
-                confidenceBasis:
-                    'Revenue derived from a SaaS template (matched on business model) ' +
-                    'applied to a defaulted size bracket (no matching company-size signal).',
-            })
+        render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    confidenceLevel: 'medium',
+                    confidenceBasis:
+                        'Revenue derived from a SaaS template (matched on business model) ' +
+                        'applied to a defaulted size bracket (no matching company-size signal).',
+                })}
+            />
         )
         const chip = screen.getByTestId('ebitda-confidence-chip')
         expect(chip.getAttribute('title')).toContain('Revenue derived from a SaaS template')
@@ -139,22 +119,62 @@ describe('EbitdaNodeComponent — chip a11y', () => {
     })
 
     it('chip wrapper is keyboard focusable', () => {
-        renderNode(makeNodeProps({ confidenceLevel: 'low', confidenceBasis: 'Both defaulted.' }))
+        render(
+            <EbitdaNodeComponent
+                {...makeProps({ confidenceLevel: 'low', confidenceBasis: 'Both defaulted.' })}
+            />
+        )
         const chip = screen.getByTestId('ebitda-confidence-chip')
         expect(chip.getAttribute('tabindex')).toBe('0')
     })
 
     it('Tab moves focus to the chip', async () => {
         const user = userEvent.setup()
-        renderNode(makeNodeProps({ confidenceLevel: 'high', confidenceBasis: 'Test.' }))
+        render(<EbitdaNodeComponent {...makeProps({ confidenceLevel: 'high', confidenceBasis: 'Test.' })} />)
         const chip = screen.getByTestId('ebitda-confidence-chip')
         await user.tab()
         expect(chip).toHaveFocus()
     })
 
     it('omits the title attribute when basis is null', () => {
-        renderNode(makeNodeProps({ confidenceLevel: 'high', confidenceBasis: null }))
+        render(<EbitdaNodeComponent {...makeProps({ confidenceLevel: 'high', confidenceBasis: null })} />)
         const chip = screen.getByTestId('ebitda-confidence-chip')
         expect(chip.getAttribute('title')).toBeNull()
+    })
+})
+
+describe('EbitdaNodeComponent — opportunity-link affordance', () => {
+    it('renders one indicator dot per linked opportunity', () => {
+        render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    linkedOpportunities: [
+                        { title: 'Upsell tier', valueLever: 'Revenue Side' },
+                        { title: 'Trim support costs', valueLever: 'Cost Side' },
+                    ],
+                })}
+            />
+        )
+        const dotRow = screen.getByTestId('ebitda-linked-opportunity-dots')
+        // One child per linked opportunity.
+        expect(dotRow.children).toHaveLength(2)
+    })
+
+    it('attaches an opportunity title via the dot title attribute', () => {
+        render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    linkedOpportunities: [{ title: 'Upsell tier', valueLever: 'Revenue Side' }],
+                })}
+            />
+        )
+        const dotRow = screen.getByTestId('ebitda-linked-opportunity-dots')
+        const dot = dotRow.firstElementChild as HTMLElement
+        expect(dot.getAttribute('title')).toBe('Upsell tier (Revenue Side)')
+    })
+
+    it('omits the dot row entirely when no opportunities are linked', () => {
+        render(<EbitdaNodeComponent {...makeProps({ linkedOpportunities: [] })} />)
+        expect(screen.queryByTestId('ebitda-linked-opportunity-dots')).toBeNull()
     })
 })
