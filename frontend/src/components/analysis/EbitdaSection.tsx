@@ -1,13 +1,10 @@
 'use client'
 
-import dynamic from 'next/dynamic'
-
-import type { EbitdaNode, EbitdaTree, Opportunity } from '@/lib/types/api'
-
-const EbitdaTree = dynamic(() => import('@/components/EbitdaTree'), { ssr: false })
+import EbitdaTree from '@/components/EbitdaTree'
+import type { EbitdaNode, EbitdaTree as EbitdaTreeData, Opportunity } from '@/lib/types/api'
 
 interface EbitdaSectionProps {
-    ebitdaTree: EbitdaTree
+    ebitdaTree: EbitdaTreeData
     opportunities: Opportunity[]
 }
 
