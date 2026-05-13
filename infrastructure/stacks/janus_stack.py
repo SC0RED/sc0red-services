@@ -111,6 +111,17 @@ class JanusStack(Stack):
             enable_tracing=enable_tracing,
         )
         worker_concurrency = config.get("worker_concurrency", 4)
+        # Lambda envelope bumped (was 540 s / 1769 MB) so the inlined
+        # strategy-map step (``redesign-strategy-map`` Phase 4) has
+        # headroom for OpenAI tail-latency retries on top of the base
+        # ~30 s analysis. The 900 s timeout is the Lambda max; 2048 MB
+        # gives ~1.16 vCPU (above the 1769 MB tier where AWS allocates
+        # >1 vCPU) so Pydantic validation + prompt rendering across the
+        # decomposed strategy-map chain don't bottleneck on CPU.
+        # The analysis-queue ``visibility_timeout`` (in
+        # ``stack_resources.create_queues``) MUST be >= this Lambda
+        # timeout per the AWS SQS-Lambda event-source-mapping contract;
+        # the queue is configured at 1080 s for the same ~20 % buffer.
         worker_handler = create_lambda(
             self,
             "WorkerHandler",
@@ -118,8 +129,8 @@ class JanusStack(Stack):
             handler="src.handlers.worker_handler_entry.handle_worker_event",
             bundling=bundling,
             environment=common_environment,
-            timeout_seconds=540,
-            memory_size=1769,
+            timeout_seconds=900,
+            memory_size=2048,
             architecture=lambda_architecture,
             log_retention_days=log_retention_days,
             enable_tracing=enable_tracing,
