@@ -703,9 +703,9 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         )
     }
 
-    it('renders all 13 sections in the prescribed beat order with full data', () => {
+    it('renders all 12 sections in the prescribed beat order with full data', () => {
         // Full-data fixture: builds the success-path analysis with every
-        // optional artifact present so all 13 sections render.
+        // optional artifact present so all 12 sections render.
         const data: AnalysisData = {
             ...buildAnalysisData(),
             analyzedAt: '2026-05-05T10:00:00Z',
@@ -740,27 +740,25 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
 
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        // Per `strategy-map-on-demand` Phase B, the layout now is:
-        //   - Sc0red CTA hoisted to Beat 1.5 (between overview and
-        //     top-actions). It always renders (analysis-centric copy)
-        //     because the banner now appears before opportunities are
-        //     shown — there's no longer a "no opportunities" guard.
-        //   - Strategy-map slot moved to Beat 6 (after opportunities).
-        //     With a fully-populated strategy map present the slot
-        //     renders <StrategyMapView/> + <DeepDiveCTA/>.
+        // Per ``redesign-strategy-map`` Phase 5:
+        //   - The standalone Sc0redCTABanner ("Dig deeper") at Beat 1.5
+        //     is gone — it was redundant with the DeepDiveCTA rendered
+        //     alongside the strategy map.
+        //   - The strategy-map slot moved up to Beat 3 (immediately
+        //     after the Top-3 immediate actions). With a populated
+        //     map the slot renders <StrategyMapView/> + <DeepDiveCTA/>.
         const expectedOrder = [
             'header',
             'strap',
             'overview',
-            'sc0red-cta',
             'top-actions',
+            'strategy-map',
+            'deep-dive-cta',
             'ebitda',
             'value-chain',
             'risk-breakdown',
             'value-lever',
             'opportunities',
-            'strategy-map',
-            'deep-dive-cta',
             'document-upload',
         ]
         expect(getRenderedSectionIds()).toEqual(expectedOrder)
@@ -774,18 +772,18 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         // EBITDA + value chain absent — those sections drop entirely.
         expect(ids).not.toContain('ebitda')
         expect(ids).not.toContain('value-chain')
-        // Per ``redesign-strategy-map`` Phase 4, the strategy-map slot
-        // returns ``null`` when the map is absent — both the slot
-        // wrapper and its DeepDiveCTA companion drop from the DOM.
+        // Per Phase 4 the strategy-map slot returns ``null`` when the
+        // map is absent — both the slot wrapper and its DeepDiveCTA
+        // companion drop from the DOM.
         expect(ids).not.toContain('strategy-map')
         expect(ids).not.toContain('deep-dive-cta')
-        // Remaining sections still in the same relative order. Sc0red
-        // CTA sits at Beat 1.5 (between overview and top-actions).
+        // Sc0redCTABanner deleted in Phase 5 — no ``sc0red-cta`` slot.
+        expect(ids).not.toContain('sc0red-cta')
+        // Remaining sections still in the same relative order.
         expect(ids).toEqual([
             'header',
             'strap',
             'overview',
-            'sc0red-cta',
             'top-actions',
             'risk-breakdown',
             'value-lever',
@@ -794,23 +792,16 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         ])
     })
 
-    it('keeps the Sc0red CTA at Beat 1.5 even when there are no opportunities', () => {
-        // Per `strategy-map-on-demand` Phase B, the Sc0red CTA was
-        // hoisted to Beat 1.5 (between overview and top-actions). It's
-        // no longer gated on opportunities being non-empty — the copy
-        // is analysis-centric, not opportunity-centric, so an empty
-        // opportunities list does not drop the banner.
+    it('does not render a standalone Sc0red CTA banner (Phase 5 removed it)', () => {
+        // ``redesign-strategy-map`` Phase 5 deleted the ``Sc0redCTABanner``
+        // that previously sat at Beat 1.5. The ``DeepDiveCTA`` rendered
+        // alongside the strategy map (when present) is now the only
+        // deep-dive affordance on the analysis page.
         const data = buildAnalysisData({ opportunities: [] })
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
         const ids = getRenderedSectionIds()
-        expect(ids).toContain('sc0red-cta')
-        // Beat 1.5: Sc0red CTA sits between `overview` and `top-actions`.
-        const overviewIndex = ids.indexOf('overview')
-        const sc0redIndex = ids.indexOf('sc0red-cta')
-        const topActionsIndex = ids.indexOf('top-actions')
-        expect(sc0redIndex).toBe(overviewIndex + 1)
-        expect(topActionsIndex).toBe(sc0redIndex + 1)
+        expect(ids).not.toContain('sc0red-cta')
     })
 
     it('renders the executive strap between header and overview cards', () => {

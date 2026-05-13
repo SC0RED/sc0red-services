@@ -33,7 +33,8 @@ interface DeepDiveCTAProps {
  *   expand/collapse), so mount is the right "saw the CTA" signal.
  * - `sc0red_cta_clicked_strategy_map` — fired in the anchor's
  *   `onClick`. Fire-and-forget; navigation is not blocked by the
- *   emit (see `Sc0redCTABanner` for the same pattern + rationale).
+ *   emit (the analytics POST silently drops on transient failure
+ *   so the click is never lost to a flaky network).
  *
  * The strategy-map surface has no lever-filter concept, so emits
  * pass `activeLeverFilter: null`. `opportunityCount` is also `0` —

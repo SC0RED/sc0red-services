@@ -74,7 +74,7 @@ interface AnalysisSectionProps {
  *
  * All section-level headings on the analysis detail page render
  * through this component. The exempt sections (StrategyMapView,
- * Sc0redCTABanner, DeepDiveCTA, TopActionsCallout, AnalysisOverviewCards,
+ * DeepDiveCTA, TopActionsCallout, AnalysisOverviewCards,
  * AnalysisExecutiveStrap, AnalysisHeader) render with no `title` prop
  * — they wrap their own internal framing for intentional reasons,
  * documented in `analysis-detail-consistency-wrapper` design D3.

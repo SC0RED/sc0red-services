@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic'
 
 import DocumentUpload from '@/components/DocumentUpload'
 import RiskBreakdown from '@/components/RiskBreakdown'
-import Sc0redCTABanner from '@/components/Sc0redCTABanner'
 import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
 import AnalysisExecutiveStrap from '@/components/analysis/AnalysisExecutiveStrap'
@@ -18,12 +17,10 @@ import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import HelpTooltip from '@/components/ui/HelpTooltip'
 import { LoadingSpinner } from '@/components/ui'
-import { getSc0redContactUrl } from '@/lib/config'
 import { useReanalyze } from '@/lib/hooks/useReanalyze'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
 import { getRiskTier } from '@/lib/utils/riskUtils'
 import type { AnalysisData, DocumentInfo } from '@/lib/types/api'
-import type { ActiveLeverFilter } from '@/lib/types/analytics'
 
 const ValueChainDiagram = dynamic(() => import('@/components/ValueChainDiagram'), {
     loading: () => (
@@ -35,43 +32,37 @@ const ValueChainDiagram = dynamic(() => import('@/components/ValueChainDiagram')
 })
 
 /**
- * Map the screen-level lever filter ("All" / "Revenue Side" / "Cost
- * Side" / "Both") down to the analytics enum the CTA banner emits.
- * Only the two named levers are tracked as filters; "All", "Both",
- * or anything else collapses to null. Mirrors the previous helper that
- * lived inline in `OpportunitiesList` before the CTA was lifted to
- * this parent surface.
- */
-function toActiveLeverFilter(activeLever: string): ActiveLeverFilter | null {
-    if (activeLever === 'Revenue Side' || activeLever === 'Cost Side') {
-        return activeLever
-    }
-    return null
-}
-
-/**
- * Top-to-bottom narrative ordering on this page is governed by the
- * `analysis-detail-narrative` capability spec.
+ * Top-to-bottom narrative ordering on this page (per
+ * ``redesign-strategy-map`` Phase 5):
  *
- *   Beat 1   — IDENTITY:    Header → ExecutiveStrap → OverviewCards
- *   Beat 1.5 — DEEP DIVE:   Sc0redCTABanner (advisor consultation)
- *   Beat 2   — SYNTHESIS:   TopActionsCallout
- *   Beat 3   — MONEY:       EbitdaSection → ValueChainDiagram (paired)
- *   Beat 4   — RISK:        RiskBreakdown
- *   Beat 5   — OPPORTUNITY: ValueLever → Opportunities
- *   Beat 6   — STRATEGY:    StrategyMapView + DeepDiveCTA (when present)
- *   Beat 7   — IMPROVE:     DocumentUpload
+ *   Beat 1 — IDENTITY:    Header → ExecutiveStrap → OverviewCards
+ *   Beat 2 — SYNTHESIS:   TopActionsCallout (top-3 immediate actions)
+ *   Beat 3 — STRATEGY:    StrategyMapView + DeepDiveCTA (when present)
+ *   Beat 4 — MONEY:       EbitdaSection → ValueChainDiagram (paired)
+ *   Beat 5 — RISK:        RiskBreakdown
+ *   Beat 6 — OPPORTUNITY: ValueLever → Opportunities
+ *   Beat 7 — IMPROVE:     DocumentUpload
  *
- * Beat 6 collapses to two states: PRESENT (StrategyMapView +
- * DeepDiveCTA) or ABSENT (slot omitted). The strategy map is now
- * generated inline during the scan pipeline (per
- * ``redesign-strategy-map`` Phase 4), so every newly-completed
- * analysis lands with the map already persisted; legacy analyses that
- * pre-date the inline integration simply hide the slot and rely on
- * "Re-analyze" to regenerate.
+ * The strategy map sits IMMEDIATELY after the top-3 immediate actions
+ * so the visual story is "here's what to do → here's the strategic
+ * frame that makes it coherent → here's the supporting evidence
+ * (money / risk / opportunities)". Previously the map lived at the
+ * very bottom (Beat 6) where users rarely scrolled to it.
+ *
+ * The standalone ``Sc0redCTABanner`` ("Dig deeper with a sc0red
+ * advisor") that previously sat at Beat 1.5 was deleted in Phase 5 —
+ * the ``DeepDiveCTA`` rendered alongside the strategy map ("Want a
+ * deeper analysis?") now sits high enough on the page to serve the
+ * same conversion role without a second banner.
+ *
+ * The Beat-3 strategy-map slot collapses to two states: PRESENT
+ * (``StrategyMapView`` + ``DeepDiveCTA``) or ABSENT (slot omitted).
+ * Maps are generated inline during the scan pipeline (Phase 4); the
+ * absent case only applies to legacy analyses produced before that
+ * change, which can recover via "Re-analyze".
  *
  * Section framing (testid + heading + lead) is owned by the shared
- * `AnalysisSection` wrapper. See `analysis-detail-consistency-wrapper` D3.
+ * ``AnalysisSection`` wrapper. See ``analysis-detail-consistency-wrapper`` D3.
  */
 export default function AnalysisDetail({ data, analysisId }: { data: AnalysisData; analysisId: string }) {
     const [activeLever, setActiveLever] = useState<string>('All')
@@ -156,29 +147,26 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 <AnalysisOverviewCards data={data} />
             </AnalysisSection>
 
-            {/* Beat 1.5 — DEEP DIVE.
-                sc0red advisor CTA repositioned from after-OpportunitiesList to
-                here, with analysis-centric copy ("Dig deeper with a sc0red
-                advisor"). Always renders — the banner is a deep-dive
-                affordance for the analysis as a whole, not contingent on
-                opportunities being non-empty. See `strategy-map-on-demand`
-                spec scenario "Banner appears at Beat 4 regardless of
-                analysis state". */}
-            <AnalysisSection id="sc0red-cta">
-                <Sc0redCTABanner
-                    contactUrl={getSc0redContactUrl()}
-                    analysisId={analysisId}
-                    opportunityCount={opportunities.length}
-                    activeLeverFilter={toActiveLeverFilter(activeLever)}
-                />
-            </AnalysisSection>
-
             {/* Beat 2 — SYNTHESIS (top actions = "so what?") */}
             <AnalysisSection id="top-actions">
                 <TopActionsCallout actions={data.topActions ?? []} />
             </AnalysisSection>
 
-            {/* Beat 3 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
+            {/* Beat 3 — STRATEGIC FRAME. Sits directly under the top-3
+                immediate actions so the user sees the strategic story
+                (Vision / Mission / Value Proposition / Strategic
+                Priorities + the perspectives map) before the
+                supporting evidence. The ``DeepDiveCTA`` rendered by
+                the slot doubles as the page-level deep-dive
+                affordance (the standalone ``Sc0redCTABanner`` at
+                Beat 1.5 was deleted in Phase 5 as redundant).
+                Renders nothing when no strategy map is persisted
+                — legacy analyses produced before
+                ``redesign-strategy-map`` Phase 4 inlined map
+                generation into the scan. */}
+            <StrategyMapSlot analysisId={analysisId} strategyMap={data.strategyMap} />
+
+            {/* Beat 4 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
                 lenses on the same question: where does value sit and how
                 is it produced?) */}
             {data.ebitdaTree && (
@@ -201,7 +189,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 </AnalysisSection>
             )}
 
-            {/* Beat 5 — RISK + OPPORTUNITY EVIDENCE */}
+            {/* Beat 5 — RISK + Beat 6 — OPPORTUNITY EVIDENCE */}
             <AnalysisSection id="risk-breakdown" title="Risk Breakdown">
                 <RiskBreakdown riskScores={riskScores} />
             </AnalysisSection>
@@ -227,13 +215,6 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             >
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
             </AnalysisSection>
-
-            {/* Beat 6 — STRATEGIC FRAME. The slot renders the
-                ``StrategyMapView`` + ``DeepDiveCTA`` when the map is
-                present and renders nothing when it's absent (legacy
-                analyses produced before ``redesign-strategy-map``
-                Phase 4 inlined map generation into the scan). */}
-            <StrategyMapSlot analysisId={analysisId} strategyMap={data.strategyMap} />
 
             {/* Beat 7 — IMPROVE THIS ANALYSIS. The reanalyze progress bar
                 and any reanalyze polling errors render INSIDE the

@@ -18,13 +18,15 @@ def _auth(user_id: str = "user-1", org_id: str = "org-1") -> AuthContext:
 def _body(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
         "event_id": "uuid-1",
-        "event_type": "sc0red_cta_banner_expanded",
+        "event_type": "sc0red_cta_rendered_strategy_map",
         "timestamp": "2026-04-24T12:00:00.000Z",
         "analytics_version": "1",
         "source": "web",
         "analysis_id": "assess-1",
         "opportunity_count": 3,
-        "active_lever_filter": "Revenue Side",
+        # Strategy-map CTA events MUST carry a null lever filter
+        # (enforced in the AnalyticsEvent model_validator).
+        "active_lever_filter": None,
     }
     base.update(overrides)
     return base
@@ -52,7 +54,7 @@ class TestHandlePostEventHappyPath:
         enriched = mock_log.call_args.args[0]
         assert enriched.user_id == "user-42"
         assert enriched.org_id == "org-99"
-        assert enriched.event_type == "sc0red_cta_banner_expanded"
+        assert enriched.event_type == "sc0red_cta_rendered_strategy_map"
 
     def test_spoofed_org_id_in_body_is_ignored(self) -> None:
         """Anti-spoofing: body-side user_id / org_id are rejected by the envelope,
