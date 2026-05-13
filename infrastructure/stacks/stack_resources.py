@@ -89,7 +89,13 @@ def create_queues(
         scope,
         "AnalysisQueue",
         queue_name=f"janus-analysis-queue-{environment}",
-        visibility_timeout=Duration.seconds(600),
+        # Visibility timeout MUST be >= the worker Lambda timeout per
+        # the AWS SQS-Lambda event-source-mapping contract — AWS rejects
+        # the mapping at deploy time otherwise. The worker is sized at
+        # 900 s (Lambda max) since ``redesign-strategy-map`` Phase 4
+        # inlined the ~35 s strategy-map step; 1080 s gives the
+        # mandated ~20 % buffer on top of that.
+        visibility_timeout=Duration.seconds(1080),
         retention_period=Duration.days(1),
         dead_letter_queue=sqs.DeadLetterQueue(queue=dlq, max_receive_count=20),
     )
