@@ -46,12 +46,12 @@ if TYPE_CHECKING:
     from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
     from src.pipeline.step_timer import StepTimer
 
-# Caller passes a closure that emits user-visible progress (calls
-# `notify_strategy_map_progress` with scan_id / analysis_id captured)
-# or ``None`` to disable progress emission. The decomposed path emits
-# at three phase boundaries (after Round 1, after Round 2, after
-# Round 3) — granularity sized for "the user sees something move
-# every ~30s" without being noisy.
+# Optional 0-100 percent / label callable invoked at three intra-step
+# phase boundaries (after Round 1, after Round 2, after Round 3). The
+# inline scan pipeline currently passes ``None`` — the scan's own
+# ``mark_question_complete`` flow is granular enough at the step level.
+# The hook is retained so a future caller (e.g. a debug-CLI driver) can
+# re-enable phase-boundary visibility without touching this module.
 ProgressEmitter = Callable[[int, str], None]
 
 # Cap on parallelism within Round 1. Round 2 / Round 3 caps live with

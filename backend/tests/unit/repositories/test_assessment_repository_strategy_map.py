@@ -1,9 +1,9 @@
 """Tests for strategy-map persistence on DynamoDBAssessmentRepository.
 
-Covers the on-demand strategy-map lifecycle: save, get, and clear.
-Per the strategy-map-on-demand spec, the repo provides ``clear_strategy_map``
-so the re-analyse handler can invalidate a stale map before regenerating
-the underlying diagnosis.
+Covers the strategy-map lifecycle: save, get, and clear. The repo
+provides ``clear_strategy_map`` so the re-analyse handler can
+invalidate a stale map before the inline pipeline regenerates the
+underlying diagnosis.
 """
 
 from moto import mock_aws

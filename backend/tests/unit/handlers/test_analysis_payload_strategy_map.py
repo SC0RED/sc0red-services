@@ -110,36 +110,22 @@ def test_payload_with_no_assessments_omits_strategy_map_lookup() -> None:
     assessment_repo.get_strategy_map.assert_not_called()
 
 
-# ── strategyMapGenerationState (on-demand spec) ────────────────────────────
-
-
-def test_payload_surfaces_generation_state_when_set() -> None:
-    """Per the strategy-map-on-demand spec: when the company record carries
-    `strategy_map_generation_state = "generating"`, the payload exposes it as
-    `strategyMapGenerationState` so the frontend can render the generating
-    placeholder during cold load / refresh."""
+def test_payload_omits_generation_state_field() -> None:
+    """Per ``redesign-strategy-map`` Phase 4 the on-demand worker is
+    gone — the analysis payload no longer carries a
+    ``strategyMapGenerationState`` field (the strategy map is either
+    present, from the inline pipeline, or absent for legacy analyses
+    that pre-date the inline integration).
+    """
     storage = _make_storage(strategy_map=None)
     company = {
         "id": "c-1",
         "company_name": "Test Corp",
+        # Legacy persisted records may still carry this attribute; the
+        # payload builder MUST NOT propagate it to the frontend.
         "strategy_map_generation_state": "generating",
     }
 
     payload = build_analysis_payload(storage, company, analysis_id="c-1")
 
-    assert payload["strategyMapGenerationState"] == "generating"
-    # The persisted strategy map is null, but the generation flag tells the
-    # frontend to show the generating placeholder rather than the CTA.
-    assert payload["strategyMap"] is None
-
-
-def test_payload_generation_state_is_none_when_not_generating() -> None:
-    """When the company record does not carry the field, the payload exposes
-    `None` — frontend renders the CTA (or the present state if the map is
-    already persisted)."""
-    storage = _make_storage(strategy_map=None)
-    company = {"id": "c-1", "company_name": "Test Corp"}
-
-    payload = build_analysis_payload(storage, company, analysis_id="c-1")
-
-    assert payload["strategyMapGenerationState"] is None
+    assert "strategyMapGenerationState" not in payload

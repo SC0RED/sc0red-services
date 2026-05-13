@@ -456,12 +456,16 @@ class TestSynthesisDecompositionIntegration:
 
 
 class TestPrerequisiteValidation:
-    """Sanity gates in ``execute()`` that fail-fast before any AI call.
+    """Prereq gates degrade gracefully (no map, no exception).
 
-    The decomposed chain MUST reject missing prereqs early — every gate
-    raises a ``ValueError`` before the AI client is touched. These
-    guards are the only way to avoid producing a half-baked strategy
-    map when an upstream pipeline step failed.
+    When upstream pipeline output is missing (profile, risk assessment,
+    opportunities), ``GenerateStrategyMap`` is a soft-fail step — it
+    logs the gap, sets ``strategy_map=None`` on the accessor, and lets
+    ``PersistResults`` save the rest of the analysis. The user gets
+    every other artifact even when the map could not be produced.
+
+    Programming errors (``AttributeError`` etc.) still propagate so
+    SQS retries and CloudWatch surfaces the stack trace.
     """
 
     def _make_step(self) -> tuple[GenerateStrategyMap, CompanyAccessor, MagicMock]:
@@ -472,44 +476,56 @@ class TestPrerequisiteValidation:
         step.request_executor = MagicMock()
         return step, accessor, ai_factory
 
-    def test_missing_profile_raises(self) -> None:
+    def test_missing_profile_skips_generation_and_clears_map(self) -> None:
         step, accessor, ai_factory = self._make_step()
         accessor.company.profile = None
 
-        with pytest.raises(ValueError, match="profile missing"):
-            step.execute()
-        ai_factory.get_client.assert_not_called()
+        # Soft-fail: ``execute()`` returns normally, AI client untouched.
+        step.execute()
 
-    def test_missing_risk_assessment_raises(self) -> None:
+        ai_factory.get_client.assert_not_called()
+        assert accessor.company.strategy_map is None
+        # The step still completes (degraded) — progress advances.
+        step.request_executor.mark_question_complete.assert_called_with(
+            "generate_strategy_map"
+        )
+
+    def test_missing_risk_assessment_skips_generation_and_clears_map(self) -> None:
         step, accessor, ai_factory = self._make_step()
         accessor.company.risk_assessment = None
 
-        with pytest.raises(ValueError, match="risk assessment missing"):
-            step.execute()
-        ai_factory.get_client.assert_not_called()
+        step.execute()
 
-    def test_missing_opportunities_raises(self) -> None:
+        ai_factory.get_client.assert_not_called()
+        assert accessor.company.strategy_map is None
+
+    def test_missing_opportunities_skips_generation_and_clears_map(self) -> None:
         step, accessor, ai_factory = self._make_step()
         accessor.company.opportunity_result = None
 
-        with pytest.raises(ValueError, match="opportunity result missing"):
-            step.execute()
+        step.execute()
+
         ai_factory.get_client.assert_not_called()
+        assert accessor.company.strategy_map is None
 
 
-class TestPartialTimingsOnFailure:
-    """Per ai-strategy-map spec: a failed AI call still emits partial timings.
+class TestDomainErrorDegradesGracefully:
+    """AI domain failures leave the analysis intact with no strategy map.
 
-    The ``finally`` block in ``execute()`` always calls
-    ``request_executor.add_details(timer.to_details())`` — so successful
-    call labels recorded before the failure are visible in CloudWatch
-    even when a later call raises.
+    The ``GenerateStrategyMap`` step is inline in the scan pipeline
+    (per ``redesign-strategy-map`` Phase 4). To preserve the failure
+    isolation the old dedicated worker provided, domain errors
+    (``EngineError`` / ``FutureManagerError`` / ``ValueError`` /
+    ``RuntimeError``) are caught inside the step. The user's risk
+    scores, opportunities, EBITDA tree, and value chain are then
+    persisted by ``PersistResults`` and the strategy-map slot on the
+    analysis page simply doesn't render.
     """
 
     @patch(
         "src.pipeline.pipeline_steps.generate_strategy_map.generate_perspectives_decomposed"
     )
-    def test_emits_partial_timings_when_synthesis_fails(
+    def test_synthesis_runtime_error_is_caught_and_map_is_cleared(
         self,
         mock_phase1_perspectives: MagicMock,
     ) -> None:
@@ -526,25 +542,15 @@ class TestPartialTimingsOnFailure:
             core_values,
         )
 
-        # Vision-text call succeeds; mission-text call raises. Both are
-        # sub-calls in the same Vision/Mission parallel bank — the bank
-        # waits for both before returning, so the second raises and the
-        # first's timing is recorded.
-        call_log: list[str] = []
-
         def fake_run_ai_call(
             _user_prompt: str,
             _schema: dict[str, Any],
             _system_prompt: str,
             label: str,
         ) -> tuple[str, dict[str, Any], float]:
-            call_log.append(label)
             if label == "mission_text":
                 msg = "simulated AI failure"
                 raise RuntimeError(msg)
-            # Other labels return a minimal canned response — they're
-            # all sub-calls inside the synchronous Vision/Mission bank,
-            # which fails as soon as any task raises.
             return label, {"statement": "v", "synthesised": False, "rationale": "r"}, 0.1
 
         ai_factory = MagicMock()
@@ -554,15 +560,14 @@ class TestPartialTimingsOnFailure:
         step.request_executor = MagicMock()
         step._run_ai_call = MagicMock(side_effect=fake_run_ai_call)  # type: ignore[method-assign]
 
-        # ``FutureManager`` wraps the worker's ``RuntimeError`` in a
-        # ``FutureManagerError`` so the synthesis bank's ``manager.wait_for_all_*``
-        # call surfaces a single aggregated exception. The underlying
-        # message is preserved in the wrapper.
-        with pytest.raises(FutureManagerError, match="simulated AI failure"):
-            step.execute()
+        # Soft-fail: ``execute()`` returns normally; the strategy map
+        # on the accessor is ``None`` so ``PersistResults`` skips it.
+        step.execute()
 
+        assert accessor.company.strategy_map is None
         # ``add_details`` still ran once with a ``GenerateStrategyMap.timings``
-        # block — the ``finally`` clause guarantees telemetry on failure.
+        # block — the ``finally`` clause guarantees telemetry on the
+        # degraded path.
         add_details_calls = step.request_executor.add_details.call_args_list
         timings_calls = [
             call
@@ -574,3 +579,40 @@ class TestPartialTimingsOnFailure:
         assert "total" in timings
         # mission_text raised → its timing was NOT recorded.
         assert "ai_call_mission_text" not in timings
+        # Step completion still fires so the progress bar advances.
+        step.request_executor.mark_question_complete.assert_called_with(
+            "generate_strategy_map"
+        )
+
+    def test_malformed_ai_response_key_error_is_caught_and_map_is_cleared(self) -> None:
+        """A ``KeyError`` raised when accessing AI response data (e.g.
+        ``vision_data["statement"]`` against a malformed response) is a
+        DOMAIN error, not a programming bug — the AI returned a dict
+        that doesn't conform to its schema. The soft-fail catches it
+        and degrades. This guards the catch list against drift.
+        """
+        ai_factory = MagicMock()
+        accessor = _make_accessor()
+        step = GenerateStrategyMap(ai_client_factory=ai_factory)
+        step.entity_accessor = accessor  # type: ignore[assignment]
+        step.request_executor = MagicMock()
+
+        def fake_run_ai_call(
+            _user_prompt: str,
+            _schema: dict[str, Any],
+            _system_prompt: str,
+            label: str,
+        ) -> tuple[str, dict[str, Any], float]:
+            # Return a dict missing the ``statement`` key that the
+            # synthesis caller subscripts. ``vision_data["statement"]``
+            # raises ``KeyError`` outside any ``FutureManager`` block.
+            return label, {"synthesised": False, "rationale": "r"}, 0.1
+
+        step._run_ai_call = MagicMock(side_effect=fake_run_ai_call)  # type: ignore[method-assign]
+
+        step.execute()
+
+        assert accessor.company.strategy_map is None
+        step.request_executor.mark_question_complete.assert_called_with(
+            "generate_strategy_map"
+        )

@@ -37,9 +37,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
+from signalfield_core.exceptions.base import EngineError
 from signalfield_core.pipeline.step import RequestStep
+from signalfield_core.utilities.future_manager import FutureManagerError
 
-from src.pipeline.appsync_notifier import notify_strategy_map_progress
 from src.pipeline.pipeline_steps._strategy_map_arrows import (
     run_decomposed_arrows_and_priorities,
 )
@@ -87,10 +88,78 @@ class GenerateStrategyMap(RequestStep):
         emitted as ``GenerateStrategyMap.timings`` on the request_executor's
         details payload — same pattern other AI-heavy steps follow
         (``ParallelProfileRiskAndIdeation``, ``DetailOpportunities``).
+
+        **Soft-fail semantics for AI domain errors.** A strategy map is an
+        additive analysis output; the user's primary value lives in the
+        risk scores, opportunities, EBITDA tree, and value chain produced
+        by upstream steps. When the AI chain fails — rate limit, schema
+        validation, ``FutureManager`` aggregation, malformed AI output
+        that's missing an expected key or has the wrong type — this step
+        logs the failure, leaves ``company.strategy_map`` as ``None``,
+        and returns normally so ``PersistResults`` saves the rest of the
+        analysis intact. The user lands on the analysis page with all
+        data except the map. Re-analyse regenerates everything
+        including the map.
+
+        ``KeyError`` and ``TypeError`` are included in the catch list
+        because the synthesis / arrows / assembly modules access AI
+        response dicts directly (``vision_data["statement"]``,
+        ``content["primary"]``); a missing key or wrong-typed value
+        from the AI surfaces as one of these. Genuine programming
+        bugs in our own code tend to surface as ``AttributeError``
+        against ``self`` / module imports — those are NOT caught and
+        will propagate so SQS retries and CloudWatch shows the stack
+        trace.
+
+        The prerequisite gates also raise ``ValueError`` if upstream
+        pipeline output is missing — those are caught here for the
+        same reason (upstream already failed; producing a degraded
+        analysis without a map is the right outcome).
+
+        Net effect: this preserves the failure-isolation property the
+        dedicated on-demand worker provided in the pre-Phase-4 design.
         """
         accessor = cast("CompanyAccessor", self.entity_accessor)
         company = accessor.company
 
+        # ``StepTimer`` collects per-AI-call elapsed times; we always emit the
+        # collected timings to ``request_executor`` even on the failure path so
+        # CloudWatch shows which calls completed before the exception.
+        timer = StepTimer(STEP_NAME)
+        try:
+            self._generate_and_set(accessor, company, timer)
+        except (
+            EngineError,
+            FutureManagerError,
+            ValueError,
+            RuntimeError,
+            KeyError,
+            TypeError,
+        ):
+            # Domain failure — degrade gracefully so ``PersistResults``
+            # can save the rest of the analysis. The stack trace surfaces
+            # in CloudWatch via ``logger.exception``; the company record
+            # ends up with no strategy map and the frontend slot renders
+            # nothing for it.
+            logger.exception(
+                "[%s] Strategy-map generation failed; analysis will persist without a map",
+                STEP_NAME,
+            )
+            accessor.set_strategy_map(None)
+        finally:
+            # Always emit timings, even on failure, so partial-call latencies
+            # are visible in CloudWatch for diagnostics.
+            self.request_executor.add_details(timer.to_details())
+
+        self.request_executor.mark_question_complete("generate_strategy_map")
+
+    def _generate_and_set(
+        self,
+        accessor: CompanyAccessor,
+        company: Any,
+        timer: StepTimer,
+    ) -> None:
+        """Run the full generation chain and set the result on the accessor."""
         # Sanity gate: we need the prerequisite analysis output. If
         # any is missing, the upstream pipeline failed and we should
         # not silently produce a half-baked strategy map.
@@ -109,115 +178,83 @@ class GenerateStrategyMap(RequestStep):
         system_prompt = compose_system_prompt()
 
         # Build the shared context dict; later steps mutate it to add
-        # their outputs as substitution variables for downstream
-        # prompts.
+        # their outputs as substitution variables for downstream prompts.
         context = build_shared_context(company)
 
-        # ``StepTimer`` collects per-AI-call elapsed times; we always emit the
-        # collected timings to ``request_executor`` even on the failure path so
-        # CloudWatch shows which calls completed before the exception.
-        timer = StepTimer(STEP_NAME)
-        try:
-            # Step 1 — Vision and Mission (4 parallel sub-calls).
-            vision_data, mission_data = run_decomposed_vision_mission(
-                self,
-                system_prompt=system_prompt,
-                context=context,
-                timer=timer,
-            )
-            context["vision_statement"] = vision_data["statement"]
-            context["mission_statement"] = mission_data["statement"]
+        # Step 1 — Vision and Mission (4 parallel sub-calls).
+        vision_data, mission_data = run_decomposed_vision_mission(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+        )
+        context["vision_statement"] = vision_data["statement"]
+        context["mission_statement"] = mission_data["statement"]
 
-            # Step 2 — Customer Value Proposition (4 parallel sub-calls).
-            value_proposition_data = run_decomposed_value_proposition(
-                self,
-                system_prompt=system_prompt,
-                context=context,
-                timer=timer,
-            )
-            context["value_proposition"] = summarise_value_proposition(value_proposition_data)
+        # Step 2 — Customer Value Proposition (4 parallel sub-calls).
+        value_proposition_data = run_decomposed_value_proposition(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+        )
+        context["value_proposition"] = summarise_value_proposition(value_proposition_data)
 
-            # Steps 3-6 — perspective generation (~25 small parallel
-            # calls across Round 1 / Round 2 / Round 3, with
-            # positional-ID assignment in the assembly layer).
-            #
-            # Phase-boundary progress emission. The executor is
-            # created with request_id=analysis_id and scan_id=scan_id
-            # by the strategy-map worker (see
-            # ``strategy_map_handler._generate_and_persist``); both
-            # are required to route AppSync events to the right
-            # subscribed frontend.
-            analysis_id = self.request_executor.request_id
-            scan_id = self.request_executor.scan_id
+        # Steps 3-6 — perspective generation (~25 small parallel
+        # calls across Round 1 / Round 2 / Round 3, with positional-ID
+        # assignment in the assembly layer).
+        (
+            financial_data,
+            customer_data,
+            internal_data,
+            capacity_data,
+            core_values_data,
+        ) = generate_perspectives_decomposed(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+            progress_emitter=None,
+        )
 
-            def _emit_progress(progress: int, label: str) -> None:
-                notify_strategy_map_progress(
-                    scan_id=scan_id,
-                    analysis_id=analysis_id,
-                    progress=progress,
-                    label=label,
-                )
+        # Update context for Step 7's prompt.
+        context["financial_objectives"] = summarise_perspective(financial_data)
+        context["customer_objectives"] = summarise_perspective(customer_data)
+        context["internal_processes"] = summarise_perspective(internal_data)
+        context["organizational_capacity"] = summarise_perspective(capacity_data)
+        context["confidence_summary"] = summarise_confidence(
+            financial_data, customer_data, internal_data, capacity_data
+        )
 
-            _emit_progress(15, "Generating perspective titles…")
+        # Step 7 — Arrows + Strategic Priorities. Per-pair yes/no
+        # arrow bank fanned out in parallel + one holistic priorities
+        # call. The What's Missing / gaps section was removed end-to-end
+        # under ``redesign-strategy-map`` Phase 2.
+        finale_data = run_decomposed_arrows_and_priorities(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+            financial=financial_data,
+            customer=customer_data,
+            internal_processes=internal_data,
+            organizational_capacity=capacity_data,
+        )
 
-            (
-                financial_data,
-                customer_data,
-                internal_data,
-                capacity_data,
-                core_values_data,
-            ) = generate_perspectives_decomposed(
-                self,
-                system_prompt=system_prompt,
-                context=context,
-                timer=timer,
-                progress_emitter=_emit_progress,
-            )
+        # Assemble + validate the full StrategyMap.
+        strategy_map = assemble_strategy_map(
+            vision=vision_data,
+            mission=mission_data,
+            value_proposition=value_proposition_data,
+            financial=financial_data,
+            customer=customer_data,
+            internal_processes=internal_data,
+            organizational_capacity=capacity_data,
+            core_values=core_values_data,
+            finale=finale_data,
+        )
 
-            # Update context for Step 7's prompt.
-            context["financial_objectives"] = summarise_perspective(financial_data)
-            context["customer_objectives"] = summarise_perspective(customer_data)
-            context["internal_processes"] = summarise_perspective(internal_data)
-            context["organizational_capacity"] = summarise_perspective(capacity_data)
-            context["confidence_summary"] = summarise_confidence(
-                financial_data, customer_data, internal_data, capacity_data
-            )
-
-            # Step 7 — Arrows + Strategic Priorities. Per-pair yes/no
-            # arrow bank fanned out in parallel + one holistic
-            # priorities call. The What's Missing / gaps section was
-            # removed end-to-end under ``redesign-strategy-map`` Phase 2.
-            finale_data = run_decomposed_arrows_and_priorities(
-                self,
-                system_prompt=system_prompt,
-                context=context,
-                timer=timer,
-                financial=financial_data,
-                customer=customer_data,
-                internal_processes=internal_data,
-                organizational_capacity=capacity_data,
-            )
-
-            # Assemble + validate the full StrategyMap.
-            strategy_map = assemble_strategy_map(
-                vision=vision_data,
-                mission=mission_data,
-                value_proposition=value_proposition_data,
-                financial=financial_data,
-                customer=customer_data,
-                internal_processes=internal_data,
-                organizational_capacity=capacity_data,
-                core_values=core_values_data,
-                finale=finale_data,
-            )
-
-            accessor.set_strategy_map(strategy_map)
-        finally:
-            # Always emit timings, even on failure, so partial-call latencies
-            # are visible in CloudWatch for diagnostics.
-            self.request_executor.add_details(timer.to_details())
-
-        self.request_executor.mark_question_complete("generate_strategy_map")
+        accessor.set_strategy_map(strategy_map)
 
     # ── AI plumbing ─────────────────────────────────────────────────────────
 
