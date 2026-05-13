@@ -1,285 +1,247 @@
 'use client'
 
-import { useMemo, useState, useCallback, useEffect } from 'react'
-import {
-    ReactFlow,
-    type Node,
-    type Edge,
-    useNodesState,
-    useEdgesState,
-    ReactFlowProvider,
-    Controls,
-    useReactFlow,
-} from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
-import dagre from '@dagrejs/dagre'
+import type { CSSProperties } from 'react'
+
+import EbitdaNodeComponent, { type EbitdaCardProps } from '@/components/EbitdaNodeComponent'
 import type { EbitdaNode } from '@/lib/types/api'
-import EbitdaNodeComponent, { type EbitdaNodeData } from '@/components/EbitdaNodeComponent'
 
-const nodeTypes = { ebitdaNode: EbitdaNodeComponent }
+/**
+ * Static vertical-waterfall renderer for the EBITDA Impact Model.
+ *
+ * The five top-level rollups (Total Revenue, Cost of Revenue, Gross
+ * Profit, Operating Expenses, EBITDA) appear top-to-bottom in P&L
+ * order. Each subtotal renders as a **band**: a single-row colored-
+ * strip header on top, followed by a horizontal row of compact leaf
+ * chips beneath. Between each adjacent band sits a "minus" or
+ * "equals" connector that names the arithmetic relationship. Chips
+ * inside each band ``flex-wrap`` — flowing left-to-right on wide
+ * viewports and wrapping to additional rows (single-column at the
+ * narrowest) on mobile, without any JS-driven layout.
+ *
+ * History: ``redesign-ebitda-impact-model`` replaced a React Flow
+ * canvas with this static waterfall. ``compact-ebitda-bands`` then
+ * collapsed parent cards into band headers and leaf cards into
+ * compact chips. See ``openspec/changes/compact-ebitda-bands/`` for
+ * the current design.
+ */
 
-/* Dagre node dimensions — MUST be larger than the actual rendered node
-   to prevent clipping. Actual nodes are minWidth 200, ~100-130px tall. */
-const DAGRE_NODE_WIDTH = 290
-const DAGRE_NODE_HEIGHT = 130
+/** Connector labels between adjacent subtotals. The backend emits the
+ *  five subtotals in P&L order, so the four connectors are always
+ *  ``[minus, equals, minus, equals]``:
+ *
+ *    Total Revenue  ── minus  →  Cost of Revenue
+ *    Cost of Revenue ── equals →  Gross Profit
+ *    Gross Profit   ── minus  →  Operating Expenses
+ *    Operating Expns ── equals →  EBITDA
+ */
+const CONNECTOR_LABELS: ReadonlyArray<'minus' | 'equals'> = ['minus', 'equals', 'minus', 'equals']
 
-export function flattenNodes(nodes: EbitdaNode[], parentId: string | null = null): EbitdaNode[] {
-    const flat: EbitdaNode[] = []
-    for (const node of nodes) {
-        flat.push({ ...node, parent_id: parentId })
-        if (node.children?.length) {
-            flat.push(...flattenNodes(node.children, node.id))
-        }
-    }
-    return flat
-}
-
-function getLayoutedElements(nodes: Node[], edges: Edge[]) {
-    const g = new dagre.graphlib.Graph()
-    g.setDefaultEdgeLabel(() => ({}))
-    g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 110 })
-
-    nodes.forEach((node) => {
-        g.setNode(node.id, { width: DAGRE_NODE_WIDTH, height: DAGRE_NODE_HEIGHT })
-    })
-    edges.forEach((edge) => {
-        g.setEdge(edge.source, edge.target)
-    })
-
-    dagre.layout(g)
-
-    const layoutedNodes = nodes.map((node) => {
-        const n = g.node(node.id)
-        return {
-            ...node,
-            position: { x: n.x - DAGRE_NODE_WIDTH / 2, y: n.y - DAGRE_NODE_HEIGHT / 2 },
-        }
-    })
-
-    return { nodes: layoutedNodes, edges }
-}
+/** Kebab-case identifier slug for an ``aria-labelledby`` reference and
+ *  a CSS class targeted by leaf-area styles. */
+const WATERFALL_HEADING_ID = 'ebitda-waterfall-heading'
 
 interface EbitdaTreeProps {
     treeData: EbitdaNode[]
     opportunities: Array<{ title: string; value_lever?: string }>
 }
 
-function EbitdaTreeInner({ treeData, opportunities }: EbitdaTreeProps) {
-    const [isExpanded, setIsExpanded] = useState(false)
-    const { fitView } = useReactFlow()
-
-    const layouted = useMemo(() => {
-        const flatNodes = flattenNodes(treeData)
-        const rfNodes: Node[] = flatNodes.map((n) => ({
-            id: n.id,
-            type: 'ebitdaNode',
-            position: { x: 0, y: 0 },
-            data: {
-                label: n.label,
-                type: n.type,
-                valueRange: n.value_range,
-                percentageOfParent: n.percentage_of_parent,
-                description: n.description || '',
-                linkedOpportunities: (n.linked_opportunity_indices || [])
-                    .filter((i) => i >= 0 && i < opportunities.length)
-                    .map((i) => ({
-                        title: opportunities[i].title,
-                        valueLever: opportunities[i].value_lever || '',
-                    })),
-                confidenceLevel: n.confidence_level,
-                confidenceBasis: n.confidence_basis,
-            } as EbitdaNodeData,
-        }))
-
-        const rfEdges: Edge[] = flatNodes
-            .filter((n) => n.parent_id)
-            .map((n) => ({
-                id: `${n.parent_id}-${n.id}`,
-                source: n.parent_id!,
-                target: n.id,
-                style: { stroke: 'rgba(139, 154, 196, 0.3)', strokeWidth: 1.5 },
-                animated: false,
-            }))
-
-        return getLayoutedElements(rfNodes, rfEdges)
-    }, [treeData, opportunities])
-
-    const [nodes, setNodes, onNodesChange] = useNodesState(layouted.nodes)
-    const [edges, , onEdgesChange] = useEdgesState(layouted.edges)
-
-    // Lift hovered node above siblings so tooltip isn't clipped by adjacent nodes
-    const handleNodeMouseEnter = useCallback(
-        (_event: React.MouseEvent, node: Node) => {
-            setNodes((current) =>
-                current.map((n) => ({
-                    ...n,
-                    zIndex: n.id === node.id ? 1000 : 0,
-                }))
-            )
-        },
-        [setNodes]
-    )
-
-    const handleNodeMouseLeave = useCallback(() => {
-        setNodes((current) => current.map((n) => ({ ...n, zIndex: 0 })))
-    }, [setNodes])
-
-    const toggleExpand = useCallback(() => {
-        setIsExpanded((prev) => !prev)
-    }, [])
-
-    // Re-fit view when expanding/collapsing to use the new container size
-    useEffect(() => {
-        const timeout = setTimeout(() => {
-            fitView({ padding: 0.25, duration: 300 })
-        }, 350)
-        return () => clearTimeout(timeout)
-    }, [isExpanded, fitView])
-
-    // Lock body scroll when expanded
-    useEffect(() => {
-        if (isExpanded) {
-            document.body.style.overflow = 'hidden'
-        } else {
-            document.body.style.overflow = ''
-        }
-        return () => {
-            document.body.style.overflow = ''
-        }
-    }, [isExpanded])
-
+export default function EbitdaTree({ treeData, opportunities }: EbitdaTreeProps) {
     return (
-        <div style={{ position: 'relative' }}>
-            <div
-                className="ebitda-tree-container"
-                style={{
-                    width: '100%',
-                    height: isExpanded ? '100vh' : '700px',
-                    borderRadius: isExpanded ? '0' : 'var(--radius-md, 8px)',
-                    background: isExpanded ? 'var(--bg-base)' : 'var(--bg-glass)',
-                    transition: 'height 0.3s ease',
-                    position: isExpanded ? 'fixed' : 'relative',
-                    inset: isExpanded ? '0' : 'auto',
-                    zIndex: isExpanded ? 1000 : 'auto',
-                }}
-            >
-                <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onNodeMouseEnter={handleNodeMouseEnter}
-                    onNodeMouseLeave={handleNodeMouseLeave}
-                    nodeTypes={nodeTypes}
-                    nodesDraggable={false}
-                    fitView
-                    fitViewOptions={{ padding: 0.25, minZoom: 0.5, maxZoom: 1 }}
-                    proOptions={{ hideAttribution: true }}
-                    minZoom={0.3}
-                    maxZoom={2.5}
-                    panOnDrag
-                    panOnScroll
-                    zoomOnPinch
-                    zoomOnDoubleClick
-                    style={{ background: 'transparent' }}
-                >
-                    <Controls showInteractive={false} />
-                </ReactFlow>
+        <section data-testid="ebitda-tree" aria-labelledby={WATERFALL_HEADING_ID} style={sectionStyle}>
+            {/* Visually-hidden heading anchors the section's accessible
+                name. The on-page heading lives at the AnalysisSection
+                wrapper level per analysis-detail-consistency-wrapper D3. */}
+            <h2 id={WATERFALL_HEADING_ID} style={visuallyHiddenStyle}>
+                EBITDA Impact Model
+            </h2>
+            <ol data-testid="ebitda-waterfall" style={waterfallStyle}>
+                {treeData.map((subtotal, index) => (
+                    <SubtotalRow
+                        key={subtotal.id}
+                        subtotal={subtotal}
+                        opportunities={opportunities}
+                        connectorBelow={resolveConnectorBelow(index, treeData.length)}
+                    />
+                ))}
+            </ol>
+        </section>
+    )
+}
 
-                {/* Top-right control buttons */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: '0.75rem',
-                        right: '0.75rem',
-                        zIndex: 10,
-                        display: 'flex',
-                        gap: '0.5rem',
-                    }}
-                >
-                    <button
-                        onClick={() => fitView({ padding: 0.25, duration: 300 })}
-                        style={{
-                            padding: '0.375rem 0.75rem',
-                            background: 'rgba(59, 123, 246, 0.15)',
-                            border: '1px solid rgba(59, 123, 246, 0.3)',
-                            borderRadius: '6px',
-                            color: 'var(--accent-blue)',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.375rem',
-                        }}
-                    >
-                        <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                        >
-                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                        </svg>
-                        Fit
-                    </button>
-                    <button
-                        onClick={toggleExpand}
-                        style={{
-                            padding: '0.375rem 0.75rem',
-                            background: isExpanded ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 123, 246, 0.15)',
-                            border: `1px solid ${isExpanded ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 123, 246, 0.3)'}`,
-                            borderRadius: '6px',
-                            color: isExpanded ? 'var(--risk-critical)' : 'var(--accent-blue)',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.375rem',
-                        }}
-                    >
-                        <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                        >
-                            {isExpanded ? (
-                                <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
-                            ) : (
-                                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                            )}
-                        </svg>
-                        {isExpanded ? 'Close' : 'Expand'}
-                    </button>
-                </div>
+function SubtotalRow({
+    subtotal,
+    opportunities,
+    connectorBelow,
+}: {
+    subtotal: EbitdaNode
+    opportunities: EbitdaTreeProps['opportunities']
+    connectorBelow: 'minus' | 'equals' | null
+}) {
+    const leaves = subtotal.children ?? []
+    return (
+        <li style={subtotalRowItemStyle}>
+            <div style={subtotalRowContentStyle}>
+                <EbitdaNodeComponent {...nodeToCardProps(subtotal, opportunities)} isSubtotalHeading />
+                {leaves.length > 0 && (
+                    <ul aria-label={`Drivers of ${subtotal.label}`} style={leafListStyle}>
+                        {leaves.map((leaf) => (
+                            <li key={leaf.id} style={leafListItemStyle}>
+                                <EbitdaNodeComponent {...nodeToCardProps(leaf, opportunities)} />
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
+            {connectorBelow && <Connector label={connectorBelow} />}
+        </li>
+    )
+}
 
-            {!isExpanded && (
-                <div
-                    style={{
-                        textAlign: 'center',
-                        marginTop: '0.5rem',
-                        fontSize: '0.75rem',
-                        color: 'var(--text-tertiary)',
-                    }}
-                >
-                    Scroll to pan, pinch or use controls to zoom. Hover nodes for details.
-                </div>
-            )}
+function Connector({ label }: { label: 'minus' | 'equals' }) {
+    return (
+        <div
+            data-testid={`ebitda-connector-${label}`}
+            style={connectorStyle}
+            aria-label={label === 'minus' ? 'minus' : 'equals'}
+        >
+            <span aria-hidden="true" style={connectorArrowStyle}>
+                ▼
+            </span>
+            <span style={connectorLabelStyle}>{label}</span>
         </div>
     )
 }
 
-export default function EbitdaTree(props: EbitdaTreeProps) {
-    return (
-        <ReactFlowProvider>
-            <EbitdaTreeInner {...props} />
-        </ReactFlowProvider>
-    )
+/** Resolve the connector label that renders below the subtotal at
+ *  ``index`` within a waterfall of ``length`` subtotals.
+ *
+ *  Returns ``null`` for the final subtotal (no connector below it).
+ *  Returns ``null`` when the index walks past the canonical
+ *  ``CONNECTOR_LABELS`` table — a backend producing more than the
+ *  expected five subtotals would otherwise silently render undefined
+ *  labels. We render nothing in that case rather than guessing the
+ *  arithmetic; a fail-loud assertion would be too aggressive for what
+ *  is presentational output.
+ */
+function resolveConnectorBelow(index: number, length: number): 'minus' | 'equals' | null {
+    if (index >= length - 1) return null
+    return CONNECTOR_LABELS[index] ?? null
+}
+
+/** Map an ``EbitdaNode`` (backend shape with snake_case fields) to the
+ *  ``EbitdaCardProps`` (camelCase) the card component consumes. */
+function nodeToCardProps(node: EbitdaNode, opportunities: EbitdaTreeProps['opportunities']): EbitdaCardProps {
+    return {
+        label: node.label,
+        type: node.type,
+        valueRange: node.value_range,
+        percentageOfParent: node.percentage_of_parent,
+        // ``description`` is a required string on ``EbitdaNode``; missing
+        // values are a schema bug, not a render-time fallback case. The
+        // card itself already skips rendering the hover tooltip when the
+        // string is empty.
+        description: node.description,
+        // ``linked_opportunity_indices`` is required on ``EbitdaNode``
+        // but legacy records persisted before the field was added carry
+        // ``undefined``. Keep the ``?? []`` as forward-compat for those
+        // records — without it the next ``.filter`` would throw.
+        linkedOpportunities: (node.linked_opportunity_indices ?? [])
+            .filter((i) => i >= 0 && i < opportunities.length)
+            .map((i) => ({
+                title: opportunities[i].title,
+                valueLever: opportunities[i].value_lever ?? '',
+            })),
+        confidenceLevel: node.confidence_level,
+        confidenceBasis: node.confidence_basis,
+    }
+}
+
+// ── styles ──────────────────────────────────────────────────────────────────
+
+const sectionStyle: CSSProperties = {
+    display: 'block',
+    width: '100%',
+}
+
+const visuallyHiddenStyle: CSSProperties = {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: 'hidden',
+    clip: 'rect(0,0,0,0)',
+    whiteSpace: 'nowrap',
+    border: 0,
+}
+
+const waterfallStyle: CSSProperties = {
+    listStyle: 'none',
+    padding: 0,
+    margin: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 0,
+}
+
+const subtotalRowItemStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    width: '100%',
+}
+
+/** Each band row is a vertical flex: band header on top, then the
+ *  horizontal chip row of leaves beneath. The band itself takes the
+ *  full available width; the chips inside flex-wrap when the
+ *  container is narrow. */
+const subtotalRowContentStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '100%',
+}
+
+/** Chip row inside a band. ``flex-wrap`` is the entire mobile-stack
+ *  mechanism — chips flow left-to-right on desktop, wrap to a second
+ *  row when the container is narrow (375 px viewports stack the chips
+ *  in a single column without any horizontal scroll). */
+const leafListStyle: CSSProperties = {
+    listStyle: 'none',
+    padding: '0 0 0 18px',
+    margin: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: '12px',
+    width: '100%',
+}
+
+const leafListItemStyle: CSSProperties = {
+    display: 'block',
+    flex: '0 1 auto',
+}
+
+const connectorStyle: CSSProperties = {
+    display: 'inline-flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '2px',
+    margin: '14px 0',
+    color: 'var(--text-tertiary)',
+    fontSize: '0.75rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    fontWeight: 600,
+    alignSelf: 'center',
+}
+
+const connectorArrowStyle: CSSProperties = {
+    color: 'var(--text-secondary)',
+    fontSize: '0.85rem',
+    lineHeight: 1,
+}
+
+const connectorLabelStyle: CSSProperties = {
+    color: 'var(--text-tertiary)',
 }

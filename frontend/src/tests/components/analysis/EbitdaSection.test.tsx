@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 import type { EbitdaTree, Opportunity } from '@/lib/types/api'
 
-// Mock the dynamically imported EbitdaTree component
+// Mock ``EbitdaTree`` to isolate ``EbitdaSection`` rendering.
 vi.mock('@/components/EbitdaTree', () => ({
     default: ({ treeData }: { treeData: unknown[] }) => (
         <div data-testid="ebitda-tree">nodes: {treeData.length}</div>
