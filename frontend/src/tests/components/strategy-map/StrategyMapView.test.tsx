@@ -95,6 +95,26 @@ describe('StrategyMapView — structural composition', () => {
         // ProvenanceMarker is present (aria-label is the canonical query).
         expect(screen.getAllByLabelText('AI-inferred').length).toBeGreaterThanOrEqual(1)
     })
+
+    it('renders the confidence-dot legend so chip dots have explained meaning', () => {
+        // Every objective chip on the canvas renders a small
+        // ``ConfidenceIndicator`` (3 dots, partially filled). Without
+        // a legend the dots read as decorative; the legend below the
+        // canvas documents the HIGH / MEDIUM / LOW scale inline.
+        render(<StrategyMapView strategyMap={fullStrategyMap} />)
+        const legend = screen.getByTestId('strategy-map-confidence-legend')
+        expect(legend).toBeInTheDocument()
+        expect(legend).toHaveTextContent(/High/)
+        expect(legend).toHaveTextContent(/Medium/)
+        expect(legend).toHaveTextContent(/Low/)
+        // Each row carries a confidence indicator with the canonical
+        // aria-label — guarantees the dot rendering is the same one
+        // used on the chips. ``aria-label`` is also the only stable
+        // selector for the (visually-hidden-to-AT) dot triple.
+        expect(legend.querySelector('[aria-label="Confidence: High"]')).not.toBeNull()
+        expect(legend.querySelector('[aria-label="Confidence: Medium"]')).not.toBeNull()
+        expect(legend.querySelector('[aria-label="Confidence: Low"]')).not.toBeNull()
+    })
 })
 
 describe('StrategyMapView — header disclosures (single-open accordion)', () => {
