@@ -584,32 +584,35 @@ class TestDomainErrorDegradesGracefully:
             "generate_strategy_map"
         )
 
-    def test_programming_error_propagates(self) -> None:
-        """``AttributeError`` / ``KeyError`` / ``TypeError`` are bugs, not
-        domain errors — they MUST escape so SQS retries the message and
-        CloudWatch sees the stack trace."""
+    def test_malformed_ai_response_key_error_is_caught_and_map_is_cleared(self) -> None:
+        """A ``KeyError`` raised when accessing AI response data (e.g.
+        ``vision_data["statement"]`` against a malformed response) is a
+        DOMAIN error, not a programming bug — the AI returned a dict
+        that doesn't conform to its schema. The soft-fail catches it
+        and degrades. This guards the catch list against drift.
+        """
         ai_factory = MagicMock()
         accessor = _make_accessor()
         step = GenerateStrategyMap(ai_client_factory=ai_factory)
         step.entity_accessor = accessor  # type: ignore[assignment]
         step.request_executor = MagicMock()
 
-        def fake_run_ai_call(*_args: Any, **_kwargs: Any) -> tuple[str, dict[str, Any], float]:
-            msg = "boom — synthesis module misuse"
-            raise AttributeError(msg)
+        def fake_run_ai_call(
+            _user_prompt: str,
+            _schema: dict[str, Any],
+            _system_prompt: str,
+            label: str,
+        ) -> tuple[str, dict[str, Any], float]:
+            # Return a dict missing the ``statement`` key that the
+            # synthesis caller subscripts. ``vision_data["statement"]``
+            # raises ``KeyError`` outside any ``FutureManager`` block.
+            return label, {"synthesised": False, "rationale": "r"}, 0.1
 
         step._run_ai_call = MagicMock(side_effect=fake_run_ai_call)  # type: ignore[method-assign]
 
-        # ``FutureManager`` wraps the worker's ``AttributeError`` in a
-        # ``FutureManagerError``. Wait — that's a domain exception per
-        # our catch list, which would mean even genuine programming bugs
-        # get soft-failed. Document the trade-off here: the bank wraps
-        # everything, so this test pins the current behaviour. The
-        # alternative would be to unwrap inside the catch and re-raise
-        # non-domain errors; deferred until the trade-off bites.
         step.execute()
 
-        # Under the current behaviour the bug is logged + map is None.
-        # If you change this to re-raise programming errors, flip this
-        # assertion to ``pytest.raises(AttributeError)``.
         assert accessor.company.strategy_map is None
+        step.request_executor.mark_question_complete.assert_called_with(
+            "generate_strategy_map"
+        )

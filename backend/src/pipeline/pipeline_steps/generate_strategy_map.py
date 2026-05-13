@@ -92,26 +92,32 @@ class GenerateStrategyMap(RequestStep):
         **Soft-fail semantics for AI domain errors.** A strategy map is an
         additive analysis output; the user's primary value lives in the
         risk scores, opportunities, EBITDA tree, and value chain produced
-        by upstream steps. When the AI call chain fails with a domain
-        error (rate limit, schema validation, ``FutureManager`` exception
-        wrapping any of the above), this step logs the failure, leaves
-        ``company.strategy_map`` as ``None``, and returns normally so
-        ``PersistResults`` saves the rest of the analysis intact. The
-        user lands on the analysis page with all data except the map.
-        Re-analyse regenerates the whole thing including the map.
+        by upstream steps. When the AI chain fails — rate limit, schema
+        validation, ``FutureManager`` aggregation, malformed AI output
+        that's missing an expected key or has the wrong type — this step
+        logs the failure, leaves ``company.strategy_map`` as ``None``,
+        and returns normally so ``PersistResults`` saves the rest of the
+        analysis intact. The user lands on the analysis page with all
+        data except the map. Re-analyse regenerates everything
+        including the map.
 
-        Programming errors (``AttributeError``, ``KeyError``, ``TypeError``,
-        ``AssertionError``) are NOT caught here — they indicate a bug in
-        the pipeline and must propagate so SQS retries and CloudWatch
-        sees the stack trace. The prerequisite gates above also raise
-        ``ValueError`` if upstream output is missing — those are caught
-        below because they're domain errors (upstream pipeline already
-        failed; producing a degraded analysis is the right outcome).
+        ``KeyError`` and ``TypeError`` are included in the catch list
+        because the synthesis / arrows / assembly modules access AI
+        response dicts directly (``vision_data["statement"]``,
+        ``content["primary"]``); a missing key or wrong-typed value
+        from the AI surfaces as one of these. Genuine programming
+        bugs in our own code tend to surface as ``AttributeError``
+        against ``self`` / module imports — those are NOT caught and
+        will propagate so SQS retries and CloudWatch shows the stack
+        trace.
 
-        This mirrors the old on-demand worker's failure semantics
-        (``EngineError`` / ``ValueError`` / ``RuntimeError`` → user-visible
-        soft-fail; programming errors → SQS retry) and preserves the
-        isolation property that the dedicated worker provided.
+        The prerequisite gates also raise ``ValueError`` if upstream
+        pipeline output is missing — those are caught here for the
+        same reason (upstream already failed; producing a degraded
+        analysis without a map is the right outcome).
+
+        Net effect: this preserves the failure-isolation property the
+        dedicated on-demand worker provided in the pre-Phase-4 design.
         """
         accessor = cast("CompanyAccessor", self.entity_accessor)
         company = accessor.company
@@ -122,7 +128,14 @@ class GenerateStrategyMap(RequestStep):
         timer = StepTimer(STEP_NAME)
         try:
             self._generate_and_set(accessor, company, timer)
-        except (EngineError, FutureManagerError, ValueError, RuntimeError):
+        except (
+            EngineError,
+            FutureManagerError,
+            ValueError,
+            RuntimeError,
+            KeyError,
+            TypeError,
+        ):
             # Domain failure — degrade gracefully so ``PersistResults``
             # can save the rest of the analysis. The stack trace surfaces
             # in CloudWatch via ``logger.exception``; the company record

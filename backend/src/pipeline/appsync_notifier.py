@@ -73,5 +73,3 @@ def notify_progress(
                 logger.warning("AppSync notify failed: status=%d", response.status)
     except (URLError, OSError):
         logger.warning("AppSync notify failed for scan=%s", scan_id, exc_info=True)
-
-
