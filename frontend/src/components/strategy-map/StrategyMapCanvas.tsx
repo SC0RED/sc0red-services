@@ -253,7 +253,7 @@ function BandLabels({ bands, rowWidth }: { bands: StrategyMapBand[]; rowWidth: n
                             height: band.height,
                             borderBottom: '1px dashed var(--border-subtle)',
                             padding: '4px 8px',
-                            fontSize: '0.65rem',
+                            fontSize: '0.75rem',
                             fontWeight: 700,
                             color: 'var(--text-tertiary)',
                             textTransform: 'uppercase',

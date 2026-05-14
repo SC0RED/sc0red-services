@@ -60,7 +60,7 @@ export default function ValueLeverSummary({
                         >
                             <div
                                 style={{
-                                    fontSize: '0.8rem',
+                                    fontSize: '0.75rem',
                                     color: 'var(--text-secondary)',
                                     marginBottom: '0.5rem',
                                 }}

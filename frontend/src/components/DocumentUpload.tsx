@@ -228,7 +228,7 @@ export default function DocumentUpload({
                         </p>
                         <p
                             style={{
-                                fontSize: '0.8rem',
+                                fontSize: '0.75rem',
                                 color: 'var(--text-tertiary)',
                             }}
                         >
@@ -288,7 +288,7 @@ export default function DocumentUpload({
                                     border: 'none',
                                     color: 'var(--risk-critical)',
                                     cursor: 'pointer',
-                                    fontSize: '0.8rem',
+                                    fontSize: '0.75rem',
                                     fontWeight: 500,
                                     padding: '0.25rem 0.5rem',
                                 }}
