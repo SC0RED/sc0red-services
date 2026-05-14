@@ -50,40 +50,31 @@ export interface EbitdaCardProps {
     isSubtotalHeading?: boolean
 }
 
-const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-    revenue: {
-        bg: 'rgba(34, 197, 94, 0.10)',
-        border: 'rgba(34, 197, 94, 0.35)',
-        text: '#22C55E',
-    },
-    cost: {
-        bg: 'rgba(239, 68, 68, 0.10)',
-        border: 'rgba(239, 68, 68, 0.35)',
-        text: '#EF4444',
-    },
-    margin: {
-        bg: 'rgba(59, 123, 246, 0.10)',
-        border: 'rgba(59, 123, 246, 0.35)',
-        text: '#3B7BF6',
-    },
-    subtotal: {
-        bg: 'rgba(245, 158, 11, 0.10)',
-        border: 'rgba(245, 158, 11, 0.35)',
-        text: '#F59E0B',
-    },
+/** Per-type semantic accent colors. After
+ *  ``tighten-analysis-page-readability``, this map carries only the
+ *  ``accent`` hex used on the band header's 4px left strip and the
+ *  chip's 3px left border. The chip body, main border, and label all
+ *  use theme tokens (``--bg-surface-2``, ``--border-subtle``,
+ *  ``--text-primary``) — no more chromatic-bath chip backgrounds.
+ */
+const NODE_COLORS: Record<string, { accent: string }> = {
+    revenue: { accent: '#22C55E' },
+    cost: { accent: '#EF4444' },
+    margin: { accent: '#3B7BF6' },
+    subtotal: { accent: '#F59E0B' },
 }
 
 export default function EbitdaNodeComponent(props: EbitdaCardProps) {
     // The TypeScript discriminated union on ``type`` guarantees a hit
     // in ``NODE_COLORS`` — no fallback. A future contributor who adds
     // a new ``type`` value MUST add a ``NODE_COLORS`` entry; otherwise
-    // they'll get a loud ``undefined.text`` at render time instead of
-    // a silently-wrong blue palette.
-    const colors = NODE_COLORS[props.type]
+    // they'll get a loud ``undefined.accent`` at render time instead
+    // of a silently-wrong default.
+    const { accent } = NODE_COLORS[props.type]
     if (props.isSubtotalHeading) {
-        return <BandHeader {...props} accentColor={colors.text} />
+        return <BandHeader {...props} accentColor={accent} />
     }
-    return <LeafChip {...props} colors={colors} />
+    return <LeafChip {...props} accentColor={accent} />
 }
 
 /** Band-header variant — one-row P&L subtotal anchor.
@@ -112,7 +103,7 @@ function BandHeader({ label, valueRange, accentColor }: EbitdaCardProps & { acce
             <h3
                 style={{
                     margin: 0,
-                    fontSize: '0.95rem',
+                    fontSize: '1rem',
                     fontWeight: 700,
                     color: accentColor,
                     textTransform: 'uppercase',
@@ -126,7 +117,7 @@ function BandHeader({ label, valueRange, accentColor }: EbitdaCardProps & { acce
                 <span
                     style={{
                         marginLeft: 'auto',
-                        fontSize: '0.95rem',
+                        fontSize: '1rem',
                         fontWeight: 600,
                         color: 'var(--text-primary)',
                     }}
@@ -154,8 +145,8 @@ function LeafChip({
     linkedOpportunities,
     confidenceLevel,
     confidenceBasis,
-    colors,
-}: EbitdaCardProps & { colors: (typeof NODE_COLORS)[string] }) {
+    accentColor,
+}: EbitdaCardProps & { accentColor: string }) {
     // Show a confidence chip when the backend supplied a level AND
     // this is a leaf (revenue/cost) node. Subtotal / margin rollups
     // carry no own confidence per ebitda-tree-confidence.
@@ -177,9 +168,9 @@ function LeafChip({
             // hovered or focused. Replaces the custom absolutely-
             // positioned overlay that overflowed neighbouring rows.
             title={description || undefined}
-            style={chipStyle(colors)}
+            style={chipStyle(accentColor)}
         >
-            <div style={chipLabelStyle(colors.text)}>{label}</div>
+            <div style={chipLabelStyle}>{label}</div>
             {valueRange && (
                 <div style={chipValueRowStyle}>
                     <span>{valueRange}</span>
@@ -226,11 +217,16 @@ function LeafChip({
 
 // ── chip styles ─────────────────────────────────────────────────────────────
 
-function chipStyle(colors: (typeof NODE_COLORS)[string]): CSSProperties {
+/** Chip outer style. After ``tighten-analysis-page-readability`` the
+ *  chip's semantic-type signal is carried ONLY on the 3px left border;
+ *  the body, main border, and label are neutral theme tokens. Mirrors
+ *  the strategy-map chip's ``borderLeft`` accent pattern. */
+function chipStyle(accentColor: string): CSSProperties {
     return {
         padding: '8px 12px',
-        background: colors.bg,
-        border: `1px solid ${colors.border}`,
+        background: 'var(--bg-surface-2)',
+        border: '1px solid var(--border-subtle)',
+        borderLeft: `3px solid ${accentColor}`,
         borderRadius: '8px',
         minWidth: '150px',
         maxWidth: '200px',
@@ -240,15 +236,13 @@ function chipStyle(colors: (typeof NODE_COLORS)[string]): CSSProperties {
     }
 }
 
-function chipLabelStyle(textColor: string): CSSProperties {
-    return {
-        fontSize: '0.8125rem',
-        fontWeight: 700,
-        color: textColor,
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-    }
+const chipLabelStyle: CSSProperties = {
+    fontSize: '0.875rem',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
 }
 
 const chipValueRowStyle: CSSProperties = {

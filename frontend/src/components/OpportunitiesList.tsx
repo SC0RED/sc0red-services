@@ -13,7 +13,7 @@ function ImpactBadge({ impact }: { impact: string }) {
 
 function TimelineBadge({ timeline }: { timeline: string }) {
     return (
-        <span className="badge badge-blue" style={{ fontSize: '0.7rem' }}>
+        <span className="badge badge-blue" style={{ fontSize: '0.75rem' }}>
             {timeline}
         </span>
     )
@@ -74,7 +74,7 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
                             borderColor: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--border)',
                             background: activeOppCat === cat ? 'rgba(59,123,246,0.1)' : 'transparent',
                             color: activeOppCat === cat ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                            fontSize: '0.8rem',
+                            fontSize: '0.75rem',
                             fontWeight: 500,
                             cursor: 'pointer',
                             transition: 'all var(--transition-fast)',
@@ -116,7 +116,7 @@ function OpportunityHeader({ opp }: { opp: Opportunity }) {
             <div
                 style={{
                     fontWeight: 700,
-                    fontSize: '0.9875rem',
+                    fontSize: '1rem',
                     marginBottom: '0.5rem',
                 }}
             >
@@ -137,7 +137,7 @@ function OpportunityHeader({ opp }: { opp: Opportunity }) {
                         style={{
                             padding: '0.15rem 0.5rem',
                             borderRadius: 'var(--radius-full)',
-                            fontSize: '0.7rem',
+                            fontSize: '0.75rem',
                             fontWeight: 500,
                             border: '1px solid',
                             borderColor: LEVER_COLORS[opp.value_lever] || 'var(--text-secondary)',
@@ -161,7 +161,7 @@ function OpportunityBody({ opp }: { opp: Opportunity }) {
         <>
             <p
                 style={{
-                    fontSize: '0.9rem',
+                    fontSize: '0.875rem',
                     lineHeight: 1.75,
                     color: 'var(--text-primary)',
                     marginTop: 0,
@@ -272,7 +272,7 @@ function OpportunityBody({ opp }: { opp: Opportunity }) {
                     >
                         Potential ROI
                     </div>
-                    <div style={{ fontWeight: 600, color: 'var(--risk-low)', fontSize: '0.9rem' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--risk-low)', fontSize: '0.875rem' }}>
                         {opp.roi_estimate}
                     </div>
                 </div>

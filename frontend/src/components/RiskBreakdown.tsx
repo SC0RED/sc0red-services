@@ -68,7 +68,7 @@ export default function RiskBreakdown({ riskScores }: RiskBreakdownProps) {
                                             <div
                                                 style={{
                                                     fontWeight: 600,
-                                                    fontSize: '0.9375rem',
+                                                    fontSize: '1rem',
                                                     marginBottom: '2px',
                                                 }}
                                             >

@@ -38,7 +38,7 @@ export default function TopActionsCallout({ actions }: TopActionsCalloutProps) {
                     style={{
                         fontWeight: 700,
                         color: 'var(--accent-blue)',
-                        fontSize: '0.9rem',
+                        fontSize: '0.875rem',
                     }}
                 >
                     Top 3 Immediate Actions

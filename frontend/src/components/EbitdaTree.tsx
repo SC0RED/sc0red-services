@@ -238,7 +238,7 @@ const connectorStyle: CSSProperties = {
 
 const connectorArrowStyle: CSSProperties = {
     color: 'var(--text-secondary)',
-    fontSize: '0.85rem',
+    fontSize: '0.875rem',
     lineHeight: 1,
 }
 

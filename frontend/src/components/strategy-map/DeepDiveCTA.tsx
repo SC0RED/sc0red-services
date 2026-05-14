@@ -89,7 +89,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
                 rel="noopener noreferrer"
                 onClick={handleCtaClick}
                 style={{
-                    fontSize: '0.85rem',
+                    fontSize: '0.875rem',
                     color: 'var(--accent-blue)',
                     fontWeight: 600,
                     textDecoration: 'none',
@@ -119,7 +119,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
             <div style={{ flex: '1 1 320px', minWidth: '0' }}>
                 <h3
                     style={{
-                        fontSize: '1.05rem',
+                        fontSize: '1rem',
                         fontWeight: 700,
                         margin: '0 0 6px',
                         color: 'var(--text-primary)',
@@ -153,7 +153,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
                     borderRadius: '6px',
                     background: 'var(--accent-blue)',
                     color: 'white',
-                    fontSize: '0.9rem',
+                    fontSize: '0.875rem',
                     fontWeight: 600,
                     textDecoration: 'none',
                 }}
