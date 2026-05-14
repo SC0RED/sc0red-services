@@ -24,7 +24,12 @@ test.describe('analysis detail', () => {
 
     test('analysis page shows opportunities', async ({ page }) => {
         await navigateToAnalysis(page)
-        await expect(page.getByText('AI Opportunities')).toBeVisible({ timeout: 10000 })
+        // Scope to the heading — the EBITDA opportunity-link legend also
+        // mentions "AI Opportunities" inline, so a bare getByText match would
+        // collide. The section header is the authoritative anchor.
+        await expect(page.getByRole('heading', { name: /AI Opportunities/ })).toBeVisible({
+            timeout: 10000,
+        })
     })
 
     test('analysis page shows EBITDA section', async ({ page }) => {
