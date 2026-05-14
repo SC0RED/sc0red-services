@@ -26,7 +26,6 @@ from stacks.stack_resources import (
     create_table,
 )
 from stacks.step_functions_construct import StepFunctionsConstruct
-from stacks.strategy_map_construct import StrategyMapConstruct
 
 
 class JanusStack(Stack):
@@ -112,6 +111,17 @@ class JanusStack(Stack):
             enable_tracing=enable_tracing,
         )
         worker_concurrency = config.get("worker_concurrency", 4)
+        # Lambda envelope bumped (was 540 s / 1769 MB) so the inlined
+        # strategy-map step (``redesign-strategy-map`` Phase 4) has
+        # headroom for OpenAI tail-latency retries on top of the base
+        # ~30 s analysis. The 900 s timeout is the Lambda max; 2048 MB
+        # gives ~1.16 vCPU (above the 1769 MB tier where AWS allocates
+        # >1 vCPU) so Pydantic validation + prompt rendering across the
+        # decomposed strategy-map chain don't bottleneck on CPU.
+        # The analysis-queue ``visibility_timeout`` (in
+        # ``stack_resources.create_queues``) MUST be >= this Lambda
+        # timeout per the AWS SQS-Lambda event-source-mapping contract;
+        # the queue is configured at 1080 s for the same ~20 % buffer.
         worker_handler = create_lambda(
             self,
             "WorkerHandler",
@@ -119,8 +129,8 @@ class JanusStack(Stack):
             handler="src.handlers.worker_handler_entry.handle_worker_event",
             bundling=bundling,
             environment=common_environment,
-            timeout_seconds=540,
-            memory_size=1769,
+            timeout_seconds=900,
+            memory_size=2048,
             architecture=lambda_architecture,
             log_retention_days=log_retention_days,
             enable_tracing=enable_tracing,
@@ -229,29 +239,6 @@ class JanusStack(Stack):
         api_handler.add_environment("APPSYNC_ENDPOINT", observability.appsync_url)
         api_handler.add_environment("APPSYNC_API_KEY", observability.appsync_api_key)
 
-        # ── On-demand strategy-map worker (strategy-map-on-demand spec) ──
-        # Dedicated SQS queue + Lambda. Isolated from the main analysis worker
-        # so a strategy-map crash doesn't drain into the analysis pipeline.
-        strategy_map = StrategyMapConstruct(
-            self,
-            "StrategyMap",
-            environment=environment,
-            bundling=bundling,
-            common_environment=common_environment,
-            table=table,
-            lambda_architecture=lambda_architecture,
-            log_retention_days=log_retention_days,
-            enable_tracing=enable_tracing,
-            enable_monitoring=bool(config.get("enable_monitoring")),
-            appsync_endpoint=observability.appsync_url,
-            appsync_api_key=observability.appsync_api_key,
-        )
-        # API Lambda enqueues; worker Lambda is wired internally to consume.
-        strategy_map.queue.grant_send_messages(api_handler)
-        api_handler.add_environment(
-            "STRATEGY_MAP_QUEUE_URL", strategy_map.queue.queue_url
-        )
-
         # ── Step Functions for portfolio batch coordination ──────────
         batch_coordinator = StepFunctionsConstruct(
             self,
@@ -275,9 +262,6 @@ class JanusStack(Stack):
         CfnOutput(self, "TableName", value=table.table_name)
         CfnOutput(self, "QueueUrl", value=queue.queue_url)
         CfnOutput(self, "DlqUrl", value=dlq.queue_url)
-        CfnOutput(self, "StrategyMapQueueUrl", value=strategy_map.queue.queue_url)
-        CfnOutput(self, "StrategyMapDlqUrl", value=strategy_map.dlq.queue_url)
-        CfnOutput(self, "StrategyMapWorkerLambdaName", value=strategy_map.worker.function_name)
         CfnOutput(self, "BucketName", value=documents_bucket.bucket_name)
         CfnOutput(self, "ApiLambdaName", value=api_handler.function_name)
         CfnOutput(self, "WorkerLambdaName", value=worker_handler.function_name)

@@ -4,7 +4,7 @@ import { Handle, type NodeProps, NodeToolbar, Position, type Node } from '@xyflo
 
 import ConfidenceIndicator from '@/components/analysis/ConfidenceIndicator'
 import { useHoverIntent } from '@/lib/hooks/useHoverIntent'
-import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
+import { CHIP_HEIGHT, CHIP_WIDTH, type StrategyMapNodeData } from '@/lib/strategyMap/layout'
 
 /**
  * Custom React Flow node for the strategy-map canvas.
@@ -40,9 +40,6 @@ import type { StrategyMapNodeData } from '@/lib/strategyMap/layout'
  *     canvas's `overflow: hidden` and got clipped.
  * The `NodeToolbar` portal escapes both issues at once.
  */
-
-const CHIP_WIDTH = 220
-const CHIP_HEIGHT = 64
 
 /** Slight visual differentiation per perspective via a left-border accent. */
 const PERSPECTIVE_ACCENT: Record<StrategyMapNodeData['perspective'], string> = {
@@ -132,7 +129,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                 <span
                     style={{
                         fontFamily: 'var(--font-mono, monospace)',
-                        fontSize: '0.65rem',
+                        fontSize: '0.75rem',
                         fontWeight: 700,
                         color: 'var(--text-tertiary)',
                         flexShrink: 0,
@@ -144,7 +141,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                 {data.capacityBucket ? (
                     <span
                         style={{
-                            fontSize: '0.6rem',
+                            fontSize: '0.75rem',
                             fontWeight: 700,
                             textTransform: 'uppercase',
                             color: 'var(--text-tertiary)',
@@ -158,7 +155,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
             </header>
             <div
                 style={{
-                    fontSize: '0.8rem',
+                    fontSize: '0.75rem',
                     fontWeight: 600,
                     color: 'var(--text-primary)',
                     fontStyle: data.customerVoice ? 'italic' : 'normal',
@@ -261,7 +258,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                     >
                         <strong
                             style={{
-                                fontSize: '0.85rem',
+                                fontSize: '0.875rem',
                                 color: 'var(--text-primary)',
                                 fontStyle: data.customerVoice ? 'italic' : 'normal',
                                 lineHeight: 1.4,
@@ -284,7 +281,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                         <p
                             style={{
                                 margin: 0,
-                                fontSize: '0.78rem',
+                                fontSize: '0.75rem',
                                 color: 'var(--text-secondary)',
                                 lineHeight: 1.6,
                                 whiteSpace: 'pre-line',
@@ -298,7 +295,7 @@ export default function StrategyMapNode({ id, data, selected }: NodeProps<Node<S
                                     margin: '8px 0 0',
                                     paddingTop: '8px',
                                     borderTop: '1px solid var(--border-subtle)',
-                                    fontSize: '0.7rem',
+                                    fontSize: '0.75rem',
                                     fontStyle: 'italic',
                                     color: 'var(--text-tertiary)',
                                     lineHeight: 1.5,

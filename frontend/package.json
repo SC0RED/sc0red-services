@@ -24,7 +24,6 @@
         "prepare": "cd .. && husky install frontend/.husky"
     },
     "dependencies": {
-        "@dagrejs/dagre": "^2.0.4",
         "@xyflow/react": "^12.10.1",
         "amazon-cognito-identity-js": "^6.3.16",
         "cmdk": "^1.1.1",

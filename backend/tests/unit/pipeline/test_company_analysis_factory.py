@@ -25,30 +25,40 @@ class TestCompanyAnalysisFactory:
             request_id="r-1",
         )
 
-    def test_get_pipeline_returns_six_steps(self):
-        # Per `strategy-map-on-demand` Phase C the auto-gen
-        # `GenerateStrategyMap` step was lifted from this pipeline to a
-        # dedicated SQS worker. The persisted analysis pipeline is now 6
-        # steps (was 7) and the strategy-map artifact is generated
-        # on-demand via the "Generate strategy map" button.
+    def test_get_pipeline_returns_seven_steps(self):
+        # Per `redesign-strategy-map` Phase 4 the strategy-map step is
+        # back in the auto-pipeline (and the on-demand SQS worker that
+        # ran it in isolation was deleted in the same change). The
+        # pipeline runs every analysis end-to-end through to a persisted
+        # strategy map without any user-driven trigger.
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
-        assert len(pipeline) == 6
+        assert len(pipeline) == 7
         assert isinstance(pipeline[0], ScrapeAndResolveURL)
         assert isinstance(pipeline[1], ParallelProfileRiskAndIdeation)
         assert isinstance(pipeline[2], DetailOpportunities)
         assert isinstance(pipeline[3], ComputeEbitdaTree)
         assert isinstance(pipeline[4], ComputeValueChain)
-        assert isinstance(pipeline[5], PersistResults)
+        assert isinstance(pipeline[5], GenerateStrategyMap)
+        assert isinstance(pipeline[6], PersistResults)
 
-    def test_pipeline_does_not_contain_generate_strategy_map(self):
-        # Defends against an accidental re-introduction of the auto-gen
-        # step. The strategy-map worker uses the same `GenerateStrategyMap`
-        # class, so the import isn't dead — only the wiring into THIS
-        # pipeline must stay removed.
+    def test_generate_strategy_map_sits_between_value_chain_and_persist(self):
+        # Order matters: ``GenerateStrategyMap`` consumes the profile,
+        # risk assessment, opportunities, EBITDA tree, and value chain
+        # produced by the upstream steps, then ``PersistResults`` writes
+        # the assembled map to DynamoDB alongside the other artifacts.
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
-        assert not any(isinstance(step, GenerateStrategyMap) for step in pipeline)
+        value_chain_index = next(
+            i for i, step in enumerate(pipeline) if isinstance(step, ComputeValueChain)
+        )
+        strategy_index = next(
+            i for i, step in enumerate(pipeline) if isinstance(step, GenerateStrategyMap)
+        )
+        persist_index = next(
+            i for i, step in enumerate(pipeline) if isinstance(step, PersistResults)
+        )
+        assert value_chain_index < strategy_index < persist_index
 
     def test_build_executor_wires_accessor(self):
         factory = self._make_factory()
@@ -58,7 +68,7 @@ class TestCompanyAnalysisFactory:
 
     def test_execute_pipeline_runs_all_steps(self):
         factory = self._make_factory()
-        mock_steps = [MagicMock() for _ in range(6)]
+        mock_steps = [MagicMock() for _ in range(7)]
         for i, step in enumerate(mock_steps):
             step.step_name.return_value = f"Step{i}"
         factory.get_pipeline = MagicMock(return_value=mock_steps)
@@ -79,5 +89,5 @@ class TestCompanyAnalysisFactory:
             assessment_repo=assessment_repo,
         )
         pipeline = factory.get_pipeline()
-        persist_step = pipeline[5]
+        persist_step = pipeline[6]
         assert isinstance(persist_step, PersistResults)

@@ -13,15 +13,25 @@ from src.models.analytics_events import (
 
 
 def _web_event(**overrides: object) -> dict[str, object]:
+    """Build a default web-source analytics event payload.
+
+    The default ``event_type`` is the strategy-map CTA "rendered" event
+    — the only web-source CTA emitter that survives Phase 5 of
+    ``redesign-strategy-map`` (the opportunities-list ``Sc0redCTABanner``
+    and its three event types — ``_banner_expanded`` /
+    ``_banner_collapsed`` / ``_clicked`` — were removed). Strategy-map
+    events MUST carry ``active_lever_filter=None``; the validator
+    rejects non-null lever filters for these event types.
+    """
     base: dict[str, object] = {
         "event_id": "uuid-1",
-        "event_type": "sc0red_cta_banner_expanded",
+        "event_type": "sc0red_cta_rendered_strategy_map",
         "timestamp": "2026-04-24T12:00:00.000Z",
         "analytics_version": "1",
         "source": "web",
         "analysis_id": "assess-1",
         "opportunity_count": 3,
-        "active_lever_filter": "Revenue Side",
+        "active_lever_filter": None,
     }
     base.update(overrides)
     return base
@@ -40,34 +50,6 @@ def _pdf_event(**overrides: object) -> dict[str, object]:
     }
     base.update(overrides)
     return base
-
-
-class TestAnalyticsEventWebEvents:
-    def test_expand_event_parses(self) -> None:
-        event = AnalyticsEvent(**_web_event())
-        assert event.event_type == "sc0red_cta_banner_expanded"
-        assert event.source == "web"
-        assert event.active_lever_filter == "Revenue Side"
-
-    def test_collapse_event_parses(self) -> None:
-        event = AnalyticsEvent(**_web_event(event_type="sc0red_cta_banner_collapsed"))
-        assert event.event_type == "sc0red_cta_banner_collapsed"
-
-    def test_click_event_parses(self) -> None:
-        event = AnalyticsEvent(**_web_event(event_type="sc0red_cta_clicked"))
-        assert event.event_type == "sc0red_cta_clicked"
-
-    def test_lever_filter_may_be_null(self) -> None:
-        event = AnalyticsEvent(**_web_event(active_lever_filter=None))
-        assert event.active_lever_filter is None
-
-    def test_cost_side_is_accepted(self) -> None:
-        event = AnalyticsEvent(**_web_event(active_lever_filter="Cost Side"))
-        assert event.active_lever_filter == "Cost Side"
-
-    def test_arbitrary_lever_filter_rejected(self) -> None:
-        with pytest.raises(ValidationError):
-            AnalyticsEvent(**_web_event(active_lever_filter="Some Other Lever"))
 
 
 class TestAnalyticsEventStrategyMapEvents:
@@ -210,7 +192,7 @@ class TestEnrichedAnalyticsEvent:
         )
         dumped = enriched.model_dump()
         assert dumped["event_id"] == "uuid-1"
-        assert dumped["event_type"] == "sc0red_cta_banner_expanded"
+        assert dumped["event_type"] == "sc0red_cta_rendered_strategy_map"
         assert dumped["user_id"] == "user-1"
         assert dumped["org_id"] == "org-1"
         assert dumped["analytics_version"] == ANALYTICS_VERSION

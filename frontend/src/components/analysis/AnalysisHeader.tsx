@@ -89,7 +89,7 @@ export default function AnalysisHeader({
                 {isPortfolio && (
                     <div
                         style={{
-                            fontSize: '0.8125rem',
+                            fontSize: '0.875rem',
                             color: 'var(--text-tertiary)',
                             marginBottom: '0.5rem',
                         }}
@@ -125,7 +125,7 @@ export default function AnalysisHeader({
                             rel="noopener noreferrer"
                             style={{
                                 color: 'var(--text-tertiary)',
-                                fontSize: '0.8125rem',
+                                fontSize: '0.875rem',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.25rem',

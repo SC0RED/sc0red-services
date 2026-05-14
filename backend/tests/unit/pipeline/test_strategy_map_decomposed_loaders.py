@@ -40,7 +40,6 @@ _PER_CALL_SCHEMAS = [
     "vp_rationale",
     "arrow_yesno",
     "arrows_priorities",
-    "arrows_gaps",
 ]
 
 _DECOMPOSED_TEMPLATES = [
@@ -66,7 +65,6 @@ _DECOMPOSED_TEMPLATES = [
     "vp_rationale",
     "arrow_yesno",
     "arrows_priorities",
-    "arrows_gaps",
 ]
 
 # JSON Schema keywords that OpenAI's structured-output mode REJECTS with

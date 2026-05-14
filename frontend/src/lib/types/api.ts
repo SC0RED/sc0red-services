@@ -79,13 +79,6 @@ export interface AnalysisData {
     /** AI-generated Balanced Scorecard strategy map (Vector Advisory).
      * Optional because legacy analyses pre-date this field. */
     strategyMap?: StrategyMap
-    /** In-flight on-demand strategy-map generation flag (per the
-     *  strategy-map-on-demand spec). Populated when the SQS worker is
-     *  processing a generation job; absent / null otherwise. The frontend
-     *  renders the generating placeholder when this is "generating",
-     *  the CTA when it's null/absent and `strategyMap` is also absent,
-     *  and `<StrategyMapView />` when `strategyMap` is populated. */
-    strategyMapGenerationState?: 'generating' | null
     documents?: DocumentInfo[]
     analyzedAt?: string
     error?: string
@@ -207,14 +200,6 @@ export interface Arrow {
     hypothesis: string
 }
 
-export interface Gap {
-    id: string
-    title: string
-    description: string
-    deepDiveFraming: string
-    relatedObjectiveIds?: string[]
-}
-
 export interface CoreValues {
     values: string[]
     synthesised: boolean
@@ -231,7 +216,6 @@ export interface StrategyMap {
     internalProcesses: { themes: InternalProcessTheme[] }
     organizationalCapacity: OrganizationalCapacityPerspective
     arrows: Arrow[]
-    whatsMissing: Gap[]
     coreValues: CoreValues
 }
 

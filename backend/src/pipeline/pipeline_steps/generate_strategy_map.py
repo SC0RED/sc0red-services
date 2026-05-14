@@ -6,20 +6,24 @@ single-company analysis pipeline. Consumes existing pipeline output
 tree, value chain) plus any user-uploaded document text, and produces
 a `StrategyMap` artifact persisted on the assessment record.
 
-Generation runs as a 7-step chain:
-  Step 1 — Vision and Mission synthesis        (single AI call)
-  Step 2 — Customer Value Proposition classify (single AI call)
-  Step 3 — Financial perspective objectives    \
-  Step 4 — Customer perspective objectives     -- 4 calls in parallel
-  Step 5 — Internal Processes (themed)         -- via FutureManager
-  Step 6 — Organizational Capacity (P/T/C)     /
-  Step 7 — Arrows + Strategic Priorities       (single AI call)
-                + "What's Missing?" gaps
+Generation runs as a fully decomposed chain (~25 small AI calls fanned
+out under ``FutureManager``). Modules:
+  - ``_strategy_map_synthesis``  — Vision/Mission and Value Proposition
+                                   (Phase 2: 4 + 4 parallel sub-calls).
+  - ``_strategy_map_perspectives`` — Financial / Customer /
+                                     Internal-Processes / Organizational
+                                     Capacity (Phase 1: Rounds 1/2/3).
+  - ``_strategy_map_arrows``     — Strategic Priorities + per-pair
+                                   arrow yes/no calls (Phase 2).
+  - ``_strategy_map_assembly``   — Final Pydantic validation.
 
 The corpus that grounds generation lives at `prompts/strategy_map/`
 and is loaded via `_strategy_map_corpus.py`. Context construction
-and summarisation helpers live in `_strategy_map_context.py`. Output
-assembly + validation lives in `_strategy_map_assembly.py`.
+and summarisation helpers live in `_strategy_map_context.py`.
+
+The earlier monolithic (single-call-per-step) path was removed end-to-end
+under ``redesign-strategy-map`` Phase 3 — the decomposed chain is the
+only path, no feature flags.
 
 Per CLAUDE.md mandatory patterns:
   - Subclass `RequestStep`.
@@ -31,28 +35,29 @@ Per CLAUDE.md mandatory patterns:
 from __future__ import annotations
 
 import logging
-import os
 from typing import TYPE_CHECKING, Any, cast
 
+from signalfield_core.exceptions.base import EngineError
 from signalfield_core.pipeline.step import RequestStep
+from signalfield_core.utilities.future_manager import FutureManagerError
 
-from src.pipeline.pipeline_steps._strategy_map_assembly import (
-    assemble_strategy_map,
-    extract_core_values,
+from src.pipeline.pipeline_steps._strategy_map_arrows import (
+    run_decomposed_arrows_and_priorities,
 )
+from src.pipeline.pipeline_steps._strategy_map_assembly import assemble_strategy_map
 from src.pipeline.pipeline_steps._strategy_map_context import (
     build_shared_context,
     summarise_confidence,
     summarise_perspective,
     summarise_value_proposition,
-    unwrap_perspective,
 )
 from src.pipeline.pipeline_steps._strategy_map_corpus import compose_system_prompt
-from src.pipeline.pipeline_steps._strategy_map_legacy_steps import (
-    run_step_1_vision_mission,
-    run_step_2_value_proposition,
-    run_step_7_arrows_and_gaps,
-    run_steps_3_through_6_in_parallel,
+from src.pipeline.pipeline_steps._strategy_map_perspectives import (
+    generate_perspectives_decomposed,
+)
+from src.pipeline.pipeline_steps._strategy_map_synthesis import (
+    run_decomposed_value_proposition,
+    run_decomposed_vision_mission,
 )
 from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
 from src.pipeline.step_timer import StepTimer
@@ -67,61 +72,6 @@ logger = logging.getLogger(__name__)
 STEP_NAME = "GenerateStrategyMap"
 """CloudWatch log filter prefix and metric label."""
 
-DECOMPOSED_FLAG_ENV_VAR = "GENERATE_STRATEGY_MAP_DECOMPOSED"
-"""Env var that gates the decomposed (Phase 1) call shape.
-
-When set to ``"1"`` on the strategy-map worker Lambda, Steps 3-6
-delegate to ``_strategy_map_perspectives.generate_perspectives_decomposed``,
-which fans the four perspectives out into ~25 small parallel AI calls
-instead of the legacy 4-call-per-perspective pattern. Default OFF —
-the legacy single-call path runs unchanged. See
-``optimize-strategy-map-latency`` design Decision §0a for which
-Lambda receives this env var.
-"""
-
-DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR = "GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS"
-"""Env var that gates the decomposed (Phase 2) synthesis call shape.
-
-When set to ``"1"`` ON TOP OF ``GENERATE_STRATEGY_MAP_DECOMPOSED=1``:
-- Step 1 (Vision/Mission) delegates to
-  ``_strategy_map_synthesis.run_decomposed_vision_mission`` (4 parallel
-  sub-calls).
-- Step 2 (Value Proposition) delegates to
-  ``_strategy_map_synthesis.run_decomposed_value_proposition`` (4 parallel
-  sub-calls).
-- Step 7 (Arrows + Priorities + Gaps) delegates to
-  ``_strategy_map_arrows.run_decomposed_arrows_and_gaps`` (~15-25 parallel
-  per-pair yes/no calls + 2 holistic singletons).
-
-This flag MUST NOT be set without ``GENERATE_STRATEGY_MAP_DECOMPOSED=1``
-— ``execute()`` raises a ``ValueError`` before any AI call is made if
-synthesis decomposition is requested while Phase 1 is off. The arrows
-module reuses the Phase 1 decomposed perspective output for candidate
-pair enumeration; without Phase 1's per-objective IDs the arrows
-fan-out would be ill-defined.
-
-Default OFF — Phase 1 alone (or fully monolithic) runs unchanged.
-"""
-
-
-def _decomposed_path_enabled() -> bool:
-    """Whether the decomposed Phase 1 call shape should run.
-
-    Reads the env var at call time (not import time) so test fixtures
-    can flip it via ``monkeypatch.setenv``.
-    """
-    return os.environ.get(DECOMPOSED_FLAG_ENV_VAR, "0") == "1"
-
-
-def _decomposed_synthesis_enabled() -> bool:
-    """Whether the decomposed Phase 2 synthesis call shape should run.
-
-    Reads the env var at call time. Callers MUST also verify
-    ``_decomposed_path_enabled()`` — the synthesis path requires the
-    Phase 1 perspective output to enumerate arrow candidate pairs.
-    """
-    return os.environ.get(DECOMPOSED_SYNTHESIS_FLAG_ENV_VAR, "0") == "1"
-
 
 class GenerateStrategyMap(RequestStep):
     """Generate the Balanced Scorecard strategy map for the company."""
@@ -132,16 +82,84 @@ class GenerateStrategyMap(RequestStep):
         self._ai_client_factory = ai_client_factory
 
     def execute(self) -> None:
-        """Run the 7-step generation chain and persist the assembled map.
+        """Run the decomposed generation chain and persist the assembled map.
 
         Wall-clock timings for every AI call are recorded via ``StepTimer`` and
         emitted as ``GenerateStrategyMap.timings`` on the request_executor's
         details payload — same pattern other AI-heavy steps follow
         (``ParallelProfileRiskAndIdeation``, ``DetailOpportunities``).
+
+        **Soft-fail semantics for AI domain errors.** A strategy map is an
+        additive analysis output; the user's primary value lives in the
+        risk scores, opportunities, EBITDA tree, and value chain produced
+        by upstream steps. When the AI chain fails — rate limit, schema
+        validation, ``FutureManager`` aggregation, malformed AI output
+        that's missing an expected key or has the wrong type — this step
+        logs the failure, leaves ``company.strategy_map`` as ``None``,
+        and returns normally so ``PersistResults`` saves the rest of the
+        analysis intact. The user lands on the analysis page with all
+        data except the map. Re-analyse regenerates everything
+        including the map.
+
+        ``KeyError`` and ``TypeError`` are included in the catch list
+        because the synthesis / arrows / assembly modules access AI
+        response dicts directly (``vision_data["statement"]``,
+        ``content["primary"]``); a missing key or wrong-typed value
+        from the AI surfaces as one of these. Genuine programming
+        bugs in our own code tend to surface as ``AttributeError``
+        against ``self`` / module imports — those are NOT caught and
+        will propagate so SQS retries and CloudWatch shows the stack
+        trace.
+
+        The prerequisite gates also raise ``ValueError`` if upstream
+        pipeline output is missing — those are caught here for the
+        same reason (upstream already failed; producing a degraded
+        analysis without a map is the right outcome).
+
+        Net effect: this preserves the failure-isolation property the
+        dedicated on-demand worker provided in the pre-Phase-4 design.
         """
         accessor = cast("CompanyAccessor", self.entity_accessor)
         company = accessor.company
 
+        # ``StepTimer`` collects per-AI-call elapsed times; we always emit the
+        # collected timings to ``request_executor`` even on the failure path so
+        # CloudWatch shows which calls completed before the exception.
+        timer = StepTimer(STEP_NAME)
+        try:
+            self._generate_and_set(accessor, company, timer)
+        except (
+            EngineError,
+            FutureManagerError,
+            ValueError,
+            RuntimeError,
+            KeyError,
+            TypeError,
+        ):
+            # Domain failure — degrade gracefully so ``PersistResults``
+            # can save the rest of the analysis. The stack trace surfaces
+            # in CloudWatch via ``logger.exception``; the company record
+            # ends up with no strategy map and the frontend slot renders
+            # nothing for it.
+            logger.exception(
+                "[%s] Strategy-map generation failed; analysis will persist without a map",
+                STEP_NAME,
+            )
+            accessor.set_strategy_map(None)
+        finally:
+            # Always emit timings, even on failure, so partial-call latencies
+            # are visible in CloudWatch for diagnostics.
+            self.request_executor.add_details(timer.to_details())
+
+        self.request_executor.mark_question_complete("generate_strategy_map")
+
+    def _generate_and_set(
+        self,
+        accessor: CompanyAccessor,
+        company: Any,
+        timer: StepTimer,
+    ) -> None:
+        """Run the full generation chain and set the result on the accessor."""
         # Sanity gate: we need the prerequisite analysis output. If
         # any is missing, the upstream pipeline failed and we should
         # not silently produce a half-baked strategy map.
@@ -160,185 +178,83 @@ class GenerateStrategyMap(RequestStep):
         system_prompt = compose_system_prompt()
 
         # Build the shared context dict; later steps mutate it to add
-        # their outputs as substitution variables for downstream
-        # prompts.
+        # their outputs as substitution variables for downstream prompts.
         context = build_shared_context(company)
 
-        # Feature-flag validation. Phase 2 (synthesis decomposition)
-        # MUST run on top of Phase 1 (perspective decomposition). The
-        # arrows module reuses Phase 1's per-objective IDs (F1..F3,
-        # C1..C4, I*.*, O.P/O.T/O.C) to enumerate candidate pairs —
-        # without Phase 1 these IDs may not have stable shapes.
-        synthesis_decomposed = _decomposed_synthesis_enabled()
-        phase1_decomposed = _decomposed_path_enabled()
-        if synthesis_decomposed and not phase1_decomposed:
-            message = (
-                "Cannot enable GENERATE_STRATEGY_MAP_DECOMPOSED_SYNTHESIS=1 "
-                "without GENERATE_STRATEGY_MAP_DECOMPOSED=1. The synthesis "
-                "decomposition reuses Phase 1's perspective output."
-            )
-            raise ValueError(message)
+        # Step 1 — Vision and Mission (4 parallel sub-calls).
+        vision_data, mission_data = run_decomposed_vision_mission(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+        )
+        context["vision_statement"] = vision_data["statement"]
+        context["mission_statement"] = mission_data["statement"]
 
-        # ``StepTimer`` collects per-AI-call elapsed times; we always emit the
-        # collected timings to ``request_executor`` even on the failure path so
-        # CloudWatch shows which calls completed before the exception.
-        timer = StepTimer(STEP_NAME)
-        try:
-            # Step 1 — Vision and Mission. Two paths:
-            # - Decomposed (Phase 2): 4 parallel sub-calls in
-            #   ``_strategy_map_synthesis.run_decomposed_vision_mission``.
-            # - Monolithic: today's single AI call.
-            if synthesis_decomposed:
-                from src.pipeline.pipeline_steps._strategy_map_synthesis import (
-                    run_decomposed_vision_mission,
-                )
+        # Step 2 — Customer Value Proposition (4 parallel sub-calls).
+        value_proposition_data = run_decomposed_value_proposition(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+        )
+        context["value_proposition"] = summarise_value_proposition(value_proposition_data)
 
-                vision_data, mission_data = run_decomposed_vision_mission(
-                    self,
-                    system_prompt=system_prompt,
-                    context=context,
-                    timer=timer,
-                )
-            else:
-                vision_data, mission_data = run_step_1_vision_mission(
-                    self, system_prompt, context, timer
-                )
-            context["vision_statement"] = vision_data["statement"]
-            context["mission_statement"] = mission_data["statement"]
+        # Steps 3-6 — perspective generation (~25 small parallel
+        # calls across Round 1 / Round 2 / Round 3, with positional-ID
+        # assignment in the assembly layer).
+        (
+            financial_data,
+            customer_data,
+            internal_data,
+            capacity_data,
+            core_values_data,
+        ) = generate_perspectives_decomposed(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+            progress_emitter=None,
+        )
 
-            # Step 2 — Customer Value Proposition classification. Two paths:
-            # - Decomposed (Phase 2): 4 parallel sub-calls.
-            # - Monolithic: today's single AI call.
-            if synthesis_decomposed:
-                from src.pipeline.pipeline_steps._strategy_map_synthesis import (
-                    run_decomposed_value_proposition,
-                )
+        # Update context for Step 7's prompt.
+        context["financial_objectives"] = summarise_perspective(financial_data)
+        context["customer_objectives"] = summarise_perspective(customer_data)
+        context["internal_processes"] = summarise_perspective(internal_data)
+        context["organizational_capacity"] = summarise_perspective(capacity_data)
+        context["confidence_summary"] = summarise_confidence(
+            financial_data, customer_data, internal_data, capacity_data
+        )
 
-                value_proposition_data = run_decomposed_value_proposition(
-                    self,
-                    system_prompt=system_prompt,
-                    context=context,
-                    timer=timer,
-                )
-            else:
-                value_proposition_data = run_step_2_value_proposition(
-                    self, system_prompt, context, timer
-                )
-            context["value_proposition"] = summarise_value_proposition(value_proposition_data)
+        # Step 7 — Arrows + Strategic Priorities. Per-pair yes/no
+        # arrow bank fanned out in parallel + one holistic priorities
+        # call. The What's Missing / gaps section was removed end-to-end
+        # under ``redesign-strategy-map`` Phase 2.
+        finale_data = run_decomposed_arrows_and_priorities(
+            self,
+            system_prompt=system_prompt,
+            context=context,
+            timer=timer,
+            financial=financial_data,
+            customer=customer_data,
+            internal_processes=internal_data,
+            organizational_capacity=capacity_data,
+        )
 
-            # Steps 3-6 — perspective generation. Two paths:
-            # - Legacy: 4 single-call-per-perspective rounds in parallel.
-            # - Decomposed (Phase 1, feature-flagged): ~25 small calls
-            #   across Round 1 / 2 / 3 with positional-ID assignment in
-            #   the assembly layer. See `_strategy_map_perspectives.py`.
-            if _decomposed_path_enabled():
-                # Imported here (not at module top) so the import + its
-                # transitive schema-loading don't run on the legacy path.
-                # Keeps the legacy path's startup cost unchanged when the
-                # flag is OFF — matters because strategy_map_handler
-                # cold-start is on the user's first-click critical path.
-                from src.pipeline.appsync_notifier import notify_strategy_map_progress
-                from src.pipeline.pipeline_steps._strategy_map_perspectives import (
-                    generate_perspectives_decomposed,
-                )
+        # Assemble + validate the full StrategyMap.
+        strategy_map = assemble_strategy_map(
+            vision=vision_data,
+            mission=mission_data,
+            value_proposition=value_proposition_data,
+            financial=financial_data,
+            customer=customer_data,
+            internal_processes=internal_data,
+            organizational_capacity=capacity_data,
+            core_values=core_values_data,
+            finale=finale_data,
+        )
 
-                # Phase-boundary progress emission. The executor is
-                # created with request_id=analysis_id and scan_id=scan_id
-                # by the strategy-map worker (see
-                # ``strategy_map_handler._generate_and_persist``); both
-                # are required to route AppSync events to the right
-                # subscribed frontend.
-                analysis_id = self.request_executor.request_id
-                scan_id = self.request_executor.scan_id
-
-                def _emit_progress(progress: int, label: str) -> None:
-                    notify_strategy_map_progress(
-                        scan_id=scan_id,
-                        analysis_id=analysis_id,
-                        progress=progress,
-                        label=label,
-                    )
-
-                _emit_progress(15, "Generating perspective titles…")
-
-                (
-                    financial_data,
-                    customer_data,
-                    internal_data,
-                    capacity_data,
-                    core_values_data,
-                ) = generate_perspectives_decomposed(
-                    self,
-                    system_prompt=system_prompt,
-                    context=context,
-                    timer=timer,
-                    progress_emitter=_emit_progress,
-                )
-            else:
-                results = run_steps_3_through_6_in_parallel(self, system_prompt, context, timer)
-
-                # Some models wrap output under a top-level key; tolerate both.
-                financial_data = unwrap_perspective(results["financial"], "financial")
-                customer_data = unwrap_perspective(results["customer"], "customer")
-                internal_data = unwrap_perspective(
-                    results["internal_processes"], "internalProcesses"
-                )
-                capacity_data = unwrap_perspective(
-                    results["organizational_capacity"], "organizationalCapacity"
-                )
-                core_values_data = extract_core_values(results["organizational_capacity"])
-
-            # Update context for Step 7's prompt.
-            context["financial_objectives"] = summarise_perspective(financial_data)
-            context["customer_objectives"] = summarise_perspective(customer_data)
-            context["internal_processes"] = summarise_perspective(internal_data)
-            context["organizational_capacity"] = summarise_perspective(capacity_data)
-            context["confidence_summary"] = summarise_confidence(
-                financial_data, customer_data, internal_data, capacity_data
-            )
-
-            # Step 7 — Arrows + Strategic Priorities + What's Missing. Two paths:
-            # - Decomposed (Phase 2): per-pair yes/no arrows bank +
-            #   holistic priorities + holistic gaps, all in parallel.
-            # - Monolithic: today's single AI call.
-            if synthesis_decomposed:
-                from src.pipeline.pipeline_steps._strategy_map_arrows import (
-                    run_decomposed_arrows_and_gaps,
-                )
-
-                finale_data = run_decomposed_arrows_and_gaps(
-                    self,
-                    system_prompt=system_prompt,
-                    context=context,
-                    timer=timer,
-                    financial=financial_data,
-                    customer=customer_data,
-                    internal_processes=internal_data,
-                    organizational_capacity=capacity_data,
-                )
-            else:
-                finale_data = run_step_7_arrows_and_gaps(self, system_prompt, context, timer)
-
-            # Assemble + validate the full StrategyMap.
-            strategy_map = assemble_strategy_map(
-                vision=vision_data,
-                mission=mission_data,
-                value_proposition=value_proposition_data,
-                financial=financial_data,
-                customer=customer_data,
-                internal_processes=internal_data,
-                organizational_capacity=capacity_data,
-                core_values=core_values_data,
-                finale=finale_data,
-            )
-
-            accessor.set_strategy_map(strategy_map)
-        finally:
-            # Always emit timings, even on failure, so partial-call latencies
-            # are visible in CloudWatch for diagnostics.
-            self.request_executor.add_details(timer.to_details())
-
-        self.request_executor.mark_question_complete("generate_strategy_map")
+        accessor.set_strategy_map(strategy_map)
 
     # ── AI plumbing ─────────────────────────────────────────────────────────
 

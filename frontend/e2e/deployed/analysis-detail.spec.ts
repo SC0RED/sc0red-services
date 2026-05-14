@@ -24,12 +24,24 @@ test.describe('analysis detail', () => {
 
     test('analysis page shows opportunities', async ({ page }) => {
         await navigateToAnalysis(page)
-        await expect(page.getByText('AI Opportunities')).toBeVisible({ timeout: 10000 })
+        // Scope to the heading — the EBITDA opportunity-link legend also
+        // mentions "AI Opportunities" inline, so a bare getByText match would
+        // collide. The section header is the authoritative anchor.
+        await expect(page.getByRole('heading', { name: /AI Opportunities/ })).toBeVisible({
+            timeout: 10000,
+        })
     })
 
     test('analysis page shows EBITDA section', async ({ page }) => {
         await navigateToAnalysis(page)
-        await expect(page.getByText('EBITDA Impact Model')).toBeVisible({ timeout: 10000 })
+        // Scope to the visible <h2> — EbitdaTree also renders a
+        // ``visually-hidden`` <h2>EBITDA Impact Model</h2> for sr-only
+        // accessible-name anchoring, so a bare getByText match resolves
+        // to two elements. The page-level AnalysisSection heading is the
+        // authoritative on-screen anchor.
+        await expect(page.getByRole('heading', { name: 'EBITDA Impact Model' }).first()).toBeVisible({
+            timeout: 10000,
+        })
     })
 
     test('analysis page shows value chain', async ({ page }) => {

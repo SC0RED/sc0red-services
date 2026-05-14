@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { BAND_HEIGHT, COLUMN_WIDTH, SLOT_Y_OFFSET, buildStrategyMapGraph } from '@/lib/strategyMap/layout'
+import {
+    CHIP_HEIGHT,
+    CHIP_WIDTH,
+    COLUMN_WIDTH,
+    MIN_BAND_HEIGHT,
+    SLOT_Y_OFFSET,
+    buildStrategyMapGraph,
+    totalCanvasHeight,
+} from '@/lib/strategyMap/layout'
 import type { StrategyMap } from '@/lib/types/api'
 
 import { fullStrategyMap } from '@/tests/components/strategy-map/_fixtures'
@@ -27,6 +35,154 @@ const findEdge = (graph: ReturnType<typeof buildStrategyMapGraph>, id: string) =
     return graph.edges.find((e) => e.id === id)
 }
 
+/**
+ * Minimal strategy-map fixture with one Internal Processes theme that
+ * contains 4 objectives. Used by the dynamic-band-height regression
+ * tests; the production overflow bug surfaced exactly this shape.
+ */
+function buildFourSlotInternalThemeFixture(): StrategyMap {
+    const objectiveDefinition =
+        'A representative objective definition long enough to satisfy the schema minimum.'
+    return {
+        vision: {
+            statement: 'To be the leading provider in the market.',
+            synthesised: false,
+            rationale: 'Verbatim from the company brand materials.',
+        },
+        mission: {
+            statement: 'Deliver excellent products to our customers every day.',
+            synthesised: false,
+            rationale: 'Verbatim from public materials.',
+        },
+        valueProposition: {
+            primary: 'customer_intimacy',
+            secondary: null,
+            rationale: 'Public materials emphasise close customer relationships.',
+            exemplar_company: 'Acme',
+        },
+        strategicPriorities: [
+            {
+                name: 'Deliver Excellence',
+                result: 'Best-in-class delivery across every customer touchpoint.',
+            },
+        ],
+        financial: {
+            objectives: [
+                {
+                    id: 'F1',
+                    title: 'Grow revenue',
+                    definition: objectiveDefinition,
+                    category: 'revenue_growth',
+                    confidence: 'HIGH',
+                },
+                {
+                    id: 'F2',
+                    title: 'Reduce cost',
+                    definition: objectiveDefinition,
+                    category: 'productivity',
+                    confidence: 'HIGH',
+                },
+                {
+                    id: 'F3',
+                    title: 'Improve return on capital',
+                    definition: objectiveDefinition,
+                    category: 'productivity',
+                    confidence: 'HIGH',
+                },
+            ],
+        },
+        customer: {
+            objectives: [
+                {
+                    id: 'C1',
+                    title: 'Want fresh products',
+                    definition: objectiveDefinition,
+                    panel: 'consumer',
+                    confidence: 'HIGH',
+                },
+                {
+                    id: 'C2',
+                    title: 'Want loyalty rewards',
+                    definition: objectiveDefinition,
+                    panel: 'consumer',
+                    confidence: 'HIGH',
+                },
+                {
+                    id: 'C3',
+                    title: 'Want speed at checkout',
+                    definition: objectiveDefinition,
+                    panel: 'consumer',
+                    confidence: 'HIGH',
+                },
+            ],
+        },
+        internalProcesses: {
+            themes: [
+                {
+                    name: 'Differentiate',
+                    supports_financial_objectives: ['F1'],
+                    objectives: [
+                        {
+                            id: 'I1.1',
+                            title: 'Build brand and innovation',
+                            definition: objectiveDefinition,
+                            category: 'innovation',
+                            confidence: 'HIGH',
+                        },
+                        {
+                            id: 'I1.2',
+                            title: 'Refresh assortment continuously',
+                            definition: objectiveDefinition,
+                            category: 'customer_management',
+                            confidence: 'MEDIUM',
+                        },
+                        {
+                            id: 'I1.3',
+                            title: 'Interrogate data continuously',
+                            definition: objectiveDefinition,
+                            category: 'innovation',
+                            confidence: 'MEDIUM',
+                        },
+                        {
+                            id: 'I1.4',
+                            title: 'Launch predictive deal success',
+                            definition: objectiveDefinition,
+                            category: 'innovation',
+                            confidence: 'LOW',
+                        },
+                    ],
+                },
+            ],
+        },
+        organizationalCapacity: {
+            people: {
+                id: 'O.P',
+                title: 'Develop and retain talent',
+                definition: objectiveDefinition,
+                confidence: 'HIGH',
+            },
+            technology: {
+                id: 'O.T',
+                title: 'Modernise core platforms',
+                definition: objectiveDefinition,
+                confidence: 'HIGH',
+            },
+            culture: {
+                id: 'O.C',
+                title: 'Live customer-centric values',
+                definition: objectiveDefinition,
+                confidence: 'MEDIUM',
+            },
+        },
+        arrows: [],
+        coreValues: {
+            values: ['Quality', 'Speed', 'Care'],
+            synthesised: true,
+            rationale: 'Synthesised from public-facing brand materials.',
+        },
+    }
+}
+
 const yOf = (graph: ReturnType<typeof buildStrategyMapGraph>, id: string) => findNode(graph, id).position.y
 
 const xOf = (graph: ReturnType<typeof buildStrategyMapGraph>, id: string) => findNode(graph, id).position.x
@@ -45,7 +201,7 @@ describe('buildStrategyMapGraph — perspective row placement', () => {
         expect(yInternal).toBeLessThan(yCapacity)
     })
 
-    it('separates bands by exactly BAND_HEIGHT', () => {
+    it('separates bands by the dynamic per-band height from the graph metadata', () => {
         const graph = buildStrategyMapGraph(fullStrategyMap)
 
         const yFinancial = yOf(graph, 'F1')
@@ -53,9 +209,75 @@ describe('buildStrategyMapGraph — perspective row placement', () => {
         const yInternal = yOf(graph, 'I1.1')
         const yCapacity = yOf(graph, 'O.P')
 
-        expect(yCustomer - yFinancial).toBe(BAND_HEIGHT)
-        expect(yInternal - yCustomer).toBe(BAND_HEIGHT)
-        expect(yCapacity - yInternal).toBe(BAND_HEIGHT)
+        // Each chip is positioned at ``band.top + BAND_PADDING``. The
+        // difference between two slot-0 chips in adjacent bands is the
+        // height of the upper band (band.top advances by that amount).
+        const financialBand = graph.bands.find((b) => b.perspective === 'financial')!
+        const customerBand = graph.bands.find((b) => b.perspective === 'customer')!
+        const internalBand = graph.bands.find((b) => b.perspective === 'internal')!
+
+        expect(yCustomer - yFinancial).toBe(financialBand.height)
+        expect(yInternal - yCustomer).toBe(customerBand.height)
+        expect(yCapacity - yInternal).toBe(internalBand.height)
+    })
+
+    it('exposes band geometry in top-to-bottom narrative order', () => {
+        const graph = buildStrategyMapGraph(fullStrategyMap)
+
+        expect(graph.bands.map((b) => b.perspective)).toEqual([
+            'financial',
+            'customer',
+            'internal',
+            'capacity',
+        ])
+        // Tops stack in order: each band's top = sum of prior heights.
+        for (let i = 1; i < graph.bands.length; i++) {
+            expect(graph.bands[i].top).toBe(graph.bands[i - 1].top + graph.bands[i - 1].height)
+        }
+    })
+})
+
+describe('buildStrategyMapGraph — dynamic band heights prevent chip overflow', () => {
+    /**
+     * Regression for the production overflow bug: when a theme has 4
+     * objectives, the Internal Processes band must grow to fit them.
+     * Before this fix, the band had a fixed height of 180 px and the
+     * 3rd/4th chips (at slot offsets 152 and 228) spilled into the
+     * Capacity band below.
+     */
+    it('grows a band to fit a theme with 4 objectives', () => {
+        // Build a minimal strategy map with one theme of 4 internal-process
+        // objectives.
+        const fourSlotStrategyMap = buildFourSlotInternalThemeFixture()
+        const graph = buildStrategyMapGraph(fourSlotStrategyMap)
+
+        const internalBand = graph.bands.find((b) => b.perspective === 'internal')!
+
+        // 4 slots needs: BAND_PADDING + 3*SLOT_Y_OFFSET + CHIP_HEIGHT + BAND_PADDING
+        // = 24 + 228 + 64 + 24 = 340. Floor stays MIN_BAND_HEIGHT only if
+        // required height is below it, which is not the case here.
+        const requiredHeight = 24 + 3 * SLOT_Y_OFFSET + CHIP_HEIGHT + 24
+        expect(internalBand.height).toBe(Math.max(MIN_BAND_HEIGHT, requiredHeight))
+    })
+
+    it('keeps every chip within its band height regardless of slot count', () => {
+        const fourSlotStrategyMap = buildFourSlotInternalThemeFixture()
+        const graph = buildStrategyMapGraph(fourSlotStrategyMap)
+
+        for (const node of graph.nodes) {
+            const perspective = node.data.perspective
+            const band = graph.bands.find((b) => b.perspective === perspective)!
+            const chipBottom = node.position.y + CHIP_HEIGHT
+            const bandBottom = band.top + band.height
+            expect(chipBottom).toBeLessThanOrEqual(bandBottom)
+            expect(node.position.y).toBeGreaterThanOrEqual(band.top)
+        }
+    })
+
+    it('produces a total canvas height equal to the sum of band heights', () => {
+        const graph = buildStrategyMapGraph(buildFourSlotInternalThemeFixture())
+        const expected = graph.bands.reduce((acc, b) => acc + b.height, 0)
+        expect(totalCanvasHeight(graph.bands)).toBe(expected)
     })
 })
 
@@ -518,7 +740,6 @@ describe('buildStrategyMapGraph — shared-lane never collides with a real colum
         // And — critical — it must not overlap any real column's chip.
         // A chip at column N spans `[N * COLUMN_WIDTH, N * COLUMN_WIDTH + CHIP_WIDTH]`.
         // Two chips overlap when their x-ranges intersect.
-        const CHIP_WIDTH = 220
         for (let column = 0; column < 3; column++) {
             const columnChipStart = column * COLUMN_WIDTH
             const columnChipEnd = columnChipStart + CHIP_WIDTH

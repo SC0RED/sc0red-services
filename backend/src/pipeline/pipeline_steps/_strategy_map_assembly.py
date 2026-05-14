@@ -21,7 +21,6 @@ from src.models.model_strategy_map import (
     CustomerPerspective,
     FinancialObjective,
     FinancialPerspective,
-    Gap,
     InternalProcessesPerspective,
     InternalProcessObjective,
     InternalProcessTheme,
@@ -49,7 +48,10 @@ def assemble_strategy_map(
     """Build a validated StrategyMap from the seven-step outputs.
 
     The `finale` dict carries the Step 7 output, which contains
-    `strategicPriorities`, `arrows`, and `whatsMissing`.
+    ``strategicPriorities`` and ``arrows``. A legacy monolithic Step 7
+    call may also produce a ``whatsMissing`` block — it is silently
+    dropped here (the field was removed from the assembled output as
+    part of the ``redesign-strategy-map`` Phase 2 change).
     """
     return StrategyMap(
         vision=VisionStatement(**vision),
@@ -78,7 +80,6 @@ def assemble_strategy_map(
             culture=CapacityObjective(**organizational_capacity["culture"]),
         ),
         arrows=[Arrow(**a) for a in finale["arrows"]],
-        whatsMissing=[Gap(**g) for g in finale["whatsMissing"]],
         coreValues=CoreValues(**core_values),
     )
 
@@ -98,14 +99,12 @@ def extract_core_values(capacity_response: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(message)
 
 
-# ── Positional ID assignment (optimize-strategy-map-latency Phase 1) ─────────
+# ── Positional ID assignment ─────────────────────────────────────────────────
 #
-# When generation is decomposed (feature flag GENERATE_STRATEGY_MAP_DECOMPOSED=1),
-# the per-call schemas under `prompts/strategy_map/schemas/per_call/` omit
+# Per-call schemas under `prompts/strategy_map/schemas/per_call/` omit
 # the `id` field — parallel calls cannot reliably know their position in
 # the title list. The assembly layer assigns IDs deterministically from
-# the title-list order returned by Round 1. See Decision §2 of the
-# optimize-strategy-map-latency design for the full rationale.
+# the title-list order returned by Round 1.
 
 
 def build_financial_objectives(

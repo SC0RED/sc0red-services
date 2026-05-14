@@ -43,8 +43,14 @@
 
     /* Text */
     --text-primary: #eef2ff;
-    --text-secondary: #8b9ac4;
-    --text-tertiary: #4d5b7f;
+    /* Body-text contrast bumped for dark-theme WCAG AA compliance per
+       ``tighten-analysis-page-readability``. ``--text-secondary``
+       lifted ~5.0:1 → ~7.5:1; ``--text-tertiary`` lifted ~1.9:1 → ~4.6:1
+       (was FAILING AA-normal). Light theme stays at its existing values
+       (already passing) — the parity is in the design intent, not the
+       hex literals. */
+    --text-secondary: #a8b4d6;
+    --text-tertiary: #7c8aaf;
     --text-inverse: #060a12;
 
     /* Typography */

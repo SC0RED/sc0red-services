@@ -1,9 +1,5 @@
 """Decomposed perspective generation for the strategy-map step.
 
-Implements `optimize-strategy-map-latency` Phase 1 — replaces the four
-sequential single-call-per-perspective AI rounds (~30s combined) with a
-two-phase / three-phase pattern that parallelises elaboration:
-
   Round 1 — title lists (4 calls in parallel, one per perspective):
     - financial:  {titles: [t1, t2, t3]}
     - customer:   {titles: [t1, t2, t3, t4]}
@@ -20,12 +16,7 @@ two-phase / three-phase pattern that parallelises elaboration:
 Each call goes through ``run_structured_ai_call``, parallel blocks use
 ``FutureManager``, and per-call elapsed times are recorded on the
 shared ``StepTimer`` (matching the pattern other AI-heavy pipeline
-steps already use). See the optimize-strategy-map-latency design.md
-Decisions §1, §2, §3, §4 for the full rationale.
-
-This module is invoked from ``generate_strategy_map.py`` ONLY when the
-``GENERATE_STRATEGY_MAP_DECOMPOSED=1`` env var is set. Otherwise the
-existing single-call-per-perspective path runs unchanged.
+steps already use).
 """
 
 from __future__ import annotations
@@ -55,12 +46,12 @@ if TYPE_CHECKING:
     from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
     from src.pipeline.step_timer import StepTimer
 
-# Caller passes a closure that emits user-visible progress (calls
-# `notify_strategy_map_progress` with scan_id / analysis_id captured)
-# or ``None`` to disable progress emission. The decomposed path emits
-# at three phase boundaries (after Round 1, after Round 2, after
-# Round 3) — granularity sized for "the user sees something move
-# every ~30s" without being noisy.
+# Optional 0-100 percent / label callable invoked at three intra-step
+# phase boundaries (after Round 1, after Round 2, after Round 3). The
+# inline scan pipeline currently passes ``None`` — the scan's own
+# ``mark_question_complete`` flow is granular enough at the step level.
+# The hook is retained so a future caller (e.g. a debug-CLI driver) can
+# re-enable phase-boundary visibility without touching this module.
 ProgressEmitter = Callable[[int, str], None]
 
 # Cap on parallelism within Round 1. Round 2 / Round 3 caps live with
@@ -81,11 +72,9 @@ def _schema(name: str) -> dict[str, Any]:
 def _render(name: str, context: dict[str, Any]) -> str:
     """Render a decomposed template with `{key}` placeholder substitution.
 
-    Mirrors the regex behaviour in ``_strategy_map_corpus.render_template``
-    (single-token placeholders only, JSON braces ignored). Decomposed
-    templates live under ``templates/decomposed/`` rather than
-    ``templates/``, so the existing renderer cannot be re-used directly —
-    this adapter loads from the decomposed loader instead.
+    Single-token placeholders only; JSON braces with whitespace or
+    nested content are left untouched so example JSON in the template
+    body doesn't collide with the placeholder syntax.
     """
     template = load_decomposed_template(name)
 

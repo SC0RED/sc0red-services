@@ -63,7 +63,6 @@ _PER_CALL_SCHEMAS = [
     "vp_rationale",
     "arrow_yesno",
     "arrows_priorities",
-    "arrows_gaps",
 ]
 
 

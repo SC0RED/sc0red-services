@@ -13,11 +13,10 @@ import { formatValueProposition } from '@/lib/utils/strategyMapUtils'
  *   text is exposed via the native `title` attribute (browser tooltip)
  *   on overflow.
  * - **Mission**, **Value Proposition**, **Strategic Priorities**: each
- *   rendered with the same `ExpandableSection` disclosure pattern as
- *   the gaps in `WhatsMissingPanel` — single-open accordion, all
- *   closed by default, click a header to expand its detail (and
- *   collapse any other open header). One mental model across the
- *   entire strategy-map section: header rows are compact summaries,
+ *   rendered with the same `ExpandableSection` disclosure pattern —
+ *   single-open accordion, all closed by default, click a header to
+ *   expand its detail (and collapse any other open header). One mental
+ *   model across the strategy-map header: rows are compact summaries,
  *   click to drill in.
  */
 type HeaderSectionId = 'mission' | 'value-proposition' | 'strategic-priorities'
@@ -27,8 +26,7 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
     const valueLabel = formatValueProposition(valueProposition.primary, valueProposition.secondary)
 
     // Single-open accordion: at most one section expanded at any time.
-    // Mirrors `WhatsMissingPanel`'s `expandedGapId` pattern so the user
-    // sees the same interaction on both sides of the canvas.
+    // Same pattern used elsewhere in the analysis surface.
     const [openSection, setOpenSection] = useState<HeaderSectionId | null>(null)
     const toggle = (id: HeaderSectionId) => setOpenSection((current) => (current === id ? null : id))
 
@@ -139,8 +137,7 @@ export default function StrategyMapHeader({ strategyMap }: { strategyMap: Strate
 
 /**
  * Controlled disclosure section. The parent owns `isOpen` so single-open
- * accordion behaviour can be enforced across siblings — exactly the
- * pattern used by `WhatsMissingPanel`'s `GapRow`.
+ * accordion behaviour can be enforced across siblings.
  *
  * Built on native `<details>` for accessibility-by-default. The summary
  * click is intercepted (`event.preventDefault()` blocks the browser's
@@ -161,7 +158,7 @@ function ExpandableSection({
     children: ReactNode
 }) {
     return (
-        <details open={isOpen} style={{ fontSize: '0.85rem' }}>
+        <details open={isOpen} style={{ fontSize: '0.875rem' }}>
             <summary
                 onClick={(event) => {
                     event.preventDefault()
@@ -178,7 +175,7 @@ function ExpandableSection({
                         transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
                         transition: 'transform 0.15s ease',
                         marginRight: '6px',
-                        fontSize: '0.6rem',
+                        fontSize: '0.75rem',
                     }}
                 >
                     ▶
@@ -194,7 +191,7 @@ function ExpandableSection({
 
 const summaryStyle: React.CSSProperties = {
     cursor: 'pointer',
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
     color: 'var(--text-tertiary)',
     fontWeight: 600,
     textTransform: 'uppercase',
@@ -207,7 +204,7 @@ const summaryStyle: React.CSSProperties = {
 
 const bodyParagraphStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: '0.85rem',
+    fontSize: '0.875rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.6,
 }
@@ -238,7 +235,7 @@ const labelledItemStyle: React.CSSProperties = {
 
 const labelledItemHeadingStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: '0.85rem',
+    fontSize: '0.875rem',
     fontWeight: 700,
     color: 'var(--text-primary)',
     textTransform: 'uppercase',

@@ -33,7 +33,8 @@ interface DeepDiveCTAProps {
  *   expand/collapse), so mount is the right "saw the CTA" signal.
  * - `sc0red_cta_clicked_strategy_map` — fired in the anchor's
  *   `onClick`. Fire-and-forget; navigation is not blocked by the
- *   emit (see `Sc0redCTABanner` for the same pattern + rationale).
+ *   emit (the analytics POST silently drops on transient failure
+ *   so the click is never lost to a flaky network).
  *
  * The strategy-map surface has no lever-filter concept, so emits
  * pass `activeLeverFilter: null`. `opportunityCount` is also `0` —
@@ -88,7 +89,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
                 rel="noopener noreferrer"
                 onClick={handleCtaClick}
                 style={{
-                    fontSize: '0.85rem',
+                    fontSize: '0.875rem',
                     color: 'var(--accent-blue)',
                     fontWeight: 600,
                     textDecoration: 'none',
@@ -118,7 +119,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
             <div style={{ flex: '1 1 320px', minWidth: '0' }}>
                 <h3
                     style={{
-                        fontSize: '1.05rem',
+                        fontSize: '1rem',
                         fontWeight: 700,
                         margin: '0 0 6px',
                         color: 'var(--text-primary)',
@@ -152,7 +153,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
                     borderRadius: '6px',
                     background: 'var(--accent-blue)',
                     color: 'white',
-                    fontSize: '0.9rem',
+                    fontSize: '0.875rem',
                     fontWeight: 600,
                     textDecoration: 'none',
                 }}
