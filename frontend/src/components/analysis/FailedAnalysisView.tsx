@@ -44,7 +44,7 @@ export default function FailedAnalysisView({
                     style={{
                         display: 'inline-block',
                         color: 'var(--text-secondary)',
-                        fontSize: '0.8125rem',
+                        fontSize: '0.875rem',
                         marginBottom: '1rem',
                     }}
                 >
@@ -60,8 +60,8 @@ export default function FailedAnalysisView({
                         marginBottom: '1.5rem',
                     }}
                 >
-                    <span style={{ fontSize: '1.25rem' }}>&#9888;</span>
-                    <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Analysis Failed</h1>
+                    <span style={{ fontSize: '1.125rem' }}>&#9888;</span>
+                    <h1 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0 }}>Analysis Failed</h1>
                 </div>
 
                 <div style={{ marginBottom: '1rem' }}>
@@ -73,7 +73,7 @@ export default function FailedAnalysisView({
                             href={companyUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ fontSize: '0.8125rem', color: 'var(--accent-blue)' }}
+                            style={{ fontSize: '0.875rem', color: 'var(--accent-blue)' }}
                         >
                             {companyUrl}
                         </a>
@@ -85,7 +85,7 @@ export default function FailedAnalysisView({
                         padding: '0.75rem 1rem',
                         backgroundColor: 'rgba(239, 68, 68, 0.1)',
                         borderRadius: '6px',
-                        fontSize: '0.8125rem',
+                        fontSize: '0.875rem',
                         color: 'var(--risk-critical)',
                         marginBottom: '1.5rem',
                     }}
@@ -115,7 +115,7 @@ export default function FailedAnalysisView({
                         role="alert"
                         className="alert-error"
                         style={{
-                            fontSize: '0.8125rem',
+                            fontSize: '0.875rem',
                             color: 'var(--risk-critical)',
                             marginBottom: '1rem',
                         }}
@@ -129,7 +129,7 @@ export default function FailedAnalysisView({
                         <LoadingSpinner />
                         <div
                             style={{
-                                fontSize: '0.8125rem',
+                                fontSize: '0.875rem',
                                 color: 'var(--text-secondary)',
                                 marginTop: '0.5rem',
                             }}

@@ -162,7 +162,7 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                 <div
                     style={{
                         fontWeight: 600,
-                        fontSize: '0.8125rem',
+                        fontSize: '0.875rem',
                         color: 'var(--text-primary)',
                         lineHeight: 1.3,
                     }}
@@ -187,7 +187,7 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                         <span
                             key={category}
                             style={{
-                                fontSize: '0.625rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 500,
                                 padding: '0.125rem 0.375rem',
                                 borderRadius: '9999px',
@@ -206,7 +206,7 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                 {linkedOpportunities.length > 0 && (
                     <div
                         style={{
-                            fontSize: '0.6875rem',
+                            fontSize: '0.75rem',
                             color: 'var(--accent-blue)',
                             fontWeight: 500,
                         }}
@@ -227,7 +227,7 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                     >
                         <div
                             style={{
-                                fontSize: '0.6875rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 600,
                                 color: 'var(--text-tertiary)',
                                 marginBottom: '0.375rem',

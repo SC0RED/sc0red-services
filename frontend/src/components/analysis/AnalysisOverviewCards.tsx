@@ -46,7 +46,7 @@ export default function AnalysisOverviewCards({ data }: AnalysisOverviewCardsPro
             >
                 <div
                     style={{
-                        fontSize: '0.8125rem',
+                        fontSize: '0.875rem',
                         color: 'var(--text-secondary)',
                         fontWeight: 500,
                         marginBottom: '0.75rem',
@@ -85,7 +85,7 @@ export default function AnalysisOverviewCards({ data }: AnalysisOverviewCardsPro
                     <p
                         style={{
                             marginTop: '1rem',
-                            fontSize: '0.8125rem',
+                            fontSize: '0.875rem',
                             color: 'var(--text-secondary)',
                             lineHeight: 1.6,
                             textAlign: 'left',
@@ -97,9 +97,7 @@ export default function AnalysisOverviewCards({ data }: AnalysisOverviewCardsPro
             </div>
 
             <div className="card card--rich">
-                <div style={{ fontWeight: 600, marginBottom: '1rem', fontSize: '0.9375rem' }}>
-                    Risk Dimensions
-                </div>
+                <div style={{ fontWeight: 600, marginBottom: '1rem', fontSize: '1rem' }}>Risk Dimensions</div>
                 <ResponsiveContainer width="100%" height={280}>
                     <RadarChart data={radarData}>
                         <PolarGrid stroke="var(--border)" />

@@ -53,7 +53,7 @@ export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSecti
             {ebitdaTree.businessModelSummary && (
                 <p
                     style={{
-                        fontSize: '0.9rem',
+                        fontSize: '0.875rem',
                         lineHeight: 1.7,
                         color: 'var(--text-secondary)',
                         marginBottom: '1.25rem',
@@ -67,7 +67,7 @@ export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSecti
                 <div
                     data-testid="ebitda-confidence-legend"
                     style={{
-                        fontSize: '0.8125rem',
+                        fontSize: '0.875rem',
                         color: 'var(--text-tertiary)',
                         marginBottom: '0.75rem',
                         lineHeight: 1.6,

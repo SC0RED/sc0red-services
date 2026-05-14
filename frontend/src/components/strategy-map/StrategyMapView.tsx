@@ -102,7 +102,7 @@ function ConfidenceLegend() {
                 padding: '10px 14px',
                 background: 'var(--bg-surface-2)',
                 borderRadius: '6px',
-                fontSize: '0.78rem',
+                fontSize: '0.75rem',
                 color: 'var(--text-secondary)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -111,7 +111,7 @@ function ConfidenceLegend() {
         >
             <span
                 style={{
-                    fontSize: '0.7rem',
+                    fontSize: '0.75rem',
                     color: 'var(--text-tertiary)',
                     fontWeight: 600,
                     textTransform: 'uppercase',
@@ -158,14 +158,14 @@ function CoreValuesStrip({ values, synthesised }: { values: string[]; synthesise
                 padding: '8px 14px',
                 background: 'var(--bg-surface-3)',
                 borderRadius: '6px',
-                fontSize: '0.8rem',
+                fontSize: '0.75rem',
                 color: 'var(--text-secondary)',
                 textAlign: 'center',
             }}
         >
             <span
                 style={{
-                    fontSize: '0.7rem',
+                    fontSize: '0.75rem',
                     color: 'var(--text-tertiary)',
                     fontWeight: 600,
                     textTransform: 'uppercase',

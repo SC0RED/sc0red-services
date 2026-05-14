@@ -158,7 +158,7 @@ function ExpandableSection({
     children: ReactNode
 }) {
     return (
-        <details open={isOpen} style={{ fontSize: '0.85rem' }}>
+        <details open={isOpen} style={{ fontSize: '0.875rem' }}>
             <summary
                 onClick={(event) => {
                     event.preventDefault()
@@ -175,7 +175,7 @@ function ExpandableSection({
                         transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
                         transition: 'transform 0.15s ease',
                         marginRight: '6px',
-                        fontSize: '0.6rem',
+                        fontSize: '0.75rem',
                     }}
                 >
                     ▶
@@ -191,7 +191,7 @@ function ExpandableSection({
 
 const summaryStyle: React.CSSProperties = {
     cursor: 'pointer',
-    fontSize: '0.7rem',
+    fontSize: '0.75rem',
     color: 'var(--text-tertiary)',
     fontWeight: 600,
     textTransform: 'uppercase',
@@ -204,7 +204,7 @@ const summaryStyle: React.CSSProperties = {
 
 const bodyParagraphStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: '0.85rem',
+    fontSize: '0.875rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.6,
 }
@@ -235,7 +235,7 @@ const labelledItemStyle: React.CSSProperties = {
 
 const labelledItemHeadingStyle: React.CSSProperties = {
     margin: 0,
-    fontSize: '0.85rem',
+    fontSize: '0.875rem',
     fontWeight: 700,
     color: 'var(--text-primary)',
     textTransform: 'uppercase',

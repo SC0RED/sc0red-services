@@ -991,6 +991,79 @@ describe('AnalysisDetail — section heading framing (analysis-detail-consistenc
     })
 })
 
+describe('AnalysisDetail — type-scale invariants (tighten-analysis-page-readability)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+    })
+
+    /**
+     * Per ``analysis-page-readability`` Requirement §3: inline
+     * ``fontSize`` values inside analysis-page components SHALL match
+     * one of five canonical rem steps (0.75 / 0.875 / 1 / 1.125 /
+     * 1.5) OR one of three documented display-stat exceptions
+     * (1.625 on the AnalysisHeader h1, 2.5 on the OverviewCards
+     * risk-score, 1.75 on the ValueLeverSummary lever-count).
+     *
+     * This regression test walks the full rendered DOM with the
+     * canonical fixture and asserts every inline ``fontSize`` style
+     * value is on-scale. Catches off-scale values reintroduced by
+     * future contributors.
+     */
+    it('every inline fontSize on the rendered page is on the canonical scale or a documented exception', () => {
+        const data = buildAnalysisData({
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'rev',
+                        label: 'Total Revenue',
+                        type: 'revenue',
+                        value_range: '$10M',
+                        parent_id: null,
+                        description: 'Total revenue across all channels',
+                        linked_opportunity_indices: [],
+                        children: [],
+                    },
+                ],
+                revenueEstimate: '$10M',
+                ebitdaEstimate: '$2M',
+                businessModelSummary: 'SaaS business model',
+            },
+            strategyMap: makeFullStrategyMap(),
+        })
+        const { container } = render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const ALLOWED = new Set([
+            // Five canonical steps from the body type scale.
+            '0.75rem',
+            '0.875rem',
+            '1rem',
+            '1.125rem',
+            '1.5rem',
+            // Three documented display-stat exceptions.
+            '1.625rem',
+            '1.75rem',
+            '2.5rem',
+        ])
+
+        const offending: Array<{ tag: string; size: string }> = []
+        for (const el of Array.from(container.querySelectorAll<HTMLElement>('*'))) {
+            const inline = el.style.fontSize
+            if (!inline) continue
+            // Some inline values may be set as ``0.875rem`` literally,
+            // others may be normalised by the browser; both should be
+            // checked as the raw string. Skip non-rem units (e.g.
+            // ``inherit``, ``1em`` — fine, just not in our scale).
+            if (!inline.endsWith('rem')) continue
+            if (!ALLOWED.has(inline)) {
+                offending.push({ tag: el.tagName, size: inline })
+            }
+        }
+
+        expect(offending).toEqual([])
+    })
+})
+
 /**
  * Strategy-map fixture for ordering tests. Mirrors the shape required
  * by `StrategyMapView` so the component renders without throwing during

@@ -319,3 +319,138 @@ describe('EbitdaNodeComponent — no custom hover overlay (compact-ebitda-bands)
         expect(offending).toHaveLength(0)
     })
 })
+
+describe('EbitdaNodeComponent — neutral body + colored-left-edge (tighten-analysis-page-readability)', () => {
+    it('renders the leaf chip with neutral body and a 3px colored left border', () => {
+        // Per ``analysis-page-readability`` Requirement §2 and the
+        // modified ``ebitda-impact-model`` chip color rule: chips
+        // carry their semantic accent ONLY on a 3px colored left
+        // border. The body uses theme tokens — no semantic-color
+        // background tint, no semantic-color border, no semantic-color
+        // label text. Mirrors the strategy-map's ``borderLeft``
+        // accent pattern.
+        const { container } = render(
+            <EbitdaNodeComponent {...makeProps({ type: 'revenue', label: 'Subscriptions' })} />
+        )
+        const article = container.querySelector('article')
+        expect(article).not.toBeNull()
+        const style = article!.getAttribute('style') ?? ''
+        // 3px solid {accent} left border (revenue accent = #22C55E)
+        expect(/border-left\s*:\s*3px\s+solid/i.test(style)).toBe(true)
+        // Neutral body — theme tokens, NOT semantic-color literals.
+        expect(style).toMatch(/background:\s*var\(--bg-surface-2\)/i)
+        expect(style).toMatch(/border:\s*1px\s+solid\s+var\(--border-subtle\)/i)
+        // Label color is --text-primary (theme token), NOT #22C55E.
+        const label = article!.querySelector('div') as HTMLElement
+        const labelStyle = label.getAttribute('style') ?? ''
+        expect(labelStyle).toMatch(/color:\s*var\(--text-primary\)/i)
+        // And the label text is the leaf label.
+        expect(label.textContent).toContain('Subscriptions')
+    })
+
+    it('does NOT bathe the chip in semantic color (anywhere — outer or descendant)', () => {
+        // Anti-regression guard for the chromatic-bath bug. The chip's
+        // body, main border, label, and EVERY descendant element MUST
+        // NOT carry a semantic-color RGBA. The 3px ``borderLeft``
+        // accent is the only place a hardcoded color is allowed.
+        //
+        // Walk every styled element under the chip so a future
+        // contributor can't sneak rgba into a child element's style
+        // (e.g. the percentage row, the value row).
+        const { container } = render(<EbitdaNodeComponent {...makeProps({ type: 'revenue' })} />)
+        const article = container.querySelector('article') as HTMLElement
+        // ``article`` itself + every styled descendant.
+        const styled: HTMLElement[] = [
+            article,
+            ...Array.from(article.querySelectorAll<HTMLElement>('[style]')),
+        ]
+        for (const el of styled) {
+            const style = (el.getAttribute('style') ?? '').toLowerCase()
+            // Strip the borderLeft declaration before testing for
+            // ``rgba(`` — the 3px accent uses a hex that the browser
+            // normalises to ``rgb(...)`` (not ``rgba(``), but if the
+            // hex were ever expressed via ``rgba(...)`` for alpha
+            // control we'd want the guard to ignore the accent edge.
+            const stripped = style.replace(/border-left:[^;]+;?/g, '')
+            expect(stripped).not.toContain('rgba(')
+        }
+    })
+
+    it("renders each leaf type's accent on the 3px left border (revenue + cost)", () => {
+        // Confirms each ``type`` resolves to a distinct accent on the
+        // chip's left border. The accent hex values come from
+        // ``NODE_COLORS`` and stay hardcoded as the *only* semantic
+        // signal each chip carries. Margin and subtotal types render
+        // as band headers, not chips — only revenue + cost surface
+        // as leaf chips in production.
+        //
+        // Browsers normalise the inline ``style`` attribute (``#22C55E``
+        // → ``rgb(34, 197, 94)``), so we match either form via regex
+        // on the structural shape rather than the literal hex.
+        const accents: Array<{ type: 'revenue' | 'cost'; rgb: string }> = [
+            { type: 'revenue', rgb: 'rgb(34, 197, 94)' },
+            { type: 'cost', rgb: 'rgb(239, 68, 68)' },
+        ]
+        for (const { type, rgb } of accents) {
+            const { container, unmount } = render(<EbitdaNodeComponent {...makeProps({ type })} />)
+            const article = container.querySelector('article')
+            const style = (article!.getAttribute('style') ?? '').toLowerCase()
+            expect(style).toContain(`border-left: 3px solid ${rgb}`)
+            unmount()
+        }
+    })
+})
+
+describe('EbitdaNodeComponent — type-scale invariant (tighten-analysis-page-readability)', () => {
+    // The page-level guard in ``AnalysisDetail.test.tsx`` mocks out
+    // ``EbitdaTree``, so any off-scale ``fontSize`` reintroduced into
+    // this component (chipLabelStyle, chipValueRowStyle, chipPercentStyle,
+    // or the BandHeader inline styles) would slip past the page-level
+    // check. This component-level test closes the gap.
+    const CANONICAL = new Set([
+        '0.75rem',
+        '0.875rem',
+        '1rem',
+        '1.125rem',
+        '1.5rem',
+        // Documented display-stat exceptions don't apply to this
+        // component — they live in AnalysisHeader / AnalysisOverviewCards
+        // / ValueLeverSummary, NOT here. EBITDA chips and band headers
+        // are strictly on-scale.
+    ])
+
+    it('every inline fontSize on a rendered leaf chip is on the canonical scale', () => {
+        const { container } = render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    confidenceLevel: 'medium',
+                    confidenceBasis: 'b',
+                    linkedOpportunities: [{ title: 'X', valueLever: 'Revenue Side' }],
+                })}
+            />
+        )
+        for (const el of Array.from(container.querySelectorAll<HTMLElement>('[style]'))) {
+            const size = el.style.fontSize
+            if (!size || !size.endsWith('rem')) continue
+            expect(CANONICAL).toContain(size)
+        }
+    })
+
+    it('every inline fontSize on a rendered band header is on the canonical scale', () => {
+        const { container } = render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    label: 'Total Revenue',
+                    type: 'revenue',
+                    valueRange: '$15M-$200M',
+                    isSubtotalHeading: true,
+                })}
+            />
+        )
+        for (const el of Array.from(container.querySelectorAll<HTMLElement>('[style]'))) {
+            const size = el.style.fontSize
+            if (!size || !size.endsWith('rem')) continue
+            expect(CANONICAL).toContain(size)
+        }
+    })
+})
