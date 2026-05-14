@@ -23,4 +23,4 @@
 - [x] 3.2 Run ``npx tsc --noEmit`` and ``npm run lint`` — clean.
 - [x] 3.3 Run the ``architecture-reviewer`` agent (touches 1 component file + 1 test file); resolve CRITICAL + MEDIUM findings before commit.
 - [ ] 3.4 Visual verification on testing env: scroll to EBITDA section. Confirm the new legend renders below the confidence legend, one line, three colored dots matching the chips below. Hover-test on a leaf's dot row — the colors should match the legend exactly.
-- [ ] 3.5 Commit, push, open PR against ``development``.
+- [x] 3.5 Commit, push, open PR against ``development``.
