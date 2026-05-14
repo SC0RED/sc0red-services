@@ -36,4 +36,4 @@
 - [ ] 5.4 Visual verification on testing env (dark theme): the EBITDA section now matches the strategy-map aesthetic — neutral chip bodies with colored left edges, band headers still carrying the colored strip. Body text reads more clearly across every section. No section feels "too loud" or "too quiet".
 - [ ] 5.5 Visual verification on testing env (light theme): the page renders identically to today (light tokens unchanged); EBITDA chips picked up the neutral-body + colored-left-edge treatment.
 - [ ] 5.6 Cross-page spot check (dark theme): dashboard, admin, login surfaces reading the bumped tokens — verify the contrast lift looks intentional, not glaring, on those pages.
-- [ ] 5.7 Commit, push, open PR against ``development``.
+- [x] 5.7 Commit, push, open PR against ``development``.
