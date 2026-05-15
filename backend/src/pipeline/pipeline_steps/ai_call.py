@@ -48,6 +48,7 @@ def run_structured_ai_call(
     system_prompt: str,
     label: str,
     step_name: str,
+    precision: Precision = Precision.STANDARD,
 ) -> tuple[str, dict[str, Any], float, TokenCounts]:
     """Execute a single structured AI call.
 
@@ -55,6 +56,21 @@ def run_structured_ai_call(
     steps delegate to this function so AI client configuration, logging format,
     error handling, schema validation, and per-call telemetry are consistent
     across the pipeline.
+
+    ``precision`` chooses which model the SDK routes to:
+
+    - ``Precision.STANDARD`` (default) → ``gpt-5.4-mini`` as of
+      signalfield-core v0.3.0. Bulk-parallel / short-output tier — much
+      lower latency and tighter tail than ``gpt-5.1``.
+    - ``Precision.ADVANCED`` → ``gpt-5.1``. Escape hatch for call sites
+      where output specificity (PE-grade ROI estimates, accurate
+      categorical classification) matters more than latency.
+
+    The Janus 2026-05-15 benchmark (``backend/scripts/benchmark/results/``)
+    cleared mini for all strategy-map calls + risk batches + ideation +
+    portfolio discovery/validation. Two call sites flagged 🔴 and use
+    ``Precision.ADVANCED``: ``ParallelProfileRiskAndIdeation``'s
+    ``extract_profile`` task and ``DetailOpportunities``.
 
     Two defensive gates run after the SDK call:
 
@@ -77,7 +93,7 @@ def run_structured_ai_call(
     client = ai_client_factory.get_client(
         verbosity=Verbosity.MEDIUM,
         reasoning_effort=ReasoningEffort.LOW,
-        precision=Precision.STANDARD,
+        precision=precision,
         instructions=system_prompt,
     )
     logger.info(

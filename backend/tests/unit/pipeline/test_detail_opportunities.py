@@ -108,6 +108,32 @@ class TestDetailOpportunities:
         completed = {c[0][0] for c in calls}
         assert "generate_opportunities" in completed
 
+    def test_all_calls_use_advanced_precision(self):
+        """Every DetailOpportunities AI call runs on Precision.ADVANCED (gpt-5.1).
+
+        Pins the override added in the gpt-5.4-mini migration (2026-05-15).
+        The benchmark flagged mini for compressing the explicit financial
+        bridge in ``roi_estimate`` from a PE-grade deliverable (1167 chars
+        with revenue → COGS → BOM → addressable → 3-yr EBITDA uplift →
+        valuation impact) to a ~4x shorter qualitative summary. PE diligence
+        users consume the full bridge — mini cannot match gpt-5.1 here.
+        """
+        from signalfield_core.models.enums import Precision
+
+        mock_factory = _make_mock_factory()
+        company = _make_company(ideation_count=3)
+        accessor = CompanyAccessor(company)
+        step = DetailOpportunities(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+        step.execute()
+
+        calls = mock_factory.get_client.call_args_list
+        precisions = [c.kwargs["precision"] for c in calls]
+        assert all(p == Precision.ADVANCED for p in precisions), (
+            f"DetailOpportunities must pin all calls to Precision.ADVANCED; got {precisions}"
+        )
+
     def test_missing_profile_raises(self):
         company = Company(url="https://example.com")
         company.risk_assessment = RiskAssessment(overall_score=5.0)
