@@ -6,6 +6,7 @@ import pytest
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
+from src.pipeline.pipeline_steps.ai_call import TokenCounts
 from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
 
 
@@ -99,7 +100,12 @@ class TestDiscoverPortfolio:
         }
         with patch(
             "src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call",
-            return_value=("extract_portfolio", ai_result, 0.0),
+            return_value=(
+                "extract_portfolio",
+                ai_result,
+                0.0,
+                TokenCounts(input_tokens=100, output_tokens=50, cached_input_tokens=0),
+            ),
         ):
             step.execute()
 

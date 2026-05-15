@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from signalfield_core.utilities.future_manager import FutureManager
 
 if TYPE_CHECKING:
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
     from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
     from src.pipeline.step_timer import StepTimer
 
@@ -73,7 +74,7 @@ def run_round2_details_and_internal_titles(
       - ``titles_per_theme``:  list of title-lists (aligned with themes_meta)
       - ``core_values``:       full {values, synthesised, rationale} dict
     """
-    collected: list[tuple[str, dict[str, Any], float]] = []
+    collected: list[tuple[str, dict[str, Any], float, TokenCounts]] = []
     with FutureManager(name="GenerateStrategyMap.R2", max_workers=_ROUND2_MAX_WORKERS) as manager:
         # Financial details (one per title). Sibling text is computed
         # PER CALL so each call's prompt sees the OTHER titles only,
@@ -168,10 +169,11 @@ def run_round2_details_and_internal_titles(
 
         collected = manager.wait_for_all_and_collect_results()
 
-    for label, _data, elapsed in collected:
+    for label, _data, elapsed, tokens in collected:
         timer.record(f"ai_call_{label}", elapsed)
+        timer.record_tokens(f"ai_call_{label}", tokens)
 
-    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e in collected}
+    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e, _t in collected}
 
     financial_details = [
         by_label[f"detail_financial_F{index + 1}"] for index in range(len(financial_titles))
@@ -213,7 +215,7 @@ def run_round3_internal_details(
 
     Returns a list of detail-lists aligned with ``titles_per_theme``.
     """
-    collected: list[tuple[str, dict[str, Any], float]] = []
+    collected: list[tuple[str, dict[str, Any], float, TokenCounts]] = []
     with FutureManager(name="GenerateStrategyMap.R3", max_workers=_ROUND3_MAX_WORKERS) as manager:
         for theme_index, (theme, titles) in enumerate(
             zip(themes_meta, titles_per_theme, strict=True)
@@ -238,10 +240,11 @@ def run_round3_internal_details(
                 )
         collected = manager.wait_for_all_and_collect_results()
 
-    for label, _data, elapsed in collected:
+    for label, _data, elapsed, tokens in collected:
         timer.record(f"ai_call_{label}", elapsed)
+        timer.record_tokens(f"ai_call_{label}", tokens)
 
-    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e in collected}
+    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e, _t in collected}
 
     details_per_theme: list[list[dict[str, Any]]] = []
     for theme_index, titles in enumerate(titles_per_theme):

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.pipeline.pipeline_steps.ai_call import TokenCounts
 from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
 
 
@@ -37,7 +38,12 @@ class TestRunAIExtraction:
         step = DiscoverPortfolio(ai_client_factory=mock_ai)
 
         with patch("src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call") as mock_call:
-            mock_call.return_value = ("extract_portfolio", {"companies": [{"name": "X", "url": "https://x.com"}], "is_pe_firm": True}, 1.0)
+            mock_call.return_value = (
+                "extract_portfolio",
+                {"companies": [{"name": "X", "url": "https://x.com"}], "is_pe_firm": True},
+                1.0,
+                TokenCounts(input_tokens=100, output_tokens=50, cached_input_tokens=0),
+            )
             result = step._run_ai_extraction("https://firm.com", "page text", [{"text": "link", "href": "https://x.com"}])  # noqa: SLF001
             assert len(result["companies"]) == 1
 

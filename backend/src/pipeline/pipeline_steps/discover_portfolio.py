@@ -171,7 +171,10 @@ class DiscoverPortfolio(RequestStep):
             page_text=page_text[:_AI_PAGE_TEXT_BUDGET],
             links_text=links_text[:_AI_LINKS_TEXT_BUDGET],
         )
-        _label, result, _elapsed = run_structured_ai_call(
+        # ``_tokens`` is the 4th tuple element from run_structured_ai_call
+        # (added 2026-05-15). DiscoverPortfolio doesn't surface token
+        # telemetry yet; opt-in later if needed.
+        _label, result, _elapsed, _tokens = run_structured_ai_call(
             ai_client_factory=self._ai_client_factory,
             user_prompt=prompt,
             schema=schema,
