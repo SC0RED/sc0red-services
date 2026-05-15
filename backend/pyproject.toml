@@ -43,6 +43,16 @@ dev = [
     "boto3-stubs[dynamodb]>=1.34",
 ]
 
+# ``benchmark`` is opt-in tooling for ``scripts/benchmark/`` — porting the
+# AI model benchmark suite from assessment_engine (PR for OpenSpec change
+# ``upgrade-strategy-map-to-mini-model``). The ``openai`` SDK reaches us
+# transitively via ``signalfield-core`` today, but the benchmark scripts
+# import it directly; declaring it here ensures the import survives any
+# future SDK reshuffle.
+benchmark = [
+    "openai>=1.40",
+]
+
 [tool.hatch.metadata]
 allow-direct-references = true
 
@@ -198,6 +208,10 @@ ignore = [
     "PGH003",  # Specific rule codes not required in scripts
     "PIE810",  # startswith/endswith tuple not required
     "E501",    # Line length relaxed in scripts
+    "PLR2004", # Magic value thresholds OK in benchmark / reporting scripts
+    "PLC0206", # Dict iteration without .items() OK in scripts
+    "RUF001",  # Ambiguous unicode (status emojis like ℹ️) OK in reports
+    "RUF002",  # Ambiguous unicode in docstrings OK in scripts
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
