@@ -18,6 +18,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+# Sub-step entries whose keys begin with one of these prefixes carry token
+# counts (integers), not elapsed-time durations. The post-pipeline summary
+# log uses this to render counts as ``N tokens`` instead of the elapsed
+# ``N.NNs`` format. Introduced 2026-05-15 with the strategy-map token
+# telemetry — every other ``{step}.timings`` entry is still a float of
+# wall-clock seconds.
+_TOKEN_KEY_PREFIXES: tuple[str, ...] = ("tokens_in_", "tokens_out_", "cached_tokens_")
+
+
+def _format_timing_value(sub_name: str, value: Any) -> str:
+    """Render a ``{step}.timings`` entry for the human-readable summary log.
+
+    Token-count keys (prefixed with ``tokens_in_`` / ``tokens_out_`` /
+    ``cached_tokens_``) render as ``N tokens``. Everything else is
+    treated as elapsed seconds and rendered with two decimals + ``s``.
+    """
+    if sub_name.startswith(_TOKEN_KEY_PREFIXES):
+        return f"{int(value)} tokens"
+    return f"{value:.2f}s"
+
+
 # Maps pipeline question keys → (progress percentage, user-visible label)
 _PROGRESS_MAP: dict[str, tuple[int, str]] = {
     "scrape_and_resolve": (15, "Scraping website content..."),
@@ -178,8 +200,10 @@ class JanusRequestExecutor:
         for key, value in self._details.items():
             if key.endswith(".timings") and isinstance(value, dict):
                 step_label = key.removesuffix(".timings")
-                for sub_name, sub_duration in value.items():
-                    substep_lines.append(f"    {step_label}.{sub_name}: {sub_duration:.2f}s")
+                for sub_name, sub_value in value.items():
+                    substep_lines.append(
+                        f"    {step_label}.{sub_name}: {_format_timing_value(sub_name, sub_value)}"
+                    )
 
         summary = "\n".join(timing_lines)
         if substep_lines:
