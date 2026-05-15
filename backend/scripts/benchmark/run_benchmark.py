@@ -170,12 +170,30 @@ def run_single_prompt(client: openai.OpenAI, model: str, prompt: dict) -> dict:
     }
 
 
+# Per-call request budget. Bounds the worst case when the model hits a
+# slow path (the same tail-latency pathology this benchmark was built to
+# investigate). Production uses 180s but typical Janus AI calls finish
+# in 2-30s; 90s catches the tail without truncating legitimate work, and
+# the single retry doubles the effective ceiling to ~180s before the
+# benchmark records the call as a timeout error.
+_REQUEST_TIMEOUT_SECONDS = 90.0
+_MAX_RETRIES = 1
+
+
 def run_benchmark(model: str, prompts_path: str, output_dir: str, baseline: bool = False) -> str:
     """Run full benchmark suite against a model."""
     data = load_prompts(prompts_path)
     prompts = data["prompts"]
 
-    client = openai.OpenAI()  # Uses OPENAI_API_KEY env var
+    # Tight timeout + single retry. Without this the SDK defaults to a
+    # 600 s per-request timeout and 2 retries — a single stuck call can
+    # block the benchmark for 30 min. With 90 s x 2 attempts, worst case
+    # per prompt is ~3 min, and the runner records ``error="API error: ..."``
+    # in the result rather than hanging.
+    client = openai.OpenAI(
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+        max_retries=_MAX_RETRIES,
+    )
 
     print(f"\n{'='*60}")
     print(f"  AI Model Benchmark — {model}")
