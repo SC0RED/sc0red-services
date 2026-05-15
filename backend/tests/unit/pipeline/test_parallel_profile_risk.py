@@ -246,6 +246,38 @@ class TestParallelProfileRiskAndIdeation:
         # get_client called 11 times: 1 profile + 2 risk + 8 ideation
         assert mock_factory.get_client.call_count == 11
 
+    def test_extract_profile_uses_advanced_precision(self):
+        """``extract_profile`` runs on Precision.ADVANCED (gpt-5.1); other calls on STANDARD.
+
+        Pins the per-call-site override added in the gpt-5.4-mini migration
+        (2026-05-15). Without this, a future refactor could silently route
+        ``extract_profile`` to STANDARD and trip the categorical-misclassification
+        regression the benchmark caught (industry_sector → "Manufacturing",
+        revenue_model losing anchor numbers).
+        """
+        mock_factory = self._make_mock_factory()
+        accessor = self._make_accessor()
+
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+        step.execute()
+
+        calls = mock_factory.get_client.call_args_list
+        precisions = [c.kwargs["precision"] for c in calls]
+
+        # Exactly one ADVANCED call (extract_profile); ten STANDARD calls.
+        assert precisions.count(Precision.ADVANCED) == 1
+        assert precisions.count(Precision.STANDARD) == 10
+
+        # Pin identity: the ADVANCED call MUST be the profile one. Without
+        # this, a refactor that reordered ``submit_task`` calls could leave
+        # the counts intact while routing ADVANCED to an ideation call by
+        # accident — defeating the benchmark finding.
+        advanced_calls = [c for c in calls if c.kwargs["precision"] == Precision.ADVANCED]
+        assert len(advanced_calls) == 1
+        assert advanced_calls[0].kwargs["instructions"] == PROFILE_SYSTEM_PROMPT
+
     def test_correct_system_prompts_used(self):
         mock_factory = self._make_mock_factory()
         accessor = self._make_accessor()

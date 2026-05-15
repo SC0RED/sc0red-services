@@ -133,7 +133,21 @@ class DetailOpportunities(RequestStep):
         system_prompt: str,
         label: str,
     ) -> tuple[str, dict[str, Any], float, TokenCounts]:
-        """Execute a single AI call via the shared run_structured_ai_call."""
+        """Execute a single AI call via the shared run_structured_ai_call.
+
+        Uses the default ``Precision.STANDARD`` (gpt-5.4-mini). The Janus
+        2026-05-15 benchmark initially flagged mini for compressing the
+        ROI estimate ~4x (1167 → 278 chars), but a re-read showed mini's
+        output is structurally complete (lever + financial impact +
+        payback period + driving action). The verbose gpt-5.1 ROI adds
+        supporting math (COGS breakdown, 3-yr cumulative, valuation at
+        EBITDA multiple) that PE diligence users can re-derive themselves
+        and that doesn't justify the recurring 3-minute tail-latency
+        spikes gpt-5.1 hits on this call site (e.g., ``detail_3`` ran
+        201s in production on 2026-05-15). If real PE users surface
+        quality complaints post-deploy, re-pin to ``Precision.ADVANCED``
+        — one-line revert; token telemetry monitors the impact.
+        """
         return run_structured_ai_call(
             ai_client_factory=self._ai_client_factory,
             user_prompt=user_prompt,
