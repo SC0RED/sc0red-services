@@ -289,8 +289,16 @@ class TestParallelProfileRiskAndIdeation:
         assert "Investment memo" in profile_prompt
 
     def test_incomplete_profile_raises(self):
+        # The profile schema requires all 13 fields structurally; the
+        # ``run_structured_ai_call`` boundary validator (added 2026-05-15)
+        # will reject a response missing any of them at the call site. The
+        # pipeline's OWN "incomplete data" check guards against the case
+        # where every field is present but the two anchor fields
+        # (``company_name`` / ``industry``) are semantically empty. This
+        # test exercises that second layer.
         mock_factory = self._make_mock_factory(
             profile_data={
+                **_PROFILE_RESPONSE,
                 "company_name": "",
                 "industry": "",
             }

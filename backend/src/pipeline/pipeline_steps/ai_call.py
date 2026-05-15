@@ -10,6 +10,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+import jsonschema
 from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 if TYPE_CHECKING:
@@ -31,6 +32,16 @@ def run_structured_ai_call(
 
     All pipeline steps delegate to this function so that AI client configuration,
     logging format, and error handling are consistent across the pipeline.
+
+    A boundary-validation pass runs ``jsonschema.validate(response, schema)`` on
+    every response before returning. OpenAI's structured-output mode already
+    enforces the schema, so this is a defensive fast-fail check — a malformed
+    response trips at the exact call site with its ``label`` instead of
+    propagating into downstream assembly and surfacing as a Pydantic error
+    several steps later. Overhead is ~100-500 μs per call (negligible vs. the
+    500-2000 ms OpenAI latency dominating each call). See
+    ``prompts/strategy_map/schemas/per_call/README.md`` for the pipeline's
+    validation contract.
     """
     client = ai_client_factory.get_client(
         verbosity=Verbosity.MEDIUM,
@@ -59,4 +70,13 @@ def run_structured_ai_call(
         elapsed,
         response.metadata,
     )
+    try:
+        jsonschema.validate(instance=response.content, schema=schema)
+    except jsonschema.ValidationError:
+        logger.exception(
+            "[%s:%s] AI response failed per-call schema validation",
+            step_name,
+            label,
+        )
+        raise
     return label, response.content, elapsed
