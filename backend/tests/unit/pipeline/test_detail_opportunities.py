@@ -108,15 +108,21 @@ class TestDetailOpportunities:
         completed = {c[0][0] for c in calls}
         assert "generate_opportunities" in completed
 
-    def test_all_calls_use_advanced_precision(self):
-        """Every DetailOpportunities AI call runs on Precision.ADVANCED (gpt-5.1).
+    def test_all_calls_use_standard_precision(self):
+        """Every DetailOpportunities AI call runs on Precision.STANDARD (gpt-5.4-mini).
 
-        Pins the override added in the gpt-5.4-mini migration (2026-05-15).
-        The benchmark flagged mini for compressing the explicit financial
-        bridge in ``roi_estimate`` from a PE-grade deliverable (1167 chars
-        with revenue → COGS → BOM → addressable → 3-yr EBITDA uplift →
-        valuation impact) to a ~4x shorter qualitative summary. PE diligence
-        users consume the full bridge — mini cannot match gpt-5.1 here.
+        Initial draft of the 2026-05-15 migration pinned this step to
+        ``Precision.ADVANCED``, but a re-read of the benchmark outputs
+        showed mini's roi_estimate is structurally complete (lever,
+        financial impact, payback period, driving action). The verbose
+        gpt-5.1 ROI adds supporting math PE users can re-derive, and
+        gpt-5.1 hits recurring ~3-minute tail-latency spikes on this
+        call site (e.g., ``detail_3`` ran 201s in production on
+        2026-05-15).
+
+        If real PE users surface quality complaints post-deploy, the
+        revert is one line in ``_run_ai_call``. This test pins the
+        current routing so the revert is intentional, not accidental.
         """
         from signalfield_core.models.enums import Precision
 
@@ -130,8 +136,8 @@ class TestDetailOpportunities:
 
         calls = mock_factory.get_client.call_args_list
         precisions = [c.kwargs["precision"] for c in calls]
-        assert all(p == Precision.ADVANCED for p in precisions), (
-            f"DetailOpportunities must pin all calls to Precision.ADVANCED; got {precisions}"
+        assert all(p == Precision.STANDARD for p in precisions), (
+            f"DetailOpportunities must use Precision.STANDARD; got {precisions}"
         )
 
     def test_missing_profile_raises(self):
