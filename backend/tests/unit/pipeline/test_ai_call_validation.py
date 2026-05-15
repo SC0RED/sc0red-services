@@ -22,17 +22,31 @@ from unittest.mock import MagicMock
 import jsonschema
 import pytest
 
-from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
+from src.pipeline.pipeline_steps.ai_call import TokenCounts, run_structured_ai_call
 
 
-def _build_ai_factory(response_content: dict[str, Any]) -> MagicMock:
-    """Build a MagicMock ``AIClientFactory`` whose client returns ``response_content``."""
+def _build_ai_factory(
+    response_content: dict[str, Any],
+    *,
+    input_tokens: int = 100,
+    output_tokens: int = 50,
+    cached_input_tokens: int = 0,
+) -> MagicMock:
+    """Build a MagicMock ``AIClientFactory`` whose client returns ``response_content``.
+
+    Defaults to non-zero ``input_tokens`` / ``output_tokens`` and zero
+    ``cached_input_tokens`` (cache-miss). Override per-test for assertions
+    on cache hit-rate or token plumbing.
+    """
     factory = MagicMock()
     client = factory.get_client.return_value
     client.model = "gpt-test"
     response = MagicMock()
     response.content = response_content
-    response.metadata = {"input_tokens": 100, "output_tokens": 50}
+    response.metadata = {"input_tokens": input_tokens, "output_tokens": output_tokens}
+    response.input_tokens = input_tokens
+    response.output_tokens = output_tokens
+    response.cached_input_tokens = cached_input_tokens
     client.query_structured.return_value = response
     return factory
 
@@ -71,7 +85,7 @@ class TestRunStructuredAICallValidation:
             "rationale_source": "Customer cohort analysis Q2 2025",
         }
         factory = _build_ai_factory(valid_response)
-        label, content, elapsed = run_structured_ai_call(
+        label, content, elapsed, _tokens = run_structured_ai_call(
             ai_client_factory=factory,
             user_prompt="elaborate on objective F1",
             schema=detail_schema,
@@ -82,6 +96,46 @@ class TestRunStructuredAICallValidation:
         assert label == "detail_financial_F1"
         assert content == valid_response
         assert elapsed >= 0.0
+
+    def test_returns_token_counts_from_sdk_response(
+        self, detail_schema: dict[str, Any]
+    ) -> None:
+        """The 4th tuple element is a ``TokenCounts`` populated from the SDK response.
+
+        Pins the wiring between signalfield-core's ``StructuredResponse``
+        (which gained ``input_tokens`` / ``output_tokens`` /
+        ``cached_input_tokens`` in v0.2.0) and ``run_structured_ai_call``'s
+        return shape. Without this assertion a regression that drops one of
+        the three fields would only surface downstream as a
+        ``StepTimer.record_tokens`` exception.
+        """
+        valid_response = {
+            "definition": (
+                "Grow recurring SaaS revenue by expanding the enterprise "
+                "tier into 3 new vertical segments within 12 months."
+            ),
+            "category": "revenue_growth",
+            "confidence": "HIGH",
+            "rationale_source": None,
+        }
+        factory = _build_ai_factory(
+            valid_response,
+            input_tokens=2840,
+            output_tokens=215,
+            cached_input_tokens=2600,
+        )
+        _, _, _, tokens = run_structured_ai_call(
+            ai_client_factory=factory,
+            user_prompt="elaborate on objective F1",
+            schema=detail_schema,
+            system_prompt="strategy-map system",
+            label="detail_financial_F1",
+            step_name="GenerateStrategyMap",
+        )
+        assert isinstance(tokens, TokenCounts)
+        assert tokens.input_tokens == 2840
+        assert tokens.output_tokens == 215
+        assert tokens.cached_input_tokens == 2600
 
     def test_valid_response_with_null_nullable_field_passes_through(
         self, detail_schema: dict[str, Any]
@@ -102,7 +156,7 @@ class TestRunStructuredAICallValidation:
             "rationale_source": None,
         }
         factory = _build_ai_factory(valid_response_with_null)
-        label, content, _ = run_structured_ai_call(
+        label, content, _, _ = run_structured_ai_call(
             ai_client_factory=factory,
             user_prompt="elaborate on objective F1",
             schema=detail_schema,

@@ -21,7 +21,14 @@ from src.pipeline.pipeline_steps._strategy_map_synthesis import (
     run_decomposed_value_proposition,
     run_decomposed_vision_mission,
 )
+from src.pipeline.pipeline_steps.ai_call import TokenCounts
 from src.pipeline.step_timer import StepTimer
+
+# Per-call token counts the mocked ``_run_ai_call`` reports. Token telemetry
+# pinning lives in ``test_step_timer.py``; these fixtures only need a real
+# ``TokenCounts`` instance so ``timer.record_tokens(...)`` doesn't trip on a
+# MagicMock attribute. The exact numbers are irrelevant here.
+_CANNED_TOKEN_COUNTS = TokenCounts(input_tokens=100, output_tokens=50, cached_input_tokens=80)
 
 
 def _make_step_with_canned_responses(
@@ -35,8 +42,8 @@ def _make_step_with_canned_responses(
         _schema: dict[str, Any],
         _system_prompt: str,
         label: str,
-    ) -> tuple[str, dict[str, Any], float]:
-        return label, responses_by_label[label], 0.5
+    ) -> tuple[str, dict[str, Any], float, TokenCounts]:
+        return label, responses_by_label[label], 0.5, _CANNED_TOKEN_COUNTS
 
     step._run_ai_call.side_effect = fake_run_ai_call
     return step

@@ -769,7 +769,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "python-docx", specifier = ">=1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "signalfield-core", extras = ["all"], git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.1.0" },
+    { name = "signalfield-core", extras = ["all"], git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.2.0" },
     { name = "uvicorn", specifier = ">=0.30" },
     { name = "vulture", marker = "extra == 'dev'", specifier = ">=2.11" },
 ]
@@ -1875,8 +1875,8 @@ wheels = [
 
 [[package]]
 name = "signalfield-core"
-version = "0.1.0"
-source = { git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.1.0#1debb734848951d5fa6c4d514eea6b28f1844a92" }
+version = "0.2.0"
+source = { git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.2.0#9caca5915b121a71f556ada0d1ead584c0ffef41" }
 dependencies = [
     { name = "pydantic" },
 ]

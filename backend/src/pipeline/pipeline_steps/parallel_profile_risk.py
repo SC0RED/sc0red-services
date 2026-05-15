@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
 
 logger = logging.getLogger(__name__)
 
@@ -230,8 +231,12 @@ class ParallelProfileRiskAndIdeation(RequestStep):
                 )
             all_results = manager.wait_for_all_and_collect_results()
 
+        # Drop the per-call ``TokenCounts`` (4th tuple element from
+        # run_structured_ai_call as of 2026-05-15) — this step doesn't surface
+        # token telemetry yet. Opt-in by calling timer.record_tokens(...)
+        # below if/when that becomes desired.
         results: dict[str, tuple[dict[str, Any], float]] = {}
-        for label, data, elapsed in all_results:
+        for label, data, elapsed, _tokens in all_results:
             results[label] = (data, elapsed)
 
         profile_data, profile_elapsed = results["extract_profile"]
@@ -302,7 +307,7 @@ class ParallelProfileRiskAndIdeation(RequestStep):
         schema: dict[str, Any],
         system_prompt: str,
         label: str,
-    ) -> tuple[str, dict[str, Any], float]:
+    ) -> tuple[str, dict[str, Any], float, TokenCounts]:
         """Execute a single AI call via the shared run_structured_ai_call."""
         return run_structured_ai_call(
             ai_client_factory=self._ai_client_factory,

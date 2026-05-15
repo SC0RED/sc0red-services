@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from src.pipeline.pipeline_steps.ai_call import TokenCounts
 from src.pipeline.step_timer import StepTimer
 
 
@@ -62,3 +63,64 @@ class TestStepTimer:
         timings = timer.to_details()["TestStep.timings"]
         assert "failing_op" in timings
         assert timings["failing_op"] >= 0
+
+
+class TestStepTimerRecordTokens:
+    """Per-call token-count recording (added 2026-05-15 for P1.6).
+
+    Pair with ``timer.record(label, elapsed)`` at every strategy-map AI
+    call site so each call's CloudWatch entry carries elapsed + three
+    token-count keys.
+    """
+
+    def test_record_tokens_writes_three_keys(self):
+        timer = StepTimer("GenerateStrategyMap")
+        counts = TokenCounts(input_tokens=1450, output_tokens=220, cached_input_tokens=1320)
+        timer.record_tokens("ai_call_vision_text", counts)
+
+        timings = timer.to_details()["GenerateStrategyMap.timings"]
+        assert timings["tokens_in_ai_call_vision_text"] == 1450
+        assert timings["tokens_out_ai_call_vision_text"] == 220
+        assert timings["cached_tokens_ai_call_vision_text"] == 1320
+
+    def test_record_tokens_keys_are_ints_not_floats(self):
+        """Token counts are emitted as ints; elapsed is the only float entry."""
+        timer = StepTimer("Step")
+        timer.record_tokens("call", TokenCounts(100, 50, 80))
+
+        timings = timer.to_details()["Step.timings"]
+        assert isinstance(timings["tokens_in_call"], int)
+        assert isinstance(timings["tokens_out_call"], int)
+        assert isinstance(timings["cached_tokens_call"], int)
+
+    def test_record_and_record_tokens_share_label(self):
+        """The same label keys all four entries — one ai_call_*, three tokens_*."""
+        timer = StepTimer("Step")
+        timer.record("ai_call_F1", 1.2)
+        timer.record_tokens("ai_call_F1", TokenCounts(800, 120, 600))
+
+        timings = timer.to_details()["Step.timings"]
+        assert timings["ai_call_F1"] == 1.2
+        assert timings["tokens_in_ai_call_F1"] == 800
+        assert timings["tokens_out_ai_call_F1"] == 120
+        assert timings["cached_tokens_ai_call_F1"] == 600
+
+    def test_record_tokens_zero_cached_when_cache_missed(self):
+        """``cached_input_tokens == 0`` records cleanly (cache miss / no cache surface)."""
+        timer = StepTimer("Step")
+        timer.record_tokens("ai_call_label", TokenCounts(1000, 200, 0))
+
+        timings = timer.to_details()["Step.timings"]
+        assert timings["cached_tokens_ai_call_label"] == 0
+        assert timings["tokens_in_ai_call_label"] == 1000
+
+    def test_multiple_calls_keep_separate_entries(self):
+        timer = StepTimer("Step")
+        timer.record_tokens("call_a", TokenCounts(100, 50, 80))
+        timer.record_tokens("call_b", TokenCounts(200, 90, 150))
+
+        timings = timer.to_details()["Step.timings"]
+        assert timings["tokens_in_call_a"] == 100
+        assert timings["tokens_in_call_b"] == 200
+        assert timings["cached_tokens_call_a"] == 80
+        assert timings["cached_tokens_call_b"] == 150

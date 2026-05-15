@@ -30,6 +30,7 @@ from src.pipeline.pipeline_steps._strategy_map_corpus import (
 )
 
 if TYPE_CHECKING:
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
     from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
     from src.pipeline.step_timer import StepTimer
 
@@ -97,7 +98,7 @@ def run_decomposed_vision_mission(
         ("mission_synth", "mission_synth", _schema("synth_yesno")),
     ]
 
-    collected: list[tuple[str, dict[str, Any], float]] = []
+    collected: list[tuple[str, dict[str, Any], float, TokenCounts]] = []
     with FutureManager(
         name="GenerateStrategyMap.synthesis_vm",
         max_workers=_VISION_MISSION_MAX_WORKERS,
@@ -112,13 +113,13 @@ def run_decomposed_vision_mission(
             )
         collected = manager.wait_for_all_and_collect_results()
 
-    # Record per-call elapsed before returning. CloudWatch sees
-    # ``ai_call_vision_text``, ``ai_call_mission_text``,
-    # ``ai_call_vision_synth``, ``ai_call_mission_synth``.
-    for label, _data, elapsed in collected:
+    # Record per-call elapsed + tokens before returning. CloudWatch sees
+    # ``ai_call_vision_text`` + ``tokens_in/out/cached_vision_text``, etc.
+    for label, _data, elapsed, tokens in collected:
         timer.record(f"ai_call_{label}", elapsed)
+        timer.record_tokens(f"ai_call_{label}", tokens)
 
-    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e in collected}
+    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e, _t in collected}
 
     vision = {
         "statement": by_label["vision_text"]["statement"],
@@ -158,7 +159,7 @@ def run_decomposed_value_proposition(
         ("vp_rationale", "vp_rationale", _schema("vp_rationale")),
     ]
 
-    collected: list[tuple[str, dict[str, Any], float]] = []
+    collected: list[tuple[str, dict[str, Any], float, TokenCounts]] = []
     with FutureManager(
         name="GenerateStrategyMap.synthesis_vp",
         max_workers=_VALUE_PROPOSITION_MAX_WORKERS,
@@ -173,10 +174,11 @@ def run_decomposed_value_proposition(
             )
         collected = manager.wait_for_all_and_collect_results()
 
-    for label, _data, elapsed in collected:
+    for label, _data, elapsed, tokens in collected:
         timer.record(f"ai_call_{label}", elapsed)
+        timer.record_tokens(f"ai_call_{label}", tokens)
 
-    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e in collected}
+    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e, _t in collected}
 
     primary = by_label["vp_primary"]["primary"]
     # Hybrid is the only case that uses the secondary classifier output.

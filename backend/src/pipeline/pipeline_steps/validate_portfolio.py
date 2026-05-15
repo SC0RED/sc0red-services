@@ -14,7 +14,7 @@ from signalfield_core.exceptions.base import EngineError
 from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
-from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
+from src.pipeline.pipeline_steps.ai_call import TokenCounts, run_structured_ai_call
 from src.pipeline.prompts.loader import load_schema, load_system_prompt, load_template
 
 if TYPE_CHECKING:
@@ -102,8 +102,11 @@ class ValidatePortfolioCompanies(RequestStep):
                 )
             results = manager.wait_for_all_and_collect_results()
 
+        # ``_tokens`` is the 4th tuple element from run_structured_ai_call
+        # (added 2026-05-15). ValidatePortfolio doesn't surface token
+        # telemetry yet; opt-in later if needed.
         validated: list[dict[str, Any]] = []
-        for label, data, _elapsed in results:
+        for label, data, _elapsed, _tokens in results:
             index = int(label.split("_")[1])
             is_portfolio = data.get("is_portfolio_company", True)
             if is_portfolio:
@@ -141,7 +144,7 @@ class ValidatePortfolioCompanies(RequestStep):
         schema: dict[str, Any],
         system_prompt: str,
         label: str,
-    ) -> tuple[str, dict[str, Any], float]:
+    ) -> tuple[str, dict[str, Any], float, TokenCounts]:
         """Run a single validation AI call, returning fail-open default on error."""
         try:
             return run_structured_ai_call(
@@ -154,4 +157,5 @@ class ValidatePortfolioCompanies(RequestStep):
             )
         except (EngineError, ValueError, RuntimeError):
             logger.exception("[ValidatePortfolio:%s] AI call failed — keeping company", label)
-            return label, {"is_portfolio_company": True}, 0.0
+            # Fail-open default: zero token counts because no call completed.
+            return label, {"is_portfolio_company": True}, 0.0, TokenCounts(0, 0, 0)
