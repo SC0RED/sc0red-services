@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
+from signalfield_core.models.enums import Precision
 from signalfield_core.pipeline.step import RequestStep
 from signalfield_core.utilities.future_manager import FutureManager
 
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
 
 logger = logging.getLogger(__name__)
 
@@ -197,12 +199,19 @@ class ParallelProfileRiskAndIdeation(RequestStep):
 
         # Run all 11 AI calls in parallel
         with FutureManager(name="ParallelProfileRiskAndIdeation", max_workers=11) as manager:
+            # ``extract_profile`` runs on Precision.ADVANCED (gpt-5.1).
+            # The Janus 2026-05-15 benchmark flagged mini for misclassifying
+            # ``industry_sector`` as "Manufacturing" (should be Technology)
+            # and dropping anchor numbers in ``revenue_model`` /
+            # ``competitive_positioning``. Other calls below use the default
+            # STANDARD (gpt-5.4-mini).
             manager.submit_task(
                 self._run_ai_call,
                 profile_prompt,
                 PROFILE_SCHEMA,
                 PROFILE_SYSTEM_PROMPT,
                 "extract_profile",
+                Precision.ADVANCED,
             )
             risk_instructions = RISK_SYSTEM_PROMPT + "\n\n" + RISK_SCORING_GUIDE
             manager.submit_task(
@@ -230,8 +239,12 @@ class ParallelProfileRiskAndIdeation(RequestStep):
                 )
             all_results = manager.wait_for_all_and_collect_results()
 
+        # Drop the per-call ``TokenCounts`` (4th tuple element from
+        # run_structured_ai_call as of 2026-05-15) — this step doesn't surface
+        # token telemetry yet. Opt-in by calling timer.record_tokens(...)
+        # below if/when that becomes desired.
         results: dict[str, tuple[dict[str, Any], float]] = {}
-        for label, data, elapsed in all_results:
+        for label, data, elapsed, _tokens in all_results:
             results[label] = (data, elapsed)
 
         profile_data, profile_elapsed = results["extract_profile"]
@@ -302,8 +315,17 @@ class ParallelProfileRiskAndIdeation(RequestStep):
         schema: dict[str, Any],
         system_prompt: str,
         label: str,
-    ) -> tuple[str, dict[str, Any], float]:
-        """Execute a single AI call via the shared run_structured_ai_call."""
+        precision: Precision = Precision.STANDARD,
+    ) -> tuple[str, dict[str, Any], float, TokenCounts]:
+        """Execute a single AI call via the shared run_structured_ai_call.
+
+        ``precision`` defaults to ``STANDARD`` (gpt-5.4-mini). The
+        ``extract_profile`` call passes ``Precision.ADVANCED`` (gpt-5.1)
+        because the Janus 2026-05-15 benchmark flagged mini for misclassifying
+        ``industry_sector`` and dropping anchor numbers in ``revenue_model`` /
+        ``competitive_positioning``. Risk-batch and ideation calls accept
+        mini-quality outputs per the same benchmark.
+        """
         return run_structured_ai_call(
             ai_client_factory=self._ai_client_factory,
             user_prompt=user_prompt,
@@ -311,4 +333,5 @@ class ParallelProfileRiskAndIdeation(RequestStep):
             system_prompt=system_prompt,
             label=label,
             step_name="ParallelProfileRiskAndIdeation",
+            precision=precision,
         )

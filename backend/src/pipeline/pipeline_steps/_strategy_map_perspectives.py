@@ -43,6 +43,7 @@ from src.pipeline.pipeline_steps._strategy_map_perspective_rounds import (
 )
 
 if TYPE_CHECKING:
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
     from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
     from src.pipeline.step_timer import StepTimer
 
@@ -204,7 +205,7 @@ def _run_round1_titles(
         ("titles_capacity", "round1_titles_capacity", _schema("capacity_titles")),
     ]
 
-    collected: list[tuple[str, dict[str, Any], float]] = []
+    collected: list[tuple[str, dict[str, Any], float, TokenCounts]] = []
     with FutureManager(name="GenerateStrategyMap.R1", max_workers=_ROUND1_MAX_WORKERS) as manager:
         for label, template_name, schema in tasks:
             manager.submit_task(
@@ -216,10 +217,11 @@ def _run_round1_titles(
             )
         collected = manager.wait_for_all_and_collect_results()
 
-    for label, _data, elapsed in collected:
+    for label, _data, elapsed, tokens in collected:
         timer.record(f"ai_call_{label}", elapsed)
+        timer.record_tokens(f"ai_call_{label}", tokens)
 
-    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e in collected}
+    by_label: dict[str, dict[str, Any]] = {label: data for label, data, _e, _t in collected}
     return {
         "financial": by_label["titles_financial"],
         "customer": by_label["titles_customer"],

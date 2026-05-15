@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +94,12 @@ class DetailOpportunities(RequestStep):
                 )
             all_results = manager.wait_for_all_and_collect_results()
 
+        # Drop the per-call ``TokenCounts`` (4th tuple element from
+        # run_structured_ai_call as of 2026-05-15) — DetailOpportunities
+        # doesn't surface token telemetry yet. Opt-in by calling
+        # timer.record_tokens(...) here if/when that becomes desired.
         results: dict[str, tuple[dict[str, Any], float]] = {}
-        for label, data, elapsed in all_results:
+        for label, data, elapsed, _tokens in all_results:
             results[label] = (data, elapsed)
 
         all_opportunities = []
@@ -127,8 +132,22 @@ class DetailOpportunities(RequestStep):
         schema: dict[str, Any],
         system_prompt: str,
         label: str,
-    ) -> tuple[str, dict[str, Any], float]:
-        """Execute a single AI call via the shared run_structured_ai_call."""
+    ) -> tuple[str, dict[str, Any], float, TokenCounts]:
+        """Execute a single AI call via the shared run_structured_ai_call.
+
+        Uses the default ``Precision.STANDARD`` (gpt-5.4-mini). The Janus
+        2026-05-15 benchmark initially flagged mini for compressing the
+        ROI estimate ~4x (1167 → 278 chars), but a re-read showed mini's
+        output is structurally complete (lever + financial impact +
+        payback period + driving action). The verbose gpt-5.1 ROI adds
+        supporting math (COGS breakdown, 3-yr cumulative, valuation at
+        EBITDA multiple) that PE diligence users can re-derive themselves
+        and that doesn't justify the recurring 3-minute tail-latency
+        spikes gpt-5.1 hits on this call site (e.g., ``detail_3`` ran
+        201s in production on 2026-05-15). If real PE users surface
+        quality complaints post-deploy, re-pin to ``Precision.ADVANCED``
+        — one-line revert; token telemetry monitors the impact.
+        """
         return run_structured_ai_call(
             ai_client_factory=self._ai_client_factory,
             user_prompt=user_prompt,

@@ -34,6 +34,7 @@ from src.pipeline.pipeline_steps._strategy_map_corpus import (
 )
 
 if TYPE_CHECKING:
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
     from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
     from src.pipeline.step_timer import StepTimer
 
@@ -178,7 +179,7 @@ def run_decomposed_arrows_and_priorities(
     arrow_schema = _schema("arrow_yesno")
     priorities_schema = _schema("arrows_priorities")
 
-    collected: list[tuple[str, dict[str, Any], float]] = []
+    collected: list[tuple[str, dict[str, Any], float, TokenCounts]] = []
     with FutureManager(
         name="GenerateStrategyMap.arrows",
         max_workers=_ARROWS_MAX_WORKERS,
@@ -211,16 +212,17 @@ def run_decomposed_arrows_and_priorities(
 
         collected = manager.wait_for_all_and_collect_results()
 
-    # Record per-call elapsed. Labels:
+    # Record per-call elapsed + token counts. Labels:
     # - ``ai_call_arrow_{from_id}_{to_id}`` per yes/no call
     # - ``ai_call_priorities`` for the holistic priorities call
-    for label, _data, elapsed in collected:
+    for label, _data, elapsed, tokens in collected:
         timer.record(f"ai_call_{label}", elapsed)
+        timer.record_tokens(f"ai_call_{label}", tokens)
 
     # Partition results by label prefix.
     arrows: list[dict[str, Any]] = []
     priorities_payload: dict[str, Any] | None = None
-    for label, data, _elapsed in collected:
+    for label, data, _elapsed, _tokens in collected:
         if label == "priorities":
             priorities_payload = data
         elif label.startswith("arrow_"):

@@ -1,0 +1,296 @@
+{
+  "metadata": {
+    "model": "gpt-5.4-mini",
+    "timestamp": "2026-05-15T13:56:03.619623+00:00",
+    "prompts_file": "/Users/vedratnavelani/Documents/sf-github/janus/backend/scripts/benchmark/benchmark_prompts.json",
+    "prompt_count": 10,
+    "is_baseline": false
+  },
+  "summary": {
+    "total_cost_usd": 0.027527,
+    "total_latency_seconds": 31.696,
+    "avg_latency_seconds": 3.17,
+    "schema_compliance_rate": 1.0,
+    "error_count": 0
+  },
+  "results": [
+    {
+      "prompt_id": "strategy_map_arrow_yesno_01",
+      "task_type": "arrow_yesno",
+      "description": "Strategy-map arrow yes/no \u2014 one candidate cause-effect link among 60+ parallel calls",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "enables": true,
+        "hypothesis": "Hiring and retaining hardware-software hybrids gives Acme the cross-disciplinary team needed to architect and ship the gen-3 platform with modular tooling that future features can stack on top of."
+      },
+      "input_tokens": 3745,
+      "output_tokens": 103,
+      "total_tokens": 3848,
+      "cost_usd": 0.003272,
+      "latency_seconds": 2.354,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "strategy_map_arrows_priorities_01",
+      "task_type": "arrows_priorities",
+      "description": "Strategy-map holistic priorities synthesis \u2014 the historic tail-latency outlier",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "strategicPriorities": [
+          {
+            "name": "Build the gen-3 collaborative-robot platform",
+            "result": "A modular gen-3 platform that cuts customer-specific configuration from months to weeks while sustaining safer, more reliable pick-and-pack performance."
+          },
+          {
+            "name": "Build the fleet-data flywheel",
+            "result": "Fleet telemetry that shortens onboarding, sharpens ROI proof, and accelerates the next product roadmap across every installed warehouse."
+          },
+          {
+            "name": "Build a customer-success engine that prevents churn",
+            "result": "A proactive renewal engine that flags at-risk accounts early, expands strategic relationships, and turns customer wins into lower-cost growth."
+          }
+        ]
+      },
+      "input_tokens": 3216,
+      "output_tokens": 157,
+      "total_tokens": 3373,
+      "cost_usd": 0.003119,
+      "latency_seconds": 2.386,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "strategy_map_internal_detail_01",
+      "task_type": "internal_objective_detail",
+      "description": "Strategy-map Round-3 internal-objective elaboration (definition, category, confidence)",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "definition": "We will ship a gen-3 collaborative-robot hardware platform with enough modularity, standardisation, and compute/sensor headroom to support the next five years of software and mechanical features without redesigning the core chassis. We will prioritise component substitution and BOM compression in R&D and procurement, while preserving interfaces that let us add new payloads, arm extensions, and warehouse workflows later. This objective is about creating the technical foundation for future releases, not about speeding installs or improving human-safety performance in the field.",
+        "category": "innovation",
+        "confidence": "HIGH",
+        "rationale_source": "Value chain R&D + procurement; opportunity #1 (ML-driven component substitution) and #3 (depalletisation arm extension) indicate a reusable platform strategy."
+      },
+      "input_tokens": 2696,
+      "output_tokens": 248,
+      "total_tokens": 2944,
+      "cost_usd": 0.003138,
+      "latency_seconds": 3.196,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "strategy_map_financial_titles_01",
+      "task_type": "financial_titles",
+      "description": "Strategy-map Round-1 financial-perspective title list (3 short objective titles)",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "titles": [
+          "Convert pilot wins into multi-site rollouts",
+          "Expand revenue with higher-value warehouse use cases",
+          "Compress hardware cost to lift gross margin"
+        ]
+      },
+      "input_tokens": 2707,
+      "output_tokens": 91,
+      "total_tokens": 2798,
+      "cost_usd": 0.00244,
+      "latency_seconds": 1.581,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "strategy_map_mission_text_01",
+      "task_type": "mission_text",
+      "description": "Strategy-map mission-statement generation from scrape",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "statement": "We provide collaborative warehouse robots, software, and field support that help mid-market fulfilment operators improve throughput, accuracy, and labor productivity."
+      },
+      "input_tokens": 3117,
+      "output_tokens": 69,
+      "total_tokens": 3186,
+      "cost_usd": 0.002648,
+      "latency_seconds": 1.569,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "strategy_map_vp_primary_01",
+      "task_type": "vp_primary",
+      "description": "Strategy-map value-proposition primary classifier (operational_excellence / customer_intimacy / product_leadership / hybrid)",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "primary": "product_leadership"
+      },
+      "input_tokens": 3317,
+      "output_tokens": 58,
+      "total_tokens": 3375,
+      "cost_usd": 0.002749,
+      "latency_seconds": 3.899,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "profile_extract_01",
+      "task_type": "profile_extraction",
+      "description": "ParallelProfileRisk \u2014 extract structured company profile from scrape",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "company_name": "Acme Robotics",
+        "industry": "Robotics-as-a-Service (RaaS) - Warehouse Automation / Collaborative Warehouse Robots",
+        "industry_sector": "Manufacturing",
+        "business_model": "Subscription-based RaaS with bundled hardware lease, software, and support; partnership-led enterprise sales",
+        "description": "Acme Robotics builds collaborative warehouse robots for mid-market fulfillment operators, positioning its robots to augment human pickers rather than replace them. The company\u2019s gen-3 platform is deployed across multi-site warehouse customers and is sold through long-term recurring contracts that include hardware, fleet-management software, updates, and field engineering support.",
+        "products_services": [
+          "Collaborative warehouse robots",
+          "Gen-3 robotics platform",
+          "Per-robot subscription contracts",
+          "Fleet-management software",
+          "Hardware lease bundled with support",
+          "Custom end-effectors for cold-chain handling and fragile-item gripping",
+          "Depalletisation arm extension",
+          "Returns-processing configuration",
+          "Warehouse-control-system integrations",
+          "Customer success / field-engineering support"
+        ],
+        "target_market": "Mid-market warehouse and fulfillment operators, including retail apparel, e-commerce fulfillment, pharmaceutical distribution, automotive parts, and 3PLs",
+        "company_size": "Mid-market 200-1000",
+        "revenue_model": "Recurring subscription contracts (3-year terms), with premium pricing for custom configurations and likely lease/service components",
+        "tech_signals": [
+          "ROS 2",
+          "Python",
+          "Rust",
+          "Warehouse-management-system protocols",
+          "Manhattan Active integration",
+          "SAP EWM integration",
+          "Warehouse-control-system integration",
+          "Hardware stack with mechanical, electrical, and systems engineering",
+          "Perception software",
+          "Fleet orchestration",
+          "Customer-facing tooling",
+          "Cobot experience in hardware hiring",
+          "Motor-control expertise in electrical hiring"
+        ],
+        "competitive_positioning": "Positions itself as a human-augmentation platform for warehouse operations rather than a 'fully autonomous warehouse' solution. Differentiates through operational partnership, field empathy, strong warehouse-ops customer success, measurable throughput/error-rate improvements, and live-demo led go-to-market at major supply-chain events.",
+        "ai_maturity": "Early exploration",
+        "key_risks_visible": [
+          "Revenue recognition complexity due to subscription vs. lease accounting",
+          "Potentially challenging long-tail economics on customized configurations",
+          "Hardware gross-margin standardization remains unresolved",
+          "European expansion may require meaningful capital for London office and market entry",
+          "Relatively concentrated growth dependence on warehouse automation adoption in mid-market fulfillment",
+          "Customer success execution risk given reliance on operations-experienced hires",
+          "Competitive pressure from Geek+, Locus, and Symbotic"
+        ]
+      },
+      "input_tokens": 1292,
+      "output_tokens": 502,
+      "total_tokens": 1794,
+      "cost_usd": 0.003228,
+      "latency_seconds": 4.739,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "risk_batch_01",
+      "task_type": "risk_batch",
+      "description": "ParallelProfileRisk \u2014 assess 4 risk categories with rationale (audit-trail quality matters)",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "risk_scores": [
+          {
+            "category": "competitive_displacement",
+            "score": 6.5,
+            "rationale": "If an AI-native entrant achieves materially lower unit economics or a step-change autonomy curve, Acme could lose mid-market share in 3 years, especially in e-commerce fulfilment where it already has 12 customers and is competing against better-known warehouse automation names. Probability is moderate: Acme has real traction, 47 warehouses deployed, and sticky integrations with Manhattan, Honeywell, and DHL, but the market is still early and vendor switching is plausible as buyers benchmark newer systems against the 2025 gen-3 launch."
+          },
+          {
+            "category": "technology_obsolescence",
+            "score": 7.5,
+            "rationale": "A foundation-model-driven perception stack could outpace Acme's task-specific approach and make parts of the gen-3 platform feel dated within 2-3 years, particularly if autonomy quality becomes the primary buying criterion. Probability is high enough to matter because Acme is explicitly software-and-perception intensive, is hiring deeply in ROS 2/perception, and is still scaling a recent 2025 platform; however, its augmentation-focused product and partner integrations reduce the chance of immediate obsolescence."
+          },
+          {
+            "category": "customer_behavior",
+            "score": 5.5,
+            "rationale": "The risk is that warehouse operators increasingly prefer fully autonomous systems over cobot-plus-human workflows, which would pressure Acme's positioning as an augmenting solution. The probability over 3 years is moderate, not extreme, because Acme's current customer base is buying measurable throughput gains (22% to 41%) and lower error rates, and its marketing deliberately aligns with operators who want operational help rather than a warehouse redesign; still, buyer preferences can shift quickly if autonomous competitors demonstrate reliable ROI."
+          },
+          {
+            "category": "margin_compression",
+            "score": 8.0,
+            "rationale": "This is the most immediate structural risk: robotics-as-a-service is hardware-heavy, and Acme's per-robot subscription must absorb hardware lease, software, updates, and field support while component costs and competitive pricing pressure move against it. The probability is high within 3 years because the company is still on the path to standardize hardware gross margin at 38%, faces customization complexity (up to $66K/robot/year), and has open questions around unit economics and revenue recognition; any pricing squeeze could hit cash generation before scale benefits fully arrive."
+          }
+        ]
+      },
+      "input_tokens": 1483,
+      "output_tokens": 555,
+      "total_tokens": 2038,
+      "cost_usd": 0.00361,
+      "latency_seconds": 5.215,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "ideation_01",
+      "task_type": "ideation",
+      "description": "ParallelProfileRisk \u2014 generate one specific AI opportunity addressing margin compression (creativity matters)",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "title": "Deploy an AI Remote-Diagnostics Copilot to Cut Field-Service Cost per Robot",
+        "description": "Build an AI layer on top of fleet telemetry, WMS/WCS events, and robot sensor logs that automatically diagnoses faults, predicts component failures, and recommends fixes before a field engineer is dispatched. This would reduce truck rolls, shorten downtime, and standardize support across the installed base, directly protecting gross margin as component prices and competitive pricing pressure intensify.",
+        "value_lever": "Cost Side",
+        "strategic_category": "Operational Efficiency",
+        "impact_rating": "High"
+      },
+      "input_tokens": 1198,
+      "output_tokens": 195,
+      "total_tokens": 1393,
+      "cost_usd": 0.001776,
+      "latency_seconds": 2.441,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    },
+    {
+      "prompt_id": "detail_01",
+      "task_type": "detail_opportunity",
+      "description": "DetailOpportunities \u2014 implementation steps + timeline + investment range + ROI (specificity matters)",
+      "model": "gpt-5.4-mini",
+      "content": {
+        "implementation_steps": [
+          "Build a clean, searchable BOM data layer for gen-3 hardware: normalize every part in the current BOM (supplier, specs, MOQ, lead time, failure rates, qualification status, pricing history) and connect it to engineering change orders, procurement records, and field-failure data so substitutions can be evaluated on both cost and reliability.",
+          "Train a component-substitution recommendation engine: use rules plus ML to rank near-equivalent parts by electrical/mechanical compatibility, historical performance, supply risk, and unit-cost savings; then create an engineer-in-the-loop workflow so hardware, quality, and procurement can approve candidates before any design change.",
+          "Run a phased qualification and rollout program: pilot on the top 20% of BOM spend across the highest-volume robot SKUs, qualify 5-10 substitutions with controlled testing, then roll approved swaps into the standard build spec and sourcing playbook to lock in savings at scale."
+        ],
+        "timeline": "Medium-term (3-9 months)",
+        "investment_range": "$100K-$500K",
+        "roi_estimate": "If Acme can reduce BOM cost by 12-18% on a meaningful share of gen-3 unit volume, the program could drive roughly $2M-$4M+ annual gross profit uplift at current scale, with payback typically inside 6-12 months once the first qualified substitutions are released into production."
+      },
+      "input_tokens": 263,
+      "output_tokens": 300,
+      "total_tokens": 563,
+      "cost_usd": 0.001547,
+      "latency_seconds": 4.316,
+      "schema_compliant": true,
+      "missing_fields": [],
+      "web_search_used": false,
+      "error": null
+    }
+  ]
+}

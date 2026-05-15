@@ -66,6 +66,7 @@ if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
+    from src.pipeline.pipeline_steps.ai_call import TokenCounts
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +265,14 @@ class GenerateStrategyMap(RequestStep):
         schema: dict[str, Any],
         system_prompt: str,
         label: str,
-    ) -> tuple[str, dict[str, Any], float]:
-        """Execute a single AI call via the shared `run_structured_ai_call`."""
+    ) -> tuple[str, dict[str, Any], float, TokenCounts]:
+        """Execute a single AI call via the shared `run_structured_ai_call`.
+
+        Returns ``(label, content, elapsed, token_counts)``. Strategy-map
+        sub-modules destructure all four and pair ``timer.record_tokens(...)``
+        with the existing ``timer.record(...)`` call so each per-call entry in
+        the CloudWatch payload carries elapsed-time + token-count keys.
+        """
         return run_structured_ai_call(
             ai_client_factory=self._ai_client_factory,
             user_prompt=user_prompt,

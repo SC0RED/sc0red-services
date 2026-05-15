@@ -24,6 +24,10 @@ jobs:
     name: Deploy to Testing
     needs: ci
     runs-on: ubuntu-latest
+    # Typical run is ~7 min. 20-min ceiling matches deploy-backend.yml
+    # so a stuck-queued runner fails fast instead of leaving the job
+    # hanging for 6h (GitHub Actions default).
+    timeout-minutes: 20
     environment: testing
     permissions:
       contents: read
@@ -122,6 +126,10 @@ jobs:
     if: needs.deploy.outputs.frontend_url != ''
     runs-on: ubuntu-latest
     environment: testing
+    # Typical run is ~5-6 min (Playwright browser install + full deployed
+    # suite). 20-min ceiling absorbs the slower 3-retry path on flaky
+    # assertions while still failing fast on a stuck-queued runner.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -163,6 +171,9 @@ jobs:
     # the very first deploy where the stack doesn't exist yet).
     if: always()
     runs-on: ubuntu-latest
+    # Cleanup is a single boto3 script (~15-30 s). 5-min ceiling
+    # matches deploy-backend.yml.
+    timeout-minutes: 5
     environment: testing
 
     steps:
