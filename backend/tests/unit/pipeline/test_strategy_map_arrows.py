@@ -22,7 +22,13 @@ from src.pipeline.pipeline_steps._strategy_map_arrows import (
     enumerate_arrow_pairs,
     run_decomposed_arrows_and_priorities,
 )
+from src.pipeline.pipeline_steps.ai_call import TokenCounts
 from src.pipeline.step_timer import StepTimer
+
+# Per-call token counts the mocked ``_run_ai_call`` reports. The exact
+# numbers are irrelevant for these tests; token-telemetry pinning lives in
+# ``test_step_timer.py``.
+_CANNED_TOKEN_COUNTS = TokenCounts(input_tokens=100, output_tokens=50, cached_input_tokens=80)
 
 
 def _make_step_with_canned_responses(
@@ -35,8 +41,8 @@ def _make_step_with_canned_responses(
         _schema: dict[str, Any],
         _system_prompt: str,
         label: str,
-    ) -> tuple[str, dict[str, Any], float]:
-        return label, responses_by_label[label], 0.5
+    ) -> tuple[str, dict[str, Any], float, TokenCounts]:
+        return label, responses_by_label[label], 0.5, _CANNED_TOKEN_COUNTS
 
     step._run_ai_call.side_effect = fake_run_ai_call
     return step

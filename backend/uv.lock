@@ -714,6 +714,7 @@ dependencies = [
     { name = "boto3" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "jsonschema" },
     { name = "mangum" },
     { name = "mcp" },
     { name = "openpyxl" },
@@ -726,6 +727,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+benchmark = [
+    { name = "openai" },
+]
 dev = [
     { name = "bandit" },
     { name = "boto3-stubs", extra = ["dynamodb"] },
@@ -752,9 +756,11 @@ requires-dist = [
     { name = "commitizen", marker = "extra == 'dev'", specifier = ">=3.13" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "jsonschema", specifier = ">=4.26" },
     { name = "mangum", specifier = ">=0.17" },
     { name = "mcp", specifier = ">=1.27" },
     { name = "moto", extras = ["dynamodb"], marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "openai", marker = "extra == 'benchmark'", specifier = ">=1.40" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0" },
@@ -767,11 +773,11 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "python-docx", specifier = ">=1.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "signalfield-core", extras = ["all"], git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.1.0" },
+    { name = "signalfield-core", extras = ["all"], git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.3.0" },
     { name = "uvicorn", specifier = ">=0.30" },
     { name = "vulture", marker = "extra == 'dev'", specifier = ">=2.11" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "benchmark"]
 
 [[package]]
 name = "jinja2"
@@ -1873,8 +1879,8 @@ wheels = [
 
 [[package]]
 name = "signalfield-core"
-version = "0.1.0"
-source = { git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.1.0#1debb734848951d5fa6c4d514eea6b28f1844a92" }
+version = "0.3.0"
+source = { git = "https://github.com/SC0RED/signalfield-core.git?rev=v0.3.0#38b542260dfd51e7f95f2867b27d7bc68423e5aa" }
 dependencies = [
     { name = "pydantic" },
 ]

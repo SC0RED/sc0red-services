@@ -40,7 +40,15 @@ from src.models.model_company import (
     RiskScore,
 )
 from src.pipeline.pipeline_steps._strategy_map_arrows import enumerate_arrow_pairs
+from src.pipeline.pipeline_steps.ai_call import TokenCounts
 from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
+
+# Per-call token counts the mocked ``_run_ai_call`` reports. Token telemetry
+# pinning lives in ``test_step_timer.py``; this fixture only needs a real
+# ``TokenCounts`` instance so ``timer.record_tokens(...)`` doesn't trip on a
+# MagicMock attribute. The exact numbers are irrelevant for integration
+# scenarios.
+_CANNED_TOKEN_COUNTS = TokenCounts(input_tokens=100, output_tokens=50, cached_input_tokens=80)
 
 
 def _make_accessor() -> CompanyAccessor:
@@ -388,8 +396,8 @@ class TestSynthesisDecompositionIntegration:
             _schema: dict[str, Any],
             _system_prompt: str,
             label: str,
-        ) -> tuple[str, dict[str, Any], float]:
-            return label, responses[label], 0.5
+        ) -> tuple[str, dict[str, Any], float, TokenCounts]:
+            return label, responses[label], 0.5, _CANNED_TOKEN_COUNTS
 
         ai_factory = MagicMock()
         accessor = _make_accessor()
@@ -453,6 +461,21 @@ class TestSynthesisDecompositionIntegration:
             "ai_call_arrows_and_gaps",
         ):
             assert legacy_label not in timings, f"legacy label {legacy_label} leaked"
+
+        # Token-count keys present per call. Pins the end-to-end wiring from
+        # the SDK's ``StructuredResponse`` (input_tokens / output_tokens /
+        # cached_input_tokens) → ``run_structured_ai_call`` (4-tuple return)
+        # → ``StepTimer.record_tokens`` → the emitted CloudWatch payload.
+        # A regression that drops ``timer.record_tokens(...)`` from any one
+        # of the four strategy-map sub-modules trips this assertion even
+        # when every other AI-call label still lands.
+        for prefix in ("tokens_in_", "tokens_out_", "cached_tokens_"):
+            matching_keys = [k for k in timings if k.startswith(prefix)]
+            assert matching_keys, f"no {prefix}* keys in timings — record_tokens() missed"
+            # Same per-call coverage as the elapsed entries — one token-keyed
+            # entry per AI-call label.
+            for label in ("ai_call_vision_text", "ai_call_vp_primary"):
+                assert f"{prefix}{label}" in timings, f"missing {prefix}{label}"
 
 
 class TestPrerequisiteValidation:
@@ -547,11 +570,16 @@ class TestDomainErrorDegradesGracefully:
             _schema: dict[str, Any],
             _system_prompt: str,
             label: str,
-        ) -> tuple[str, dict[str, Any], float]:
+        ) -> tuple[str, dict[str, Any], float, TokenCounts]:
             if label == "mission_text":
                 msg = "simulated AI failure"
                 raise RuntimeError(msg)
-            return label, {"statement": "v", "synthesised": False, "rationale": "r"}, 0.1
+            return (
+                label,
+                {"statement": "v", "synthesised": False, "rationale": "r"},
+                0.1,
+                _CANNED_TOKEN_COUNTS,
+            )
 
         ai_factory = MagicMock()
         accessor = _make_accessor()

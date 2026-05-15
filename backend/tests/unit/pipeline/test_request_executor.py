@@ -1,11 +1,12 @@
 """Tests for JanusRequestExecutor."""
 
 import contextlib
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.pipeline.request_executor import JanusRequestExecutor
+from src.pipeline.request_executor import JanusRequestExecutor, _format_timing_value
 
 
 def _make_mock_step(name):
@@ -232,3 +233,55 @@ class TestRequestExecutorAppSyncIntegration:
         mock_notify.assert_called_once()
         company_repo.update.assert_called_once()
         assert executor.is_question_complete("generate_strategy_map") is True
+
+
+class TestFormatTimingValue:
+    """Per-key formatting of ``{step}.timings`` entries in the summary log.
+
+    Strategy-map token telemetry (shipped 2026-05-15) writes
+    ``tokens_in_*`` / ``tokens_out_*`` / ``cached_tokens_*`` keys
+    alongside the existing ``ai_call_*`` elapsed entries inside the
+    same ``timings`` dict. Without per-key rendering, every value gets
+    the elapsed-seconds format and integer token counts misleadingly
+    print as ``12786.00s`` instead of ``12786 tokens``.
+    """
+
+    def test_elapsed_keys_render_as_seconds(self):
+        assert _format_timing_value("ai_call_vision_text", 1.2345) == "1.23s"
+        assert _format_timing_value("total", 28.4) == "28.40s"
+        assert _format_timing_value("ai_call_arrow_O.P_I1.1", 0.0) == "0.00s"
+
+    def test_token_keys_render_as_token_counts(self):
+        assert _format_timing_value("tokens_in_ai_call_vision_text", 12786) == "12786 tokens"
+        assert _format_timing_value("tokens_out_ai_call_vision_text", 74) == "74 tokens"
+        assert _format_timing_value("cached_tokens_ai_call_priorities", 15360) == "15360 tokens"
+
+    def test_zero_cached_tokens_renders_cleanly(self):
+        """Cache-miss path: ``cached_tokens_* = 0`` reads as ``0 tokens``."""
+        assert _format_timing_value("cached_tokens_ai_call_vp_primary", 0) == "0 tokens"
+
+    def test_token_values_coerced_to_int(self):
+        """If a float somehow lands in a token-keyed slot, render without decimals."""
+        assert _format_timing_value("tokens_in_call_a", 12786.0) == "12786 tokens"
+
+    def test_summary_log_renders_mixed_keys_correctly(self, caplog):
+        """End-to-end: the summary log line contains both ``s`` and ``tokens`` formats."""
+        executor = JanusRequestExecutor("t", "r", [])
+        executor.add_details(
+            {
+                "GenerateStrategyMap.timings": {
+                    "ai_call_vision_text": 1.23,
+                    "tokens_in_ai_call_vision_text": 12786,
+                    "tokens_out_ai_call_vision_text": 74,
+                    "cached_tokens_ai_call_vision_text": 0,
+                    "total": 1.23,
+                },
+            }
+        )
+        with caplog.at_level(logging.INFO):
+            executor.execute_all()
+        summary = " ".join(record.getMessage() for record in caplog.records)
+        assert "ai_call_vision_text: 1.23s" in summary
+        assert "tokens_in_ai_call_vision_text: 12786 tokens" in summary
+        assert "tokens_out_ai_call_vision_text: 74 tokens" in summary
+        assert "cached_tokens_ai_call_vision_text: 0 tokens" in summary
