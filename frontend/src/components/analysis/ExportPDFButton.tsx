@@ -11,172 +11,263 @@ interface ExportPDFButtonProps {
 }
 
 /**
- * The label shows up after this many ms in flight, signalling "still working
- * — your click did register." Below this threshold the user typically
- * doesn't notice the button changed; above it the silent button feels
- * broken.
+ * Polling cadence per ``openspec/changes/async-pdf-export-with-cache/``:
+ * 2 s for the first 10 polls (~20 s — covers the typical ~13 s render),
+ * then 5 s indefinitely. The backend's stale-rendering window is 60 s,
+ * so a stuck render naturally terminates the polling loop within ~70 s
+ * (the status endpoint returns ``status: 'failed'`` synthetically for
+ * stale-rendering records).
  */
-const SPINNER_THRESHOLD_MS = 200
-
-/** After this many ms in flight, swap "Generating…" → "Still working…". */
-const STILL_WORKING_THRESHOLD_MS = 5_000
+const POLL_FAST_INTERVAL_MS = 2_000
+const POLL_FAST_COUNT = 10
+const POLL_SLOW_INTERVAL_MS = 5_000
 
 /**
- * Hard timeout. The PDF render Lambda has a 30s ceiling; if we haven't
- * heard back by then, surface an error and reset.
+ * Hard safety cap on total polling duration. The 60-second stale window
+ * means a stuck render returns ``failed`` within ~62 s; a long-tail
+ * render that legitimately exceeds that is uncommon. 5 minutes covers
+ * the worst case without leaking timers if the user leaves the page
+ * loaded indefinitely.
  */
-const REQUEST_TIMEOUT_MS = 30_000
-
-type ButtonState = 'idle' | 'starting' | 'generating' | 'still-working'
+const POLL_MAX_DURATION_MS = 5 * 60 * 1000
 
 /**
- * Filename extraction from a `Content-Disposition` header. The server is
- * expected to set both `filename=` (ASCII fallback) and `filename*=UTF-8''…`
- * (per RFC 5987) — we prefer the latter for non-ASCII company names.
- *
- * Defensive: if neither parses, fall back to a generic name so the user
- * still gets a download with a sensible extension.
+ * Consecutive status-endpoint failures we tolerate before giving up.
+ * Single transient failures (e.g., one DDB throttle) shouldn't kill the
+ * flow, but a sustained outage should surface an error to the user
+ * rather than poll silently forever.
  */
-function parseDownloadFilename(header: string | null, fallback: string): string {
-    if (!header) return fallback
-    const utf8Match = header.match(/filename\*=(?:UTF-8''|utf-8'')([^;]+)/i)
-    if (utf8Match) {
-        try {
-            return decodeURIComponent(utf8Match[1])
-        } catch {
-            // fall through to ASCII match
-        }
-    }
-    const asciiMatch = header.match(/filename="?([^";]+)"?/i)
-    if (asciiMatch) return asciiMatch[1]
-    return fallback
+const POLL_MAX_CONSECUTIVE_FAILURES = 5
+
+type ButtonState = 'idle' | 'posting' | 'polling'
+
+interface PostExportResponse {
+    status: 'ready' | 'rendering' | 'failed'
+    url?: string
+    generatedAt?: string
+    startedAt?: string
+    error?: string
+}
+
+interface StatusResponse {
+    status: 'none' | 'ready' | 'rendering' | 'failed'
+    url?: string
+    generatedAt?: string
+    startedAt?: string
+    error?: string
 }
 
 /**
- * Click handler that fetches `/api/export/pdf/{analysisId}`, builds a Blob
- * URL, and triggers a programmatic download. Replaces the old
- * `<Link target="_blank">` that opened HTML-pretending-to-be-PDF in a new
- * tab — the user now gets a real file.
+ * Trigger a browser download for a presigned S3 URL. The S3 response
+ * carries ``Content-Disposition: attachment; filename="<...>"`` via the
+ * ``ResponseContentDisposition`` query param the backend set on the
+ * presigned URL — that header is authoritative for the download
+ * behaviour, so we don't need the ``download`` attribute (which is
+ * ignored for cross-origin URLs anyway).
+ */
+function triggerDownload(presignedUrl: string): void {
+    const link = document.createElement('a')
+    link.href = presignedUrl
+    // ``rel="noopener"`` defends against the (unlikely) case that the
+    // presigned URL response renders HTML for some reason — without it,
+    // the loaded URL could reference ``window.opener``.
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+}
+
+/**
+ * Click handler for "Export PDF". POSTs to ``/api/export/pdf/<id>`` and
+ * either redirects to a fresh presigned URL (cached path) or enters a
+ * polling state that watches ``/api/export/pdf/<id>/status`` until the
+ * backend transitions to ``ready`` / ``failed``.
  */
 export default function ExportPDFButton({ analysisId, className }: ExportPDFButtonProps) {
     const [state, setState] = useState<ButtonState>('idle')
     const toast = useToast()
 
-    // Tracks the in-flight request so we can abort it on unmount or when
-    // the user mashes the button. AbortController gives us a clean way to
-    // cancel both the fetch and the long-running stream the Lambda
-    // produces.
+    // Polling state. ``pollTimerRef`` holds the active ``setTimeout`` so
+    // unmount + state transitions can clear it. ``loadingToastIdRef``
+    // holds the in-flight "Generating PDF…" toast id so we can dismiss
+    // it deterministically when polling ends. ``abortRef`` lets the
+    // unmount cleanup cancel any in-flight fetch.
+    const pollTimerRef = useRef<number | null>(null)
+    const loadingToastIdRef = useRef<string | null>(null)
     const abortRef = useRef<AbortController | null>(null)
+    const pollStartedAtRef = useRef<number | null>(null)
+    const consecutiveFailuresRef = useRef<number>(0)
+    const pollCountRef = useRef<number>(0)
 
-    // Threshold timers for the visual state machine. Refs so multiple
-    // clicks reset the same handles instead of leaking stacked timeouts.
-    const spinnerTimerRef = useRef<number | null>(null)
-    const stillWorkingTimerRef = useRef<number | null>(null)
-    const timeoutTimerRef = useRef<number | null>(null)
-
-    const clearTimers = useCallback(() => {
-        if (spinnerTimerRef.current !== null) {
-            window.clearTimeout(spinnerTimerRef.current)
-            spinnerTimerRef.current = null
+    const cleanupPolling = useCallback(() => {
+        if (pollTimerRef.current !== null) {
+            window.clearTimeout(pollTimerRef.current)
+            pollTimerRef.current = null
         }
-        if (stillWorkingTimerRef.current !== null) {
-            window.clearTimeout(stillWorkingTimerRef.current)
-            stillWorkingTimerRef.current = null
+        if (loadingToastIdRef.current !== null) {
+            toast.dismiss(loadingToastIdRef.current)
+            loadingToastIdRef.current = null
         }
-        if (timeoutTimerRef.current !== null) {
-            window.clearTimeout(timeoutTimerRef.current)
-            timeoutTimerRef.current = null
-        }
-    }, [])
+        abortRef.current?.abort()
+        abortRef.current = null
+        pollStartedAtRef.current = null
+        consecutiveFailuresRef.current = 0
+        pollCountRef.current = 0
+    }, [toast])
 
     const reset = useCallback(() => {
-        clearTimers()
-        abortRef.current = null
+        cleanupPolling()
         setState('idle')
-    }, [clearTimers])
+    }, [cleanupPolling])
 
     useEffect(
         () => () => {
-            // Unmount: cancel everything in flight so we don't update state
-            // on an unmounted component.
-            abortRef.current?.abort()
-            clearTimers()
+            // Unmount: cancel in-flight + clear timers + dismiss toast.
+            cleanupPolling()
         },
-        [clearTimers]
+        [cleanupPolling]
     )
+
+    /**
+     * Run one status poll. Schedules the next tick on ``rendering``,
+     * exits the loop on ``ready`` / ``failed`` / hard-cap / repeated
+     * network failures.
+     */
+    const pollOnce = useCallback(async () => {
+        if (pollStartedAtRef.current === null) return
+        if (Date.now() - pollStartedAtRef.current > POLL_MAX_DURATION_MS) {
+            toast.error('PDF generation timed out. Please try again.')
+            reset()
+            return
+        }
+
+        pollCountRef.current += 1
+        const controller = new AbortController()
+        abortRef.current = controller
+
+        let body: StatusResponse | null = null
+        try {
+            const res = await fetch(`/api/export/pdf/${analysisId}/status`, {
+                method: 'GET',
+                signal: controller.signal,
+            })
+            if (!res.ok) {
+                throw new Error(`Status check failed (HTTP ${res.status})`)
+            }
+            body = (await res.json()) as StatusResponse
+            consecutiveFailuresRef.current = 0
+        } catch (error) {
+            if (controller.signal.aborted) return // unmount / explicit reset
+            consecutiveFailuresRef.current += 1
+            if (consecutiveFailuresRef.current >= POLL_MAX_CONSECUTIVE_FAILURES) {
+                const message = error instanceof Error ? error.message : 'Status check failed'
+                toast.error(message)
+                reset()
+                return
+            }
+        }
+
+        if (body) {
+            if (body.status === 'ready' && body.url) {
+                triggerDownload(body.url)
+                reset()
+                return
+            }
+            if (body.status === 'failed') {
+                toast.error(body.error ?? 'PDF generation failed.')
+                reset()
+                return
+            }
+            // ``none`` is unexpected — the POST that started this cycle
+            // wrote a ``rendering`` row, so the only way to see ``none``
+            // is a parallel re-analyse clearing the field. Treat as
+            // failure so the user can re-trigger.
+            if (body.status === 'none') {
+                toast.error('PDF generation was cancelled by re-analyse.')
+                reset()
+                return
+            }
+            // status === 'rendering' — keep polling.
+        }
+
+        // After ``POLL_FAST_COUNT`` polls have run, schedule the NEXT
+        // poll at the slow interval. ``>= POLL_FAST_COUNT`` flips on the
+        // 10th-poll boundary so poll 11 is the first one at 5 s.
+        const interval =
+            pollCountRef.current >= POLL_FAST_COUNT ? POLL_SLOW_INTERVAL_MS : POLL_FAST_INTERVAL_MS
+        pollTimerRef.current = window.setTimeout(() => {
+            void pollOnce()
+        }, interval)
+    }, [analysisId, reset, toast])
 
     const handleClick = useCallback(async () => {
         if (state !== 'idle') return
 
+        // Disable the button synchronously so a fast double-click doesn't
+        // fire the handler twice. The state transition to ``posting``
+        // renders before the ``await fetch`` yields, which means
+        // subsequent clicks bounce off the ``state !== 'idle'`` guard.
+        setState('posting')
         const controller = new AbortController()
         abortRef.current = controller
-        setState('starting')
 
-        spinnerTimerRef.current = window.setTimeout(() => {
-            setState('generating')
-        }, SPINNER_THRESHOLD_MS)
-
-        stillWorkingTimerRef.current = window.setTimeout(() => {
-            setState('still-working')
-        }, STILL_WORKING_THRESHOLD_MS)
-
-        timeoutTimerRef.current = window.setTimeout(() => {
-            controller.abort()
-        }, REQUEST_TIMEOUT_MS)
-
+        let postBody: PostExportResponse | null = null
         try {
-            const response = await fetch(`/api/export/pdf/${analysisId}`, {
-                method: 'GET',
+            const res = await fetch(`/api/export/pdf/${analysisId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
                 signal: controller.signal,
             })
-            if (!response.ok) {
-                throw new Error(`PDF export failed (HTTP ${response.status})`)
+            // ``res.ok`` is true for any 2xx including 202, so no
+            // separate 202 carve-out needed — non-2xx throws.
+            if (!res.ok) {
+                throw new Error(`PDF export failed (HTTP ${res.status})`)
             }
-
-            const blob = await response.blob()
-            const filename = parseDownloadFilename(
-                response.headers.get('content-disposition'),
-                `analysis-${analysisId}.pdf`
-            )
-
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement('a')
-            link.href = url
-            link.download = filename
-            // Append + click + remove is the canonical way to programmatically
-            // trigger a download in modern browsers; some (Safari) ignore the
-            // download attribute on detached elements.
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-            URL.revokeObjectURL(url)
-
-            reset()
+            postBody = (await res.json()) as PostExportResponse
         } catch (error) {
-            if (controller.signal.aborted) {
-                // Either the timeout fired or the component unmounted.
-                // We discriminate via `timeoutTimerRef.current === null`:
-                // the unmount cleanup runs `clearTimers()` (which nulls
-                // the ref) BEFORE calling `abort()`, so a null ref means
-                // unmount; a non-null ref means the timeout fired itself.
-                // (LOW-priority review nit: an explicit `unmountedRef` is
-                // cleaner. Deferred — current code is correct + commented,
-                // and the discriminator is exercised by the existing test.)
-                if (timeoutTimerRef.current === null) {
-                    return
-                }
-                toast.error('PDF export timed out. Please try again.')
-            } else {
-                const message = error instanceof Error ? error.message : 'Failed to generate PDF'
-                toast.error(message)
-            }
+            if (controller.signal.aborted) return
+            const message = error instanceof Error ? error.message : 'Failed to start PDF export'
+            toast.error(message)
             reset()
+            return
+        } finally {
+            // Done with this fetch; subsequent ticks may install their own.
+            abortRef.current = null
         }
-    }, [analysisId, state, toast, reset])
+
+        if (postBody.status === 'ready' && postBody.url) {
+            // Cached path — instant redirect, no toast / no polling.
+            triggerDownload(postBody.url)
+            setState('idle')
+            return
+        }
+
+        if (postBody.status === 'failed') {
+            // Backend reported a synchronous failure (rare — bad config,
+            // async-invoke throttled). The polling cycle won't help; show
+            // the error directly.
+            toast.error(postBody.error ?? 'PDF export failed.')
+            setState('idle')
+            return
+        }
+
+        // Cold path: backend is rendering. Enter polling state.
+        loadingToastIdRef.current = toast.loading(
+            'Generating PDF…',
+            'You can keep working; the download will start automatically.'
+        )
+        pollStartedAtRef.current = Date.now()
+        setState('polling')
+        // Kick off the first tick after the fast interval so the backend
+        // has a head start on the render.
+        pollTimerRef.current = window.setTimeout(() => {
+            void pollOnce()
+        }, POLL_FAST_INTERVAL_MS)
+    }, [analysisId, state, toast, reset, pollOnce])
 
     const isLoading = state !== 'idle'
-    const label =
-        state === 'still-working' ? 'Still working…' : state === 'idle' ? 'Export PDF' : 'Generating PDF…'
+    const label = state === 'idle' ? 'Export PDF' : 'Generating PDF…'
 
     return (
         <button

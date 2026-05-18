@@ -29,14 +29,18 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
 )
 
+# Re-exported here for backward compatibility with the existing test
+# fixture that imports it from this module. The canonical owner is
+# ``pdf_export_handlers`` (which survives Phase 4 cleanup); this module
+# is removed once the synchronous render path is retired.
+from src.handlers.pdf_export_handlers import PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME
+
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
     from src.handlers.auth_middleware import AuthContext
     from src.handlers.router import Router
 
 logger = logging.getLogger(__name__)
-
-PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME = "PDF_RENDER_LAMBDA_ARN"
 
 
 def register_routes(router: Router) -> None:
