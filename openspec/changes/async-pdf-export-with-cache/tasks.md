@@ -140,10 +140,11 @@
 
 ### 4.1 Remove the synchronous path
 
-- [ ] 4.1.1 ``backend/src/handlers/pdf_render_handlers.py``: delete the synchronous render handler. Keep only the async-invoke caller used by the new POST endpoint.
-- [ ] 4.1.2 Remove the unused ``InvocationType="RequestResponse"`` codepath. Remove ``RENDER_PATH`` constant if no longer referenced.
-- [ ] 4.1.3 Frontend: any leftover GET fallback in ``ExportPDFButton`` (if added defensively in Phase 3) — remove.
-- [ ] 4.1.4 Delete dead test fixtures + tests that exercised the synchronous path.
+- [x] 4.1.1 ``backend/src/handlers/pdf_render_handlers.py``: deleted (the module is gone; the async POST is the only PDF entry point now).
+- [x] 4.1.2 ``backend/src/handlers/api_gateway_handler.py``: removed the legacy ``register_pdf_render_routes`` import + wiring.
+- [x] 4.1.3 Frontend ``[analysisId]/route.ts``: removed the legacy GET handler + the ``signToken`` / ``readSigningSecret`` / ``readFrontendBaseUrl`` / ``invokeRenderLambda`` / ``resolveOrgId`` helpers; only the async POST handler remains.
+- [x] 4.1.4 Deleted ``backend/tests/unit/handlers/test_pdf_render_handlers.py`` + the legacy GET tests from ``frontend/src/tests/api/export/pdf/route.test.ts``.
+- [x] 4.1.5 ``signToken`` removed from both ``backend/lambdas/pdf-render/src/token.ts`` and ``frontend/src/lib/pdf/token.ts`` (production now signs in Python only). Test-only ``signTokenForTest`` helper kept in each test directory to mint tokens for the verify-side tests.
 
 ### 4.2 Ship Phase 4
 
