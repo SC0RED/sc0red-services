@@ -76,8 +76,8 @@
 
 ## P1.6 Token-count telemetry extension
 
-- [ ] P1.6.1 Extend `run_structured_ai_call` to return token-count metadata (input, output, cached) alongside elapsed. `StepTimer` records `tokens_in_{label}` / `tokens_out_{label}` / `cached_tokens_{label}` as separate detail entries. *(Blocked on signalfield-core exposing `usage.input_tokens_details.cached_tokens` from `openai_provider.py` — see P0.2.1.)*
-- [ ] P1.6.2 Update Phase 0's tests to allow either elapsed-only (legacy) or elapsed-plus-tokens (new) detail shapes, depending on whether token data is available.
+- [x] P1.6.1 Extend `run_structured_ai_call` to return token-count metadata (input, output, cached) alongside elapsed. `StepTimer` records `tokens_in_{label}` / `tokens_out_{label}` / `cached_tokens_{label}` as separate detail entries. *(Shipped 2026-05-15 via the sibling change `add-strategy-map-token-telemetry`. signalfield-core PR #15 exposed `cached_input_tokens` on `StructuredResponse`; Janus PR #313 plumbed it through `ai_call.py` + `StepTimer.record_tokens(...)`. Production confirmed cache-hit rate ~77% on the strategy-map arrow yes/no bank.)*
+- [x] P1.6.2 Update Phase 0's tests to allow either elapsed-only (legacy) or elapsed-plus-tokens (new) detail shapes, depending on whether token data is available. *(Shipped 2026-05-15 — `TestStepTimerRecordTokens` (5 tests) covers the new key shapes; existing `TestGenerateStrategyMapTelemetry` tests unchanged because the elapsed-only path was never legacy — it was always additive.)*
 
 ## P1.7 Tests
 
