@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from src.repositories.dynamodb.client import DynamoDBTable
 
 
+# Sort key for the per-analysis cached PDF export record (one row per analysis).
+PDF_EXPORT_SK = "PDF_EXPORT"
+
+
 def save_strategy_map(table: DynamoDBTable, assessment_id: str, data: dict[str, Any]) -> None:
     """Persist the AI-generated strategy map for the given assessment.
 
@@ -113,6 +117,75 @@ def get_value_chain(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] 
         steps = json.loads(steps)
 
     return {"steps": steps, "summary": item["summary"]}
+
+
+# ── PDF Export ─────────────────────────────────────────────────────────────
+
+
+def save_pdf_export(table: DynamoDBTable, assessment_id: str, data: dict[str, Any]) -> None:
+    """Persist a PDF export sub-record for the given assessment.
+
+    Used by the POST endpoint to write the initial ``rendering`` state
+    with a fresh ``started_at`` anchor. The PDF Lambda subsequently
+    transitions the row to ``ready`` (or ``failed``) via a conditional
+    UpdateItem that guards on this ``started_at`` timestamp, so a
+    concurrent re-analyse that clears the row can't be silently
+    overwritten by a stale render.
+
+    Expected keys in ``data``: ``status``, ``s3_key``, ``started_at``
+    (ISO8601 string), and optionally ``generated_at`` or ``error``.
+    """
+    item: dict[str, Any] = {
+        "pk": f"ASSESSMENT#{assessment_id}",
+        "sk": PDF_EXPORT_SK,
+        "entity_type": "pdf_export",
+        "assessment_id": assessment_id,
+        "status": data["status"],
+        "s3_key": data["s3_key"],
+        "started_at": data["started_at"],
+    }
+    if "generated_at" in data and data["generated_at"] is not None:
+        item["generated_at"] = data["generated_at"]
+    if "error" in data and data["error"] is not None:
+        item["error"] = data["error"]
+    table.put_item(item)
+
+
+def clear_pdf_export(table: DynamoDBTable, assessment_id: str) -> None:
+    """Remove the PDF export sub-record for the given assessment.
+
+    Called by the re-analyse handler. Does NOT delete the S3 object —
+    callers that own object-lifecycle responsibilities (re-analyse)
+    issue ``s3:DeleteObject`` separately. Idempotent: a no-op when no
+    record exists.
+    """
+    table.delete_item(pk=f"ASSESSMENT#{assessment_id}", sk=PDF_EXPORT_SK)
+
+
+def get_pdf_export(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] | None:
+    """Return the PDF export sub-record, or ``None`` if not present.
+
+    Returns the raw DynamoDB attribute shape (``status``, ``s3_key``,
+    ``started_at``, optional ``generated_at`` / ``error``). Callers
+    parse the timestamps as needed.
+    """
+    item = table.get_item(
+        pk=f"ASSESSMENT#{assessment_id}",
+        sk=PDF_EXPORT_SK,
+    )
+    if not item:
+        return None
+
+    result: dict[str, Any] = {
+        "status": item["status"],
+        "s3_key": item["s3_key"],
+        "started_at": item["started_at"],
+    }
+    if "generated_at" in item:
+        result["generated_at"] = item["generated_at"]
+    if "error" in item:
+        result["error"] = item["error"]
+    return result
 
 
 # ── Documents ──────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
+from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
@@ -72,7 +73,12 @@ class PdfRenderConstruct(Construct):
 
         self._token_secret = self._build_token_secret()
         self._internal_api_key = self._build_internal_api_key()
+        self._exports_bucket = self._build_exports_bucket()
         self._function = self._build_function()
+        self._exports_bucket.grant_put(self._function)
+        self._function.add_environment(
+            "PDF_EXPORTS_BUCKET", self._exports_bucket.bucket_name
+        )
         self._build_metrics(self._function.log_group)
 
         # Surface the Lambda ARN so the API Lambda's environment can pick
@@ -96,6 +102,17 @@ class PdfRenderConstruct(Construct):
     def token_secret(self) -> secretsmanager.Secret:
         """The HMAC signing secret. Granted-read to the API Lambda + this Lambda."""
         return self._token_secret
+
+    @property
+    def exports_bucket(self) -> s3.Bucket:
+        """The S3 bucket holding cached rendered PDFs (per-analysis key).
+
+        The PDF Lambda has ``s3:PutObject`` on the bucket (granted in
+        ``__init__``). The API Lambda needs ``s3:GetObject`` to mint
+        the 60-second presigned download URLs — that grant is wired
+        in ``janus_stack.py``, where both Lambdas live.
+        """
+        return self._exports_bucket
 
     @property
     def internal_api_key(self) -> secretsmanager.Secret:
@@ -157,6 +174,28 @@ class PdfRenderConstruct(Construct):
                 password_length=64,
                 exclude_punctuation=True,
             ),
+        )
+
+    def _build_exports_bucket(self) -> s3.Bucket:
+        """Create the per-environment S3 bucket that caches rendered PDFs.
+
+        One object per analysis (``pdf-exports/<analysisId>.pdf``);
+        re-renders overwrite the same key. No lifecycle policy — storage
+        cost is rounding error at expected volume. Block-all-public-access
+        + bucket-owner-enforced ownership keeps the access model
+        unambiguous: the PDF Lambda writes, the API Lambda reads via
+        presigned URLs minted server-side. Browser clients never get a
+        direct bucket grant.
+        """
+        return s3.Bucket(
+            self,
+            "PdfExportsBucket",
+            bucket_name=f"janus-{self._environment}-pdf-exports",
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+            removal_policy=self._config["removal_policy"],
+            auto_delete_objects=self._environment == "development",
         )
 
     def _build_function(self) -> lambda_.Function:
@@ -232,6 +271,10 @@ class PdfRenderConstruct(Construct):
         self._token_secret.grant_read(function)
         return function
 
+    # TODO Phase 2 of async-pdf-export-with-cache: extract this 120-line
+    # method into a sibling `_pdf_render_metrics.py` free function before
+    # adding the DLQ + alarm + DynamoDB grant changes — those additions
+    # will push this file past the 400-line spirit-of-the-rule limit.
     def _build_metrics(self, log_group: logs.ILogGroup) -> None:
         """Extract `durationMs`, `pageCount`, `pdfSizeBytes` from the Lambda's
         structured JSON log lines and publish them as CloudWatch metrics.

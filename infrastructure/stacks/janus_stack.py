@@ -168,6 +168,14 @@ class JanusStack(Stack):
         pdf_render.grant_invoke(api_handler)
         pdf_render.token_secret.grant_read(api_handler)
         pdf_render.internal_api_key.grant_read(api_handler)
+        # API Lambda mints 60-second presigned download URLs against the
+        # exports bucket from `handle_post_export` when a cached PDF is
+        # found. Read-only grant is sufficient — only the PDF Lambda
+        # writes (via the bucket's grant_put in PdfRenderConstruct).
+        pdf_render.exports_bucket.grant_read(api_handler)
+        api_handler.add_environment(
+            "PDF_EXPORTS_BUCKET", pdf_render.exports_bucket.bucket_name
+        )
         # API Lambda gets the ARNs and resolves at runtime via Secrets
         # Manager (handlers cache the value module-level, so the round-
         # trip is one-per-cold-start). This keeps the cleartext out of
