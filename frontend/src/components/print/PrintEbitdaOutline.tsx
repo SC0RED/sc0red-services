@@ -29,8 +29,11 @@ interface PrintEbitdaOutlineProps {
  * against the printed-PDF index of each opportunity card so the reader
  * can flip back from a tree branch to the relevant opportunity.
  *
- * Wraps the section in `.print-ebitda` so the named `@page ebitda-page
- * { size: A3 landscape; }` rule kicks in for these pages only.
+ * The section keeps the `.print-ebitda` class — not for a named-page
+ * override (the outline form fits A4 portrait cleanly; the legacy
+ * `@page ebitda-page { size: A3 landscape; }` rule was removed when
+ * the tree was retired) — but for the shared `page-break-inside:
+ * avoid` selector in `print.css`.
  */
 
 export default function PrintEbitdaOutline({ ebitdaTree, sortedOpportunities }: PrintEbitdaOutlineProps) {
