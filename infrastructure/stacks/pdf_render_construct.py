@@ -34,9 +34,25 @@ RESERVED_CONCURRENCY = 5
 # off mid-render.
 TIMEOUT_SECONDS = 30
 
-# Memory size — Chromium needs 1GB minimum to render reliably; 1024MB
-# gives a 100ms-class CPU allocation on Lambda.
-MEMORY_MB = 1024
+# Memory size — Chromium needs 1GB minimum to render reliably. Bumped
+# from 1024MB to 2048MB on 2026-05-18 because 1024MB was producing
+# 26-28s renders, putting the synchronous request chain (browser →
+# Amplify SSR → backend API Gateway → Python proxy → PDF Lambda → S3
+# → response stream) right against API Gateway's 29s hard ceiling.
+# Result: intermittent 504s for the user even when the PDF rendered
+# successfully (CloudWatch confirmed the bytes were generated, the
+# delivery just couldn't complete in time).
+#
+# Lambda allocates vCPU proportional to memory: 1024MB ≈ 0.5 vCPU,
+# 2048MB ≈ 1.0 vCPU. Chromium PDF rendering is CPU-bound, so doubling
+# memory roughly halves render time (expected ~13s in production).
+# Cost delta is small (renders are infrequent and only ~2x as
+# expensive each) — well worth the headroom.
+#
+# This is a band-aid; the structural fix is to move PDF rendering off
+# the synchronous request path entirely. See the
+# ``async-pdf-export-with-cache`` OpenSpec change.
+MEMORY_MB = 2048
 
 
 class PdfRenderConstruct(Construct):
