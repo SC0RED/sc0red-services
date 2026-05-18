@@ -10,6 +10,22 @@ import { signToken } from '@/lib/pdf/token'
 import type { AnalysisData } from '@/lib/types/api'
 
 /**
+ * Async export response shape — matches the Python backend
+ * (`backend/src/handlers/pdf_export_handlers.py`).
+ *
+ *   200 OK   { status: 'ready', url, generatedAt }    — cached path
+ *   202      { status: 'rendering', startedAt }       — cold path / dedupe
+ *   500      { error, code }                          — server-side failure
+ */
+interface ExportPostResponse {
+    status: 'ready' | 'rendering' | 'failed'
+    url?: string
+    generatedAt?: string
+    startedAt?: string
+    error?: string
+}
+
+/**
  * Server-side PDF export endpoint.
  *
  *   1. Auth check — Cognito session via NextAuth (raises 401 if absent).
@@ -148,6 +164,82 @@ export async function GET(req: NextRequest, { params }: { params: { analysisId: 
         const status = error instanceof BackendError ? error.status : 500
         const message = error instanceof Error ? error.message : 'PDF export failed'
         return new NextResponse(message, { status })
+    }
+}
+
+/**
+ * POST — primary entry point for the async PDF export flow.
+ *
+ * Thin proxy to the Python backend's
+ * ``POST /api/export/pdf/<analysisId>``. The backend handles auth +
+ * org-scoping + cache lookup + Lambda async-invoke; we forward the
+ * response shape verbatim:
+ *
+ *   200 OK   { status: 'ready',     url, generatedAt }   — cached
+ *   202      { status: 'rendering', startedAt }          — cold / dedupe
+ *   500      { status: 'failed',    error }              — sync failure
+ *
+ * The frontend ``ExportPDFButton`` either redirects to ``url`` (cached
+ * path) or starts polling the sibling ``/status`` route (cold path).
+ *
+ * Analytics: emits ``sc0red_cta_rendered_in_pdf`` on the cached path
+ * (we know the PDF was rendered, it's just being re-served from
+ * cache). Cold-path emission is deferred to Phase 4 — we'd need a
+ * separate "PDF delivered" signal because POST time precedes the
+ * actual render. The funnel loses cold-path exports during the brief
+ * Phase 3 → Phase 4 window, which is an acceptable trade-off for the
+ * simpler implementation here.
+ *
+ * Funnel-gating preserved from legacy: only emit when the analysis
+ * has at least one opportunity (zero-opp analyses don't have CTAs
+ * to render, so they'd pollute the "CTA-in-PDF" funnel).
+ *
+ * See ``openspec/changes/async-pdf-export-with-cache/`` for the design.
+ */
+export async function POST(_req: NextRequest, { params }: { params: { analysisId: string } }) {
+    try {
+        const result = await backendFetch<ExportPostResponse>(`/api/export/pdf/${params.analysisId}`, {
+            method: 'POST',
+            body: {},
+        })
+
+        if (result.status === 'failed') {
+            // Synchronous failure (rare: missing config, async-invoke
+            // throttled). Return 5xx so access logs / monitoring reflect
+            // the failure — the frontend reads ``body.status`` anyway.
+            return NextResponse.json(result, { status: 500 })
+        }
+
+        if (result.status === 'ready') {
+            // Cached path — fire the analytics event before responding.
+            // We fetch the analysis here (one extra GET) to read
+            // ``opportunities.length`` for the funnel gate that matches
+            // the legacy GET handler's behaviour. The fetch is cheap
+            // (DDB GetItem, ~10 ms warm) and runs in parallel with the
+            // response from the user's perspective (the browser's
+            // redirect to the presigned URL is independent of this).
+            try {
+                const analysis = await backendFetch<AnalysisData>(`/api/analysis/${params.analysisId}`)
+                const opportunities = analysis.opportunities ?? []
+                if (opportunities.length > 0) {
+                    void emitFromServer('sc0red_cta_rendered_in_pdf', {
+                        analysisId: params.analysisId,
+                        opportunityCount: opportunities.length,
+                    })
+                }
+            } catch {
+                // Analytics is best-effort. A failure to fetch the
+                // analysis MUST NOT block the user's download.
+            }
+            return NextResponse.json(result, { status: 200 })
+        }
+
+        // status === 'rendering'
+        return NextResponse.json(result, { status: 202 })
+    } catch (error: unknown) {
+        const status = error instanceof BackendError ? error.status : 500
+        const message = error instanceof Error ? error.message : 'PDF export failed'
+        return NextResponse.json({ error: message }, { status })
     }
 }
 
