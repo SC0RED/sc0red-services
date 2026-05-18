@@ -132,7 +132,6 @@ class APIGatewayHandler:
         )
         from src.handlers.oauth_handlers import handle_oauth_approve
         from src.handlers.pdf_export_handlers import register_routes as register_pdf_export_routes
-        from src.handlers.pdf_render_handlers import register_routes as register_pdf_render_routes
         from src.handlers.scan_handlers import (
             handle_delete_scan,
             handle_scan_confirm,
@@ -325,13 +324,10 @@ class APIGatewayHandler:
         # Internal-key endpoints for the headless PDF render flow.
         register_internal_routes(router, self._storage)
 
-        # PDF render proxy — Cognito-auth, boto3-invokes the Node.js Lambda.
-        # Kept during Phase 1+2 rollout; removed in Phase 4 (see
-        # ``openspec/changes/async-pdf-export-with-cache/tasks.md``).
-        register_pdf_render_routes(router)
-
-        # Async PDF export — POST + GET status. The new primary entry
-        # point for the Export PDF button (Phase 3 frontend migration).
+        # PDF export — POST + GET status. Async render via Lambda async-
+        # invoke; S3-backed cache. See ``openspec/changes/archive/...
+        # async-pdf-export-with-cache/`` (the legacy synchronous proxy
+        # at ``POST /api/admin/render-pdf`` was retired in Phase 4).
         register_pdf_export_routes(router, self._storage)
 
         return router
