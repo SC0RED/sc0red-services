@@ -118,7 +118,12 @@ describe('PrintEbitdaOutline', () => {
         }
     })
 
-    it('applies the .print-ebitda class so the named @page rule kicks in', () => {
+    it('applies the .print-ebitda class so the page-break-inside: avoid rule kicks in', () => {
+        // The class used to also activate an `@page ebitda-page { size:
+        // A3 landscape }` override; that was removed when the
+        // visualisation moved from ReactFlow tree to vertical indented
+        // outline. The class survives as the shared selector for
+        // `page-break-inside: avoid` in print.css.
         const { container } = render(
             <PrintEbitdaOutline ebitdaTree={smallTree} sortedOpportunities={sortedOpportunities} />
         )
