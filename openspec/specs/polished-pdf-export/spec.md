@@ -73,11 +73,13 @@ The Strategy Map section is conditional — included when the analysis has a per
 - **AND** the section order continues with Executive Summary → Top Actions
 - **AND** no placeholder, "generate from app" prompt, or empty header appears
 
-#### Scenario: EBITDA tree page renders on a wider page format
+#### Scenario: EBITDA section renders on the same A4 portrait format as the rest of the PDF
 
-- **WHEN** the EBITDA tree section is rendered as part of the PDF
-- **THEN** that section's pages use the `ebitda-page` named `@page` rule (A3 landscape)
-- **AND** the surrounding pages remain A4 portrait
+- **WHEN** the EBITDA Impact Model section is rendered as part of the PDF
+- **THEN** that section's pages use the default `@page` rule (A4 portrait), identical to every other section
+- **AND** no `@page` override targets the EBITDA section
+
+> Earlier the EBITDA section overrode the page format to A3 landscape because the visualisation was a ReactFlow tree that would clip on A4. The visualisation is now a vertical indented outline (`PrintEbitdaOutline`) that fits A4 portrait without clipping, so the override was removed.
 
 #### Scenario: Strategy-map perspective rows survive page breaks
 
@@ -215,7 +217,7 @@ The AI Opportunity Roadmap section SHALL render every opportunity as a fully-exp
 
 ### Requirement: EBITDA Impact Model renders statically with linkage callouts
 
-The EBITDA Impact Model section SHALL render the tree statically as a nested HTML outline (label → value range → percent → children, indented) on a section-overridden page format (A3 landscape). The static rendering SHALL NOT include any interactive UI chrome (zoom controls, fit/expand buttons, pan-help text). The outline preserves parent-child relationships via indentation regardless of tree shape (balanced or unbalanced). Each branch SHALL include a "Linked opportunities" callout when its `linked_opportunity_indices` array is non-empty, formatted as `Opportunities: #{i} ({title}), #{j} ({title})`, where the indices reference the printed-PDF position of opportunity cards.
+The EBITDA Impact Model section SHALL render the tree statically as a nested HTML outline (label → value range → percent → children, indented) on the default A4 portrait page format used by every other section. The static rendering SHALL NOT include any interactive UI chrome (zoom controls, fit/expand buttons, pan-help text). The outline preserves parent-child relationships via indentation regardless of tree shape (balanced or unbalanced). Each branch SHALL include a "Linked opportunities" callout when its `linked_opportunity_indices` array is non-empty, formatted as `Opportunities: #{i} ({title}), #{j} ({title})`, where the indices reference the printed-PDF position of opportunity cards.
 
 #### Scenario: Tree renders all nodes without interaction
 

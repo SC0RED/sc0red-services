@@ -6,12 +6,17 @@
  * `globals.css`. Page breaks, A4 margins, and chrome-hiding rules live
  * here; visual styling stays in the print components.
  *
- * Page-format strategy (improve-pdf-export-content):
- *   - Default: A4 portrait. Used for cover, executive summary, risk
- *     profile, opportunity roadmap, value chain, methodology, back cover.
- *   - Override: A3 landscape for the EBITDA tree page only — wider
- *     margin to fit fully-expanded tree visuals without horizontal cut.
- *     Activated by `.print-ebitda { page: ebitda-page; }`.
+ * Page-format strategy:
+ *   - All sections render on A4 portrait. The cover page gets slightly
+ *     wider top/bottom margins via `@page :first`.
+ *
+ * History: an earlier iteration used a ReactFlow-based EBITDA tree that
+ * needed `@page ebitda-page { size: A3 landscape; }` to avoid horizontal
+ * clipping. That visualisation was replaced (see
+ * `improve-pdf-export-content` archive) by a vertical indented outline
+ * (`PrintEbitdaOutline.tsx`), which fits A4 portrait cleanly — the
+ * landscape override was wasted paper and visually inconsistent with
+ * surrounding pages. Removed.
  */
 
 @page {
@@ -22,15 +27,6 @@
 @page :first {
     /* Cover page gets a touch more breathing room top + bottom. */
     margin: 30mm 20mm 30mm 20mm;
-}
-
-@page ebitda-page {
-    size: A3 landscape;
-    margin: 18mm 16mm 18mm 16mm;
-}
-
-.print-ebitda {
-    page: ebitda-page;
 }
 
 .print-root {
