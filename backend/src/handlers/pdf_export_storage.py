@@ -70,7 +70,7 @@ def build_download_filename(company: dict[str, Any]) -> str:
     return f"{company_name}_{date_part}.pdf"
 
 
-def mint_pdf_url(bucket: str, s3_key: str, filename: str) -> str:
+def mint_pdf_url(bucket: str, s3_key: str, filename: str) -> str:  # noqa: NAMING001 mint is a verb (mint a URL); not in the script's heuristic verb list
     """Mint a short-lived presigned ``GetObject`` URL for the cached PDF.
 
     The ``ResponseContentDisposition`` override forces the browser to
