@@ -6,6 +6,7 @@ Ported from pe-scan/src/lib/ai/prompts.ts interfaces (lines 179-237).
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,39 @@ from pydantic import BaseModel, Field
 from src.models.model_strategy_map import (
     StrategyMap,  # noqa: TC001  pydantic field annotation needs runtime resolution
 )
+
+
+class PdfExportStatus(StrEnum):
+    """Lifecycle state of a cached PDF export for an analysis.
+
+    The frontend ``ExportPDFButton`` switches behaviour off this value:
+    ``READY`` triggers a presigned-URL redirect, ``RENDERING`` starts
+    polling, ``FAILED`` shows an error toast and re-enables the button.
+    See ``openspec/changes/async-pdf-export-with-cache/`` for the
+    full flow.
+    """
+
+    RENDERING = "rendering"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class PdfExportRecord(BaseModel):
+    """Per-analysis PDF export cache record.
+
+    Persisted as its own DynamoDB row (``sk = PDF_EXPORT``) alongside
+    the assessment's other sub-records. The ``started_at`` timestamp
+    is the race-protection anchor: the PDF Lambda's conditional
+    ``UpdateItem`` checks this value matches the moment the render
+    was enqueued so a concurrent re-analyse can't be silently
+    overwritten by a stale render's result.
+    """
+
+    status: PdfExportStatus
+    s3_key: str
+    started_at: datetime
+    generated_at: datetime | None = None
+    error: str | None = None
 
 
 class CompanyProfile(BaseModel):
@@ -144,6 +178,7 @@ class Company(BaseModel):
     ebitda_tree: EbitdaTreeResult | None = None
     value_chain: ValueChainResult | None = None
     strategy_map: StrategyMap | None = None
+    pdf_export: PdfExportRecord | None = None
     error: str | None = None
     analyzed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

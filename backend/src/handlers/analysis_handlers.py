@@ -13,6 +13,7 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
+from src.handlers.pdf_export_handlers import delete_cached_pdf
 from src.handlers.sqs_messages import build_reanalysis_message
 from src.utilities.scan_summary import build_company_summary
 
@@ -304,12 +305,17 @@ def handle_reanalyze(
 ) -> LambdaResponse:
     """Handle POST /api/analysis/{analysis_id}/reanalyze.
 
-    The persisted strategy map is invalidated up-front (before SQS
-    enqueue) so a stale map grounded in the prior diagnosis doesn't
-    linger alongside the refreshed analysis. The inline
-    ``GenerateStrategyMap`` step in the re-analysis pipeline regenerates
-    the map; on failure the slot simply renders nothing until the next
-    successful run.
+    The persisted strategy map and cached PDF are invalidated up-front
+    (before SQS enqueue) so neither lingers alongside the refreshed
+    analysis. The inline ``GenerateStrategyMap`` step in the re-analysis
+    pipeline regenerates the map; the next click on Export PDF triggers
+    a fresh render against the updated analysis. On failure either slot
+    simply renders nothing until the next successful run.
+
+    The PDF Lambda's conditional ``UpdateItem`` (see Phase 2 of
+    ``async-pdf-export-with-cache``) protects the race where re-analyse
+    clears ``pdf_export`` mid-render: the Lambda's stale ``started_at``
+    no longer matches, so its result is discarded.
     """
     company_repo = storage.create_company_repository()
     company = company_repo.get_by_id(analysis_id)
@@ -325,6 +331,15 @@ def handle_reanalyze(
     # Idempotent — safe to call when no map exists (fresh analysis).
     assessment_repo = storage.create_assessment_repository()
     assessment_repo.clear_strategy_map(analysis_id)
+
+    # Cached-PDF invalidation: best-effort S3 delete, then clear the
+    # ``pdf_export`` sub-record. S3 failure is logged but never blocks
+    # re-analyse — the orphan object (if any) will be overwritten by
+    # the next render of the same analysis.
+    pdf_export = assessment_repo.get_pdf_export(analysis_id)
+    if pdf_export and pdf_export.get("s3_key"):
+        delete_cached_pdf(pdf_export["s3_key"])
+    assessment_repo.clear_pdf_export(analysis_id)
 
     sqs.send_message(
         QueueUrl=queue_url,

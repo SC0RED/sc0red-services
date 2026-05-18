@@ -4,8 +4,6 @@ import base64
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.handlers.api_gateway_handler import APIGatewayHandler, build_error, build_json_response
 
 
@@ -1724,6 +1722,139 @@ class TestDocumentEndpoints:
             "clear_strategy_map must run BEFORE enqueueing the re-analysis "
             "so the worker can't observe a stale map between dispatch and clear"
         )
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_clears_pdf_export_and_deletes_s3_object(
+        self, mock_boto3, mock_authentication
+    ):
+        # Cached-PDF invalidation: when re-analyse fires on an analysis
+        # with a cached PDF, the S3 object MUST be deleted and the
+        # ``pdf_export`` sub-record cleared. See OpenSpec change
+        # ``async-pdf-export-with-cache`` requirement
+        # "Re-analyse clears cached PDF + deletes the S3 object".
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_url": "https://test.com",
+            "scan_id": "scan-1",
+        }
+        storage.create_company_repository.return_value = company_repo
+        assessment_repo = MagicMock()
+        assessment_repo.get_pdf_export.return_value = {
+            "status": "ready",
+            "s3_key": "pdf-exports/a-1.pdf",
+            "started_at": "2026-05-18T09:00:00+00:00",
+            "generated_at": "2026-05-18T09:00:13+00:00",
+        }
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        with patch(
+            "src.handlers.analysis_handlers.delete_cached_pdf",
+            return_value=True,
+        ) as mock_delete:
+            result = handler.handle(
+                {
+                    "httpMethod": "POST",
+                    "path": "/api/analysis/a-1/reanalyze",
+                    "headers": {"Authorization": "Bearer token"},
+                }
+            )
+        assert result["statusCode"] == 202
+        mock_delete.assert_called_once_with("pdf-exports/a-1.pdf")
+        assessment_repo.clear_pdf_export.assert_called_once_with("a-1")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_with_no_pdf_export_skips_s3_delete(
+        self, mock_boto3, mock_authentication
+    ):
+        # Fresh analyses with no cached PDF: still call clear_pdf_export
+        # (idempotent), but DO NOT call delete_cached_pdf — nothing to
+        # delete, and we shouldn't waste an S3 round-trip.
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_url": "https://test.com",
+            "scan_id": "scan-1",
+        }
+        storage.create_company_repository.return_value = company_repo
+        assessment_repo = MagicMock()
+        assessment_repo.get_pdf_export.return_value = None
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        with patch(
+            "src.handlers.analysis_handlers.delete_cached_pdf",
+            return_value=True,
+        ) as mock_delete:
+            result = handler.handle(
+                {
+                    "httpMethod": "POST",
+                    "path": "/api/analysis/a-1/reanalyze",
+                    "headers": {"Authorization": "Bearer token"},
+                }
+            )
+        assert result["statusCode"] == 202
+        mock_delete.assert_not_called()
+        assessment_repo.clear_pdf_export.assert_called_once_with("a-1")
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    @patch("src.handlers.api_gateway_handler.boto3")
+    @patch.dict(
+        "os.environ",
+        {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
+    )
+    def test_reanalyze_succeeds_when_s3_delete_fails(self, mock_boto3, mock_authentication):
+        # S3 failure during re-analyse invalidation MUST NOT block the
+        # re-analyse — the orphan object will be overwritten by the next
+        # render. ``delete_cached_pdf`` returns False on error and never
+        # raises; verify the handler still returns 202.
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        mock_boto3.client.return_value = MagicMock()
+        handler, storage = self._make_handler()
+        company_repo = MagicMock()
+        company_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "company_url": "https://test.com",
+            "scan_id": "scan-1",
+        }
+        storage.create_company_repository.return_value = company_repo
+        assessment_repo = MagicMock()
+        assessment_repo.get_pdf_export.return_value = {
+            "status": "ready",
+            "s3_key": "pdf-exports/a-1.pdf",
+            "started_at": "2026-05-18T09:00:00+00:00",
+        }
+        storage.create_assessment_repository.return_value = assessment_repo
+
+        with patch(
+            "src.handlers.analysis_handlers.delete_cached_pdf",
+            return_value=False,
+        ):
+            result = handler.handle(
+                {
+                    "httpMethod": "POST",
+                    "path": "/api/analysis/a-1/reanalyze",
+                    "headers": {"Authorization": "Bearer token"},
+                }
+            )
+        assert result["statusCode"] == 202
+        assessment_repo.clear_pdf_export.assert_called_once_with("a-1")
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")

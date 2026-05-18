@@ -188,6 +188,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = [
     "S101",    # Assert allowed in tests
+    "S105",    # Hardcoded strings flagged as passwords are test fixtures
+    "S106",    # Hardcoded password-arg kwargs are test fixtures
     "ARG",     # Unused args OK (fixtures)
     "PLR2004", # Magic values OK in tests
     "ANN",     # Type annotations optional in tests

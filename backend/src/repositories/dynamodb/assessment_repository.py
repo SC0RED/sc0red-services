@@ -330,6 +330,20 @@ class DynamoDBAssessmentRepository:
         """Return the strategy map for the given assessment, or None if not found."""
         return _assessment_subrecord_ops.get_strategy_map(self._table, assessment_id)
 
+    # ── PDF Export operations (delegates to `_assessment_subrecord_ops.py`) ──
+
+    def save_pdf_export(self, assessment_id: str, data: dict[str, Any]) -> None:
+        """Persist the PDF export sub-record (rendering / ready / failed)."""
+        _assessment_subrecord_ops.save_pdf_export(self._table, assessment_id, data)
+
+    def clear_pdf_export(self, assessment_id: str) -> None:
+        """Remove the PDF export sub-record. Idempotent."""
+        _assessment_subrecord_ops.clear_pdf_export(self._table, assessment_id)
+
+    def get_pdf_export(self, assessment_id: str) -> dict[str, Any] | None:
+        """Return the PDF export sub-record, or None if not found."""
+        return _assessment_subrecord_ops.get_pdf_export(self._table, assessment_id)
+
     # ── Document operations (delegates to `_assessment_subrecord_ops.py`) ──
 
     def save_document(self, assessment_id: str, document: dict[str, Any]) -> None:
@@ -363,7 +377,7 @@ class DynamoDBAssessmentRepository:
     # sk like `STRATEGY_MAP_V2` or `EBITDA_TREE_HISTORICAL` and silently
     # over-deleting. Exact-match strings stay exact-match.
     _PREFIX_SK_PATTERNS = ("RISK#", "OPP#")
-    _EXACT_SK_VALUES = frozenset({"EBITDA_TREE", "VALUE_CHAIN", "STRATEGY_MAP"})
+    _EXACT_SK_VALUES = frozenset({"EBITDA_TREE", "VALUE_CHAIN", "STRATEGY_MAP", "PDF_EXPORT"})
 
     def delete_analysis_results(self, assessment_id: str) -> None:
         """Delete risk scores, opps, EBITDA, value chain, strategy map; keep docs + metadata."""

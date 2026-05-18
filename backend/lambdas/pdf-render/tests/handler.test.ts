@@ -30,13 +30,26 @@ vi.mock('../src/secretSource', () => ({
     _resetSecretCacheForTests: vi.fn(),
 }))
 
+// Mock the S3 + DynamoDB writer surface so async-mode tests don't hit
+// AWS. The default returns success; per-test overrides exercise the
+// failure branches (S3 raises, conditional check fails, etc).
+vi.mock('../src/exportWriter', () => ({
+    uploadPdfToS3: vi.fn(),
+    markPdfExportReady: vi.fn(),
+    markPdfExportFailed: vi.fn(),
+}))
+
 import { handler } from '../src/handler'
+import { markPdfExportFailed, markPdfExportReady, uploadPdfToS3 } from '../src/exportWriter'
 import { PrintStatusError, renderPdf } from '../src/render'
 import { readSigningSecret } from '../src/secretSource'
 
 const SECRET = 'test-secret-32-bytes-of-randomness-please'
 const mockRender = vi.mocked(renderPdf)
 const mockReadSigningSecret = vi.mocked(readSigningSecret)
+const mockUploadPdf = vi.mocked(uploadPdfToS3)
+const mockMarkReady = vi.mocked(markPdfExportReady)
+const mockMarkFailed = vi.mocked(markPdfExportFailed)
 
 function buildEvent(body: unknown): APIGatewayProxyEventV2 {
     return {
@@ -56,6 +69,13 @@ beforeEach(() => {
     // Default: secret resolution succeeds with the test secret. Cases
     // that exercise the misconfig path override per-test.
     mockReadSigningSecret.mockResolvedValue(SECRET)
+    // Defaults for async-mode tests — S3 + DDB both succeed.
+    mockUploadPdf.mockResolvedValue(undefined)
+    mockMarkReady.mockResolvedValue({ ok: true })
+    mockMarkFailed.mockResolvedValue({ ok: true })
+    // Required env vars for async-mode tests.
+    process.env.PDF_EXPORTS_BUCKET = 'janus-test-pdf-exports'
+    process.env.ASSESSMENT_TABLE = 'janus-test'
 })
 
 describe('PDF render Lambda handler', () => {
@@ -212,5 +232,106 @@ describe('PDF render Lambda handler', () => {
             }),
         )) as { statusCode: number; body: string }
         expect(response.statusCode).toBe(500)
+    })
+})
+
+
+describe('PDF render Lambda — async mode (S3 + DynamoDB)', () => {
+    function asyncEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+        const token = signToken({ analysisId: 'a-1', orgId: 'org-1' }, SECRET)
+        return {
+            analysisId: 'a-1',
+            s3Key: 'pdf-exports/a-1.pdf',
+            startedAt: '2026-05-18T10:00:00+00:00',
+            companyName: 'Acme',
+            token,
+            frontendBaseUrl: 'https://app.example.com',
+            ...overrides,
+        }
+    }
+
+    it('uploads PDF + marks ready on the happy path', async () => {
+        const result = await handler(asyncEvent())
+
+        // Async mode returns void — async-invoke discards the value.
+        expect(result).toBeUndefined()
+        expect(mockUploadPdf).toHaveBeenCalledTimes(1)
+        expect(mockUploadPdf).toHaveBeenCalledWith({
+            bucket: 'janus-test-pdf-exports',
+            key: 'pdf-exports/a-1.pdf',
+            bytes: expect.any(Buffer),
+        })
+        expect(mockMarkReady).toHaveBeenCalledTimes(1)
+        const readyArgs = mockMarkReady.mock.calls[0][0]
+        expect(readyArgs.tableName).toBe('janus-test')
+        expect(readyArgs.analysisId).toBe('a-1')
+        expect(readyArgs.s3Key).toBe('pdf-exports/a-1.pdf')
+        expect(readyArgs.inputStartedAt).toBe('2026-05-18T10:00:00+00:00')
+        expect(readyArgs.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+        // No failed-marker on success.
+        expect(mockMarkFailed).not.toHaveBeenCalled()
+    })
+
+    it('throws (engaging async-invoke retry) when bucket env var is missing', async () => {
+        delete process.env.PDF_EXPORTS_BUCKET
+        await expect(handler(asyncEvent())).rejects.toThrow(/misconfigured/)
+        expect(mockUploadPdf).not.toHaveBeenCalled()
+    })
+
+    it('throws (engaging async-invoke retry) when table env var is missing', async () => {
+        delete process.env.ASSESSMENT_TABLE
+        await expect(handler(asyncEvent())).rejects.toThrow(/misconfigured/)
+    })
+
+    it('marks failed + returns void when token is invalid (does not retry)', async () => {
+        // A bad token is a deterministic failure — retrying won't help,
+        // so the handler logs + marks failed + returns cleanly (no throw).
+        const result = await handler(asyncEvent({ token: 'bad-token' }))
+        expect(result).toBeUndefined()
+        expect(mockUploadPdf).not.toHaveBeenCalled()
+        expect(mockMarkReady).not.toHaveBeenCalled()
+        expect(mockMarkFailed).toHaveBeenCalledTimes(1)
+        const failedArgs = mockMarkFailed.mock.calls[0][0]
+        expect(failedArgs.error).toMatch(/Token invalid/)
+    })
+
+    it('marks failed + re-throws on render failure (so retry engages)', async () => {
+        mockRender.mockRejectedValueOnce(new Error('chrome crashed'))
+        await expect(handler(asyncEvent())).rejects.toThrow('chrome crashed')
+        expect(mockMarkFailed).toHaveBeenCalledTimes(1)
+        const failedArgs = mockMarkFailed.mock.calls[0][0]
+        expect(failedArgs.error).toMatch(/chrome crashed/)
+        expect(mockUploadPdf).not.toHaveBeenCalled()
+        expect(mockMarkReady).not.toHaveBeenCalled()
+    })
+
+    it('marks failed + re-throws on S3 upload failure', async () => {
+        mockUploadPdf.mockRejectedValueOnce(new Error('Access denied to bucket'))
+        await expect(handler(asyncEvent())).rejects.toThrow('Access denied to bucket')
+        expect(mockMarkFailed).toHaveBeenCalledTimes(1)
+        const failedArgs = mockMarkFailed.mock.calls[0][0]
+        expect(failedArgs.error).toMatch(/S3 upload failed/)
+        expect(mockMarkReady).not.toHaveBeenCalled()
+    })
+
+    it('exits cleanly when conditional UpdateItem fails (race with re-analyse)', async () => {
+        // A parallel re-analyse cleared the PDF_EXPORT row — our
+        // `started_at` no longer matches, so the conditional fails.
+        // The Lambda must NOT re-throw (no point retrying — re-analyse
+        // is authoritative); instead it logs + exits.
+        mockMarkReady.mockResolvedValueOnce({ ok: false, reason: 'conditional_failed' })
+        const result = await handler(asyncEvent())
+        expect(result).toBeUndefined()
+        expect(mockUploadPdf).toHaveBeenCalledTimes(1)
+        expect(mockMarkReady).toHaveBeenCalledTimes(1)
+        expect(mockMarkFailed).not.toHaveBeenCalled()
+    })
+
+    it('detects async mode purely from the s3Key field, not event shape', async () => {
+        // An object lacking `body` but containing `s3Key` is async — no
+        // API Gateway wrapping. This is what `boto3.invoke(Payload=...)`
+        // delivers.
+        await handler(asyncEvent())
+        expect(mockUploadPdf).toHaveBeenCalled()
     })
 })
