@@ -25,9 +25,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-import src.handlers.pdf_export_handlers as pdf_export_handlers
+from src.handlers import pdf_export_handlers, pdf_token_secret
 from src.handlers.auth_middleware import AuthContext
 from src.handlers.pdf_export_handlers import (
+    FRONTEND_BASE_URL_ENVIRONMENT_NAME,
     PDF_EXPORTS_BUCKET_ENVIRONMENT_NAME,
     PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME,
     RENDERING_STALE_AFTER_SECONDS,
@@ -35,12 +36,15 @@ from src.handlers.pdf_export_handlers import (
     handle_get_export_status,
     handle_post_export,
 )
+from src.handlers.pdf_token_secret import PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME
 
 ANALYSIS_ID = "a-1"
 ORG_ID = "org-1"
 USER_ID = "user-1"
 BUCKET = "janus-development-pdf-exports"
 RENDER_ARN = "arn:aws:lambda:us-east-1:1:function:janus-pdf-render-development"
+TOKEN_SECRET_ARN = "arn:aws:secretsmanager:us-east-1:1:secret:janus/dev/pdf-token-secret"
+FRONTEND_BASE_URL = "https://development.d1234abcdef.amplifyapp.com"
 
 
 def _auth() -> AuthContext:
@@ -70,9 +74,10 @@ def _storage_with(company: dict[str, Any] | None, pdf_export: dict[str, Any] | N
 
 @pytest.fixture(autouse=True)
 def _reset_module_clients() -> None:
-    """Reset module-level boto3 client caches between tests."""
+    """Reset module-level boto3 client + secret caches between tests."""
     pdf_export_handlers._lambda_client = None
     pdf_export_handlers._s3_client = None
+    pdf_token_secret._reset_caches_for_tests()
 
 
 @pytest.fixture
@@ -80,6 +85,22 @@ def _configured_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set the required env vars for happy-path tests."""
     monkeypatch.setenv(PDF_EXPORTS_BUCKET_ENVIRONMENT_NAME, BUCKET)
     monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, RENDER_ARN)
+    monkeypatch.setenv(PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME, TOKEN_SECRET_ARN)
+    monkeypatch.setenv(FRONTEND_BASE_URL_ENVIRONMENT_NAME, FRONTEND_BASE_URL)
+
+
+@pytest.fixture
+def _mocked_token_secret() -> Any:
+    """Patch the Secrets Manager fetch for token-signing happy paths.
+
+    All ``handle_post_export`` cold-path tests need the token secret
+    resolvable. Without this fixture, real boto3 Secrets Manager
+    requests would be attempted (or fail noisily).
+    """
+    mock_secrets = MagicMock()
+    mock_secrets.get_secret_value.return_value = {"SecretString": "test-pdf-token-secret"}
+    with patch.object(pdf_token_secret, "_get_secrets_client", return_value=mock_secrets):
+        yield mock_secrets
 
 
 # ── POST /api/export/pdf/<id> ────────────────────────────────────────────────
@@ -88,8 +109,50 @@ def _configured_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_post_returns_500_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(PDF_EXPORTS_BUCKET_ENVIRONMENT_NAME, raising=False)
     monkeypatch.delenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, raising=False)
+    monkeypatch.delenv(PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME, raising=False)
+    monkeypatch.delenv(FRONTEND_BASE_URL_ENVIRONMENT_NAME, raising=False)
     storage = _storage_with(_company(), None)
     response = handle_post_export({}, _auth(), storage, ANALYSIS_ID)
+    assert response["statusCode"] == 500
+
+
+def test_post_returns_500_when_frontend_base_url_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """All four env vars must be set for the cold path to work."""
+    monkeypatch.setenv(PDF_EXPORTS_BUCKET_ENVIRONMENT_NAME, BUCKET)
+    monkeypatch.setenv(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, RENDER_ARN)
+    monkeypatch.setenv(PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME, TOKEN_SECRET_ARN)
+    monkeypatch.delenv(FRONTEND_BASE_URL_ENVIRONMENT_NAME, raising=False)
+    storage = _storage_with(_company(), None)
+    response = handle_post_export({}, _auth(), storage, ANALYSIS_ID)
+    assert response["statusCode"] == 500
+
+
+def test_post_returns_500_when_token_secret_arn_unset(
+    _configured_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing PDF_TOKEN_SECRET_ARN raises RuntimeError → 500 NOT_CONFIGURED."""
+    monkeypatch.delenv(PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME, raising=False)
+    storage = _storage_with(_company(), None)
+    response = handle_post_export({}, _auth(), storage, ANALYSIS_ID)
+    assert response["statusCode"] == 500
+
+
+def test_post_returns_500_when_secrets_manager_raises(_configured_env: None) -> None:
+    """Secrets Manager ClientError (throttle / access denied / etc) → 500.
+
+    Exercises the actual boto3 client path — not just the env-var-unset
+    branch — so the ``except ClientError`` catch in ``handle_post_export``
+    has regression coverage.
+    """
+    mock_secrets = MagicMock()
+    mock_secrets.get_secret_value.side_effect = ClientError(
+        {"Error": {"Code": "AccessDeniedException", "Message": "denied"}}, "GetSecretValue"
+    )
+    storage = _storage_with(_company(), None)
+    with patch.object(pdf_token_secret, "_get_secrets_client", return_value=mock_secrets):
+        response = handle_post_export({}, _auth(), storage, ANALYSIS_ID)
     assert response["statusCode"] == 500
 
 
@@ -106,7 +169,9 @@ def test_post_returns_404_when_analysis_belongs_to_other_org(_configured_env: No
     assert response["statusCode"] == 404
 
 
-def test_post_first_click_enqueues_render_and_writes_rendering(_configured_env: None) -> None:
+def test_post_first_click_enqueues_render_and_writes_rendering(
+    _configured_env: None, _mocked_token_secret: Any
+) -> None:
     storage = _storage_with(_company(), None)
     assessment_repo = storage.create_assessment_repository.return_value
 
@@ -138,6 +203,11 @@ def test_post_first_click_enqueues_render_and_writes_rendering(_configured_env: 
     assert payload["s3Key"] == f"pdf-exports/{ANALYSIS_ID}.pdf"
     assert payload["startedAt"] == body["startedAt"]
     assert payload["companyName"] == "Acme Corp"
+    # Phase 2: payload now includes a signed token + frontend URL so
+    # the Lambda's headless browser can navigate /print/<id>?t=<token>.
+    assert payload["frontendBaseUrl"] == FRONTEND_BASE_URL
+    assert isinstance(payload["token"], str)
+    assert "." in payload["token"]  # base64url(payload).base64url(sig)
 
 
 def test_post_cached_path_returns_presigned_url_no_invoke(_configured_env: None) -> None:
@@ -204,7 +274,9 @@ def test_post_in_flight_non_stale_dedupes(_configured_env: None) -> None:
     assessment_repo.save_pdf_export.assert_not_called()
 
 
-def test_post_stale_rendering_triggers_fresh_render(_configured_env: None) -> None:
+def test_post_stale_rendering_triggers_fresh_render(
+    _configured_env: None, _mocked_token_secret: Any
+) -> None:
     stale_started = (
         datetime.now(UTC) - timedelta(seconds=RENDERING_STALE_AFTER_SECONDS + 30)
     ).isoformat()
@@ -229,7 +301,9 @@ def test_post_stale_rendering_triggers_fresh_render(_configured_env: None) -> No
     mock_lambda.invoke.assert_called_once()
 
 
-def test_post_failed_state_triggers_fresh_render(_configured_env: None) -> None:
+def test_post_failed_state_triggers_fresh_render(
+    _configured_env: None, _mocked_token_secret: Any
+) -> None:
     pdf_export = {
         "status": "failed",
         "s3_key": f"pdf-exports/{ANALYSIS_ID}.pdf",
@@ -248,7 +322,9 @@ def test_post_failed_state_triggers_fresh_render(_configured_env: None) -> None:
     mock_lambda.invoke.assert_called_once()
 
 
-def test_post_marks_failed_when_async_invoke_raises(_configured_env: None) -> None:
+def test_post_marks_failed_when_async_invoke_raises(
+    _configured_env: None, _mocked_token_secret: Any
+) -> None:
     storage = _storage_with(_company(), None)
     assessment_repo = storage.create_assessment_repository.return_value
 

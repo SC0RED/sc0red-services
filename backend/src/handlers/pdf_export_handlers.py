@@ -1,29 +1,15 @@
 """Async PDF export handlers — POST + GET status.
 
-These two routes replace the synchronous ``POST /api/admin/render-pdf``
-flow from the user's perspective. The frontend's ``ExportPDFButton`` now
-POSTs to ``/api/export/pdf/<analysisId>``, and the handler either:
+POST /api/export/pdf/<id>: serves cached (200 + presigned URL) or
+async-enqueues a render (202). Concurrent clicks on a non-stale
+``rendering`` row dedupe to 202 without a second invoke.
 
-1. **Serves cached** — if a fresh rendered PDF lives in S3 with a
-   ``ready`` sub-record, mint a 60-second presigned URL and return
-   ``200``. The browser follows the redirect, S3 streams the bytes
-   directly (no Lambda hop).
-2. **Async-enqueues a render** — if no cached PDF, or the cached
-   record is ``failed`` / ``stale-rendering``, write a fresh
-   ``rendering`` sub-record and ``boto3.invoke`` the PDF Lambda
-   with ``InvocationType="Event"``. The Lambda runs out-of-band,
-   PutObjects to S3, and conditionally UpdateItem's the sub-record
-   on completion. The handler returns ``202`` immediately.
-3. **Dedupe** — if a non-stale ``rendering`` already exists, return
-   ``202`` with the existing ``started_at`` without enqueuing a
-   duplicate render.
+GET /api/export/pdf/<id>/status: the frontend's polling target. Folds
+``rendering`` older than 60 s into a synthetic ``failed`` so the
+frontend exits the polling loop without mutating the persisted record;
+the next POST re-triggers naturally.
 
-The status endpoint is the frontend's polling target — same auth
-boundary, same record read, but also folds the stale-rendering check
-(``rendering`` older than 60 s) into a synthetic ``failed`` so the
-frontend exits the polling loop. The persisted record is NOT modified
-by the read; the next POST sees the same stale window and triggers a
-fresh render. See ``openspec/changes/async-pdf-export-with-cache/``.
+See ``openspec/changes/async-pdf-export-with-cache/`` for the full design.
 """
 
 from __future__ import annotations
@@ -44,6 +30,10 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
+from src.handlers.pdf_token_secret import (
+    read_pdf_token_secret,
+)
+from src.utilities.pdf_token import sign_pdf_token
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -72,10 +62,12 @@ S3_KEY_PREFIX = "pdf-exports"
 
 PDF_EXPORTS_BUCKET_ENVIRONMENT_NAME = "PDF_EXPORTS_BUCKET"
 PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME = "PDF_RENDER_LAMBDA_ARN"
+FRONTEND_BASE_URL_ENVIRONMENT_NAME = "FRONTEND_BASE_URL"
 
 
-# Module-level boto3 clients survive Lambda warm-restart, avoiding
-# the per-invoke client init cost (~50 ms each).
+# Module-level boto3 clients survive Lambda warm-restart, avoiding the
+# per-invoke client init cost (~50 ms each). The token-secret client +
+# cache live in ``pdf_token_secret.py``.
 _lambda_client: Any = None
 _s3_client: Any = None
 
@@ -227,12 +219,14 @@ def handle_post_export(
     """POST /api/export/pdf/<analysisId> — kick off or serve a cached PDF."""
     bucket = os.environ.get(PDF_EXPORTS_BUCKET_ENVIRONMENT_NAME, "")
     render_arn = os.environ.get(PDF_RENDER_LAMBDA_ARN_ENVIRONMENT_NAME, "")
-    if not bucket or not render_arn:
+    frontend_base_url = os.environ.get(FRONTEND_BASE_URL_ENVIRONMENT_NAME, "")
+    if not bucket or not render_arn or not frontend_base_url:
         logger.error(
             "pdf_export_not_configured",
             extra={
                 "bucket_set": bool(bucket),
                 "render_arn_set": bool(render_arn),
+                "frontend_base_url_set": bool(frontend_base_url),
             },
         )
         return build_error("PDF export not configured", 500, NOT_CONFIGURED)
@@ -282,11 +276,26 @@ def handle_post_export(
         },
     )
 
+    # Mint a fresh URL token for the Lambda's headless browser to
+    # navigate ``/print/<id>?t=<token>``. The print route verifies the
+    # HMAC server-side. 60-second TTL covers the typical ~13 s render.
+    try:
+        token = sign_pdf_token(
+            analysis_id=analysis_id,
+            org_id=authentication.org_id,
+            secret=read_pdf_token_secret(),
+        )
+    except (RuntimeError, ClientError):
+        logger.exception("pdf_export_token_sign_failed", extra={"analysis_id": analysis_id})
+        return build_error("PDF export token unavailable", 500, NOT_CONFIGURED)
+
     payload = {
         "analysisId": analysis_id,
         "s3Key": s3_key,
         "startedAt": started_at_iso,
         "companyName": company.get("company_name", ""),
+        "token": token,
+        "frontendBaseUrl": frontend_base_url,
     }
     try:
         _get_lambda_client().invoke(

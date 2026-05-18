@@ -4,8 +4,6 @@ import base64
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.handlers.api_gateway_handler import APIGatewayHandler, build_error, build_json_response
 
 

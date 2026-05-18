@@ -164,6 +164,11 @@ class JanusStack(Stack):
             "PdfRender",
             environment=environment,
             config=config,
+            # The Lambda's async mode performs conditional UpdateItem on
+            # the assessment record's PDF_EXPORT sub-row. Construct grants
+            # `dynamodb:UpdateItem` on this table + passes its name as
+            # `ASSESSMENT_TABLE` env to the Lambda.
+            assessment_table=table,
         )
         pdf_render.grant_invoke(api_handler)
         pdf_render.token_secret.grant_read(api_handler)
@@ -175,6 +180,15 @@ class JanusStack(Stack):
         pdf_render.exports_bucket.grant_read(api_handler)
         api_handler.add_environment(
             "PDF_EXPORTS_BUCKET", pdf_render.exports_bucket.bucket_name
+        )
+        # The async POST handler signs a fresh URL token + passes the
+        # frontend base URL to the PDF Lambda so its headless browser
+        # can navigate ``<frontend_base_url>/print/<id>?t=<token>``.
+        # Empty string outside Amplify-managed environments is fine —
+        # the handler fails fast at the env-var read.
+        api_handler.add_environment("FRONTEND_BASE_URL", frontend_domain)
+        api_handler.add_environment(
+            "PDF_TOKEN_SECRET_ARN", pdf_render.token_secret.secret_arn
         )
         # API Lambda gets the ARNs and resolves at runtime via Secrets
         # Manager (handlers cache the value module-level, so the round-
