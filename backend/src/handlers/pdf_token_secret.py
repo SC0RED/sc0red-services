@@ -24,7 +24,7 @@ import boto3
 
 logger = logging.getLogger(__name__)
 
-PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME = "PDF_TOKEN_SECRET_ARN"  # noqa: S105 env var name
+PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME = "PDF_TOKEN_SECRET_ARN"  # noqa: S105  # nosec B105  env var name, not a secret value
 
 
 # Module-level caches survive Lambda warm-restart, avoiding ~30 ms

@@ -25,7 +25,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from src.handlers import pdf_export_handlers, pdf_token_secret
+from src.handlers import pdf_export_handlers, pdf_export_storage, pdf_token_secret
 from src.handlers.auth_middleware import AuthContext
 from src.handlers.pdf_export_handlers import (
     FRONTEND_BASE_URL_ENVIRONMENT_NAME,
@@ -76,7 +76,7 @@ def _storage_with(company: dict[str, Any] | None, pdf_export: dict[str, Any] | N
 def _reset_module_clients() -> None:
     """Reset module-level boto3 client + secret caches between tests."""
     pdf_export_handlers._lambda_client = None
-    pdf_export_handlers._s3_client = None
+    pdf_export_storage._reset_caches_for_tests()
     pdf_token_secret._reset_caches_for_tests()
 
 
@@ -224,7 +224,7 @@ def test_post_cached_path_returns_presigned_url_no_invoke(_configured_env: None)
     mock_s3.generate_presigned_url.return_value = "https://s3.example/signed-url"
     mock_lambda = MagicMock()
     with (
-        patch.object(pdf_export_handlers, "_get_s3_client", return_value=mock_s3),
+        patch.object(pdf_export_storage, "get_s3_client", return_value=mock_s3),
         patch.object(pdf_export_handlers, "_get_lambda_client", return_value=mock_lambda),
     ):
         response = handle_post_export({}, _auth(), storage, ANALYSIS_ID)
@@ -403,7 +403,7 @@ def test_status_ready_returns_fresh_presigned_url(_configured_env: None) -> None
 
     mock_s3 = MagicMock()
     mock_s3.generate_presigned_url.return_value = "https://s3.example/ready-url"
-    with patch.object(pdf_export_handlers, "_get_s3_client", return_value=mock_s3):
+    with patch.object(pdf_export_storage, "get_s3_client", return_value=mock_s3):
         response = handle_get_export_status({}, _auth(), storage, ANALYSIS_ID)
 
     assert response["statusCode"] == 200
@@ -459,7 +459,7 @@ def test_delete_cached_pdf_returns_false_when_bucket_unset(
 def test_delete_cached_pdf_calls_s3_delete(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(PDF_EXPORTS_BUCKET_ENVIRONMENT_NAME, BUCKET)
     mock_s3 = MagicMock()
-    with patch.object(pdf_export_handlers, "_get_s3_client", return_value=mock_s3):
+    with patch.object(pdf_export_storage, "get_s3_client", return_value=mock_s3):
         result = delete_cached_pdf(f"pdf-exports/{ANALYSIS_ID}.pdf")
     assert result is True
     mock_s3.delete_object.assert_called_once_with(
@@ -474,6 +474,6 @@ def test_delete_cached_pdf_returns_false_on_s3_error(monkeypatch: pytest.MonkeyP
     mock_s3.delete_object.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied", "Message": "denied"}}, "DeleteObject"
     )
-    with patch.object(pdf_export_handlers, "_get_s3_client", return_value=mock_s3):
+    with patch.object(pdf_export_storage, "get_s3_client", return_value=mock_s3):
         # Returns False — never raises (re-analyse must not be blocked by S3).
         assert delete_cached_pdf(f"pdf-exports/{ANALYSIS_ID}.pdf") is False
