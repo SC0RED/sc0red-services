@@ -104,6 +104,12 @@ class CompanyAccessor:
         """Set the AI-generated Balanced Scorecard strategy map."""
         self._company.strategy_map = strategy_map
 
+    # NOTE: PDF export state intentionally has no accessor methods. The
+    # state is persisted via `assessment_repository.save_pdf_export`
+    # and never threaded through the pipeline — there's no current
+    # pipeline step that needs to read or write it. Add accessor
+    # methods here if (and only if) a step does.
+
     def set_url(self, url: str) -> None:
         """Set the company URL."""
         self._company.url = url

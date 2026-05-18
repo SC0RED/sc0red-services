@@ -2,6 +2,14 @@
 
 > This change spans two repositories: `signalfield-core` (SDK) and `janus` (host). The SDK PR must ship `v0.2.0` before the Janus PR can merge. Per the design's migration plan, the Janus PR bumps the SDK pin in the same commit that introduces the token-handling code, so branch-protection rules enforce the order.
 
+> **Reconciliation note (2026-05-18):** Fully shipped to production.
+>
+> - **SDK side**: signalfield-core PR #15, released as v0.2.0 (later superseded by v0.3.0 in the gpt-5.4-mini upgrade).
+> - **Janus side**: PR #313 (implementation) + PR #314 (summary-log rendering fix for token-count keys). Promoted dev → testing → production over 2026-05-15.
+> - **Soak (2026-05-15 to 2026-05-18)**: token telemetry keys (`tokens_in_*`, `tokens_out_*`, `cached_tokens_*`) confirmed flowing in CloudWatch on every AI call. Cache-hit rate on the strategy-map arrow yes/no bank running at ~77% (12288/15890 input tokens), exactly the cost-saving lever the change was designed to surface.
+> - **Optional follow-ups §3**: explicitly optional in the original design; not implemented. The data is flowing — dashboards/alerts can be built later when there's a specific signal to act on. Left unticked, intentionally.
+> - **Quality verification on production confirmed by user 2026-05-18 — green-lit archive.**
+
 ## 1. SDK side (`signalfield-core` repo)
 
 ### 1.1 ProviderResponse: add `cached_input_tokens` field
@@ -95,25 +103,25 @@ timer.record_tokens(label, tokens)
 
 ### 2.6 Ship
 
-- [ ] 2.6.1 Architecture-reviewer agent on the Janus diff (touches ai_call, step_timer, all strategy-map sub-modules, tests). Resolve CRITICAL + MEDIUM findings before commit.
-- [ ] 2.6.2 Open PR `feat/strategy-map-token-telemetry` against `development`. PR body includes a sample CloudWatch payload snippet showing the new keys alongside the existing elapsed keys.
-- [ ] 2.6.3 CI green → merge to `development` → deploy to staging.
-- [ ] 2.6.4 Verify staging: a fresh analysis produces CloudWatch event-detail with all three token-count keys per AI call.
-- [ ] 2.6.5 Promote dev → testing → production.
+- [x] 2.6.1 Architecture-reviewer agent on the Janus diff (touches ai_call, step_timer, all strategy-map sub-modules, tests). Resolve CRITICAL + MEDIUM findings before commit.
+- [x] 2.6.2 Open PR `feat/strategy-map-token-telemetry` against `development`. PR body includes a sample CloudWatch payload snippet showing the new keys alongside the existing elapsed keys.
+- [x] 2.6.3 CI green → merge to `development` → deploy to staging.
+- [x] 2.6.4 Verify staging: a fresh analysis produces CloudWatch event-detail with all three token-count keys per AI call.
+- [x] 2.6.5 Promote dev → testing → production.
 
 ## 3. Optional follow-up: dashboards + alerts
 
 *Separate small PR after ~7 days of production data has accumulated.*
 
-- [ ] 3.1 CloudWatch dashboard widget: per-call mean / p95 token usage across the past 7 days, grouped by call label.
-- [ ] 3.2 Alert: `cached_tokens / tokens_in < 0.5` for any single call. Indicates prompt-cache miss; investigates a prompt-prefix drift.
-- [ ] 3.3 Alert: `tokens_in_* > 10000` for any single call. Indicates prompt bloat regression.
-- [ ] 3.4 Optional: per-analysis cost summary widget that multiplies token counts by `MODEL_PRICING` constants. Lives in CloudWatch, not in the pipeline.
+- [ ] 3.1 CloudWatch dashboard widget: per-call mean / p95 token usage across the past 7 days, grouped by call label. *(Explicitly optional. Data is flowing today; build the widget when there's a specific signal to act on.)*
+- [ ] 3.2 Alert: `cached_tokens / tokens_in < 0.5` for any single call. Indicates prompt-cache miss; investigates a prompt-prefix drift. *(Optional, deferred.)*
+- [ ] 3.3 Alert: `tokens_in_* > 10000` for any single call. Indicates prompt bloat regression. *(Optional, deferred.)*
+- [ ] 3.4 Optional: per-analysis cost summary widget that multiplies token counts by `MODEL_PRICING` constants. Lives in CloudWatch, not in the pipeline. *(Optional, deferred.)*
 
 ## 4. Wrap-up
 
-- [ ] 4.1 Sync delta spec into `openspec/specs/ai-strategy-map/spec.md` (this change's spec delta).
-- [ ] 4.2 Archive this change once the Janus PR is stable on production.
-- [ ] 4.3 Tick P1.6.1 + P1.6.2 in `openspec/changes/archive/2026-05-15-redesign-strategy-map/`'s sibling… wait, that change is already archived. Update the README footer of the optimize-strategy-map-latency archive to note P1.6 is now shipped via this change and the parent change is fully done.
+- [ ] 4.1 Sync delta spec into `openspec/specs/ai-strategy-map/spec.md` (this change's spec delta). *(Deferred — bundled with the broader spec-sync backlog.)*
+- [x] 4.2 Archive this change once the Janus PR is stable on production.
+- [x] 4.3 Tick P1.6.1 + P1.6.2 in `openspec/changes/archive/2026-05-15-redesign-strategy-map/`'s sibling… wait, that change is already archived. Update the README footer of the optimize-strategy-map-latency archive to note P1.6 is now shipped via this change and the parent change is fully done.
 
 > See also: the parent `optimize-strategy-map-latency` change in archive (yet to be archived; only P1.6 was blocking) can be finalised after this change ships.
