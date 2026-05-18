@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger(__name__)
@@ -40,10 +41,32 @@ _s3_client: Any = None
 
 
 def get_s3_client() -> Any:
-    """Cached boto3 S3 client (module-level cache survives container reuse)."""
+    """Cached boto3 S3 client (module-level cache survives container reuse).
+
+    Pinned to SigV4 + virtual-hosted-style addressing explicitly. Both
+    are normally boto3 defaults for non-us-east-1 buckets, but on some
+    boto3 versions the default resolution can drift between
+    ``generate_presigned_url``'s URL output and S3's reconstructed
+    canonical request — observed as a ``SignatureDoesNotMatch`` 403 on
+    us-east-2 even though both the URL host and the credential scope
+    referenced ``us-east-2`` correctly. Making the signing config
+    explicit eliminates the drift surface.
+
+    The ``region_name`` falls back to the Lambda runtime's
+    ``AWS_REGION`` (always set by Lambda). Pinning it explicitly avoids
+    any default-region resolution path.
+    """
     global _s3_client
     if _s3_client is None:
-        _s3_client = boto3.client("s3")
+        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        _s3_client = boto3.client(
+            "s3",
+            region_name=region,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "virtual"},
+            ),
+        )
     return _s3_client
 
 
