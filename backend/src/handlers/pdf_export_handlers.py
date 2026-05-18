@@ -131,7 +131,7 @@ def _mint_pdf_url(bucket: str, s3_key: str, filename: str) -> str:
     )
 
 
-def delete_cached_pdf(s3_key: str) -> bool:
+def delete_cached_pdf(s3_key: str) -> bool:  # noqa: NAMING001 action verb; bool return is success/failure, not a predicate
     """Best-effort delete of a cached PDF object from the exports bucket.
 
     Used by the re-analyse handler to invalidate the cached PDF when
@@ -174,7 +174,7 @@ def _parse_iso_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
-def _is_rendering_stale(started_at_iso: str, now: datetime) -> bool:
+def _is_rendering_stale(started_at_iso: str, now: datetime) -> bool:  # noqa: NAMING001 already an is_ predicate; checker mis-flags leading-underscore
     """Return True if a ``rendering`` record is older than the stale window.
 
     Corrupt timestamps (unparseable) are treated as stale so callers

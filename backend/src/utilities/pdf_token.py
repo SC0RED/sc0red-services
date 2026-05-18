@@ -42,7 +42,7 @@ def _to_base64url(value: bytes) -> str:
     return encoded.replace("=", "").replace("+", "-").replace("/", "_")
 
 
-def sign_pdf_token(
+def sign_pdf_token(  # noqa: NAMING001 sign is a verb (mint a token); not in the script's heuristic verb list
     *,
     analysis_id: str,
     org_id: str,
