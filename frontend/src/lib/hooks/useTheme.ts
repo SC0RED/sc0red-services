@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 
 /**
- * Theme system for the Janus webapp.
+ * Theme system for the sc0red Advisory webapp.
  *
- * Three user-facing modes are persisted under `localStorage.janus.theme`:
+ * Three user-facing modes are persisted under `localStorage.janus.theme` (the
+ * storage key keeps the internal `janus.*` namespace to avoid invalidating
+ * existing users' persisted theme preference on the rebrand):
  *   - `"dark"`   — explicit dark
  *   - `"light"`  — explicit light
  *   - `"system"` — follow `prefers-color-scheme` on every page load

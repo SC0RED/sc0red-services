@@ -75,13 +75,15 @@ describe('PrintReport composition', () => {
 
     it('renders exactly one sc0red CTA', () => {
         render(<PrintReport analysis={fullAnalysis} generatedDate="May 1, 2026" />)
-        const matches = screen.getAllByText('sc0red can help you capture these opportunities')
+        const matches = screen.getAllByText('sc0red Advisory can help you capture these opportunities')
         expect(matches).toHaveLength(1)
     })
 
     it('omits the back cover when there are no opportunities', () => {
         render(<PrintReport analysis={{ ...fullAnalysis, opportunities: [] }} generatedDate="May 1, 2026" />)
-        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
+        expect(
+            screen.queryByText('sc0red Advisory can help you capture these opportunities')
+        ).not.toBeInTheDocument()
     })
 
     it('omits the executive summary when both risks and opportunities are empty', () => {
@@ -126,7 +128,9 @@ describe('PrintReport composition', () => {
         expect(screen.queryByText('AI Opportunity Roadmap')).not.toBeInTheDocument()
         expect(screen.queryByText('EBITDA Impact Model')).not.toBeInTheDocument()
         expect(screen.queryByText('Value Chain Analysis')).not.toBeInTheDocument()
-        expect(screen.queryByText('sc0red can help you capture these opportunities')).not.toBeInTheDocument()
+        expect(
+            screen.queryByText('sc0red Advisory can help you capture these opportunities')
+        ).not.toBeInTheDocument()
     })
 
     it('renders the Risk Profile, Opportunity Roadmap, EBITDA Impact Model, and Value Chain Analysis sections when data is present', () => {

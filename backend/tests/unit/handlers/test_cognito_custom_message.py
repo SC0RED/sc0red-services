@@ -22,7 +22,7 @@ class TestCustomMessageAdminCreateUser:
         with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://app.janus.ai"}):
             result = handle_custom_message(event, None)
 
-        assert result["response"]["emailSubject"] == "You've been invited to Janus"
+        assert result["response"]["emailSubject"] == "You've been invited to sc0red Advisory"
 
     def test_email_contains_accept_link(self):
         event = _make_event("CustomMessage_AdminCreateUser", email="analyst@firm.com")
@@ -46,8 +46,8 @@ class TestCustomMessageAdminCreateUser:
             result = handle_custom_message(event, None)
 
         body = result["response"]["emailMessage"]
-        assert "Janus" in body
-        assert "AI Risk Intelligence" in body
+        assert "sc0red Advisory" in body
+        assert "AI Risk &amp; Strategic Intelligence" in body
         assert "Accept Invitation" in body
 
     def test_email_is_html(self):

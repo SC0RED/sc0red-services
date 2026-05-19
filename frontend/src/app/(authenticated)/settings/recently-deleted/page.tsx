@@ -8,7 +8,7 @@ import type { RecentlyDeletedResponse } from '@/lib/types/api'
 
 import RecentlyDeletedView from './RecentlyDeletedView'
 
-export const metadata: Metadata = { title: 'Recently Deleted — Janus' }
+export const metadata: Metadata = { title: 'Recently Deleted — sc0red Advisory' }
 
 /**
  * Phase 2 of soft-delete recovery — admin-only page for browsing and

@@ -23,7 +23,7 @@ export default function PrintCover({ analysis, generatedDate }: PrintCoverProps)
 
     return (
         <section className="print-cover">
-            <div className="print-cover-eyebrow">sc0red · AI Risk Report</div>
+            <div className="print-cover-eyebrow">sc0red Advisory · AI Risk Report</div>
             <h1 className="print-cover-title">{analysis.companyName}</h1>
             {analysis.companyUrl ? <p className="print-cover-meta">{analysis.companyUrl}</p> : null}
             {analysis.industry ? <p className="print-cover-meta">{analysis.industry}</p> : null}
@@ -67,7 +67,7 @@ export default function PrintCover({ analysis, generatedDate }: PrintCoverProps)
                     fontSize: '0.875rem',
                 }}
             >
-                Generated {generatedDate} · sc0red.com
+                Generated {generatedDate} · sc0red Advisory
             </p>
         </section>
     )

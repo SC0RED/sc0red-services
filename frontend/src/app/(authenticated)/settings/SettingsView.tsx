@@ -130,8 +130,8 @@ export default function SettingsView() {
                         marginBottom: '0.75rem',
                     }}
                 >
-                    Choose how Janus looks. Print preview always uses the light theme regardless of your
-                    selection.
+                    Choose how sc0red Advisory looks. Print preview always uses the light theme regardless of
+                    your selection.
                 </p>
                 <ThemeToggle />
             </Section>
