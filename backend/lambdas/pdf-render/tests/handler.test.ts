@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2 } from 'aws-lambda'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { signToken } from '../src/token'
+import { signTokenForTest as signToken } from './helpers/signTokenForTest'
 
 // Mock the Puppeteer render so the handler tests don't try to launch
 // Chromium. The mocked render returns a tiny "PDF" buffer so we can

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
-import { TOKEN_TTL_SECONDS, signToken, verifyToken } from '@/lib/pdf/token'
+import { TOKEN_TTL_SECONDS, verifyToken } from '@/lib/pdf/token'
+
+import { signTokenForTest as signToken } from './signTokenForTest'
 
 const SECRET = 'test-secret-32-bytes-of-randomness-please'
 
