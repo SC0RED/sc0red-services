@@ -1,12 +1,12 @@
-# sc0red Advisory (codebase: `janus`)
+# sc0red Services (codebase: `sc0red-services`)
 
-The customer-facing product is **sc0red Advisory** — a SaaS platform that helps private equity firms assess AI disruption risk across their portfolio companies. Given a portfolio URL or a single company URL, sc0red Advisory scrapes the company, runs a 6-step AI analysis pipeline, and produces a scored risk report with actionable investment opportunities.
+The customer-facing product is **sc0red Services** — a SaaS platform that helps private equity firms assess AI disruption risk across their portfolio companies. Given a portfolio URL or a single company URL, sc0red Services scrapes the company, runs a 6-step AI analysis pipeline, and produces a scored risk report with actionable investment opportunities.
 
-## Naming convention: sc0red Advisory (customer) vs. janus (internal)
+## Naming convention: sc0red Services (customer) vs. sc0red-services (internal)
 
-Customer-facing brand: **sc0red Advisory**. Internal codebase, repo, AWS resources, CDK stack names, Python / Node package names, Docker containers, the local dev DynamoDB table, and the `localStorage.janus.theme` storage key all retain the **`janus-*`** naming. This is intentional — renaming infrastructure resources would require risky data migrations for zero customer value. See `openspec/changes/rename-janus-to-sc0red-advisory/` for the full rationale.
+Customer-facing brand: **sc0red Services**. Internal codebase, repo, AWS resources, CDK stack names, Python / Node package names, Docker containers, the local dev DynamoDB table, and the `localStorage.sc0red-services.theme` storage key all retain the **`sc0red-services-*`** naming. This is intentional — renaming infrastructure resources would require risky data migrations for zero customer value. See `openspec/changes/rename-sc0red-services-to-sc0red-services/` for the full rationale.
 
-If you're editing customer-visible text, use **sc0red Advisory**. If you're editing infrastructure or internal symbols, the `janus-*` family stays.
+If you're editing customer-visible text, use **sc0red Services**. If you're editing infrastructure or internal symbols, the `sc0red-services-*` family stays.
 
 ---
 
@@ -68,8 +68,8 @@ If you're editing customer-visible text, use **sc0red Advisory**. If you're edit
 ### 1. Clone and configure
 
 ```bash
-git clone git@github.com:SignalField/janus.git
-cd janus
+git clone git@github.com:SignalField/sc0red-services.git
+cd sc0red-services
 ```
 
 Create a `.env` file at the repo root:
@@ -138,9 +138,9 @@ Click **New Scan** in the sidebar.
 
 1. Paste your PE firm's portfolio page URL (e.g. `https://www.sequoiacap.com/companies`)
 2. Select **Portfolio**
-3. Click **Analyse** — Janus scrapes the page and extracts all portfolio companies
+3. Click **Analyse** — sc0red Services scrapes the page and extracts all portfolio companies
 4. Review the discovered company list and deselect any you want to skip
-5. Click **Confirm** — Janus runs the full AI pipeline on each company in parallel
+5. Click **Confirm** — sc0red Services runs the full AI pipeline on each company in parallel
 
 #### Standalone Scan
 
@@ -176,7 +176,7 @@ The **Analyses** page lists every completed report across all scans, filterable 
 | `GH_TOKEN` | Build-time | — | GitHub token to pull `signalfield-core` |
 | `BACKEND_URL` | Frontend only | `http://backend:8001` | Backend base URL (server-side) |
 | `NEXTAUTH_URL` | Frontend only | `http://localhost:3000` | NextAuth callback URL |
-| `DYNAMODB_TABLE` | Backend only | `janus-dev` | DynamoDB table name |
+| `DYNAMODB_TABLE` | Backend only | `sc0red-services-dev` | DynamoDB table name |
 | `DYNAMODB_ENDPOINT` | Local only | — | DynamoDB Local endpoint |
 
 > Without a real `ANTHROPIC_API_KEY`, the app starts and auth/navigation works, but any scan that triggers the AI pipeline returns a 401 error from Anthropic.
@@ -195,7 +195,7 @@ The **Analyses** page lists every completed report across all scans, filterable 
 ## Project Structure
 
 ```
-janus/
+sc0red-services/
 ├── backend/                  # Python 3.12 backend
 │   ├── src/
 │   │   ├── handlers/         # Lambda entry point, API routing, auth middleware
@@ -216,7 +216,7 @@ janus/
 │
 ├── infrastructure/           # AWS CDK Python stack
 │   ├── app.py                # CDK entry point (dev / staging / production)
-│   └── stacks/janus_stack.py # DynamoDB + SQS + Lambda + API Gateway
+│   └── stacks/sc0red_services_stack.py # DynamoDB + SQS + Lambda + API Gateway
 │
 ├── scripts/
 │   ├── deploy-local.sh       # One-command LocalStack CDK deployment

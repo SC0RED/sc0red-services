@@ -18,7 +18,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8001'
  */
 setup('create session with expired Cognito token', async ({ page, context }) => {
     const timestamp = Date.now()
-    const email = `e2e-expired-${timestamp}@janus-test.com`
+    const email = `e2e-expired-${timestamp}@sc0red-services-test.com`
 
     // 1. Register a real user (needed so the user exists in DynamoDB)
     const registerResponse = await page.request.post(`${BACKEND_URL}/api/auth/register`, {

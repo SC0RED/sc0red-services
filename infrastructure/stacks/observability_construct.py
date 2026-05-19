@@ -1,6 +1,6 @@
-"""AppSync real-time progress API and monitoring alarms for Janus.
+"""AppSync real-time progress API and monitoring alarms for sc0red Services.
 
-Extracted from janus_stack.py to stay under the 400-line file limit.
+Extracted from sc0red_services_stack.py to stay under the 400-line file limit.
 """
 
 import os
@@ -53,7 +53,7 @@ class ObservabilityConstruct(Construct):
         graphql_api = appsync.GraphqlApi(
             self,
             "ProgressApi",
-            name=f"janus-progress-{environment}",
+            name=f"sc0red-services-progress-{environment}",
             definition=appsync.Definition.from_file(
                 str(Path(__file__).parent.parent / "schema.graphql")
             ),
@@ -120,7 +120,7 @@ class ObservabilityConstruct(Construct):
         alert_topic = sns.Topic(
             self,
             "AlertTopic",
-            display_name=f"Janus Alerts — {environment}",
+            display_name=f"sc0red Services Alerts — {environment}",
         )
 
         dlq_alarm = cloudwatch.Alarm(
@@ -134,7 +134,7 @@ class ObservabilityConstruct(Construct):
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
             evaluation_periods=1,
             alarm_description=(
-                f"Messages in DLQ for Janus {environment}. "
+                f"Messages in DLQ for sc0red Services {environment}. "
                 "Pipeline failures exceeded 3 retries."
             ),
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,

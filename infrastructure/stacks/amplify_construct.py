@@ -1,4 +1,4 @@
-"""AWS Amplify Hosting construct for Janus frontend.
+"""AWS Amplify Hosting construct for sc0red Services frontend.
 
 Two-phase construct to resolve the circular dependency between Amplify and
 API Gateway: Phase 1 creates the App (gives us the domain), Phase 2 creates
@@ -42,7 +42,7 @@ class AmplifyConstruct(Construct):
         self._app = amplify.CfnApp(
             self,
             "App",
-            name=f"janus-frontend-{environment}",
+            name=f"sc0red-services-frontend-{environment}",
             repository=repository,
             access_token=github_token,
             platform="WEB_COMPUTE",
@@ -93,14 +93,14 @@ class AmplifyConstruct(Construct):
         consumed by the Next.js Lambda runtime (the `/api/export/pdf/[id]`
         token-mint flow and the `/print/[id]` server component, respectively).
         Both MUST agree with the same env vars on the API Lambda — they
-        come from the same Secrets Manager secret in `janus_stack.py`.
+        come from the same Secrets Manager secret in `sc0red_services_stack.py`.
 
         `FRONTEND_BASE_URL` is the public origin the headless Chromium
         Lambda navigates to (`${BASE}/print/{id}?t=...`). On Amplify SSR
         the Next.js process binds to `localhost:3000` internally, so
         `req.nextUrl.origin` returns the wrong URL — we have to set this
         explicitly. Value is the Amplify-default branch URL (Amplify
-        routes the custom domain `dev.janus.sc0red.com` to the same
+        routes the custom domain `dev.sc0red-services.sc0red.com` to the same
         SSR Lambda, so headless navigation against either works).
         """
         branch = amplify.CfnBranch(

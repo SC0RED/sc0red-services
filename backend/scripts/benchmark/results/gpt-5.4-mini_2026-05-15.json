@@ -2,7 +2,7 @@
   "metadata": {
     "model": "gpt-5.4-mini",
     "timestamp": "2026-05-15T13:56:03.619623+00:00",
-    "prompts_file": "/Users/vedratnavelani/Documents/sf-github/janus/backend/scripts/benchmark/benchmark_prompts.json",
+    "prompts_file": "/Users/vedratnavelani/Documents/sf-github/sc0red-services/backend/scripts/benchmark/benchmark_prompts.json",
     "prompt_count": 10,
     "is_baseline": false
   },

@@ -36,7 +36,7 @@ Captured: 2026-04-07
 | `/dashboard` | TBD | TBD | TBD | TBD |
 | `/analysis/[id]` | TBD | TBD | TBD | TBD |
 
-> Fill in after running Lighthouse on dev.janus.sc0red.com
+> Fill in after running Lighthouse on dev.sc0red-services.sc0red.com
 
 ## Frontend — Web Vitals
 
@@ -84,4 +84,4 @@ Captured: 2026-04-07
 2. **Lighthouse**: Chrome DevTools → Lighthouse tab → Analyze
 3. **Web Vitals**: Browser console on deployed app (logged automatically)
 4. **API times**: CloudWatch Logs Insights (see `docs/baselines/` in proposal)
-5. **Pipeline times**: CloudWatch Logs for `janus-worker-{env}` Lambda
+5. **Pipeline times**: CloudWatch Logs for `sc0red-services-worker-{env}` Lambda

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""CDK application entry point for Janus."""
+"""CDK application entry point for sc0red Services."""
 
 import os
 from datetime import UTC, datetime
 
 import aws_cdk as cdk
 
-from stacks.janus_stack import JanusStack
+from stacks.sc0red_services_stack import Sc0redServicesStack
 
 app = cdk.App()
 
@@ -48,7 +48,7 @@ environment_config: dict[str, object] = {
         "lambda_architecture": "x86_64",
         "api_rate_limit": 50,
         "api_burst_limit": 100,
-        "github_repository": "https://github.com/SC0RED/janus",
+        "github_repository": "https://github.com/SC0RED/sc0red-services",
         "amplify_branch": "development",
     },
     "testing": {
@@ -59,7 +59,7 @@ environment_config: dict[str, object] = {
         "lambda_architecture": "x86_64",
         "api_rate_limit": 50,
         "api_burst_limit": 100,
-        "github_repository": "https://github.com/SC0RED/janus",
+        "github_repository": "https://github.com/SC0RED/sc0red-services",
         "amplify_branch": "testing",
     },
     "production": {
@@ -70,16 +70,16 @@ environment_config: dict[str, object] = {
         "lambda_architecture": "x86_64",
         "api_rate_limit": 100,
         "api_burst_limit": 200,
-        "github_repository": "https://github.com/SC0RED/janus",
+        "github_repository": "https://github.com/SC0RED/sc0red-services",
         "amplify_branch": "production",
     },
 }
 
 config = environment_config.get(environment, environment_config["development"])
 
-JanusStack(
+Sc0redServicesStack(
     app,
-    f"Janus-{environment}",
+    f"Sc0redServices-{environment}",
     env=cdk.Environment(account=account, region=region),
     environment=environment,
     config=config,
@@ -88,7 +88,7 @@ JanusStack(
 # Tags are skipped for development (LocalStack v3 has a bug propagating stack tags
 # to EventSourceMapping resources). Tags are applied for staging/production only.
 if environment != "development":
-    cdk.Tags.of(app).add("Project", "Janus")
+    cdk.Tags.of(app).add("Project", "sc0red Services")
     cdk.Tags.of(app).add("ManagedBy", "CDK")
     cdk.Tags.of(app).add("Environment", environment)
     cdk.Tags.of(app).add("DeployedAt", datetime.now(UTC).isoformat())

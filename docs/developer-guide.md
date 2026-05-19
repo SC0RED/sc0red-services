@@ -1,6 +1,6 @@
-# Janus — Developer Guide
+# sc0red Services — Developer Guide
 
-This guide covers everything you need to run Janus locally, understand the test suites, and work within the code quality pipeline.
+This guide covers everything you need to run sc0red Services locally, understand the test suites, and work within the code quality pipeline.
 
 ---
 
@@ -155,15 +155,15 @@ export GH_TOKEN=$(gh auth token)
 cdklocal bootstrap aws://000000000000/us-east-1
 
 # Deploy
-cdklocal deploy Janus-development --require-approval never --outputs-file /tmp/janus-outputs.json
+cdklocal deploy Sc0redServices-development --require-approval never --outputs-file /tmp/sc0red-services-outputs.json
 ```
 
 ### Known LocalStack limitations
 
 | Issue | Workaround |
 |---|---|
-| `cdklocal update` stuck at `CREATE_COMPLETE` | Run `cdklocal destroy Janus-development --force && cdklocal deploy ...` |
-| `log_retention` creates unsupported nodejs22.x Lambda | Use explicit `logs.LogGroup` construct — already fixed in `janus_stack.py` |
+| `cdklocal update` stuck at `CREATE_COMPLETE` | Run `cdklocal destroy Sc0redServices-development --force && cdklocal deploy ...` |
+| `log_retention` creates unsupported nodejs22.x Lambda | Use explicit `logs.LogGroup` construct — already fixed in `sc0red_services_stack.py` |
 | Stack-level tags fail on `EventSourceMapping` | Tags are skipped for `development` environment — already fixed in `app.py` |
 
 ### CDK environments
@@ -211,7 +211,7 @@ backend/tests/
 │   ├── handlers/              # API Gateway routing, auth middleware
 │   ├── pipeline_steps/        # Each AI step tested with mocked LLM calls
 │   ├── pipeline_factories/    # CompanyAnalysisFactory, PortfolioDiscoveryFactory
-│   ├── pipeline/              # JanusFactoriesFactory, RequestExecutor
+│   ├── pipeline/              # Sc0redServicesFactoriesFactory, RequestExecutor
 │   ├── repositories/          # DynamoDB repos (mocked with moto)
 │   ├── data_strategies/       # URLResolutionStrategy, WebScraperStrategy
 │   └── facades/               # CompanyAccessor
@@ -297,7 +297,7 @@ npm run format:check # Prettier (check only — used in CI)
 
 ## End-to-End Tests
 
-Janus has two E2E test systems:
+sc0red Services has two E2E test systems:
 
 **1. Playwright browser tests** — test the full app as a user sees it (SSR, auth, navigation, scans). This is the primary E2E system.
 
@@ -481,7 +481,7 @@ docs: update API reference with dashboard endpoint
 
 ## DynamoDB Data Model
 
-Janus uses a single-table design with 4 GSIs. All entities share the same table (`janus-{environment}`).
+sc0red Services uses a single-table design with 4 GSIs. All entities share the same table (`sc0red-services-{environment}`).
 
 ### Primary key pattern
 

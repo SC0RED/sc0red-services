@@ -4,7 +4,7 @@ Extracted from `pdf_render_construct.py` to keep that file under the
 400-line spirit-of-the-rule limit (CLAUDE.md backend guideline). The
 metric filters convert structured log lines emitted by the Lambda
 handler — `{"event":"pdf_render","status":"ok","durationMs":1234,...}`
-— into CloudWatch metrics for the `Janus/<env>/PdfRender` namespace,
+— into CloudWatch metrics for the `sc0red Services/<env>/PdfRender` namespace,
 plus a dashboard in monitored environments.
 
 Operations are exposed as a free function so the construct can call it
@@ -44,7 +44,7 @@ def build_pdf_render_metrics(
     (``config["enable_monitoring"]``) — dev environments don't need
     paging surface area.
     """
-    metric_namespace = f"Janus/{environment.capitalize()}/PdfRender"
+    metric_namespace = f"sc0red Services/{environment.capitalize()}/PdfRender"
 
     # Successful-render filter: matches `event=pdf_render` AND `status=ok`.
     ok_pattern = logs.FilterPattern.all(
@@ -94,7 +94,7 @@ def build_pdf_render_metrics(
     cloudwatch.Dashboard(
         scope,
         "PdfRenderDashboard",
-        dashboard_name=f"janus-pdf-render-{environment}",
+        dashboard_name=f"sc0red-services-pdf-render-{environment}",
         widgets=[
             [
                 cloudwatch.GraphWidget(

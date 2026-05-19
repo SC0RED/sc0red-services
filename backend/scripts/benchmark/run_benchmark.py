@@ -59,7 +59,7 @@ def run_single_prompt(client: openai.OpenAI, model: str, prompt: dict) -> dict:
     # Build input — handle both string and list (chat messages) prompts
     input_text = prompt["prompt"]
 
-    # Build request params. Mirror what Janus production sends so the
+    # Build request params. Mirror what sc0red Services production sends so the
     # benchmark is a faithful proxy: system prompt via ``instructions``,
     # ``reasoning.effort`` and ``text.verbosity`` from the prompt envelope.
     text_block: dict[str, object] = {
@@ -172,7 +172,7 @@ def run_single_prompt(client: openai.OpenAI, model: str, prompt: dict) -> dict:
 
 # Per-call request budget. Bounds the worst case when the model hits a
 # slow path (the same tail-latency pathology this benchmark was built to
-# investigate). Production uses 180s but typical Janus AI calls finish
+# investigate). Production uses 180s but typical sc0red Services AI calls finish
 # in 2-30s; 90s catches the tail without truncating legitimate work, and
 # the single retry doubles the effective ceiling to ~180s before the
 # benchmark records the call as a timeout error.

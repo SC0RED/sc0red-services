@@ -56,7 +56,7 @@ class TestLogEventInDevelopment:
         mock_boto.client.assert_not_called()
 
     def test_default_stage_is_development(self, monkeypatch: MonkeyPatch) -> None:
-        """STAGE unset is treated as development (matches janus_stack default)."""
+        """STAGE unset is treated as development (matches sc0red_services_stack default)."""
         monkeypatch.delenv("ANALYTICS_LOG_GROUP", raising=False)
         monkeypatch.delenv("STAGE", raising=False)
 
@@ -76,7 +76,7 @@ class TestLogEventFailsFastOutsideDevelopment:
 
 class TestLogEventSuccess:
     def test_writes_event_as_single_json_line(self, monkeypatch: MonkeyPatch) -> None:
-        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/janus/staging/analytics-events")
+        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/sc0red-services/staging/analytics-events")
         monkeypatch.setenv("STAGE", "staging")
         monkeypatch.setenv("AWS_LAMBDA_LOG_STREAM_NAME", "2026/04/24/[$LATEST]deadbeef")
 
@@ -87,12 +87,12 @@ class TestLogEventSuccess:
 
         mock_boto.client.assert_called_once_with("logs")
         mock_client.create_log_stream.assert_called_once_with(
-            logGroupName="/janus/staging/analytics-events",
+            logGroupName="/sc0red-services/staging/analytics-events",
             logStreamName="2026/04/24/[$LATEST]deadbeef",
         )
         mock_client.put_log_events.assert_called_once()
         call_kwargs = mock_client.put_log_events.call_args.kwargs
-        assert call_kwargs["logGroupName"] == "/janus/staging/analytics-events"
+        assert call_kwargs["logGroupName"] == "/sc0red-services/staging/analytics-events"
         assert call_kwargs["logStreamName"] == "2026/04/24/[$LATEST]deadbeef"
         assert len(call_kwargs["logEvents"]) == 1
         entry = call_kwargs["logEvents"][0]
@@ -108,7 +108,7 @@ class TestLogEventSuccess:
         assert payload["active_lever_filter"] is None
 
     def test_stream_is_created_only_once_per_process(self, monkeypatch: MonkeyPatch) -> None:
-        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/janus/staging/analytics-events")
+        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/sc0red-services/staging/analytics-events")
         monkeypatch.setenv("STAGE", "staging")
         monkeypatch.setenv("AWS_LAMBDA_LOG_STREAM_NAME", "warm-container-stream")
 
@@ -124,7 +124,7 @@ class TestLogEventSuccess:
 
     def test_falls_back_to_generated_stream_outside_lambda(self, monkeypatch: MonkeyPatch) -> None:
         """Without AWS_LAMBDA_LOG_STREAM_NAME we still produce a non-empty stream name."""
-        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/janus/staging/analytics-events")
+        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/sc0red-services/staging/analytics-events")
         monkeypatch.setenv("STAGE", "staging")
         monkeypatch.delenv("AWS_LAMBDA_LOG_STREAM_NAME", raising=False)
 
@@ -139,7 +139,7 @@ class TestLogEventSuccess:
 
     def test_existing_stream_is_not_an_error(self, monkeypatch: MonkeyPatch) -> None:
         """ResourceAlreadyExistsException is an expected race, not a failure."""
-        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/janus/staging/analytics-events")
+        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/sc0red-services/staging/analytics-events")
         monkeypatch.setenv("STAGE", "staging")
 
         mock_client = MagicMock()
@@ -157,7 +157,7 @@ class TestLogEventSuccess:
 class TestLogEventErrorPropagation:
     def test_create_log_stream_error_propagates(self, monkeypatch: MonkeyPatch) -> None:
         """Non-AlreadyExists CloudWatch errors propagate — they are real failures."""
-        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/janus/staging/analytics-events")
+        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/sc0red-services/staging/analytics-events")
         monkeypatch.setenv("STAGE", "staging")
 
         mock_client = MagicMock()
@@ -173,7 +173,7 @@ class TestLogEventErrorPropagation:
         mock_client.put_log_events.assert_not_called()
 
     def test_put_log_events_error_propagates(self, monkeypatch: MonkeyPatch) -> None:
-        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/janus/staging/analytics-events")
+        monkeypatch.setenv("ANALYTICS_LOG_GROUP", "/sc0red-services/staging/analytics-events")
         monkeypatch.setenv("STAGE", "staging")
 
         mock_client = MagicMock()

@@ -1,4 +1,4 @@
-"""Janus CDK stack — DynamoDB, SQS, Lambda (API + Worker), API Gateway, Cognito."""
+"""sc0red Services CDK stack — DynamoDB, SQS, Lambda (API + Worker), API Gateway, Cognito."""
 
 import os
 from typing import Any
@@ -28,7 +28,7 @@ from stacks.stack_resources import (
 from stacks.step_functions_construct import StepFunctionsConstruct
 
 
-class JanusStack(Stack):
+class Sc0redServicesStack(Stack):
     """Main stack: DynamoDB table, SQS queue, API + Worker Lambdas, API Gateway."""
 
     def __init__(
@@ -39,7 +39,7 @@ class JanusStack(Stack):
         config: dict[str, Any],
         **kwargs: Any,
     ) -> None:
-        """Initialize the Janus stack."""
+        """Initialize the sc0red Services stack."""
         super().__init__(scope, construct_id, **kwargs)
 
         self._environment = environment
@@ -100,7 +100,7 @@ class JanusStack(Stack):
         api_handler = create_lambda(
             self,
             "ApiHandler",
-            function_name=f"janus-api-{environment}",
+            function_name=f"sc0red-services-api-{environment}",
             handler="src.handlers.api_handler_entry.handle_api_event",
             bundling=bundling,
             environment=common_environment,
@@ -125,7 +125,7 @@ class JanusStack(Stack):
         worker_handler = create_lambda(
             self,
             "WorkerHandler",
-            function_name=f"janus-worker-{environment}",
+            function_name=f"sc0red-services-worker-{environment}",
             handler="src.handlers.worker_handler_entry.handle_worker_event",
             bundling=bundling,
             environment=common_environment,

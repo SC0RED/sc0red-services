@@ -6,7 +6,7 @@ from src.models.model_company import (
     RiskAssessment,
     RiskScore,
 )
-from src.models.model_event import JanusEvent
+from src.models.model_event import Sc0redServicesEvent
 from src.models.model_literals import (
     AssessmentTypeLiterals,
     DataStrategyLiterals,
@@ -19,11 +19,11 @@ __all__ = [
     "Company",
     "CompanyProfile",
     "DataStrategyLiterals",
-    "JanusEvent",
     "Opportunity",
     "OpportunityResult",
     "RiskAssessment",
     "RiskScopeLiterals",
     "RiskScore",
+    "Sc0redServicesEvent",
     "StrategicCategoryLiterals",
 ]

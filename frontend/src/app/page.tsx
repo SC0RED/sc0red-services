@@ -106,30 +106,44 @@ export default async function LandingPage() {
                     justifyContent: 'space-between',
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                    <div
+                <a
+                    href="/"
+                    aria-label="sc0red Services home"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                    <Image
+                        src="/sc0red-logo-white.svg"
+                        alt="sc0red"
+                        width={118}
+                        height={32}
+                        style={{ height: '28px', width: 'auto' }}
+                    />
+                    <span
                         style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '7px',
-                            overflow: 'hidden',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            letterSpacing: '0.18em',
+                            textTransform: 'uppercase',
+                            color: 'var(--text-tertiary)',
+                            marginLeft: '0.25rem',
+                            paddingLeft: '0.625rem',
+                            borderLeft: '1px solid var(--border-subtle)',
                         }}
                     >
-                        <Image
-                            src="/sc0red-advisory-logo.svg"
-                            alt="sc0red Advisory"
-                            width={40}
-                            height={40}
-                            style={{ objectFit: 'contain' }}
-                        />
-                    </div>
-                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>sc0red Advisory</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        Services
+                    </span>
+                </a>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <a
+                        href="https://www.sc0red.com"
+                        style={{
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                        }}
+                    >
+                        ← sc0red.com
+                    </a>
                     <Link href="/login" className="btn btn-ghost btn-sm">
                         Sign In
                     </Link>
@@ -205,7 +219,7 @@ export default async function LandingPage() {
                             lineHeight: 1.7,
                         }}
                     >
-                        sc0red Advisory analyzes your portfolio companies for AI-driven disruption risks and
+                        sc0red Services analyzes your portfolio companies for AI-driven disruption risks and
                         generates specific, tactical roadmaps to defend and grow.
                     </p>
                     <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -265,7 +279,7 @@ export default async function LandingPage() {
                             )}
                         </div>
                         <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                            sc0red Advisory Analysis — Acme Financial Services
+                            sc0red Services Analysis — Acme Financial Services
                         </span>
                     </div>
                     <div
@@ -455,7 +469,7 @@ export default async function LandingPage() {
                         Understand your AI risk today
                     </h2>
                     <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.7 }}>
-                        Join PE firms and operators using sc0red Advisory to identify AI threats and build
+                        Join PE firms and operators using sc0red Services to identify AI threats and build
                         defensible, AI-native business strategies.
                     </p>
                     <Link
@@ -470,10 +484,41 @@ export default async function LandingPage() {
 
             {/* Footer */}
             <footer
-                style={{ padding: '2rem', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}
+                style={{
+                    padding: '2rem',
+                    borderTop: '1px solid var(--border-subtle)',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.625rem',
+                }}
             >
                 <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
-                    © 2026 sc0red Advisory · AI Risk & Strategic Intelligence
+                    © 2026 sc0red Services · AI Risk &amp; Strategic Intelligence
+                </p>
+                <p style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>
+                    Part of the{' '}
+                    <a
+                        href="https://www.sc0red.com"
+                        style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}
+                    >
+                        sc0red
+                    </a>{' '}
+                    family ·{' '}
+                    <a
+                        href="https://www.sc0red.com/advisory"
+                        style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
+                    >
+                        Advisory
+                    </a>{' '}
+                    ·{' '}
+                    <a
+                        href="https://www.sc0red.com/platform"
+                        style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
+                    >
+                        Platform
+                    </a>
                 </p>
             </footer>
 

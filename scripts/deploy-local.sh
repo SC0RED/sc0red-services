@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Deploy the Janus CDK stack to LocalStack for local testing.
+# Deploy the sc0red Services CDK stack to LocalStack for local testing.
 #
 # Usage: ./scripts/deploy-local.sh
 #
@@ -46,7 +46,7 @@ ok "CDK Python deps ready"
 
 # ── LocalStack ─────────────────────────────────────────────────────────────────
 
-if ! docker ps --format '{{.Names}}' | grep -q "janus-localstack"; then
+if ! docker ps --format '{{.Names}}' | grep -q "sc0red-services-localstack"; then
     log "Starting LocalStack..."
     cd "$CDK_DIR/.."
     docker compose --profile localstack up localstack -d
@@ -75,18 +75,18 @@ log "Bootstrapping CDK..."
 # LocalStack default account
 cdklocal bootstrap aws://000000000000/us-east-1 --quiet 2>&1 | grep -v "^$" || true
 
-log "Deploying Janus-development to LocalStack..."
-DEPLOY_OUTPUT=$(cdklocal deploy Janus-development --require-approval never --outputs-file /tmp/janus-outputs.json 2>&1)
+log "Deploying Sc0redServices-development to LocalStack..."
+DEPLOY_OUTPUT=$(cdklocal deploy Sc0redServices-development --require-approval never --outputs-file /tmp/sc0red-services-outputs.json 2>&1)
 echo "$DEPLOY_OUTPUT"
 
 # ── Extract URL ────────────────────────────────────────────────────────────────
 
-if [ -f /tmp/janus-outputs.json ]; then
+if [ -f /tmp/sc0red-services-outputs.json ]; then
     API_URL=$(python3 -c "
 import json
-with open('/tmp/janus-outputs.json') as f:
+with open('/tmp/sc0red-services-outputs.json') as f:
     outputs = json.load(f)
-stack = outputs.get('Janus-development', {})
+stack = outputs.get('Sc0redServices-development', {})
 for key, val in stack.items():
     if 'ApiUrl' in key:
         print(val)
@@ -110,6 +110,6 @@ if [ -n "${API_URL:-}" ]; then
     echo "Test it:"
     echo "  curl ${API_URL}api/health"
 else
-    ok "Deployment complete! (check above for Janus-development.ApiUrl)"
+    ok "Deployment complete! (check above for Sc0redServices-development.ApiUrl)"
 fi
 echo "════════════════════════════════════════"

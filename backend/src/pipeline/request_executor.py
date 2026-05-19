@@ -1,4 +1,4 @@
-"""JanusRequestExecutor — simplified PipelineExecutor implementation.
+"""Sc0redServicesRequestExecutor — simplified PipelineExecutor implementation.
 
 Satisfies the signalfield_core PipelineExecutor protocol (10 members).
 Simplified from Engine's RequestExecutor (600+ lines) to ~150 lines.
@@ -64,8 +64,8 @@ _PROGRESS_MAP: dict[str, tuple[int, str]] = {
 }
 
 
-class JanusRequestExecutor:
-    """Pipeline executor for Janus assessments.
+class Sc0redServicesRequestExecutor:
+    """Pipeline executor for sc0red Services assessments.
 
     Implements the PipelineExecutor protocol: tracks question completion,
     step timing, exceptions, and supports dynamic step insertion.

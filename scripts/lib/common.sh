@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for Janus deploy scripts.
+# Shared helpers for sc0red Services deploy scripts.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

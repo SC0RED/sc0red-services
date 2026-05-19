@@ -1,13 +1,13 @@
-"""Tests for JanusFactoriesFactory."""
+"""Tests for Sc0redServicesFactoriesFactory."""
 
 import pytest
 from unittest.mock import MagicMock, patch
 
-from src.models.model_event import JanusEvent
-from src.pipeline.factories_factory import JanusFactoriesFactory, _initialize_ai_client_factory
+from src.models.model_event import Sc0redServicesEvent
+from src.pipeline.factories_factory import Sc0redServicesFactoriesFactory, _initialize_ai_client_factory
 
 
-class TestJanusFactoriesFactory:
+class TestSc0redServicesFactoriesFactory:
     @patch("src.pipeline.factories_factory._initialize_ai_client_factory")
     @patch("src.pipeline.factories_factory.CompanyAnalysisFactory")
     def test_create_company_analysis(self, mock_factory_cls, mock_init_ai):
@@ -16,8 +16,8 @@ class TestJanusFactoriesFactory:
         mock_executor = MagicMock()
         mock_factory_cls.return_value.execute_pipeline.return_value = mock_executor
 
-        ff = JanusFactoriesFactory()
-        event = JanusEvent(
+        ff = Sc0redServicesFactoriesFactory()
+        event = Sc0redServicesEvent(
             request_id="req-1",
             request_type="company_analysis",
             url="https://example.com",
@@ -36,8 +36,8 @@ class TestJanusFactoriesFactory:
         mock_executor = MagicMock()
         mock_factory_cls.return_value.execute_pipeline.return_value = mock_executor
 
-        ff = JanusFactoriesFactory()
-        event = JanusEvent(
+        ff = Sc0redServicesFactoriesFactory()
+        event = Sc0redServicesEvent(
             request_id="req-1",
             request_type="portfolio_scan",
             url="https://pefirm.com",
@@ -56,11 +56,11 @@ class TestJanusFactoriesFactory:
 
         company_repo = MagicMock()
         assessment_repo = MagicMock()
-        ff = JanusFactoriesFactory(
+        ff = Sc0redServicesFactoriesFactory(
             company_repo=company_repo,
             assessment_repo=assessment_repo,
         )
-        event = JanusEvent(
+        event = Sc0redServicesEvent(
             request_id="req-1",
             request_type="company_analysis",
             url="https://example.com",

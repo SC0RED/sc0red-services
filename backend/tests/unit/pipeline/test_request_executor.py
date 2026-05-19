@@ -1,4 +1,4 @@
-"""Tests for JanusRequestExecutor."""
+"""Tests for Sc0redServicesRequestExecutor."""
 
 import contextlib
 import logging
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.pipeline.request_executor import JanusRequestExecutor, _format_timing_value
+from src.pipeline.request_executor import Sc0redServicesRequestExecutor, _format_timing_value
 
 
 def _make_mock_step(name):
@@ -18,7 +18,7 @@ def _make_mock_step(name):
 
 class TestRequestExecutor:
     def test_create(self):
-        executor = JanusRequestExecutor(
+        executor = Sc0redServicesRequestExecutor(
             tenant_id="tenant-1",
             request_id="req-1",
             pipeline=[],
@@ -28,20 +28,20 @@ class TestRequestExecutor:
         assert executor.exceptions == []
 
     def test_mark_question_complete(self):
-        executor = JanusRequestExecutor("t", "r", [])
+        executor = Sc0redServicesRequestExecutor("t", "r", [])
         executor.mark_question_complete("extract_profile")
         assert executor.is_question_complete("extract_profile") is True
         assert executor.is_question_complete("assess_risk") is False
 
     def test_mark_multiple_questions(self):
-        executor = JanusRequestExecutor("t", "r", [])
+        executor = Sc0redServicesRequestExecutor("t", "r", [])
         executor.mark_multiple_questions_complete(["step_1", "step_2", "step_3"])
         assert executor.is_question_complete("step_1") is True
         assert executor.is_question_complete("step_2") is True
         assert executor.is_question_complete("step_3") is True
 
     def test_add_details(self):
-        executor = JanusRequestExecutor("t", "r", [])
+        executor = Sc0redServicesRequestExecutor("t", "r", [])
         executor.add_details({"key_a": "value_a"})
         executor.add_details({"key_b": "value_b"})
         assert executor.details["key_a"] == "value_a"
@@ -51,7 +51,7 @@ class TestRequestExecutor:
         step1 = _make_mock_step("Step1")
         step2 = _make_mock_step("Step2")
 
-        executor = JanusRequestExecutor("t", "r", [step1, step2])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1, step2])
         executor.execute_all()
 
         step1.execute.assert_called_once()
@@ -60,7 +60,7 @@ class TestRequestExecutor:
     def test_execute_all_records_timings(self):
         step = _make_mock_step("MockStep")
 
-        executor = JanusRequestExecutor("t", "r", [step])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step])
         executor.execute_all()
 
         assert "MockStep" in executor.step_timings
@@ -69,7 +69,7 @@ class TestRequestExecutor:
         step = _make_mock_step("FailStep")
         step.execute.side_effect = ValueError("test error")
 
-        executor = JanusRequestExecutor("t", "r", [step])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step])
 
         with contextlib.suppress(ValueError):
             executor.execute_all()
@@ -79,7 +79,7 @@ class TestRequestExecutor:
     def test_has_step(self):
         step = _make_mock_step("ExtractProfile")
 
-        executor = JanusRequestExecutor("t", "r", [step])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step])
         assert executor.has_step("ExtractProfile") is True
         assert executor.has_step("NonExistent") is False
 
@@ -88,7 +88,7 @@ class TestRequestExecutor:
         step2 = _make_mock_step("Step2")
         new_step = _make_mock_step("NewStep")
 
-        executor = JanusRequestExecutor("t", "r", [step1, step2])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1, step2])
         executor.add_step_after("Step1", new_step)
 
         assert executor.has_step("NewStep") is True
@@ -98,7 +98,7 @@ class TestRequestExecutor:
         step2 = _make_mock_step("Step2")
         new_step = _make_mock_step("NewStep")
 
-        executor = JanusRequestExecutor("t", "r", [step1, step2])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1, step2])
         executor.add_step_before("Step2", new_step)
 
         assert executor.has_step("NewStep") is True
@@ -107,7 +107,7 @@ class TestRequestExecutor:
         step1 = _make_mock_step("Step1")
         new_step = _make_mock_step("NewStep")
 
-        executor = JanusRequestExecutor("t", "r", [step1])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1])
         with pytest.raises(ValueError, match="not found"):
             executor.add_step_after("Nonexistent", new_step)
 
@@ -115,7 +115,7 @@ class TestRequestExecutor:
         step1 = _make_mock_step("Step1")
         new_step = _make_mock_step("NewStep")
 
-        executor = JanusRequestExecutor("t", "r", [step1])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1])
         with pytest.raises(ValueError, match="not found"):
             executor.add_step_before("Nonexistent", new_step)
 
@@ -123,7 +123,7 @@ class TestRequestExecutor:
         step1 = _make_mock_step("Step1")
         new_step = _make_mock_step("NewStep")
 
-        executor = JanusRequestExecutor("t", "r", [step1])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1])
         mock_accessor = MagicMock()
         executor._entity_accessor = mock_accessor
 
@@ -134,7 +134,7 @@ class TestRequestExecutor:
         step1 = _make_mock_step("Step1")
         new_step = _make_mock_step("NewStep")
 
-        executor = JanusRequestExecutor("t", "r", [step1])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1])
         mock_accessor = MagicMock()
         executor._entity_accessor = mock_accessor
 
@@ -145,7 +145,7 @@ class TestRequestExecutor:
         step1 = _make_mock_step("Step1")
         step2 = _make_mock_step("Step2")
 
-        executor = JanusRequestExecutor("t", "r", [step1, step2])
+        executor = Sc0redServicesRequestExecutor("t", "r", [step1, step2])
         mock_accessor = MagicMock()
         executor.propagate_entity_accessor(mock_accessor)
 
@@ -158,7 +158,7 @@ class TestRequestExecutorAppSyncIntegration:
     def test_mark_question_complete_calls_notify_progress(self, mock_notify: MagicMock) -> None:
         """When mark_question_complete is called with a known key, notify_progress fires."""
         company_repo = MagicMock()
-        executor = JanusRequestExecutor(
+        executor = Sc0redServicesRequestExecutor(
             tenant_id="tenant-1",
             request_id="company-1",
             pipeline=[],
@@ -178,7 +178,7 @@ class TestRequestExecutorAppSyncIntegration:
     @patch("src.pipeline.appsync_notifier.notify_progress")
     def test_mark_question_complete_skips_notify_for_unknown_key(self, mock_notify: MagicMock) -> None:
         """Unknown question keys should not trigger notify_progress."""
-        executor = JanusRequestExecutor(
+        executor = Sc0redServicesRequestExecutor(
             tenant_id="tenant-1",
             request_id="company-1",
             pipeline=[],
@@ -193,7 +193,7 @@ class TestRequestExecutorAppSyncIntegration:
     def test_mark_question_complete_skips_notify_without_scan_id(self, mock_notify: MagicMock) -> None:
         """When scan_id is empty, notify_progress should not be called."""
         company_repo = MagicMock()
-        executor = JanusRequestExecutor(
+        executor = Sc0redServicesRequestExecutor(
             tenant_id="tenant-1",
             request_id="company-1",
             pipeline=[],
@@ -220,7 +220,7 @@ class TestRequestExecutorAppSyncIntegration:
         strategy-map step.
         """
         company_repo = MagicMock()
-        executor = JanusRequestExecutor(
+        executor = Sc0redServicesRequestExecutor(
             tenant_id="tenant-1",
             request_id="company-1",
             pipeline=[],
@@ -266,7 +266,7 @@ class TestFormatTimingValue:
 
     def test_summary_log_renders_mixed_keys_correctly(self, caplog):
         """End-to-end: the summary log line contains both ``s`` and ``tokens`` formats."""
-        executor = JanusRequestExecutor("t", "r", [])
+        executor = Sc0redServicesRequestExecutor("t", "r", [])
         executor.add_details(
             {
                 "GenerateStrategyMap.timings": {

@@ -33,7 +33,7 @@ restore-cascade bug. We restore each one.
 
 Required environment
 --------------------
-  DYNAMODB_TABLE          full table name (e.g. `janus-production`)
+  DYNAMODB_TABLE          full table name (e.g. `sc0red-services-production`)
   AWS_REGION / AWS_DEFAULT_REGION  matching the table's region
   AWS_ENDPOINT_URL        set when running against LocalStack
 

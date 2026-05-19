@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_TABLE_NAME = os.environ.get("DYNAMODB_TABLE", "janus-dev")
+_TABLE_NAME = os.environ.get("DYNAMODB_TABLE", "sc0red-services-dev")
 _repository = OAuthRepository(_TABLE_NAME)
 
 

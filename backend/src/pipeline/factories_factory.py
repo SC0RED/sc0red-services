@@ -1,6 +1,6 @@
 """Central DI wiring — routes events to the correct pipeline factory.
 
-Inspired by engine's PartsFactoriesFactory but simplified for Janus.
+Inspired by engine's PartsFactoriesFactory but simplified for sc0red Services.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnal
 from src.pipeline.pipeline_factories.portfolio_scan_factory import PortfolioScanFactory
 
 if TYPE_CHECKING:
-    from src.models.model_event import JanusEvent
-    from src.pipeline.request_executor import JanusRequestExecutor
+    from src.models.model_event import Sc0redServicesEvent
+    from src.pipeline.request_executor import Sc0redServicesRequestExecutor
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 
@@ -47,7 +47,7 @@ def _initialize_ai_client_factory() -> AIClientFactory:
     return AIClientFactory(composite_service_ops, provider_type=ai_provider)
 
 
-class JanusFactoriesFactory:
+class Sc0redServicesFactoriesFactory:
     """Creates the correct pipeline factory for a given event."""
 
     def __init__(
@@ -61,9 +61,9 @@ class JanusFactoriesFactory:
 
     def create_and_execute(
         self,
-        event: JanusEvent,
+        event: Sc0redServicesEvent,
         document_text: str | None = None,
-    ) -> JanusRequestExecutor:
+    ) -> Sc0redServicesRequestExecutor:
         """Create the appropriate pipeline, execute it, and return the executor."""
         company = Company(
             id=event.request_id,

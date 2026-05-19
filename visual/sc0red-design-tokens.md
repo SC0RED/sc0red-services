@@ -1,7 +1,7 @@
-# sc0red Advisory — design tokens (visual audit reference)
+# sc0red Services — design tokens (visual audit reference)
 
 Extracted from `development.sc0red.com` on 2026-05-19. Per OQ §8 of the
-[`rename-janus-to-sc0red-advisory`](../openspec/changes/rename-janus-to-sc0red-advisory/proposal.md)
+[`rename-sc0red-services-to-sc0red-services`](../openspec/changes/rename-sc0red-services-to-sc0red-services/proposal.md)
 change, this is a **visual audit**, not a Figma extraction — values are
 inspected from the live site's compiled CSS and may differ slightly
 from the original design source.
@@ -30,15 +30,15 @@ from the original design source.
 
 ## Logo asset
 
-- File: `frontend/public/sc0red-advisory-logo.svg`
+- File: `frontend/public/sc0red-services-logo.svg`
 - Source: `https://development.sc0red.com/images/advisory/advisory-mark-on-ink.svg`
-- Variant: "mark on ink" — designed to sit on dark backgrounds (Janus's default theme).
+- Variant: "mark on ink" — designed to sit on dark backgrounds (sc0red Services's default theme).
 - Dimensions: 128×128 viewBox.
 - Three coloured paths (green / blue / white triangles) forming the Advisory mark.
 
-## Mapping to Janus's existing tokens
+## Mapping to sc0red Services's existing tokens
 
-Janus's current accent in `globals.css`:
+sc0red Services's current accent in `globals.css`:
 - `--accent-blue` ≈ `#3b82f6` (Tailwind blue-500 ish)
 - `--accent-blue-glow` ≈ derived from accent-blue
 
@@ -51,6 +51,6 @@ After alignment:
 ## What's out of scope for this visual audit
 
 - Component-by-component restyle. Tokens move; components keep their layout.
-- Custom font swap. Janus already uses Inter; the variants are compatible.
+- Custom font swap. sc0red Services already uses Inter; the variants are compatible.
 - Dark-vs-light theme rewrites. The Advisory mark is on-ink (dark-bg) — fine
-  for Janus's default dark theme.
+  for sc0red Services's default dark theme.

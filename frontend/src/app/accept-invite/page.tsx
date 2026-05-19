@@ -57,7 +57,7 @@ function AcceptInviteContent() {
                 <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Accept Invitation</h1>
                     <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                        Set your password to join sc0red Advisory
+                        Set your password to join sc0red Services
                     </p>
                 </div>
 

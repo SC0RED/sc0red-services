@@ -150,8 +150,8 @@ function ConsentContent() {
                         }}
                     >
                         <Image
-                            src="/sc0red-advisory-logo.svg"
-                            alt="sc0red Advisory"
+                            src="/sc0red-services-logo.svg"
+                            alt="sc0red Services"
                             width={56}
                             height={56}
                             style={{ objectFit: 'contain' }}
@@ -170,7 +170,7 @@ function ConsentContent() {
                             marginBottom: '1.5rem',
                         }}
                     >
-                        <strong>{clientName}</strong> wants to access your sc0red Advisory account
+                        <strong>{clientName}</strong> wants to access your sc0red Services account
                     </p>
 
                     <div

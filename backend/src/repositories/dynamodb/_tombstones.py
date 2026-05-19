@@ -45,7 +45,7 @@ DELETED_BY_FIELD = "deleted_by"
 # site — see `_tombstones.tombstone_attributes` and
 # `client.remove_attributes`. Belt-and-braces.
 #
-# Storage cost: ~5.5% over a flat 90-day TTL. Negligible at Janus
+# Storage cost: ~5.5% over a flat 90-day TTL. Negligible at sc0red Services
 # volumes. User-facing copy stays "90 days recoverable" — the 5
 # extra days are internal margin only.
 TOMBSTONE_TTL_DAYS = 95

@@ -13,7 +13,7 @@
 services:
   dynamodb-local:
     image: amazon/dynamodb-local:latest
-    container_name: janus-dynamodb
+    container_name: sc0red-services-dynamodb
     ports:
       - "8000:8000"
     volumes:
@@ -27,7 +27,7 @@ services:
 
   dynamodb-admin:
     image: aaronshaf/dynamodb-admin:latest
-    container_name: janus-dynamodb-admin
+    container_name: sc0red-services-dynamodb-admin
     ports:
       - "8002:8001"
     environment:
@@ -45,11 +45,11 @@ services:
       dockerfile: Dockerfile
       args:
         GH_TOKEN: ${GH_TOKEN:-}
-    container_name: janus-backend
+    container_name: sc0red-services-backend
     ports:
       - "8001:8001"
     environment:
-      DYNAMODB_TABLE: janus-dev
+      DYNAMODB_TABLE: sc0red-services-dev
       DYNAMODB_ENDPOINT: http://dynamodb-local:8000
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: local
@@ -69,7 +69,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: janus-frontend
+    container_name: sc0red-services-frontend
     ports:
       - "3000:3000"
     environment:
@@ -82,7 +82,7 @@ services:
 
   localstack:
     image: localstack/localstack:3
-    container_name: janus-localstack
+    container_name: sc0red-services-localstack
     profiles: ["localstack"]
     ports:
       - "4566:4566"

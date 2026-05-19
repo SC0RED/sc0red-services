@@ -12,7 +12,7 @@ import { THEME_CHANGE_EVENT } from '@/lib/hooks/useTheme'
  *
  * - On the server / before hydration, returns `fallback`.
  * - On the client, reads `getComputedStyle(html).getPropertyValue(token)`.
- * - Re-resolves on `janus:theme-change`, so charts that consume the value
+ * - Re-resolves on `sc0red-services:theme-change`, so charts that consume the value
  *   re-render with the new palette when the user toggles theme.
  */
 export function useThemedColor(token: string, fallback = ''): string {

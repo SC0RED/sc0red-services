@@ -9,7 +9,7 @@ GSI_COUNT = 5
 
 
 def setup_table(table_name: str, endpoint: str) -> None:
-    """Create the Janus DynamoDB table with GSIs if it does not exist."""
+    """Create the sc0red Services DynamoDB table with GSIs if it does not exist."""
     ddb = boto3.client(
         "dynamodb",
         endpoint_url=endpoint,
@@ -76,7 +76,7 @@ def setup_table(table_name: str, endpoint: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Setup DynamoDB table")
-    parser.add_argument("--table", default="janus-dev")
+    parser.add_argument("--table", default="sc0red-services-dev")
     parser.add_argument("--endpoint", default="http://localhost:8000")
     args = parser.parse_args()
     setup_table(args.table, args.endpoint)

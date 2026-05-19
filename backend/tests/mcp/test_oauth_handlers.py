@@ -16,7 +16,7 @@ def _aws_credentials():
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"  # noqa: S105
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-    os.environ["DYNAMODB_TABLE"] = "janus-test"
+    os.environ["DYNAMODB_TABLE"] = "sc0red-services-test"
     os.environ["ANALYSIS_QUEUE_URL"] = "https://sqs.us-east-1.amazonaws.com/000/test"
 
 
@@ -33,7 +33,7 @@ def setup_dynamo():
     with mock_aws():
         client = boto3.client("dynamodb", region_name="us-east-1")
         client.create_table(
-            TableName="janus-test",
+            TableName="sc0red-services-test",
             KeySchema=[
                 {"AttributeName": "pk", "KeyType": "HASH"},
                 {"AttributeName": "sk", "KeyType": "RANGE"},
@@ -44,7 +44,7 @@ def setup_dynamo():
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        repo = OAuthRepository("janus-test")
+        repo = OAuthRepository("sc0red-services-test")
         repo.save_client("client-1", {
             "client_name": "Test App",
             "redirect_uris": ["http://localhost:12345/callback"],

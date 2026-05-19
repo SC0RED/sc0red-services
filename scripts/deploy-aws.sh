@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Deploy the Janus CDK stack to real AWS.
+# Deploy the sc0red Services CDK stack to real AWS.
 #
 # Usage:
 #   ./scripts/deploy-aws.sh [staging|production]
@@ -85,7 +85,7 @@ ok "CDK bootstrap complete"
 
 # ── Deploy ──────────────────────────────────────────────────────────────────────
 
-STACK_NAME="Janus-${ENVIRONMENT}"
+STACK_NAME="Sc0redServices-${ENVIRONMENT}"
 
 log "Deploying $STACK_NAME to AWS..."
 echo ""
@@ -97,7 +97,7 @@ AMPLIFY_GITHUB_TOKEN="${AMPLIFY_GITHUB_TOKEN:-}" \
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-sk-placeholder}" \
     cdk deploy "$STACK_NAME" \
         --require-approval never \
-        --outputs-file /tmp/janus-aws-outputs.json \
+        --outputs-file /tmp/sc0red-services-aws-outputs.json \
         --context "environment=$ENVIRONMENT" \
         --context "account=$ACCOUNT" \
         --context "region=$REGION"
@@ -105,10 +105,10 @@ ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-sk-placeholder}" \
 # ── Extract outputs ─────────────────────────────────────────────────────────────
 
 API_URL=""
-if [ -f /tmp/janus-aws-outputs.json ]; then
+if [ -f /tmp/sc0red-services-aws-outputs.json ]; then
     API_URL=$(python3 -c "
 import json
-with open('/tmp/janus-aws-outputs.json') as f:
+with open('/tmp/sc0red-services-aws-outputs.json') as f:
     outputs = json.load(f)
 stack = outputs.get('$STACK_NAME', {})
 for key, val in stack.items():

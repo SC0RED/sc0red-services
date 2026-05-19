@@ -90,9 +90,9 @@ jobs:
           cd infrastructure
           CDK_ENVIRONMENT=testing \
           AWS_DEFAULT_REGION="${{ secrets.TEST_AWS_REGION }}" \
-            cdk deploy Janus-testing \
+            cdk deploy Sc0redServices-testing \
               --require-approval never \
-              --outputs-file /tmp/janus-outputs.json \
+              --outputs-file /tmp/sc0red-services-outputs.json \
               --context "environment=testing" \
               --context "account=${{ secrets.TEST_AWS_ACCOUNT_ID }}" \
               --context "region=${{ secrets.TEST_AWS_REGION }}"
@@ -103,9 +103,9 @@ jobs:
           python3 -c "
           import json, sys, os
           try:
-              with open('/tmp/janus-outputs.json') as f:
+              with open('/tmp/sc0red-services-outputs.json') as f:
                   outputs = json.load(f)
-              stack = outputs.get('Janus-testing', {})
+              stack = outputs.get('Sc0redServices-testing', {})
               for key, val in stack.items():
                   if 'ApiUrl' in key:
                       print(f'Backend API URL: {val}')
@@ -195,9 +195,9 @@ jobs:
 
       - name: Run cleanup script
         # No --user-pool-id: the script auto-discovers via the
-        # `janus-users-*` name pattern. Avoids the secret-masking issue
+        # `sc0red-services-users-*` name pattern. Avoids the secret-masking issue
         # with cross-job outputs that previously skipped this step.
         run: |
           python3 scripts/e2e-cleanup.py \
-            --table janus-testing \
+            --table sc0red-services-testing \
             --region "${{ secrets.TEST_AWS_REGION }}"

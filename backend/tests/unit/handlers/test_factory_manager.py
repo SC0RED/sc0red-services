@@ -14,7 +14,7 @@ class TestFactoryManager:
         manager, storage = self._make_manager()
         assert manager.storage is storage
 
-    @patch("src.handlers.factory_manager.JanusFactoriesFactory")
+    @patch("src.handlers.factory_manager.Sc0redServicesFactoriesFactory")
     def test_run_company_analysis(self, mock_factory_cls):
         mock_executor = MagicMock()
         mock_executor.details = {"key": "value"}
@@ -38,7 +38,7 @@ class TestFactoryManager:
         assert result["step_timings"] == {"step1": 1.5}
         assert result["exceptions"] == []
 
-    @patch("src.handlers.factory_manager.JanusFactoriesFactory")
+    @patch("src.handlers.factory_manager.Sc0redServicesFactoriesFactory")
     def test_run_portfolio_discovery(self, mock_factory_cls):
         mock_executor = MagicMock()
         mock_executor.details = {"portfolio_companies": []}
@@ -58,7 +58,7 @@ class TestFactoryManager:
         assert "request_id" in result
         assert result["details"] == {"portfolio_companies": []}
 
-    @patch("src.handlers.factory_manager.JanusFactoriesFactory")
+    @patch("src.handlers.factory_manager.Sc0redServicesFactoriesFactory")
     def test_run_company_analysis_with_exceptions(self, mock_factory_cls):
         mock_executor = MagicMock()
         mock_executor.details = {}

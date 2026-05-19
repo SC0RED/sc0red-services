@@ -22,7 +22,7 @@ def repository():
     with mock_aws():
         client = boto3.client("dynamodb", region_name="us-east-1")
         client.create_table(
-            TableName="janus-test",
+            TableName="sc0red-services-test",
             KeySchema=[
                 {"AttributeName": "pk", "KeyType": "HASH"},
                 {"AttributeName": "sk", "KeyType": "RANGE"},
@@ -33,7 +33,7 @@ def repository():
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        yield OAuthRepository("janus-test")
+        yield OAuthRepository("sc0red-services-test")
 
 
 class TestClientCRUD:

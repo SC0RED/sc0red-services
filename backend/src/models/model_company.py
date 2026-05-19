@@ -1,4 +1,4 @@
-"""Pydantic models for the Janus PE Risk Assessment domain.
+"""Pydantic models for the sc0red Services PE Risk Assessment domain.
 
 Ported from pe-scan/src/lib/ai/prompts.ts interfaces (lines 179-237).
 """

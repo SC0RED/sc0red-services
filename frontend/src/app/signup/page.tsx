@@ -69,32 +69,39 @@ export default function SignupPage() {
                             marginBottom: '0.75rem',
                         }}
                     >
-                        <div
+                        <Image
+                            src="/sc0red-logo-white.svg"
+                            alt="sc0red"
+                            width={158}
+                            height={43}
+                            style={{ height: '40px', width: 'auto' }}
+                            priority
+                        />
+                        <span
                             style={{
-                                width: '56px',
-                                height: '56px',
-                                borderRadius: '12px',
-                                overflow: 'hidden',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0,
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                letterSpacing: '0.2em',
+                                textTransform: 'uppercase',
+                                color: 'var(--text-tertiary)',
+                                paddingLeft: '0.75rem',
+                                marginLeft: '0.25rem',
+                                borderLeft: '1px solid var(--border-subtle)',
                             }}
                         >
-                            <Image
-                                src="/sc0red-advisory-logo.svg"
-                                alt="sc0red Advisory"
-                                width={56}
-                                height={56}
-                                style={{ objectFit: 'contain' }}
-                            />
-                        </div>
-                        <span style={{ fontSize: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-                            sc0red Advisory
+                            Services
                         </span>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
                         Start your AI risk assessment
+                    </p>
+                    <p style={{ marginTop: '0.625rem', fontSize: '0.8125rem' }}>
+                        <a
+                            href="https://www.sc0red.com"
+                            style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}
+                        >
+                            ← Back to sc0red.com
+                        </a>
                     </p>
                 </div>
 

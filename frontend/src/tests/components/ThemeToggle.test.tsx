@@ -36,7 +36,7 @@ describe('ThemeToggle', () => {
 
     it('defaults to Dark highlighted when nothing is persisted', () => {
         // Per `dark-default-theme`, sc0red is dark-first by design — a
-        // user with no `localStorage.janus.theme` lands on Dark, not on
+        // user with no `localStorage.sc0red-services.theme` lands on Dark, not on
         // System. The radio in Settings reflects the rendered theme.
         render(<ThemeToggle />)
         const dark = screen.getByRole('radio', { name: /Dark/i }) as HTMLInputElement

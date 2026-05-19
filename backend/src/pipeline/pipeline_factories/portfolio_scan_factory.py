@@ -13,7 +13,7 @@ from signalfield_core.pipeline.factory import PipelineFactory
 
 from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
 from src.pipeline.pipeline_steps.validate_portfolio import ValidatePortfolioCompanies
-from src.pipeline.request_executor import JanusRequestExecutor
+from src.pipeline.request_executor import Sc0redServicesRequestExecutor
 
 if TYPE_CHECKING:
     from signalfield_core.pipeline.step import RequestStep
@@ -46,10 +46,10 @@ class PortfolioScanFactory(PipelineFactory):
             ValidatePortfolioCompanies(ai_client_factory=self._ai_client_factory),
         ]
 
-    def build_executor(self) -> JanusRequestExecutor:
-        """Build and wire a JanusRequestExecutor with the portfolio scan pipeline."""
+    def build_executor(self) -> Sc0redServicesRequestExecutor:
+        """Build and wire a Sc0redServicesRequestExecutor with the portfolio scan pipeline."""
         pipeline = self.get_pipeline()
-        executor = JanusRequestExecutor(
+        executor = Sc0redServicesRequestExecutor(
             tenant_id=self._tenant_id,
             request_id=self._request_id,
             pipeline=pipeline,
@@ -60,7 +60,7 @@ class PortfolioScanFactory(PipelineFactory):
             step.entity_accessor = self._entity_accessor
         return executor
 
-    def execute_pipeline(self) -> JanusRequestExecutor:
+    def execute_pipeline(self) -> Sc0redServicesRequestExecutor:
         """Build executor, run pipeline, return executor with results."""
         executor = self.build_executor()
         executor.execute_all()

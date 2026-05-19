@@ -80,7 +80,7 @@ class TestPersistResults:
         step._request_executor.mark_question_complete.assert_called_with("persist_results")
 
     def test_persist_writes_created_by_when_user_id_present(self):
-        """`created_by` is written on the company doc when the JanusEvent
+        """`created_by` is written on the company doc when the Sc0redServicesEvent
         carried a user_id through to the pipeline. Read by the activity
         feed for `analysis_completed` events. See
         `openspec/changes/fix-actor-attribution/`.

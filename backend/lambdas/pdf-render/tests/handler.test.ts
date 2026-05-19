@@ -74,8 +74,8 @@ beforeEach(() => {
     mockMarkReady.mockResolvedValue({ ok: true })
     mockMarkFailed.mockResolvedValue({ ok: true })
     // Required env vars for async-mode tests.
-    process.env.PDF_EXPORTS_BUCKET = 'janus-test-pdf-exports'
-    process.env.ASSESSMENT_TABLE = 'janus-test'
+    process.env.PDF_EXPORTS_BUCKET = 'sc0red-services-test-pdf-exports'
+    process.env.ASSESSMENT_TABLE = 'sc0red-services-test'
 })
 
 describe('PDF render Lambda handler', () => {
@@ -257,13 +257,13 @@ describe('PDF render Lambda — async mode (S3 + DynamoDB)', () => {
         expect(result).toBeUndefined()
         expect(mockUploadPdf).toHaveBeenCalledTimes(1)
         expect(mockUploadPdf).toHaveBeenCalledWith({
-            bucket: 'janus-test-pdf-exports',
+            bucket: 'sc0red-services-test-pdf-exports',
             key: 'pdf-exports/a-1.pdf',
             bytes: expect.any(Buffer),
         })
         expect(mockMarkReady).toHaveBeenCalledTimes(1)
         const readyArgs = mockMarkReady.mock.calls[0][0]
-        expect(readyArgs.tableName).toBe('janus-test')
+        expect(readyArgs.tableName).toBe('sc0red-services-test')
         expect(readyArgs.analysisId).toBe('a-1')
         expect(readyArgs.s3Key).toBe('pdf-exports/a-1.pdf')
         expect(readyArgs.inputStartedAt).toBe('2026-05-18T10:00:00+00:00')
