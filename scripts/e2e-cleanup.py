@@ -285,15 +285,15 @@ def main() -> None:
         print("Auto-discovering Cognito user pool...")
         user_pool_id = discover_user_pool_id(cognito)
         if not user_pool_id:
-            print("ERROR: No sc0red-services-users-* user pool found. Pass --user-pool-id explicitly.", file=sys.stderr)
-            sys.exit(1)
+            print("No sc0red-services-users-* user pool found — nothing to clean up. Exiting.")
+            return
 
     if not table_name:
         print("Auto-discovering DynamoDB table...")
         table_name = discover_table_name(dynamodb)
         if not table_name:
-            print("ERROR: No sc0red-services-* table found. Pass --table explicitly.", file=sys.stderr)
-            sys.exit(1)
+            print("No sc0red-services-* table found — nothing to clean up. Exiting.")
+            return
 
     # 1. Find E2E test users in Cognito
     print(f"\nScanning Cognito pool {user_pool_id} for e2e-* users...")

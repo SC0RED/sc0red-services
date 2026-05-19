@@ -48,7 +48,9 @@ def _load_signing_keys() -> tuple[str, str]:
 _private_key, _public_key = _load_signing_keys()
 
 _issuer_url = os.environ.get("MCP_ISSUER_URL", f"https://mcp.{STAGE}.sc0red-services.sc0red.com")
-_consent_base_url = os.environ.get("CONSENT_BASE_URL", f"https://{STAGE}.sc0red-services.sc0red.com")
+_consent_base_url = os.environ.get(
+    "CONSENT_BASE_URL", f"https://{STAGE}.sc0red-services.sc0red.com"
+)
 
 _repository = OAuthRepository(DYNAMODB_TABLE)
 _oauth_provider = Sc0redServicesOAuthProvider(
