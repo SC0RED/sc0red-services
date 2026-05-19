@@ -106,11 +106,7 @@ export default async function LandingPage() {
                     justifyContent: 'space-between',
                 }}
             >
-                <a
-                    href="/"
-                    aria-label="sc0red Services home"
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
+                <a href="/" aria-label="sc0red Services home" style={{ display: 'flex' }}>
                     <Image
                         src="/sc0red-logo-white.svg"
                         alt="sc0red"
@@ -118,20 +114,6 @@ export default async function LandingPage() {
                         height={32}
                         style={{ height: '28px', width: 'auto' }}
                     />
-                    <span
-                        style={{
-                            fontSize: '0.6875rem',
-                            fontWeight: 600,
-                            letterSpacing: '0.18em',
-                            textTransform: 'uppercase',
-                            color: 'var(--text-tertiary)',
-                            marginLeft: '0.25rem',
-                            paddingLeft: '0.625rem',
-                            borderLeft: '1px solid var(--border-subtle)',
-                        }}
-                    >
-                        Services
-                    </span>
                 </a>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                     <a
