@@ -42,7 +42,7 @@ export default function LoginPage() {
             <div className="w-full max-w-sm">
                 {/* Logo */}
                 <div className="text-center mb-xl">
-                    <div className="inline-flex items-center gap-sm mb-sm">
+                    <div className="inline-flex items-center mb-sm">
                         <Image
                             src="/sc0red-logo-white.svg"
                             alt="sc0red"
@@ -51,20 +51,6 @@ export default function LoginPage() {
                             style={{ height: '40px', width: 'auto' }}
                             priority
                         />
-                        <span
-                            style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                letterSpacing: '0.2em',
-                                textTransform: 'uppercase',
-                                color: 'var(--text-tertiary)',
-                                paddingLeft: '0.75rem',
-                                marginLeft: '0.25rem',
-                                borderLeft: '1px solid var(--border-subtle)',
-                            }}
-                        >
-                            Services
-                        </span>
                     </div>
                     <p className="text-secondary" style={{ fontSize: '0.9375rem' }}>
                         AI Risk &amp; Strategic Intelligence
