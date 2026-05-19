@@ -120,14 +120,14 @@ export default async function LandingPage() {
                         }}
                     >
                         <Image
-                            src="/sc0red-advisory-logo.svg"
-                            alt="sc0red Advisory"
+                            src="/sc0red-services-logo.svg"
+                            alt="sc0red Services"
                             width={40}
                             height={40}
                             style={{ objectFit: 'contain' }}
                         />
                     </div>
-                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>sc0red Advisory</span>
+                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>sc0red Services</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <Link href="/login" className="btn btn-ghost btn-sm">
@@ -205,7 +205,7 @@ export default async function LandingPage() {
                             lineHeight: 1.7,
                         }}
                     >
-                        sc0red Advisory analyzes your portfolio companies for AI-driven disruption risks and
+                        sc0red Services analyzes your portfolio companies for AI-driven disruption risks and
                         generates specific, tactical roadmaps to defend and grow.
                     </p>
                     <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -265,7 +265,7 @@ export default async function LandingPage() {
                             )}
                         </div>
                         <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                            sc0red Advisory Analysis — Acme Financial Services
+                            sc0red Services Analysis — Acme Financial Services
                         </span>
                     </div>
                     <div
@@ -455,7 +455,7 @@ export default async function LandingPage() {
                         Understand your AI risk today
                     </h2>
                     <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.7 }}>
-                        Join PE firms and operators using sc0red Advisory to identify AI threats and build
+                        Join PE firms and operators using sc0red Services to identify AI threats and build
                         defensible, AI-native business strategies.
                     </p>
                     <Link
@@ -473,7 +473,7 @@ export default async function LandingPage() {
                 style={{ padding: '2rem', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}
             >
                 <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
-                    © 2026 sc0red Advisory · AI Risk & Strategic Intelligence
+                    © 2026 sc0red Services · AI Risk & Strategic Intelligence
                 </p>
             </footer>
 

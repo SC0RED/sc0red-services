@@ -1,12 +1,12 @@
-# sc0red Advisory (codebase: `janus`)
+# sc0red Services (codebase: `janus`)
 
-The customer-facing product is **sc0red Advisory** — a SaaS platform that helps private equity firms assess AI disruption risk across their portfolio companies. Given a portfolio URL or a single company URL, sc0red Advisory scrapes the company, runs a 6-step AI analysis pipeline, and produces a scored risk report with actionable investment opportunities.
+The customer-facing product is **sc0red Services** — a SaaS platform that helps private equity firms assess AI disruption risk across their portfolio companies. Given a portfolio URL or a single company URL, sc0red Services scrapes the company, runs a 6-step AI analysis pipeline, and produces a scored risk report with actionable investment opportunities.
 
-## Naming convention: sc0red Advisory (customer) vs. janus (internal)
+## Naming convention: sc0red Services (customer) vs. janus (internal)
 
-Customer-facing brand: **sc0red Advisory**. Internal codebase, repo, AWS resources, CDK stack names, Python / Node package names, Docker containers, the local dev DynamoDB table, and the `localStorage.janus.theme` storage key all retain the **`janus-*`** naming. This is intentional — renaming infrastructure resources would require risky data migrations for zero customer value. See `openspec/changes/rename-janus-to-sc0red-advisory/` for the full rationale.
+Customer-facing brand: **sc0red Services**. Internal codebase, repo, AWS resources, CDK stack names, Python / Node package names, Docker containers, the local dev DynamoDB table, and the `localStorage.janus.theme` storage key all retain the **`janus-*`** naming. This is intentional — renaming infrastructure resources would require risky data migrations for zero customer value. See `openspec/changes/rename-janus-to-sc0red-services/` for the full rationale.
 
-If you're editing customer-visible text, use **sc0red Advisory**. If you're editing infrastructure or internal symbols, the `janus-*` family stays.
+If you're editing customer-visible text, use **sc0red Services**. If you're editing infrastructure or internal symbols, the `janus-*` family stays.
 
 ---
 

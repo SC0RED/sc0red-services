@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 /**
- * Theme system for the sc0red Advisory webapp.
+ * Theme system for the sc0red Services webapp.
  *
  * Three user-facing modes are persisted under `localStorage.janus.theme` (the
  * storage key keeps the internal `janus.*` namespace to avoid invalidating

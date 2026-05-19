@@ -72,9 +72,9 @@ _authentication_settings = AuthSettings(
 
 
 mcp = FastMCP(
-    name="sc0red Advisory",
+    name="sc0red Services",
     instructions=(
-        "sc0red Advisory is a PE AI Risk Intelligence Platform. Use these tools to analyze "
+        "sc0red Services is a PE AI Risk Intelligence Platform. Use these tools to analyze "
         "companies for AI-driven risks and opportunities, manage portfolio scans, and "
         "generate reports."
     ),

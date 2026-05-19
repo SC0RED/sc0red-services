@@ -16,11 +16,11 @@ test.describe('health checks', () => {
         const page = await context.newPage()
         await page.goto('/')
         // Without a session, the app should show either the login page or
-        // marketing landing. The brand string is `sc0red Advisory` post-
+        // marketing landing. The brand string is `sc0red Services` post-
         // Phase-1 rebrand (was `Janus`); kept as an alternation rather than
         // an exact match so a future rename doesn't silently mask a real
         // outage.
-        await expect(page.getByText(/Welcome back|Sign in|sc0red Advisory/)).toBeVisible({
+        await expect(page.getByText(/Welcome back|Sign in|sc0red Services/)).toBeVisible({
             timeout: 15000,
         })
         await context.close()

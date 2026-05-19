@@ -1,7 +1,7 @@
-# sc0red Advisory — design tokens (visual audit reference)
+# sc0red Services — design tokens (visual audit reference)
 
 Extracted from `development.sc0red.com` on 2026-05-19. Per OQ §8 of the
-[`rename-janus-to-sc0red-advisory`](../openspec/changes/rename-janus-to-sc0red-advisory/proposal.md)
+[`rename-janus-to-sc0red-services`](../openspec/changes/rename-janus-to-sc0red-services/proposal.md)
 change, this is a **visual audit**, not a Figma extraction — values are
 inspected from the live site's compiled CSS and may differ slightly
 from the original design source.
@@ -30,7 +30,7 @@ from the original design source.
 
 ## Logo asset
 
-- File: `frontend/public/sc0red-advisory-logo.svg`
+- File: `frontend/public/sc0red-services-logo.svg`
 - Source: `https://development.sc0red.com/images/advisory/advisory-mark-on-ink.svg`
 - Variant: "mark on ink" — designed to sit on dark backgrounds (Janus's default theme).
 - Dimensions: 128×128 viewBox.

@@ -1,10 +1,10 @@
-# sc0red Advisory (codebase: `janus`) — Claude Code Instructions
+# sc0red Services (codebase: `janus`) — Claude Code Instructions
 
-## Naming convention: sc0red Advisory (customer) vs. janus (internal)
+## Naming convention: sc0red Services (customer) vs. janus (internal)
 
-The customer-facing product is **sc0red Advisory** — that's the brand string on every page, page title, email body, PDF cover, and footer. The underlying codebase is **janus**: the GitHub repo (`SC0RED/janus`), every AWS resource (Lambda, DynamoDB, SQS, IAM roles, log groups, Secrets Manager paths, CloudWatch dashboards), the CDK stack names (`Janus-development`, `Janus-staging`, `Janus-production`), Python / Node package names (`janus-backend`, `janus-frontend`), Docker container names, the local dev DynamoDB table (`janus-dev`), the storage key `localStorage.janus.theme`, and the test fixtures all retain the `janus-*` naming. This is **intentional, not a TODO** — see `openspec/changes/rename-janus-to-sc0red-advisory/` for the full rationale (renaming infra resources would require risky data migrations for zero customer value).
+The customer-facing product is **sc0red Services** — that's the brand string on every page, page title, email body, PDF cover, and footer. The underlying codebase is **janus**: the GitHub repo (`SC0RED/janus`), every AWS resource (Lambda, DynamoDB, SQS, IAM roles, log groups, Secrets Manager paths, CloudWatch dashboards), the CDK stack names (`Janus-development`, `Janus-staging`, `Janus-production`), Python / Node package names (`janus-backend`, `janus-frontend`), Docker container names, the local dev DynamoDB table (`janus-dev`), the storage key `localStorage.janus.theme`, and the test fixtures all retain the `janus-*` naming. This is **intentional, not a TODO** — see `openspec/changes/rename-janus-to-sc0red-services/` for the full rationale (renaming infra resources would require risky data migrations for zero customer value).
 
-If you're editing customer-visible text (a page, an email template, a PDF component, a brand string in CSS), use **sc0red Advisory**. If you're editing infrastructure, package metadata, or internal symbol names, the `janus-*` family stays.
+If you're editing customer-visible text (a page, an email template, a PDF component, a brand string in CSS), use **sc0red Services**. If you're editing infrastructure, package metadata, or internal symbol names, the `janus-*` family stays.
 
 ## MANDATORY: Architecture Review Gate
 

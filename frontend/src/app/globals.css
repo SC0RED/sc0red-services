@@ -20,7 +20,7 @@
     --border-subtle: rgba(255, 255, 255, 0.06);
 
     /* Accent
-     * Primary blue aligned with the sc0red Advisory brand
+     * Primary blue aligned with the sc0red Services brand
      * (sc0red-blue = #3a77ff on development.sc0red.com). See
      * visual/sc0red-design-tokens.md for the visual-audit source. */
     --accent-blue: #3a77ff;

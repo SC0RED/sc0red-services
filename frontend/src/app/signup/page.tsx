@@ -82,15 +82,15 @@ export default function SignupPage() {
                             }}
                         >
                             <Image
-                                src="/sc0red-advisory-logo.svg"
-                                alt="sc0red Advisory"
+                                src="/sc0red-services-logo.svg"
+                                alt="sc0red Services"
                                 width={56}
                                 height={56}
                                 style={{ objectFit: 'contain' }}
                             />
                         </div>
                         <span style={{ fontSize: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-                            sc0red Advisory
+                            sc0red Services
                         </span>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
