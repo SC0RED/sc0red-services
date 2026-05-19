@@ -10,14 +10,14 @@ categorisation come in a separate Round 2 call per title.
 **Vision**: {vision_statement}
 **Customer Value Proposition** (from Step 2): {value_proposition}
 
-**EBITDA tree** (already produced by Janus):
+**EBITDA tree** (already produced by the analysis pipeline):
 {ebitda_tree}
 
 **Top-level revenue / EBITDA estimates**:
 - Revenue estimate: {revenue_estimate}
 - EBITDA estimate: {ebitda_estimate}
 
-**Top opportunities** (already classified by Janus):
+**Top opportunities** (already classified by the analysis pipeline):
 {top_opportunities}
 
 ## Your task

@@ -72,10 +72,11 @@ _authentication_settings = AuthSettings(
 
 
 mcp = FastMCP(
-    name="Janus",
+    name="sc0red Advisory",
     instructions=(
-        "Janus is a PE AI Risk Intelligence Platform. Use these tools to analyze companies "
-        "for AI-driven risks and opportunities, manage portfolio scans, and generate reports."
+        "sc0red Advisory is a PE AI Risk Intelligence Platform. Use these tools to analyze "
+        "companies for AI-driven risks and opportunities, manage portfolio scans, and "
+        "generate reports."
     ),
     auth_server_provider=_oauth_provider,
     auth=_authentication_settings,

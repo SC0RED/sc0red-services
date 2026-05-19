@@ -150,11 +150,11 @@ function ConsentContent() {
                         }}
                     >
                         <Image
-                            src="/janus-logo.png"
-                            alt="Janus"
+                            src="/sc0red-advisory-logo.svg"
+                            alt="sc0red Advisory"
                             width={56}
                             height={56}
-                            style={{ objectFit: 'cover' }}
+                            style={{ objectFit: 'contain' }}
                         />
                     </div>
                 </div>
@@ -170,7 +170,7 @@ function ConsentContent() {
                             marginBottom: '1.5rem',
                         }}
                     >
-                        <strong>{clientName}</strong> wants to access your Janus account
+                        <strong>{clientName}</strong> wants to access your sc0red Advisory account
                     </p>
 
                     <div

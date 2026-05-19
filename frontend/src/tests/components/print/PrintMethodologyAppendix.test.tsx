@@ -46,7 +46,7 @@ describe('PrintMethodologyAppendix', () => {
         render(<PrintMethodologyAppendix analysis={baseAnalysis} />)
         expect(screen.getByText('Model & Pipeline')).toBeInTheDocument()
         expect(screen.getByText('Scoring Rubric')).toBeInTheDocument()
-        expect(screen.getByText(/sc0red AI Risk Engine/)).toBeInTheDocument()
+        expect(screen.getByText(/sc0red Advisory using a structured 6-step/)).toBeInTheDocument()
         expect(screen.getByText(/0–10 scale across eight standard categories/)).toBeInTheDocument()
     })
 })

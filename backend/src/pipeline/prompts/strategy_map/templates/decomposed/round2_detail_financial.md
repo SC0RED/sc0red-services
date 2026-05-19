@@ -9,7 +9,7 @@ definition that differentiates this objective from its siblings.
 **Company name**: {company_name}
 **Customer Value Proposition** (from Step 2): {value_proposition}
 
-**EBITDA tree** (already produced by Janus):
+**EBITDA tree** (already produced by the analysis pipeline):
 {ebitda_tree}
 
 **Top opportunities**:

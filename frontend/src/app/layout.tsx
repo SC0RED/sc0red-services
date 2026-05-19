@@ -6,7 +6,7 @@ import RouteProgress from '@/components/ui/RouteProgress'
 import WebVitals from '@/components/WebVitals'
 
 export const metadata: Metadata = {
-    title: 'Janus — AI Risk & Opportunity Platform',
+    title: 'sc0red Advisory — AI Risk & Strategic Intelligence',
     description:
         'Identify AI-driven risks and opportunities across your portfolio with actionable intelligence powered by AI',
 }

@@ -1,32 +1,32 @@
 ## ADDED Requirements
 
-### Requirement: Customer-facing product name is "Vector Advisory"
+### Requirement: Customer-facing product name is "sc0red Advisory"
 
-Every customer-facing surface — page titles, marketing landing page, login / signup / oauth-authorize / accept-invite pages, sidebar brand block, settings copy, email templates, alt text on logo images, and footer copy — SHALL use the brand name "Vector Advisory" instead of "Janus". Internal-facing strings (Python / Node package names, AWS resource names, CDK stack identifiers, Docker container names, file paths, code comments describing the codebase, source-control repository name, internal docstrings) SHALL retain their existing names — the rename is a positioning bet, not an architectural change.
+Every customer-facing surface — page titles, marketing landing page, login / signup / oauth-authorize / accept-invite pages, sidebar brand block, settings copy, email templates, alt text on logo images, and footer copy — SHALL use the brand name "sc0red Advisory" instead of "Janus". Internal-facing strings (Python / Node package names, AWS resource names, CDK stack identifiers, Docker container names, file paths, code comments describing the codebase, source-control repository name, internal docstrings) SHALL retain their existing names — the rename is a positioning bet, not an architectural change.
 
 #### Scenario: Page title reflects the new brand
 
 - **WHEN** a user loads any authenticated page in the application
-- **THEN** the browser tab title contains "Vector Advisory"
+- **THEN** the browser tab title contains "sc0red Advisory"
 - **AND** does not contain "Janus"
 
-#### Scenario: Sidebar shows the Vector Advisory wordmark
+#### Scenario: Sidebar shows the sc0red Advisory wordmark
 
 - **WHEN** a logged-in user views the dashboard sidebar
-- **THEN** the brand block displays "Vector Advisory" as the product name
-- **AND** the alt text on the logo image is "Vector Advisory"
+- **THEN** the brand block displays "sc0red Advisory" as the product name
+- **AND** the alt text on the logo image is "sc0red Advisory"
 
-#### Scenario: Marketing landing page describes the product as Vector Advisory
+#### Scenario: Marketing landing page describes the product as sc0red Advisory
 
 - **WHEN** an unauthenticated visitor opens the marketing landing page
-- **THEN** the hero, body copy, and footer reference "Vector Advisory"
-- **AND** the footer copyright line reads "© <year> Vector Advisory · …"
+- **THEN** the hero, body copy, and footer reference "sc0red Advisory"
+- **AND** the footer copyright line reads "© <year> sc0red Advisory · …"
 
-#### Scenario: Invitation email uses Vector Advisory branding
+#### Scenario: Invitation email uses sc0red Advisory branding
 
 - **WHEN** a team member is invited and an invitation email is sent
-- **THEN** the email subject, header brand element, body copy, and footer reference "Vector Advisory"
-- **AND** the previous "Janus by SignalField — AI Risk Intelligence for Private Equity" footer is replaced with the Vector Advisory equivalent
+- **THEN** the email subject, header brand element, body copy, and footer reference "sc0red Advisory"
+- **AND** the previous "Janus by SignalField — AI Risk Intelligence for Private Equity" footer is replaced with the sc0red Advisory equivalent
 
 #### Scenario: Internal resource names are unchanged
 
@@ -36,32 +36,32 @@ Every customer-facing surface — page titles, marketing landing page, login / s
 - **AND** CDK stack names (`Janus-development`, `Janus-staging`) are unchanged
 - **AND** the source repository remains `SC0RED/janus`
 
-### Requirement: Customer-facing host is `vector.sc0red.com` (with old-host redirect for 90 days)
+### Requirement: Customer-facing host is `advisory.sc0red.com` (with old-host redirect for 90 days)
 
-The customer-facing application SHALL be served from a Vector-Advisory-branded host per environment:
+The customer-facing application SHALL be served from a sc0red Advisory-branded host per environment:
 
-- Development: `dev.vector.sc0red.com`
-- Testing: `testing.vector.sc0red.com`
-- Production: `vector.sc0red.com`
+- Development: `dev.advisory.sc0red.com`
+- Testing: `testing.advisory.sc0red.com`
+- Production: `advisory.sc0red.com`
 
-The previous Janus hosts (`dev.janus.sc0red.com`, `testing.janus.sc0red.com`, `janus.sc0red.com`) SHALL serve HTTP 301 redirects to the corresponding Vector path for at least 90 days after the production cutover. After that window the old hosts MAY be decommissioned.
+The previous Janus hosts (`dev.janus.sc0red.com`, `testing.janus.sc0red.com`, `janus.sc0red.com`) SHALL serve HTTP 301 redirects to the corresponding sc0red Advisory path for at least 90 days after the production cutover. After that window the old hosts MAY be decommissioned.
 
-#### Scenario: Vector Advisory loads from the new host
+#### Scenario: sc0red Advisory loads from the new host
 
-- **WHEN** a user navigates to `https://dev.vector.sc0red.com`
-- **THEN** the application loads and serves the Vector-Advisory-branded experience
+- **WHEN** a user navigates to `https://dev.advisory.sc0red.com`
+- **THEN** the application loads and serves the sc0red Advisory-branded experience
 - **AND** Cognito authentication, scans, analyses, and PDF export all work end-to-end
 
-#### Scenario: Old Janus URL redirects to the matching Vector path
+#### Scenario: Old Janus URL redirects to the matching sc0red Advisory path
 
 - **WHEN** a user navigates to `https://dev.janus.sc0red.com/analysis/abc-123`
-- **THEN** the response is HTTP 301 with `Location: https://dev.vector.sc0red.com/analysis/abc-123`
+- **THEN** the response is HTTP 301 with `Location: https://dev.advisory.sc0red.com/analysis/abc-123`
 - **AND** the user lands on the matching path on the new host
 
 #### Scenario: NextAuth callback URLs accept the new host
 
-- **WHEN** a user signs in on the Vector host
-- **THEN** the Cognito redirect URI for that environment includes `https://dev.vector.sc0red.com/api/auth/callback/cognito` (and the testing / production equivalents)
+- **WHEN** a user signs in on the new sc0red Advisory host
+- **THEN** the Cognito redirect URI for that environment includes `https://dev.advisory.sc0red.com/api/auth/callback/cognito` (and the testing / production equivalents)
 - **AND** the NextAuth flow completes without redirect-mismatch errors
 
 ### Requirement: Analysis page renders sections in advisory-narrative order

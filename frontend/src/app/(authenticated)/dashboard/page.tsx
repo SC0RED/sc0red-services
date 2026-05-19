@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/ui'
 import RelativeTime from '@/components/ui/RelativeTime'
 import { canDeleteScan, displayedCompanyCount } from '@/lib/utils/scanStatus'
 
-export const metadata: Metadata = { title: 'Dashboard — Janus' }
+export const metadata: Metadata = { title: 'Dashboard — sc0red Advisory' }
 
 export default async function DashboardPage() {
     const session = await getServerSession(authOptions)
