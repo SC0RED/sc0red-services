@@ -1,124 +1,161 @@
 # janus → sc0red-services AWS Migration Plan
 
-**Status:** Drafted 2026-05-19, targeting Thursday 2026-05-21 cutover.
-**Owner:** Engineering Team (Production Approver gates prod stage).
+**Status:** Drafted 2026-05-19. Customer-facing rebrand already live at https://services.sc0red.ai/ via a custom-domain bolt-on against the existing `janus-frontend-staging` Amplify app. The remaining work is migrating the underlying AWS resources to the renamed CDK definitions.
 
-The repo and code identifiers have already been renamed (see commit `72e294b refactor: rename Janus to sc0red Services`). This document covers the AWS-side migration: standing up new `sc0red-services-{env}` resources, moving data over from the existing `janus-{env}` resources, and cutting traffic over from `janus.sc0red.ai` to `services.sc0red.ai`.
+**Owner:** Engineering Team.
 
 ---
 
-## Decisions
+## Reality check (verified 2026-05-19)
 
-| Decision | Choice | Rationale |
+The earlier draft of this plan assumed dev / testing / production environments and a phased rollout. **Only one environment is actually deployed**:
+
+| Fact | Value |
+|---|---|
+| Deployed environments | `staging` only (no `development`, no `testing`, no `production` CFN stacks exist) |
+| AWS account / region | `sc0red-dev` (484719706337), `us-east-1` |
+| CFN stack | `Janus-staging` |
+| DynamoDB table | `janus-staging`: **1,432 items, 4.7 MB** |
+| Cognito pool | `janus-users-staging` (`us-east-1_QVnt9HTwO`): **2 users** — vedratna.velani@sc0red.com (CONFIRMED), zack.walmer@sc0red.com (FORCE_CHANGE_PASSWORD) |
+| Amplify app | `janus-frontend-staging` (`d3s20952i7opqs`), branch `development` |
+| Current API | `https://2r4vvvgech.execute-api.us-east-1.amazonaws.com/staging/` |
+| Current frontend URLs | `https://development.d3s20952i7opqs.amplifyapp.com` and `https://services.sc0red.ai/` (CNAME added 2026-05-19) |
+| Custom domain status | `services.sc0red.ai` AVAILABLE on Amplify, cert validated via cross-account DNS in `sc0red-prod` Route53 |
+| GHA deploy role | `GitHubActionsDeployRole` (484719706337) — `AdministratorAccess`. Trust: `repo:SC0RED/*` wildcard, survives repo rename. |
+| Old domain | `janus.sc0red.ai` was NEVER configured — no DNS record exists. No 301 redirect needed. |
+
+**Implication:** The migration is much smaller than the dev → testing → production cadence originally drafted. A single coordinated maintenance window against staging completes the entire rollout.
+
+---
+
+## Resource mapping (Janus-staging → Sc0redServices-staging)
+
+| Resource | Old | New |
 |---|---|---|
-| Approach | Fresh stack, parallel run, one-shot cutover | Cleaner than rename-in-place (CloudFormation can't rename most resource types). Old stack stays warm until verified. |
-| Data migration timing | Offline window (~15 min) on cutover day | DynamoDB writes are infrequent enough that a brief read-only window beats dual-write complexity for a 2-day project. |
-| Cognito users | Re-create via invitation flow | LowCount (`<50` users across envs); cleaner than User Pool import. Users get a "re-verify your email" notice. |
-| S3 documents | Copy via `s3 sync` | Static reports are immutable; one-shot copy is safe. |
-| DNS | Add `services.sc0red.ai` first, keep `janus.sc0red.ai` as a permanent 301 → services for 30 days | Email links and bookmarks won't break overnight. |
-| Old resources | Retain for 14 days post-cutover, then teardown | Recovery window if migration surfaces issues. |
+| CFN Stack | `Janus-staging` | `Sc0redServices-staging` |
+| DynamoDB | `janus-staging` | `sc0red-services-staging` |
+| Lambda — API | `janus-api-staging` | `sc0red-services-api-staging` |
+| Lambda — Worker | `janus-worker-staging` | `sc0red-services-worker-staging` |
+| Lambda — Cognito custom message | `janus-cognito-custom-message-staging` | `sc0red-services-cognito-custom-message-staging` |
+| Lambda — PDF render | `janus-pdf-render-staging` | `sc0red-services-pdf-render-staging` |
+| Lambda — Strategy map worker | `janus-strategy-map-worker-staging` | `sc0red-services-strategy-map-worker-staging` |
+| Lambda — MCP | `janus-mcp-staging` | `sc0red-services-mcp-staging` |
+| API Gateway | `janus-api-staging` | `sc0red-services-api-staging` |
+| SQS Queue | `janus-analysis-queue-staging` | `sc0red-services-analysis-queue-staging` |
+| SQS DLQ | `janus-analysis-dlq-staging` | `sc0red-services-analysis-dlq-staging` |
+| S3 Bucket | `janus-documents-staging` | `sc0red-services-documents-staging` |
+| Cognito Pool | `janus-users-staging` | `sc0red-services-users-staging` |
+| Cognito Client | `janus-web-staging` | `sc0red-services-web-staging` |
+| Amplify App | `janus-frontend-staging` | `sc0red-services-frontend-staging` |
+| AppSync | `janus-progress-staging` | `sc0red-services-progress-staging` |
+| Secret | `janus-mcp-signing-key-staging` | `sc0red-services-mcp-signing-key-staging` |
 
 ---
 
-## Resources being replaced
+## Cutover sequence
 
-Mapping from old (current) to new (post-rename CDK output) names.
+Estimated wall-clock: **~30 min including verification.** No team-wide downtime since the only users are the migration's own coordinators.
 
-| Resource type | Old name | New name |
-|---|---|---|
-| CloudFormation Stack | `Janus-{env}` | `Sc0redServices-{env}` |
-| DynamoDB Table | `janus-{env}` | `sc0red-services-{env}` |
-| Lambda — API | `janus-api-{env}` | `sc0red-services-api-{env}` |
-| Lambda — Worker | `janus-worker-{env}` | `sc0red-services-worker-{env}` |
-| Lambda — Cognito custom message | `janus-cognito-custom-message-{env}` | `sc0red-services-cognito-custom-message-{env}` |
-| API Gateway | `janus-api-{env}` | `sc0red-services-api-{env}` |
-| SQS Queue | `janus-analysis-queue-{env}` | `sc0red-services-analysis-queue-{env}` |
-| SQS DLQ | `janus-analysis-dlq-{env}` | `sc0red-services-analysis-dlq-{env}` |
-| S3 Bucket | `janus-documents-{env}` | `sc0red-services-documents-{env}` |
-| Cognito User Pool | `janus-users-{env}` | `sc0red-services-users-{env}` |
-| Cognito App Client | `janus-web-{env}` | `sc0red-services-web-{env}` |
-| Amplify App | `janus-frontend-{env}` | `sc0red-services-frontend-{env}` |
-| AppSync API | `janus-progress-{env}` | `sc0red-services-progress-{env}` |
-| CloudWatch Log Group | `/aws/lambda/janus-*` | `/aws/lambda/sc0red-services-*` |
-| Custom domain | `janus.sc0red.ai` | `services.sc0red.ai` |
+### Phase 0 — Pre-flight (any time before cutover)
 
----
+1. **Notify the 2 users** (Vedratna + Zack) on Slack/email: "services.sc0red.ai is being rebuilt against new AWS infrastructure between {start} and {end}. You'll get a password-reset email from Cognito under the new pool — re-set and continue."
+2. **Snapshot DynamoDB**: `aws dynamodb create-backup --table-name janus-staging --backup-name pre-rename-$(date +%s) --profile sc0red-dev`.
+3. **Dump Cognito users** for re-creation:
+   ```bash
+   aws --profile sc0red-dev cognito-idp list-users --user-pool-id us-east-1_QVnt9HTwO \
+     --query 'Users[].{u:Username,email:Attributes[?Name==`email`].Value|[0],attrs:Attributes}' \
+     --output json > /tmp/cognito-users.json
+   ```
 
-## Migration sequence
+### Phase 1 — Cutover
 
-### Phase 0 — Pre-flight (before cutover day)
-
-Run in each environment in this order: `development` → `testing` → `production`. Don't proceed to next env until previous is verified end-to-end.
-
-1. **Stand up the new CDK stack alongside the old one.** Both `Janus-{env}` and `Sc0redServices-{env}` exist in parallel. The new stack creates empty `sc0red-services-*` resources. No traffic is routed to it yet.
+1. **Deploy the renamed CDK stack alongside the old one.** The new stack creates fresh `sc0red-services-*` resources. The old `Janus-staging` stack remains untouched.
    ```bash
    cd infrastructure
-   CDK_ENVIRONMENT={env} AWS_PROFILE=sc0red-{env} uv run cdk deploy Sc0redServices-{env}
+   CDK_ENVIRONMENT=staging \
+   AMPLIFY_GITHUB_TOKEN=$(gh auth token) \
+   NEXTAUTH_SECRET=$(openssl rand -base64 32) \
+   AWS_PROFILE=sc0red-dev \
+   uv run cdk deploy Sc0redServices-staging
    ```
-2. **Smoke-test the new stack in isolation.** Hit the new API Gateway URL directly with a test JWT, write a synthetic DynamoDB record, run a single-company analysis through the new worker Lambda, verify the document lands in the new S3 bucket. Use `scripts/e2e-test.sh` pointed at the new API URL.
-3. **Provision the DNS record `services.sc0red.ai`** in Route53 pointing at the new Amplify branch. TTL 60s to keep cutover nimble.
+   (~5–10 min on first deploy due to Lambda Docker bundling.)
 
-### Phase 1 — Cutover day (Thursday 2026-05-21)
+2. **Stop the old worker from accepting new SQS messages.**
+   ```bash
+   aws --profile sc0red-dev lambda put-function-concurrency \
+     --function-name janus-worker-staging --reserved-concurrent-executions 0
+   ```
+   Drain the old queue (wait until `ApproximateNumberOfMessages` and `ApproximateNumberOfMessagesNotVisible` both hit 0).
 
-**Coordinated maintenance window. Estimated time: 30 min including verification.**
+3. **Copy DynamoDB items** (1,432 items, runs in seconds):
+   ```bash
+   python3 scripts/migrate_dynamodb.py \
+     --src-table janus-staging \
+     --dst-table sc0red-services-staging \
+     --profile sc0red-dev
+   ```
+   *(Script to be written — straight `Scan` with `Limit=25` + `BatchWriteItem` loop. ~50 lines.)* Verify: `aws dynamodb scan --select COUNT` on both tables should match.
 
-1. **Communicate downtime** to the small user base (Slack #services-launch + status banner on `janus.sc0red.ai`).
-2. **Stop the old worker Lambda from picking up new SQS messages.** Set `janus-worker-{env}` reserved concurrency to 0. Drain the old `janus-analysis-queue-{env}` (wait for `ApproximateNumberOfMessagesNotVisible` to reach 0). This makes the system read-only.
-3. **Snapshot the old DynamoDB table.** `aws dynamodb create-backup --table-name janus-{env} --backup-name pre-migration-{timestamp}`.
-4. **Copy DynamoDB data** from `janus-{env}` to `sc0red-services-{env}`:
-   - Use AWS Data Pipeline OR a one-shot Python script that `Scan`s the source table with `Limit=25` pagination and `BatchWriteItem`s into the target. ~`O(N)` rows, batched 25 at a time, should run under 5 min for the current row count.
-   - Verify item count: `aws dynamodb describe-table --table-name {old,new}` and compare `ItemCount` (note: ItemCount is updated every ~6h, so also do `aws dynamodb scan --select COUNT` on both).
-5. **Copy S3 documents:** `aws s3 sync s3://janus-documents-{env}/ s3://sc0red-services-documents-{env}/`.
-6. **Migrate Cognito users:**
-   - Export users from `janus-users-{env}`: `aws cognito-idp list-users --user-pool-id {old}` → CSV.
-   - For each user, call `AdminCreateUser` on `sc0red-services-users-{env}` with `MessageAction=SUPPRESS` (don't email yet).
-   - Send a custom "your sc0red Services account is ready, please reset your password" email via the new pool's invitation flow.
-   - Anyone mid-session in the old app will be logged out (different JWT issuer, intentional).
-7. **Flip DNS:** Update Amplify domain association so `services.sc0red.ai` points at `sc0red-services-frontend-{env}` Amplify branch. Add a permanent 301 redirect from `janus.sc0red.ai/*` → `services.sc0red.ai/*` at the CloudFront layer.
-8. **Run the production smoke suite** against `services.sc0red.ai`: sign up, run an analysis, view the report, sign out.
+4. **Copy S3 documents**:
+   ```bash
+   aws --profile sc0red-dev s3 sync \
+     s3://janus-documents-staging/ s3://sc0red-services-documents-staging/
+   ```
 
-### Phase 2 — Verification (cutover day + 24 hours)
+5. **Re-create the 2 Cognito users in the new pool.** Pull the new pool ID from CFN outputs, then:
+   ```bash
+   for email in vedratna.velani@sc0red.com zack.walmer@sc0red.com; do
+     aws --profile sc0red-dev cognito-idp admin-create-user \
+       --user-pool-id <NEW_POOL_ID> \
+       --username "$email" \
+       --user-attributes Name=email,Value="$email" Name=email_verified,Value=true \
+       --desired-delivery-mediums EMAIL
+   done
+   ```
+   Cognito sends each user a "your sc0red Services account is ready" email using the renamed custom-message Lambda template.
+
+6. **Re-point `services.sc0red.ai` at the new Amplify app.** The new CDK stack creates `sc0red-services-frontend-staging` Amplify app with its own `*.amplifyapp.com` URL. Move the custom domain:
+   - Remove the domain association from `janus-frontend-staging`: `aws amplify delete-domain-association --app-id d3s20952i7opqs --domain-name services.sc0red.ai`
+   - Add it to the new app: `aws amplify create-domain-association --app-id <NEW_APP_ID> --domain-name services.sc0red.ai --sub-domain-settings prefix=,branchName=development`
+   - Update the Route53 CNAME in `sc0red-prod` (zone `Z09084993URU8UB4L1L26`) to point at the new app's CloudFront target.
+   - Cert re-validation takes ~5 min.
+
+7. **Smoke test** at `services.sc0red.ai`: log in as one of the migrated users, run a test analysis, verify previous reports are visible.
+
+### Phase 2 — Verification (24h dwell)
 
 - Watch CloudWatch for any 5xx on the new API Gateway.
-- Check that DLQ depth on the new SQS DLQ stays at 0.
-- Spot-check 5 random users — confirm their password-reset emails arrived and they can log in.
-- Run analysis history queries to verify migrated DynamoDB records are reachable from the new app.
+- Confirm DLQ depth on the new SQS DLQ stays at 0.
+- Verify analysis history and document references resolve correctly from the new DynamoDB.
 
-### Phase 3 — Cleanup (cutover + 14 days)
+### Phase 3 — Cleanup (14 days post-cutover)
 
-- Tear down the old CDK stack: `cdk destroy Janus-{env}`.
-- Manually delete retained resources: old DynamoDB table (after final snapshot), old S3 bucket (after lifecycle policy purge), old Cognito User Pool, old Amplify app.
-- Remove the 301 redirect at CloudFront once analytics show negligible traffic on `janus.sc0red.ai`.
+```bash
+AWS_PROFILE=sc0red-dev uv run cdk destroy Janus-staging
+```
+
+Then manually delete:
+- DynamoDB table `janus-staging` (RemovalPolicy=SNAPSHOT means CFN takes a final snapshot)
+- S3 bucket `janus-documents-staging` (if not auto-deleted)
+- Cognito User Pool `janus-users-staging`
+- Any orphaned log groups under `/aws/lambda/janus-*`
 
 ---
 
 ## Rollback
 
-If Phase 1 verification fails before the DNS flip in step 7, roll back by reversing only what was done: restore reserved concurrency on the old worker, point users back at `janus.sc0red.ai`. No data is lost — the old table is untouched.
+The old `Janus-staging` stack is untouched throughout Phase 1. If verification fails:
 
-If failure surfaces *after* DNS flip:
-- Re-flip DNS back to old Amplify branch (the old stack is still running).
-- Any DynamoDB writes that landed in the new table during the window need to be reconciled back to the old table — write a one-shot Python script using the same scan/batch-write approach in reverse, scoped to records with `created_at >= cutover_timestamp`.
-- Affected users may need to log in again on the old domain.
+- Re-point `services.sc0red.ai` back at the old Amplify branch (one Route53 record change + one Amplify domain association swap, ~5 min including DNS propagation).
+- Restore old worker concurrency: `aws lambda put-function-concurrency --function-name janus-worker-staging --reserved-concurrent-executions <orig>` (or `delete-function-concurrency` to remove the limit).
+- Any new items written to `sc0red-services-staging` during the window can be reconciled later via the same script run in reverse, scoped by `created_at >= cutover_timestamp`.
 
----
-
-## Open questions to confirm before Phase 1
-
-1. **User count and notification copy.** How many users are in each env's Cognito pool? Do we want a 24h heads-up email or just the password-reset prompt? (Recommend: 24h heads-up to PE-firm primary contacts only.)
-2. **Email branding for password-reset.** The new Cognito custom-message Lambda will use the renamed templates from `backend/src/handlers/templates/invitation_email.html` (already updated to say "sc0red Services"). Final visual review needed before sending mass email.
-3. **CloudFront / 301 setup.** Is there an existing CloudFront distribution in front of `janus.sc0red.ai`, or does Amplify own the cert end-to-end? Determines where the 301 redirect rule lives.
-4. **`sc0red-dev` / `sc0red-test` / `sc0red-prod` IAM permissions.** Confirm the role used by GitHub Actions has CreateUser / SetUserPassword permissions on the new Cognito pool.
+No data is at risk in the rollback scenario because the old stack stays warm.
 
 ---
 
-## Estimated effort
+## Open items (small, confirm before firing Phase 1)
 
-| Phase | Time | Risk |
-|---|---|---|
-| Phase 0 (per env) | 30 min deploy + 30 min smoke | Low |
-| Phase 1 (cutover day, per env) | 30 min | Medium — coordination & DNS propagation |
-| Phase 2 (verify) | rolling 24h | Low |
-| Phase 3 (cleanup) | 30 min | Low — purely destructive |
-
-Total wall-clock for `development` → `testing` → `production`: ~3 hours of active work plus the 24h verification dwell between envs.
+- **Write the DynamoDB migration script** — `scripts/migrate_dynamodb.py`. 50ish lines, no surprises. Should accept `--dry-run` and `--limit` for testing.
+- **Confirm the new Amplify app picks up the right Next.js build.** The repo rename broke the existing app's webhook; the new app needs the same fix during initial deploy (or in the Amplify console post-deploy).
+- **Decide cutover timing.** Original target was Thursday 2026-05-21 but the rebrand is already live at services.sc0red.ai pointing at old infrastructure; the AWS-side migration could happen any time without external customer impact.
