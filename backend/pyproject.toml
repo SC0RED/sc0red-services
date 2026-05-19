@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "janus-backend"
+name = "sc0red-services-backend"
 version = "0.1.0"
-description = "Janus PE Risk Assessment — Python backend powered by signalfield-core"
+description = "sc0red Services PE Risk Assessment — Python backend powered by signalfield-core"
 authors = [{name = "SignalField Team"}]
 requires-python = ">=3.12"
 dependencies = [

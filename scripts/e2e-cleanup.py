@@ -15,7 +15,7 @@ Test users are identified by the e2e-* email pattern in Cognito.
 Usage:
     python3 scripts/e2e-cleanup.py \\
         --user-pool-id us-east-1_XXXXX \\
-        --table janus-staging \\
+        --table sc0red-services-staging \\
         --region us-east-1
 
 Environment variables:
@@ -247,20 +247,20 @@ def find_orphaned_dynamodb_users(dynamodb_client: object, table_name: str) -> li
 
 
 def discover_user_pool_id(cognito_client: object) -> str:
-    """Find the Janus Cognito user pool by name pattern (janus-users-*)."""
+    """Find the sc0red Services Cognito user pool by name pattern (sc0red-services-users-*)."""
     response = cognito_client.list_user_pools(MaxResults=60)
     for pool in response.get("UserPools", []):
-        if pool["Name"].startswith("janus-users-"):
+        if pool["Name"].startswith("sc0red-services-users-"):
             print(f"  Auto-discovered user pool: {pool['Name']} ({pool['Id']})")
             return pool["Id"]
     return ""
 
 
 def discover_table_name(dynamodb_client: object) -> str:
-    """Find the Janus DynamoDB table by name pattern (janus-*)."""
+    """Find the sc0red Services DynamoDB table by name pattern (sc0red-services-*)."""
     response = dynamodb_client.list_tables()
     for name in response.get("TableNames", []):
-        if name.startswith("janus-") and name != "janus-e2e":
+        if name.startswith("sc0red-services-") and name != "sc0red-services-e2e":
             print(f"  Auto-discovered table: {name}")
             return name
     return ""
@@ -285,14 +285,14 @@ def main() -> None:
         print("Auto-discovering Cognito user pool...")
         user_pool_id = discover_user_pool_id(cognito)
         if not user_pool_id:
-            print("ERROR: No janus-users-* user pool found. Pass --user-pool-id explicitly.", file=sys.stderr)
+            print("ERROR: No sc0red-services-users-* user pool found. Pass --user-pool-id explicitly.", file=sys.stderr)
             sys.exit(1)
 
     if not table_name:
         print("Auto-discovering DynamoDB table...")
         table_name = discover_table_name(dynamodb)
         if not table_name:
-            print("ERROR: No janus-* table found. Pass --table explicitly.", file=sys.stderr)
+            print("ERROR: No sc0red-services-* table found. Pass --table explicitly.", file=sys.stderr)
             sys.exit(1)
 
     # 1. Find E2E test users in Cognito

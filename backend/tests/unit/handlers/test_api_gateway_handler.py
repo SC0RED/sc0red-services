@@ -1902,7 +1902,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_upload_url_success(self, mock_boto3, mock_authentication):
@@ -1952,7 +1952,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_upload_url_missing_fields(self, mock_boto3, mock_authentication):
@@ -1976,7 +1976,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_upload_url_rejects_unsupported_file_type(self, mock_boto3, mock_authentication):
@@ -2001,7 +2001,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_upload_url_rejects_path_traversal(self, mock_boto3, mock_authentication):
@@ -2026,7 +2026,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_upload_url_analysis_not_found(self, mock_boto3, mock_authentication):
@@ -2053,7 +2053,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_create_document_with_s3_document_key(self, mock_boto3, mock_authentication):
@@ -2088,7 +2088,7 @@ class TestDocumentEndpoints:
         assert body["filename"] == "test.txt"
         assert body["charCount"] == len("Hello from S3")
         mock_s3.get_object.assert_called_once_with(
-            Bucket="janus-documents-test", Key="uploads/a-1/abc.txt"
+            Bucket="sc0red-services-documents-test", Key="uploads/a-1/abc.txt"
         )
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
@@ -2097,7 +2097,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_create_document_rejects_invalid_document_key_prefix(
@@ -2136,7 +2136,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {
             "ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue",
-            "DOCUMENTS_BUCKET": "janus-documents-test",
+            "DOCUMENTS_BUCKET": "sc0red-services-documents-test",
         },
     )
     def test_create_document_s3_key_not_found(self, mock_boto3, mock_authentication):

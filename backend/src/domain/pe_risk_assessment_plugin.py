@@ -1,6 +1,6 @@
 """DomainPlugin implementation for the PE Risk Assessment domain.
 
-Wires Janus's domain-specific components (risk categories, company accessor,
+Wires sc0red Services's domain-specific components (risk categories, company accessor,
 data strategies) into the signalfield-core SDK framework.
 """
 
@@ -32,7 +32,7 @@ class PERiskAssessmentPlugin:
     @property
     def event_source(self) -> str:
         """Return the event source identifier for this plugin."""
-        return "signalfield.janus"
+        return "signalfield.sc0red_services"
 
     def get_scope_names(self) -> list[str]:
         """Return sorted list of available risk scope names."""

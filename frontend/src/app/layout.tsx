@@ -28,13 +28,13 @@ export const metadata: Metadata = {
  * `openspec/changes/dark-default-theme/proposal.md`.
  *
  * Keep this in lockstep with `useTheme` (frontend/src/lib/hooks/useTheme.ts);
- * both must agree on the storage key (`janus.theme`) and the resolution rules.
+ * both must agree on the storage key (`sc0red-services.theme`) and the resolution rules.
  */
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
     var stored = null;
-    try { stored = window.localStorage.getItem('janus.theme'); } catch (_) {}
+    try { stored = window.localStorage.getItem('sc0red-services.theme'); } catch (_) {}
     var resolved;
     if (stored === 'dark' || stored === 'light') {
       resolved = stored;

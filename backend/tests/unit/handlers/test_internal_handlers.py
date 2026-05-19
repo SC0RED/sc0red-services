@@ -24,7 +24,7 @@ from src.handlers.internal_handlers import (
 
 
 VALID_KEY = "internal-key-32-bytes-of-randomness-please"
-VALID_ARN = "arn:aws:secretsmanager:us-east-1:1:secret:janus/dev/internal-api-key-AbCdEf"
+VALID_ARN = "arn:aws:secretsmanager:us-east-1:1:secret:sc0red-services/dev/internal-api-key-AbCdEf"
 
 
 def _event(*, headers: dict[str, str] | None = None) -> dict[str, Any]:

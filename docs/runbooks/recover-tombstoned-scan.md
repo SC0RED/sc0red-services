@@ -32,7 +32,7 @@ Wrong order = a half-restored scan that looks like an orphan.
 
 - AWS CLI configured for the affected environment (`development` /
   `testing` / `production`).
-- The DynamoDB table name: `janus-{env}` (e.g. `janus-production`).
+- The DynamoDB table name: `sc0red-services-{env}` (e.g. `sc0red-services-production`).
 - Region: `us-east-1`.
 - Either the `analysis_id` or the `scan_id` from the user. If the user
   only has the company name, fetch the org's recently-deleted records
@@ -41,7 +41,7 @@ Wrong order = a half-restored scan that looks like an orphan.
 Throughout this runbook, set:
 
 ```bash
-TABLE=janus-production
+TABLE=sc0red-services-production
 REGION=us-east-1
 ```
 

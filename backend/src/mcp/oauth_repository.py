@@ -9,7 +9,7 @@ import boto3
 
 
 class OAuthRepository:
-    """CRUD operations for OAuth records in the Janus DynamoDB single-table."""
+    """CRUD operations for OAuth records in the sc0red Services DynamoDB single-table."""
 
     def __init__(self, table_name: str, endpoint_url: str | None = None) -> None:
         """Initialize with DynamoDB table name."""

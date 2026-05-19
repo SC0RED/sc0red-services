@@ -56,7 +56,7 @@ done
 
 # ── Validate mode ─────────────────────────────────────────────────
 if [ -z "$MODE" ]; then
-    echo -e "${CYAN}Janus Playwright E2E Test Runner${NC}"
+    echo -e "${CYAN}sc0red Services Playwright E2E Test Runner${NC}"
     echo ""
     echo "Usage: ./scripts/playwright.sh --mode=<mode> [options]"
     echo ""
@@ -180,16 +180,16 @@ run_local() {
 
     # 4. Setup infrastructure (DynamoDB + SQS + S3)
     echo -e "${YELLOW}Setting up infrastructure...${NC}"
-    python3 "$PROJECT_ROOT/scripts/setup_dynamodb.py" --table janus-e2e --endpoint http://localhost:4566
+    python3 "$PROJECT_ROOT/scripts/setup_dynamodb.py" --table sc0red-services-e2e --endpoint http://localhost:4566
     python3 -c "
 import boto3
 sqs = boto3.client('sqs', endpoint_url='http://localhost:4566', region_name='us-east-1',
     aws_access_key_id='local', aws_secret_access_key='local')
-sqs.create_queue(QueueName='janus-analysis-e2e')
+sqs.create_queue(QueueName='sc0red-services-analysis-e2e')
 s3 = boto3.client('s3', endpoint_url='http://localhost:4566', region_name='us-east-1',
     aws_access_key_id='local', aws_secret_access_key='local')
 try:
-    s3.create_bucket(Bucket='janus-documents-e2e')
+    s3.create_bucket(Bucket='sc0red-services-documents-e2e')
 except Exception:
     pass
 print('Infrastructure ready')
@@ -203,7 +203,7 @@ print('Infrastructure ready')
     BACKEND_URL=http://localhost:8001 \
     NEXT_PUBLIC_COGNITO_USER_POOL_ID=us-east-1_TESTPOOL1 \
     NEXT_PUBLIC_COGNITO_CLIENT_ID=test-client-id-placeholder \
-    npm run dev > /tmp/janus-nextjs-e2e.log 2>&1 &
+    npm run dev > /tmp/sc0red-services-nextjs-e2e.log 2>&1 &
     NEXTJS_PID=$!
 
     for i in $(seq 1 30); do
@@ -213,7 +213,7 @@ print('Infrastructure ready')
         fi
         if [ "$i" -eq 30 ]; then
             echo -e "${RED}Next.js did not start in time${NC}"
-            tail -20 /tmp/janus-nextjs-e2e.log
+            tail -20 /tmp/sc0red-services-nextjs-e2e.log
             exit 1
         fi
         sleep 2
@@ -249,7 +249,7 @@ run_remote() {
 }
 
 # ── Execute ───────────────────────────────────────────────────────
-echo -e "${CYAN}Janus E2E Tests — mode=$MODE${NC}"
+echo -e "${CYAN}sc0red Services E2E Tests — mode=$MODE${NC}"
 echo ""
 
 case "$MODE" in

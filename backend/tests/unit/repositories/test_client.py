@@ -73,7 +73,7 @@ class TestDynamoDBTable:
             mock_boto3.resource.return_value = mock_resource
             mock_resource.Table.return_value = MagicMock()
 
-            DynamoDBTable(table_name="janus-test", endpoint_url="http://localhost:8000")
+            DynamoDBTable(table_name="sc0red-services-test", endpoint_url="http://localhost:8000")
 
             mock_boto3.resource.assert_called_once()
             call_kwargs = mock_boto3.resource.call_args
@@ -82,7 +82,7 @@ class TestDynamoDBTable:
     @mock_aws
     def test_table_name_property(self, dynamodb_table):
         """table_name property returns the configured table name."""
-        assert dynamodb_table.table_name == "janus-test"
+        assert dynamodb_table.table_name == "sc0red-services-test"
 
     def test_query_with_index_name(self):
         """query() passes IndexName when index_name is provided."""

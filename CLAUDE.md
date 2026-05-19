@@ -1,10 +1,10 @@
-# sc0red Services (codebase: `janus`) — Claude Code Instructions
+# sc0red Services (codebase: `sc0red-services`) — Claude Code Instructions
 
-## Naming convention: sc0red Services (customer) vs. janus (internal)
+## Naming convention: sc0red Services (customer) vs. sc0red-services (internal)
 
-The customer-facing product is **sc0red Services** — that's the brand string on every page, page title, email body, PDF cover, and footer. The underlying codebase is **janus**: the GitHub repo (`SC0RED/janus`), every AWS resource (Lambda, DynamoDB, SQS, IAM roles, log groups, Secrets Manager paths, CloudWatch dashboards), the CDK stack names (`Janus-development`, `Janus-staging`, `Janus-production`), Python / Node package names (`janus-backend`, `janus-frontend`), Docker container names, the local dev DynamoDB table (`janus-dev`), the storage key `localStorage.janus.theme`, and the test fixtures all retain the `janus-*` naming. This is **intentional, not a TODO** — see `openspec/changes/rename-janus-to-sc0red-services/` for the full rationale (renaming infra resources would require risky data migrations for zero customer value).
+The customer-facing product is **sc0red Services** — that's the brand string on every page, page title, email body, PDF cover, and footer. The underlying codebase is **sc0red-services**: the GitHub repo (`SC0RED/sc0red-services`), every AWS resource (Lambda, DynamoDB, SQS, IAM roles, log groups, Secrets Manager paths, CloudWatch dashboards), the CDK stack names (`Sc0redServices-development`, `Sc0redServices-staging`, `Sc0redServices-production`), Python / Node package names (`sc0red-services-backend`, `sc0red-services-frontend`), Docker container names, the local dev DynamoDB table (`sc0red-services-dev`), the storage key `localStorage.sc0red-services.theme`, and the test fixtures all retain the `sc0red-services-*` naming. This is **intentional, not a TODO** — see `openspec/changes/rename-sc0red-services-to-sc0red-services/` for the full rationale (renaming infra resources would require risky data migrations for zero customer value).
 
-If you're editing customer-visible text (a page, an email template, a PDF component, a brand string in CSS), use **sc0red Services**. If you're editing infrastructure, package metadata, or internal symbol names, the `janus-*` family stays.
+If you're editing customer-visible text (a page, an email template, a PDF component, a brand string in CSS), use **sc0red Services**. If you're editing infrastructure, package metadata, or internal symbol names, the `sc0red-services-*` family stays.
 
 ## MANDATORY: Architecture Review Gate
 
@@ -118,7 +118,7 @@ API handlers are standalone functions in focused modules (`auth_handlers.py`, `s
 
 ### Pipeline Factory Wiring
 
-New pipeline steps are wired through the factory chain: `FactoryManager` → `JanusFactoriesFactory` → `CompanyAnalysisFactory` (or `PortfolioScanFactory`) → step list. Never call pipeline steps directly from handlers.
+New pipeline steps are wired through the factory chain: `FactoryManager` → `Sc0redServicesFactoriesFactory` → `CompanyAnalysisFactory` (or `PortfolioScanFactory`) → step list. Never call pipeline steps directly from handlers.
 
 These patterns exist because inconsistency was the #1 source of bugs in this codebase. Every "quick shortcut" that bypassed these patterns eventually had to be rewritten.
 
@@ -243,7 +243,7 @@ Non-development deployments MUST NOT use fallback default values for:
 - **NEXTAUTH_SECRET**: must be a unique production secret (CDK synth fails without it)
 - **PITR**: enabled for production DynamoDB table
 
-These guards are enforced in `infrastructure/stacks/janus_stack.py`. If adding new infrastructure that has security-relevant defaults, add the same pattern: fail-fast at synth for non-development environments.
+These guards are enforced in `infrastructure/stacks/sc0red_services_stack.py`. If adding new infrastructure that has security-relevant defaults, add the same pattern: fail-fast at synth for non-development environments.
 
 ---
 
@@ -324,7 +324,7 @@ Before calling `gh pr create`, ALL of the following must be true:
    GH_TOKEN=$(gh auth token) docker compose -f docker-compose.e2e.yml up --build -d
    BACKEND_URL=http://localhost:8001 \
    DYNAMODB_ENDPOINT=http://localhost:4566 \
-   DYNAMODB_TABLE=janus-e2e \
+   DYNAMODB_TABLE=sc0red-services-e2e \
    AWS_ENDPOINT_URL=http://localhost:4566 \
    MOCK_COMPANY_URL=http://ai-mock:8080/company \
    E2E_MODE=full \

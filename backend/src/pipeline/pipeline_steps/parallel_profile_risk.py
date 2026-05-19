@@ -200,7 +200,7 @@ class ParallelProfileRiskAndIdeation(RequestStep):
         # Run all 11 AI calls in parallel
         with FutureManager(name="ParallelProfileRiskAndIdeation", max_workers=11) as manager:
             # ``extract_profile`` runs on Precision.ADVANCED (gpt-5.1).
-            # The Janus 2026-05-15 benchmark flagged mini for misclassifying
+            # The sc0red Services 2026-05-15 benchmark flagged mini for misclassifying
             # ``industry_sector`` as "Manufacturing" (should be Technology)
             # and dropping anchor numbers in ``revenue_model`` /
             # ``competitive_positioning``. Other calls below use the default
@@ -321,7 +321,7 @@ class ParallelProfileRiskAndIdeation(RequestStep):
 
         ``precision`` defaults to ``STANDARD`` (gpt-5.4-mini). The
         ``extract_profile`` call passes ``Precision.ADVANCED`` (gpt-5.1)
-        because the Janus 2026-05-15 benchmark flagged mini for misclassifying
+        because the sc0red Services 2026-05-15 benchmark flagged mini for misclassifying
         ``industry_sector`` and dropping anchor numbers in ``revenue_model`` /
         ``competitive_positioning``. Risk-batch and ideation calls accept
         mini-quality outputs per the same benchmark.

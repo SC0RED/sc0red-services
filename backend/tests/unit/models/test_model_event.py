@@ -1,11 +1,11 @@
-"""Tests for JanusEvent model."""
+"""Tests for Sc0redServicesEvent model."""
 
-from src.models.model_event import JanusEvent
+from src.models.model_event import Sc0redServicesEvent
 
 
-class TestJanusEvent:
+class TestSc0redServicesEvent:
     def test_create_company_analysis(self):
-        event = JanusEvent(
+        event = Sc0redServicesEvent(
             request_id="req-123",
             request_type="company_analysis",
             url="https://example.com",
@@ -19,7 +19,7 @@ class TestJanusEvent:
         assert event.extra == {}
 
     def test_create_portfolio_scan(self):
-        event = JanusEvent(
+        event = Sc0redServicesEvent(
             request_id="req-456",
             request_type="portfolio_scan",
             url="https://pe-firm.com",
@@ -32,7 +32,7 @@ class TestJanusEvent:
         assert event.scan_id == "scan-789"
 
     def test_extra_dict(self):
-        event = JanusEvent(
+        event = Sc0redServicesEvent(
             request_id="req-1",
             request_type="company_analysis",
             url="https://example.com",
@@ -41,7 +41,7 @@ class TestJanusEvent:
         assert event.extra["source"] == "manual"
 
     def test_defaults(self):
-        event = JanusEvent()
+        event = Sc0redServicesEvent()
         assert event.request_id == ""
         assert event.request_type == ""
         assert event.url == ""

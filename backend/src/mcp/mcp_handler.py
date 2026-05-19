@@ -1,7 +1,7 @@
-"""Janus MCP server — Lambda entry point.
+"""sc0red Services MCP server — Lambda entry point.
 
 Uses FastMCP with Streamable HTTP transport, wrapped by Mangum for Lambda.
-OAuth handled by the MCP SDK via JanusOAuthProvider.
+OAuth handled by the MCP SDK via Sc0redServicesOAuthProvider.
 """
 
 from __future__ import annotations
@@ -15,14 +15,14 @@ from mangum import Mangum
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
 
-from src.mcp.oauth_provider import JanusOAuthProvider
+from src.mcp.oauth_provider import Sc0redServicesOAuthProvider
 from src.mcp.oauth_repository import OAuthRepository
 
 logger = logging.getLogger(__name__)
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "janus-dev")
+DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "sc0red-services-dev")
 OAUTH_SIGNING_KEY_SECRET_ARN = os.environ.get("OAUTH_SIGNING_KEY_SECRET_ARN", "")
 STAGE = os.environ.get("STAGE", "development")
 
@@ -47,11 +47,11 @@ def _load_signing_keys() -> tuple[str, str]:
 
 _private_key, _public_key = _load_signing_keys()
 
-_issuer_url = os.environ.get("MCP_ISSUER_URL", f"https://mcp.{STAGE}.janus.sc0red.com")
-_consent_base_url = os.environ.get("CONSENT_BASE_URL", f"https://{STAGE}.janus.sc0red.com")
+_issuer_url = os.environ.get("MCP_ISSUER_URL", f"https://mcp.{STAGE}.sc0red-services.sc0red.com")
+_consent_base_url = os.environ.get("CONSENT_BASE_URL", f"https://{STAGE}.sc0red-services.sc0red.com")
 
 _repository = OAuthRepository(DYNAMODB_TABLE)
-_oauth_provider = JanusOAuthProvider(
+_oauth_provider = Sc0redServicesOAuthProvider(
     repository=_repository,
     private_key_pem=_private_key,
     public_key_pem=_public_key,

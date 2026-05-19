@@ -310,7 +310,7 @@ class DynamoDBScanRepository:
         """Return ONLY tombstoned scans for the given org.
 
         Used by the Phase 2 admin recovery UI. Filters in-memory after
-        the GSI query — at Janus volumes the filter cost is negligible;
+        the GSI query — at sc0red Services volumes the filter cost is negligible;
         revisit with a `deleted_at` GSI if volumes ever justify it.
 
         Pass ``window_start`` to filter records to those tombstoned

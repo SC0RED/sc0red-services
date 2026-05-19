@@ -15,7 +15,7 @@ class TestPERiskAssessmentPlugin:
 
     def test_event_source(self):
         plugin = PERiskAssessmentPlugin()
-        assert plugin.event_source == "signalfield.janus"
+        assert plugin.event_source == "signalfield.sc0red_services"
 
     def test_get_scope_names(self):
         plugin = PERiskAssessmentPlugin()

@@ -1,4 +1,4 @@
-"""Literal types for the Janus PE Risk Assessment domain."""
+"""Literal types for the sc0red Services PE Risk Assessment domain."""
 
 from typing import Literal
 

@@ -26,7 +26,7 @@ from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMa
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
-from src.pipeline.request_executor import JanusRequestExecutor
+from src.pipeline.request_executor import Sc0redServicesRequestExecutor
 
 if TYPE_CHECKING:
     from signalfield_core.pipeline.step import RequestStep
@@ -81,10 +81,10 @@ class CompanyAnalysisFactory(PipelineFactory):
             ),
         ]
 
-    def build_executor(self) -> JanusRequestExecutor:
-        """Build and wire a JanusRequestExecutor with the company analysis pipeline."""
+    def build_executor(self) -> Sc0redServicesRequestExecutor:
+        """Build and wire a Sc0redServicesRequestExecutor with the company analysis pipeline."""
         pipeline = self.get_pipeline()
-        executor = JanusRequestExecutor(
+        executor = Sc0redServicesRequestExecutor(
             tenant_id=self._tenant_id,
             request_id=self._request_id,
             pipeline=pipeline,
@@ -96,7 +96,7 @@ class CompanyAnalysisFactory(PipelineFactory):
             step.entity_accessor = self._entity_accessor
         return executor
 
-    def execute_pipeline(self) -> JanusRequestExecutor:
+    def execute_pipeline(self) -> Sc0redServicesRequestExecutor:
         """Build executor, run pipeline, return executor with results."""
         executor = self.build_executor()
         executor.execute_all()

@@ -7,7 +7,7 @@ import { test as setup, expect } from '@playwright/test'
  */
 
 const TIMESTAMP = Date.now()
-const TEST_EMAIL = `e2e-${TIMESTAMP}@janus-test.com`
+const TEST_EMAIL = `e2e-${TIMESTAMP}@sc0red-services-test.com`
 const TEST_PASSWORD = 'E2eTestPass123!'
 const TEST_NAME = 'E2E Test User'
 const TEST_ORG = `E2E Org ${TIMESTAMP}`

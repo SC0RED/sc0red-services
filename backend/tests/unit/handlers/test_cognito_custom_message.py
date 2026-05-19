@@ -19,22 +19,22 @@ def _make_event(trigger_source: str, email: str = "test@example.com", code: str 
 class TestCustomMessageAdminCreateUser:
     def test_sets_branded_email_subject(self):
         event = _make_event("CustomMessage_AdminCreateUser")
-        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://app.janus.ai"}):
+        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://services.sc0red.ai"}):
             result = handle_custom_message(event, None)
 
         assert result["response"]["emailSubject"] == "You've been invited to sc0red Services"
 
     def test_email_contains_accept_link(self):
         event = _make_event("CustomMessage_AdminCreateUser", email="analyst@firm.com")
-        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://app.janus.ai"}):
+        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://services.sc0red.ai"}):
             result = handle_custom_message(event, None)
 
         body = result["response"]["emailMessage"]
-        assert "https://app.janus.ai/accept-invite?email=analyst@firm.com" in body
+        assert "https://services.sc0red.ai/accept-invite?email=analyst@firm.com" in body
 
     def test_email_contains_temporary_password(self):
         event = _make_event("CustomMessage_AdminCreateUser", code="TempPass1!")
-        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://app.janus.ai"}):
+        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://services.sc0red.ai"}):
             result = handle_custom_message(event, None)
 
         body = result["response"]["emailMessage"]
@@ -42,7 +42,7 @@ class TestCustomMessageAdminCreateUser:
 
     def test_email_contains_branding(self):
         event = _make_event("CustomMessage_AdminCreateUser")
-        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://app.janus.ai"}):
+        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://services.sc0red.ai"}):
             result = handle_custom_message(event, None)
 
         body = result["response"]["emailMessage"]
@@ -52,7 +52,7 @@ class TestCustomMessageAdminCreateUser:
 
     def test_email_is_html(self):
         event = _make_event("CustomMessage_AdminCreateUser")
-        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://app.janus.ai"}):
+        with patch.dict("os.environ", {"FRONTEND_DOMAIN": "https://services.sc0red.ai"}):
             result = handle_custom_message(event, None)
 
         body = result["response"]["emailMessage"]

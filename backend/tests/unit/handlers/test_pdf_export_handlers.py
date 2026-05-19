@@ -41,9 +41,9 @@ from src.handlers.pdf_token_secret import PDF_TOKEN_SECRET_ARN_ENVIRONMENT_NAME
 ANALYSIS_ID = "a-1"
 ORG_ID = "org-1"
 USER_ID = "user-1"
-BUCKET = "janus-development-pdf-exports"
-RENDER_ARN = "arn:aws:lambda:us-east-1:1:function:janus-pdf-render-development"
-TOKEN_SECRET_ARN = "arn:aws:secretsmanager:us-east-1:1:secret:janus/dev/pdf-token-secret"
+BUCKET = "sc0red-services-development-pdf-exports"
+RENDER_ARN = "arn:aws:lambda:us-east-1:1:function:sc0red-services-pdf-render-development"
+TOKEN_SECRET_ARN = "arn:aws:secretsmanager:us-east-1:1:secret:sc0red-services/dev/pdf-token-secret"
 FRONTEND_BASE_URL = "https://development.d1234abcdef.amplifyapp.com"
 
 

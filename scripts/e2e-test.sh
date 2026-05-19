@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# End-to-end integration test for Janus.
+# End-to-end integration test for sc0red Services.
 # Runs the full flow: register → login → scan start → confirm → poll → view → delete.
 #
 # Usage:
@@ -19,7 +19,7 @@ set -euo pipefail
 BACKEND_URL="${BACKEND_URL:-http://localhost:8001}"
 NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-dev-secret-minimum-32-characters-long}"
 DYNAMODB_ENDPOINT="${DYNAMODB_ENDPOINT:-http://localhost:8000}"
-DYNAMODB_TABLE="${DYNAMODB_TABLE:-janus-dev}"
+DYNAMODB_TABLE="${DYNAMODB_TABLE:-sc0red-services-dev}"
 AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-}"
 # Set E2E_MODE=full to enable scan + async polling tests (requires docker-compose.e2e.yml)
 E2E_MODE="${E2E_MODE:-basic}"
@@ -95,7 +95,7 @@ import boto3, os
 endpoint = os.environ.get('AWS_ENDPOINT_URL', 'http://localhost:4566')
 sqs = boto3.client('sqs', endpoint_url=endpoint, region_name='us-east-1',
     aws_access_key_id='local', aws_secret_access_key='local')
-response = sqs.create_queue(QueueName='janus-analysis-e2e')
+response = sqs.create_queue(QueueName='sc0red-services-analysis-e2e')
 print('Queue URL:', response['QueueUrl'])
 " 2>&1
 
@@ -107,12 +107,12 @@ endpoint = os.environ.get('AWS_ENDPOINT_URL', 'http://localhost:4566')
 s3 = boto3.client('s3', endpoint_url=endpoint, region_name='us-east-1',
     aws_access_key_id='local', aws_secret_access_key='local')
 try:
-    s3.create_bucket(Bucket='janus-documents-e2e')
-    print('Bucket janus-documents-e2e created')
+    s3.create_bucket(Bucket='sc0red-services-documents-e2e')
+    print('Bucket sc0red-services-documents-e2e created')
 except ClientError as e:
     code = e.response['Error']['Code']
     if code in ('BucketAlreadyOwnedByYou', 'BucketAlreadyExists'):
-        print('Bucket janus-documents-e2e already exists')
+        print('Bucket sc0red-services-documents-e2e already exists')
     else:
         raise
 " 2>&1

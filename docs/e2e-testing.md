@@ -1,6 +1,6 @@
 # E2E Testing Guide
 
-End-to-end tests verify Janus as a user sees it — real browser interactions across SSR rendering, authentication, API calls, and AI pipeline execution.
+End-to-end tests verify sc0red Services as a user sees it — real browser interactions across SSR rendering, authentication, API calls, and AI pipeline execution.
 
 ---
 
@@ -58,10 +58,10 @@ cd ..
 ./scripts/playwright.sh --mode=local --headed
 
 # Run smoke tests against deployed dev
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.sc0red-services.sc0red.com
 
 # Run full E2E against deployed (uses real AI)
-./scripts/playwright.sh --mode=deployed --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=deployed --url=https://dev.sc0red-services.sc0red.com
 ```
 
 Or use npm shortcuts from the `frontend/` directory:
@@ -120,22 +120,22 @@ The script automatically:
 Runs against a real deployed environment. Tests signup, login, navigation — no scans (saves AI credits).
 
 ```bash
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.sc0red-services.sc0red.com
 ```
 
 Requires:
-- `--url` pointing to a deployed Janus frontend
+- `--url` pointing to a deployed sc0red Services frontend
 - The deployed backend must be running (Amplify + Lambda)
 - Real Cognito user pool must be available (tests register via the signup UI)
 
-**Cleanup:** Smoke tests create a real Cognito user and DynamoDB org. Cleanup runs automatically after tests (requires AWS credentials). The script auto-discovers the Cognito user pool and DynamoDB table by naming convention (`janus-users-*` and `janus-*`). Pass `--skip-cleanup` to disable:
+**Cleanup:** Smoke tests create a real Cognito user and DynamoDB org. Cleanup runs automatically after tests (requires AWS credentials). The script auto-discovers the Cognito user pool and DynamoDB table by naming convention (`sc0red-services-users-*` and `sc0red-services-*`). Pass `--skip-cleanup` to disable:
 
 ```bash
 # Cleanup runs by default
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.sc0red-services.sc0red.com
 
 # Skip cleanup if needed
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com --skip-cleanup
+./scripts/playwright.sh --mode=smoke --url=https://dev.sc0red-services.sc0red.com --skip-cleanup
 ```
 
 ### Deployed Mode
@@ -143,7 +143,7 @@ Requires:
 Full E2E with real Cognito and real AI. Creates a scan against `stripe.com` and verifies results.
 
 ```bash
-./scripts/playwright.sh --mode=deployed --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=deployed --url=https://dev.sc0red-services.sc0red.com
 ```
 
 This mode:
@@ -153,7 +153,7 @@ This mode:
 - Cleans up test data after completion (auto-discovers Cognito pool + DynamoDB table)
 
 Requires:
-- `--url` pointing to a deployed Janus frontend
+- `--url` pointing to a deployed sc0red Services frontend
 - AWS credentials configured (for cleanup — pass `--skip-cleanup` if unavailable)
 
 ---

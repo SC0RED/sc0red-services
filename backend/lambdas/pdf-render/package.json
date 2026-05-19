@@ -1,5 +1,5 @@
 {
-    "name": "@janus/pdf-render",
+    "name": "@sc0red-services/pdf-render",
     "version": "0.1.0",
     "private": true,
     "description": "PDF render Lambda — headless Chromium navigates to /print/{analysisId} and returns a binary PDF.",

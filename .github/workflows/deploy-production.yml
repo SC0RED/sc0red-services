@@ -78,9 +78,9 @@ jobs:
           cd infrastructure
           CDK_ENVIRONMENT=production \
           AWS_DEFAULT_REGION="${{ secrets.PROD_AWS_REGION }}" \
-            cdk deploy Janus-production \
+            cdk deploy Sc0redServices-production \
               --require-approval never \
-              --outputs-file /tmp/janus-outputs.json \
+              --outputs-file /tmp/sc0red-services-outputs.json \
               --context "environment=production" \
               --context "account=${{ secrets.PROD_AWS_ACCOUNT_ID }}" \
               --context "region=${{ secrets.PROD_AWS_REGION }}"
@@ -90,9 +90,9 @@ jobs:
           python3 -c "
           import json, sys
           try:
-              with open('/tmp/janus-outputs.json') as f:
+              with open('/tmp/sc0red-services-outputs.json') as f:
                   outputs = json.load(f)
-              stack = outputs.get('Janus-production', {})
+              stack = outputs.get('Sc0redServices-production', {})
               for key, val in stack.items():
                   if 'ApiUrl' in key:
                       print(f'Backend API URL: {val}')

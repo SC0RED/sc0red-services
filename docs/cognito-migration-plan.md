@@ -48,7 +48,7 @@ Deploy Cognito User Pool alongside existing auth. Nothing consumes it yet.
 |---|---|---|
 | **Create** | `infrastructure/stacks/cognito_construct.py` | Cognito User Pool: email sign-in, custom attributes (`custom:org_id`, `custom:role`, `custom:legacy_user_id`), password policy (8+ chars, upper+lower+digits), email verification, `USER_PASSWORD_AUTH` + `USER_SRP_AUTH` flows, migration Lambda trigger slot |
 | **Create** | `infrastructure/stacks/cognito_construct.py` | Cognito App Client: no secret (public SPA client), 1h ID/access token validity, 30d refresh token, prevent user enumeration errors |
-| **Modify** | `infrastructure/stacks/janus_stack.py` | Instantiate `CognitoConstruct`, pass `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION` as env vars to both Lambdas. Keep `NEXTAUTH_SECRET` (dual-stack). Add CfnOutputs for pool ID, client ID |
+| **Modify** | `infrastructure/stacks/sc0red_services_stack.py` | Instantiate `CognitoConstruct`, pass `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION` as env vars to both Lambdas. Keep `NEXTAUTH_SECRET` (dual-stack). Add CfnOutputs for pool ID, client ID |
 
 ### Cognito User Pool Configuration
 
@@ -84,7 +84,7 @@ prevent_user_existence_errors = True
 ```
 
 ### Rollback
-Delete the construct instantiation from `janus_stack.py`, `cdk deploy` removes the pool. No consumers affected.
+Delete the construct instantiation from `sc0red_services_stack.py`, `cdk deploy` removes the pool. No consumers affected.
 
 ---
 
@@ -294,7 +294,7 @@ Remove legacy auth after confirming all users migrated.
 | **Modify** | `backend/src/handlers/auth_handlers.py` | Remove `handle_login`. Refactor or delete `handle_register` |
 | **Modify** | `backend/src/handlers/api_gateway_handler.py` | Remove `POST /api/auth/login` route |
 | **Modify** | `backend/src/repositories/dynamodb/user_repository.py` | Remove `verify_password()`, remove `password_hash` from schema |
-| **Modify** | `infrastructure/stacks/janus_stack.py` | Remove `NEXTAUTH_SECRET` from Lambda env vars |
+| **Modify** | `infrastructure/stacks/sc0red_services_stack.py` | Remove `NEXTAUTH_SECRET` from Lambda env vars |
 | **Remove dep** | `frontend/package.json` | Remove `jsonwebtoken` |
 | **Remove dep** | `backend/pyproject.toml` | Remove `bcrypt` (migration Lambda keeps its own copy) |
 
@@ -364,7 +364,7 @@ Deprecated:       password_hash (removed in Phase 5)
 | Component | Why Unchanged |
 |---|---|
 | Worker Lambda auth | SQS messages carry `org_id` directly from API Lambda. No JWT validation. |
-| Pipeline steps | Receive `org_id` via `JanusEvent` from `FactoryManager`. No auth awareness. |
+| Pipeline steps | Receive `org_id` via `Sc0redServicesEvent` from `FactoryManager`. No auth awareness. |
 | DynamoDB single-table design | Same pk/sk patterns. No new GSIs. |
 | Frontend route protection middleware | `withAuth` from NextAuth still works (checks session presence). |
 | All 30+ `org_id` handler checks | `AuthContext` shape is identical from both RS256 and HS256 paths. |

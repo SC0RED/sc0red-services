@@ -66,7 +66,7 @@ def run_structured_ai_call(
       where output specificity (PE-grade ROI estimates, accurate
       categorical classification) matters more than latency.
 
-    The Janus 2026-05-15 benchmark (``backend/scripts/benchmark/results/``)
+    The sc0red Services 2026-05-15 benchmark (``backend/scripts/benchmark/results/``)
     cleared mini for all strategy-map calls + risk batches + ideation +
     portfolio discovery/validation. Two call sites flagged 🔴 and use
     ``Precision.ADVANCED``: ``ParallelProfileRiskAndIdeation``'s

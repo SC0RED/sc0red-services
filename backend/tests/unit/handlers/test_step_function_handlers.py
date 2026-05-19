@@ -14,9 +14,9 @@ from src.handlers.step_function_handlers import (
 
 @pytest.fixture(autouse=True)
 def _set_worker_function_name():
-    with patch.dict(os.environ, {"WORKER_FUNCTION_NAME": "janus-worker-test"}):
+    with patch.dict(os.environ, {"WORKER_FUNCTION_NAME": "sc0red-services-worker-test"}):
         import src.handlers.step_function_handlers as mod
-        mod._WORKER_FUNCTION_NAME = "janus-worker-test"
+        mod._WORKER_FUNCTION_NAME = "sc0red-services-worker-test"
         yield
         mod._WORKER_FUNCTION_NAME = ""
 
