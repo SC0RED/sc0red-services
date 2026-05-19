@@ -65,7 +65,6 @@ export default function SignupPage() {
                         style={{
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '0.625rem',
                             marginBottom: '0.75rem',
                         }}
                     >
@@ -77,20 +76,6 @@ export default function SignupPage() {
                             style={{ height: '40px', width: 'auto' }}
                             priority
                         />
-                        <span
-                            style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                letterSpacing: '0.2em',
-                                textTransform: 'uppercase',
-                                color: 'var(--text-tertiary)',
-                                paddingLeft: '0.75rem',
-                                marginLeft: '0.25rem',
-                                borderLeft: '1px solid var(--border-subtle)',
-                            }}
-                        >
-                            Services
-                        </span>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
                         Start your AI risk assessment
