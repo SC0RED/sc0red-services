@@ -70,7 +70,7 @@ function buildPdfOptions(companyName: string): PDFOptions {
             ${safeCompany} — AI Risk Report
         </div>`,
         footerTemplate: `<div style="font-size:8pt;color:#475569;width:100%;text-align:center;padding:0 12mm;">
-            Page <span class="pageNumber"></span> of <span class="totalPages"></span> · sc0red.com
+            Page <span class="pageNumber"></span> of <span class="totalPages"></span> · sc0red Advisory
         </div>`,
         margin: { top: '25mm', bottom: '25mm', left: '20mm', right: '20mm' },
     }

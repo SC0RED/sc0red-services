@@ -56,19 +56,19 @@ export default function LoginPage() {
                             }}
                         >
                             <Image
-                                src="/janus-logo.png"
-                                alt="Janus"
+                                src="/sc0red-advisory-logo.svg"
+                                alt="sc0red Advisory"
                                 width={56}
                                 height={56}
-                                style={{ objectFit: 'cover' }}
+                                style={{ objectFit: 'contain' }}
                             />
                         </div>
                         <span style={{ fontSize: '1.375rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-                            Janus
+                            sc0red Advisory
                         </span>
                     </div>
                     <p className="text-secondary" style={{ fontSize: '0.9375rem' }}>
-                        AI Risk & Opportunity Intelligence
+                        AI Risk & Strategic Intelligence
                     </p>
                 </div>
 

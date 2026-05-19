@@ -92,15 +92,17 @@ export default function DashboardSidebar() {
                             }}
                         >
                             <Image
-                                src="/janus-logo.png"
-                                alt="Janus"
+                                src="/sc0red-advisory-logo.svg"
+                                alt="sc0red Advisory"
                                 width={36}
                                 height={36}
-                                style={{ objectFit: 'cover' }}
+                                style={{ objectFit: 'contain' }}
                             />
                         </div>
                         <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>Janus</div>
+                            <div style={{ fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>
+                                sc0red Advisory
+                            </div>
                             <div
                                 style={{
                                     fontSize: '0.6875rem',

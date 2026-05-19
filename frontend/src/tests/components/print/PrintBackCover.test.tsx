@@ -7,7 +7,9 @@ describe('PrintBackCover', () => {
     it('renders the CTA heading and contact link when there are opportunities', () => {
         render(<PrintBackCover hasOpportunities={true} />)
         expect(screen.getByText('Next Steps')).toBeInTheDocument()
-        expect(screen.getByText('sc0red can help you capture these opportunities')).toBeInTheDocument()
+        expect(
+            screen.getByText('sc0red Advisory can help you capture these opportunities')
+        ).toBeInTheDocument()
         // Anchor href attr is set from getSc0redContactUrl().
         const link = screen.getByRole('link')
         expect(link.getAttribute('href')).toMatch(/^https?:\/\//)

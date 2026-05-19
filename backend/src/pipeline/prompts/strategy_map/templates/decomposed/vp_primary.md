@@ -18,7 +18,7 @@ proposition record; you do not see the other calls' outputs.
 **Scraped content** (about-us, products, customer testimonials):
 {scraped_content}
 
-**Opportunity strategic categories** (already classified by Janus):
+**Opportunity strategic categories** (already classified by the analysis pipeline):
 {opportunity_categories}
 
 **Value chain emphasis** (which activities are most opportunity-rich):
