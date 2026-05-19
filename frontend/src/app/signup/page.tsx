@@ -8,6 +8,8 @@ import { signIn } from 'next-auth/react'
 
 import { Button, Card, FormField, Input } from '@/components/ui'
 
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL ?? 'https://www.sc0red.com'
+
 export default function SignupPage() {
     const router = useRouter()
     const [form, setForm] = useState({
@@ -82,7 +84,7 @@ export default function SignupPage() {
                     </p>
                     <p style={{ marginTop: '0.625rem', fontSize: '0.8125rem' }}>
                         <a
-                            href="https://www.sc0red.com"
+                            href={MARKETING_URL}
                             style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}
                         >
                             ← Back to sc0red.com

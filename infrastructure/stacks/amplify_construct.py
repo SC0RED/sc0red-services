@@ -86,6 +86,7 @@ class AmplifyConstruct(Construct):
         cognito_client_id: str,
         pdf_token_secret: str,
         internal_api_key: str,
+        marketing_url: str,
     ) -> None:
         """Phase 2: create the branch after API Gateway exists.
 
@@ -143,6 +144,10 @@ class AmplifyConstruct(Construct):
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="FRONTEND_BASE_URL",
                     value=self.branch_url,
+                ),
+                amplify.CfnBranch.EnvironmentVariableProperty(
+                    name="NEXT_PUBLIC_MARKETING_URL",
+                    value=marketing_url,
                 ),
             ],
         )
