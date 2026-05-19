@@ -1,8 +1,8 @@
-# Janus (PE Scan) — Project Documentation
+# sc0red Services (PE Scan) — Project Documentation
 
 ## Overview
 
-**Janus** is a SaaS AI risk intelligence platform built for private equity firms and their portfolio companies. Its core purpose is to analyze companies for AI-driven disruption risks and generate tactical opportunity roadmaps to defend against and capitalize on AI trends.
+**sc0red Services** is a SaaS AI risk intelligence platform built for private equity firms and their portfolio companies. Its core purpose is to analyze companies for AI-driven disruption risks and generate tactical opportunity roadmaps to defend against and capitalize on AI trends.
 
 ---
 
@@ -87,7 +87,7 @@ Risk scoring is industry-aware — for example, financial services weights regul
 ## Project Structure
 
 ```
-janus/
+sc0red-services/
 ├── backend/                  # Python 3.12 backend
 │   ├── src/
 │   │   ├── handlers/         # Lambda entry point, API routing, auth middleware
@@ -108,7 +108,7 @@ janus/
 │
 ├── infrastructure/           # AWS CDK Python stack
 │   ├── app.py                # CDK entry point (dev / staging / production)
-│   └── stacks/janus_stack.py # DynamoDB + SQS + Lambda + API Gateway
+│   └── stacks/sc0red_services_stack.py # DynamoDB + SQS + Lambda + API Gateway
 │
 ├── scripts/
 │   ├── deploy-local.sh       # One-command LocalStack CDK deployment
@@ -125,7 +125,7 @@ janus/
 
 ## Database Schema
 
-DynamoDB single-table design (`janus-{environment}`). All entities share one table with 4 GSIs.
+DynamoDB single-table design (`sc0red-services-{environment}`). All entities share one table with 4 GSIs.
 
 ### Primary key pattern
 
@@ -198,7 +198,7 @@ See [docs/api.md](docs/api.md) for full request/response schemas.
 | `GH_TOKEN` | Build-time | GitHub token to pull `signalfield-core` |
 | `BACKEND_URL` | Frontend only | Backend base URL (server-side, default `http://backend:8001`) |
 | `NEXTAUTH_URL` | Frontend only | NextAuth callback URL (default `http://localhost:3000`) |
-| `DYNAMODB_TABLE` | Backend only | DynamoDB table name (default `janus-dev`) |
+| `DYNAMODB_TABLE` | Backend only | DynamoDB table name (default `sc0red-services-dev`) |
 | `DYNAMODB_ENDPOINT` | Local only | DynamoDB Local endpoint |
 
 ---
@@ -224,7 +224,7 @@ See [docs/api.md](docs/api.md) for full request/response schemas.
 
 ### Backend — AWS Lambda (CDK)
 
-- Infrastructure defined in `infrastructure/stacks/janus_stack.py`
+- Infrastructure defined in `infrastructure/stacks/sc0red_services_stack.py`
 - Lambda + API Gateway + SQS + DynamoDB provisioned via AWS CDK
 - Local testing via LocalStack: `./scripts/deploy-local.sh`
 - See [docs/developer-guide.md](docs/developer-guide.md) for full CDK deployment instructions

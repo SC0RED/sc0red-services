@@ -1,7 +1,7 @@
-"""Top-level AWS resources owned by the Janus stack.
+"""Top-level AWS resources owned by the sc0red Services stack.
 
 These are module-level helpers (not a Construct) so resources remain
-parented to the stack — their logical IDs (``JanusTable``,
+parented to the stack — their logical IDs (``Sc0redServicesTable``,
 ``AnalysisQueue``, ``DocumentsBucket``, etc.) must stay byte-identical
 to the pre-split layout. Wrapping them in a sub-Construct would change
 their CloudFormation paths and force a redeploy.
@@ -41,8 +41,8 @@ def create_table(
     """
     table = dynamodb.Table(
         scope,
-        "JanusTable",
-        table_name=f"janus-{environment}",
+        "Sc0redServicesTable",
+        table_name=f"sc0red-services-{environment}",
         partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
         sort_key=dynamodb.Attribute(name="sk", type=dynamodb.AttributeType.STRING),
         billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -82,13 +82,13 @@ def create_queues(
     dlq = sqs.Queue(
         scope,
         "AnalysisDLQ",
-        queue_name=f"janus-analysis-dlq-{environment}",
+        queue_name=f"sc0red-services-analysis-dlq-{environment}",
         retention_period=Duration.days(14),
     )
     queue = sqs.Queue(
         scope,
         "AnalysisQueue",
-        queue_name=f"janus-analysis-queue-{environment}",
+        queue_name=f"sc0red-services-analysis-queue-{environment}",
         # Visibility timeout MUST be >= the worker Lambda timeout per
         # the AWS SQS-Lambda event-source-mapping contract — AWS rejects
         # the mapping at deploy time otherwise. The worker is sized at
@@ -118,7 +118,7 @@ def create_analytics_log_group(
     return logs.LogGroup(
         scope,
         "AnalyticsEventsLogGroup",
-        log_group_name=f"/janus/{environment}/analytics-events",
+        log_group_name=f"/sc0red-services/{environment}/analytics-events",
         retention=logs.RetentionDays.THREE_MONTHS,
         removal_policy=removal_policy,
     )
@@ -181,8 +181,8 @@ def create_api(
         scope,
         "ApiEndpoint",
         handler=handler,
-        rest_api_name=f"janus-api-{environment}",
-        description=f"Janus PE Risk Assessment API — {environment}",
+        rest_api_name=f"sc0red-services-api-{environment}",
+        description=f"sc0red Services PE Risk Assessment API — {environment}",
         # Binary content types — `application/pdf` is forwarded verbatim
         # (base64-encoded) from the API Lambda so the Export PDF flow can
         # stream binary to the browser without text-encoding corruption.

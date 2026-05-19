@@ -1,8 +1,8 @@
-# Janus AI Model Benchmark Suite
+# sc0red Services AI Model Benchmark Suite
 
-Evaluate an OpenAI model against the current `gpt-5.1` baseline for Janus's strategy-map, profile, risk, ideation, and detail-opportunity workloads.
+Evaluate an OpenAI model against the current `gpt-5.1` baseline for sc0red Services's strategy-map, profile, risk, ideation, and detail-opportunity workloads.
 
-Ported from `assessment_engine/scripts/benchmark/` (2026-05-15) for the OpenSpec change `upgrade-strategy-map-to-mini-model`. Goal: produce the data needed to decide whether to migrate Janus's `Precision.STANDARD` model from `gpt-5.1` to `gpt-5.4-mini` (assessment_engine made this switch in March 2026 and saw ~50% lower latency + ~40% lower cost on their workload).
+Ported from `assessment_engine/scripts/benchmark/` (2026-05-15) for the OpenSpec change `upgrade-strategy-map-to-mini-model`. Goal: produce the data needed to decide whether to migrate sc0red Services's `Precision.STANDARD` model from `gpt-5.1` to `gpt-5.4-mini` (assessment_engine made this switch in March 2026 and saw ~50% lower latency + ~40% lower cost on their workload).
 
 ## Quick start
 
@@ -10,7 +10,7 @@ Ported from `assessment_engine/scripts/benchmark/` (2026-05-15) for the OpenSpec
 cd backend
 export OPENAI_API_KEY="sk-..."          # use a dev key — full run costs ~$3-7
 
-# 1. Baseline (current Janus model)
+# 1. Baseline (current sc0red Services model)
 uv run python scripts/benchmark/run_benchmark.py --model gpt-5.1 --baseline
 
 # 2. Candidate (proposed model)
@@ -27,7 +27,7 @@ The comparison markdown lands at `results/comparison_*.md`. **Read every prompt'
 
 ## What's benchmarked
 
-`benchmark_prompts.json` contains 10 prompts — one per distinct AI call site in Janus's pipeline:
+`benchmark_prompts.json` contains 10 prompts — one per distinct AI call site in sc0red Services's pipeline:
 
 | Prompt ID | Task type | Volume per analysis | Quality risk on mini | Latency win |
 |---|---|---|---|---|
@@ -50,13 +50,13 @@ Total prompt size: ~12K input tokens (matches typical production prompt sizes �
 |---|---|
 | `run_benchmark.py` | Runner — hits OpenAI Responses API directly with each prompt, captures cost/latency/schema-compliance |
 | `compare_results.py` | Diff two result JSONs → markdown report with per-prompt comparison |
-| `build_prompts.py` | Regenerates `benchmark_prompts.json` from real Janus templates rendered against the Acme Robotics fixture. Re-run when templates change. |
+| `build_prompts.py` | Regenerates `benchmark_prompts.json` from real sc0red Services templates rendered against the Acme Robotics fixture. Re-run when templates change. |
 | `benchmark_prompts.json` | The 10 prompts. Committed for reproducibility. |
 | `results/` | Output directory for benchmark runs. Committed alongside the OpenSpec change so the upgrade decision is auditable. |
 
 ## Regenerating `benchmark_prompts.json`
 
-If you update a Janus prompt template:
+If you update a sc0red Services prompt template:
 
 ```bash
 cd backend && uv run python scripts/benchmark/build_prompts.py
@@ -91,7 +91,7 @@ Round-trip "baseline + candidate" is typically under $0.50. The OpenSpec migrati
 
 ## Fidelity to production
 
-The benchmark mirrors what Janus production sends to OpenAI:
+The benchmark mirrors what sc0red Services production sends to OpenAI:
 - **System prompts** are loaded per call type (strategy-map / profile / risk / ideation / detail) and passed via `instructions=` — same as `ai_call.run_structured_ai_call`.
 - **`reasoning.effort` + `text.verbosity`** are passed through (default `low` / `medium` matching production).
 - **`text.format`** uses strict JSON schema with `additionalProperties=false`.

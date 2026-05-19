@@ -80,7 +80,7 @@ format: ## Auto-fix lint issues and format code
 # =============================================================================
 
 setup-db: ## Create DynamoDB table with GSIs (for local dev)
-	python3 scripts/setup_dynamodb.py --table janus-dev --endpoint http://localhost:8000
+	python3 scripts/setup_dynamodb.py --table sc0red-services-dev --endpoint http://localhost:8000
 
 dev: lint-quick ## Start all services (lint must pass first)
 	@echo ""

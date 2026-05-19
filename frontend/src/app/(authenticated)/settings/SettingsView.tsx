@@ -130,7 +130,7 @@ export default function SettingsView() {
                         marginBottom: '0.75rem',
                     }}
                 >
-                    Choose how sc0red Advisory looks. Print preview always uses the light theme regardless of
+                    Choose how sc0red Services looks. Print preview always uses the light theme regardless of
                     your selection.
                 </p>
                 <ThemeToggle />

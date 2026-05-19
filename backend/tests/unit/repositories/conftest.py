@@ -25,7 +25,7 @@ def dynamodb_table():  # noqa: NAMING001
     with mock_aws():
         client = boto3.client("dynamodb", region_name="us-east-1")
         client.create_table(
-            TableName="janus-test",
+            TableName="sc0red-services-test",
             KeySchema=[
                 {"AttributeName": "pk", "KeyType": "HASH"},
                 {"AttributeName": "sk", "KeyType": "RANGE"},
@@ -89,5 +89,5 @@ def dynamodb_table():  # noqa: NAMING001
             BillingMode="PAY_PER_REQUEST",
         )
 
-        table = DynamoDBTable(table_name="janus-test", endpoint_url=None)
+        table = DynamoDBTable(table_name="sc0red-services-test", endpoint_url=None)
         yield table

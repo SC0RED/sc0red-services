@@ -165,7 +165,7 @@ class DynamoDBCompanyRepository:
         fewer than ``limit`` items even when more live records exist on
         subsequent pages — callers must drive pagination off
         ``next_cursor``, not off the size of the returned slice. At
-        Janus volumes (low tombstone density) page rag is negligible;
+        sc0red Services volumes (low tombstone density) page rag is negligible;
         revisit with a server-side ``FilterExpression`` if heavy
         tombstone density distorts pagination.
         """
@@ -189,7 +189,7 @@ class DynamoDBCompanyRepository:
 
         Used by the Phase 2 admin recovery UI. Phase 1 ships this so
         engineer-assisted recovery has a quick listing path. Filters
-        in-memory after the GSI query — at Janus volumes the filter
+        in-memory after the GSI query — at sc0red Services volumes the filter
         cost is negligible; revisit with a `deleted_at` GSI if volumes
         ever justify it.
 

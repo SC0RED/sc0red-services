@@ -76,7 +76,7 @@ jobs:
         env:
           BACKEND_URL: http://localhost:8001
           DYNAMODB_ENDPOINT: http://localhost:4566
-          DYNAMODB_TABLE: janus-e2e
+          DYNAMODB_TABLE: sc0red-services-e2e
           AWS_ENDPOINT_URL: http://localhost:4566
           MOCK_COMPANY_URL: http://ai-mock:8080/company
           E2E_MODE: full
@@ -151,13 +151,13 @@ jobs:
       - name: Set up DynamoDB table
         run: |
           python3 scripts/setup_dynamodb.py \
-            --table janus-e2e \
+            --table sc0red-services-e2e \
             --endpoint http://localhost:4566
 
       - name: Create SQS queue
         run: |
           aws --endpoint-url=http://localhost:4566 sqs create-queue \
-            --queue-name janus-analysis-e2e \
+            --queue-name sc0red-services-analysis-e2e \
             --region us-east-1 2>/dev/null || true
         env:
           AWS_ACCESS_KEY_ID: local

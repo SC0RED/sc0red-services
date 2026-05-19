@@ -7,7 +7,7 @@ import pytest
 from moto import mock_aws
 
 from src.mcp.oauth_provider import (
-    JanusOAuthProvider,
+    Sc0redServicesOAuthProvider,
     StoredAuthorizationCode,
     StoredRefreshToken,
 )
@@ -36,7 +36,7 @@ def provider(rsa_keys):
     with mock_aws():
         client = boto3.client("dynamodb", region_name="us-east-1")
         client.create_table(
-            TableName="janus-test",
+            TableName="sc0red-services-test",
             KeySchema=[
                 {"AttributeName": "pk", "KeyType": "HASH"},
                 {"AttributeName": "sk", "KeyType": "RANGE"},
@@ -47,13 +47,13 @@ def provider(rsa_keys):
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        repo = OAuthRepository("janus-test")
-        yield JanusOAuthProvider(
+        repo = OAuthRepository("sc0red-services-test")
+        yield Sc0redServicesOAuthProvider(
             repository=repo,
             private_key_pem=private_pem,
             public_key_pem=public_pem,
-            issuer_url="https://mcp.test.janus.sc0red.com",
-            consent_base_url="https://test.janus.sc0red.com",
+            issuer_url="https://mcp.test.sc0red-services.sc0red.com",
+            consent_base_url="https://test.sc0red-services.sc0red.com",
         )
 
 
@@ -117,7 +117,7 @@ class TestAuthorize:
             redirect_uri_provided_explicitly=True,
         )
         url = await provider.authorize(client, params)
-        assert url.startswith("https://test.janus.sc0red.com/oauth/authorize?")
+        assert url.startswith("https://test.sc0red-services.sc0red.com/oauth/authorize?")
         assert "client_id=test-client" in url
         assert "state=random-state" in url
         assert "code_challenge=test-challenge" in url
@@ -266,7 +266,7 @@ class TestLoadAccessToken:
         access_token = create_signed_access_token(
             private_key_pem=provider._private_key_pem,
             user_id="u1", email="t@t.com", org_id="o1", role="admin",
-            client_id="c1", scopes=["read"], issuer="https://mcp.test.janus.sc0red.com",
+            client_id="c1", scopes=["read"], issuer="https://mcp.test.sc0red-services.sc0red.com",
         )
         provider._repository.save_access_token(
             compute_token_hash(access_token), user_id="u1", org_id="o1",
@@ -288,7 +288,7 @@ class TestLoadAccessToken:
         access_token = create_signed_access_token(
             private_key_pem=provider._private_key_pem,
             user_id="u1", email="t@t.com", org_id="o1", role="admin",
-            client_id="c1", scopes=["read"], issuer="https://mcp.test.janus.sc0red.com",
+            client_id="c1", scopes=["read"], issuer="https://mcp.test.sc0red-services.sc0red.com",
         )
         # JWT is valid but no record in DynamoDB
         result = await provider.load_access_token(access_token)

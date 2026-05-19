@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.handlers.api_handler_entry import handle_api_event
 
-app = FastAPI(title="Janus Backend (Local Dev)")
+app = FastAPI(title="sc0red Services Backend (Local Dev)")
 
 app.add_middleware(
     CORSMiddleware,

@@ -75,14 +75,14 @@ describe('PrintReport composition', () => {
 
     it('renders exactly one sc0red CTA', () => {
         render(<PrintReport analysis={fullAnalysis} generatedDate="May 1, 2026" />)
-        const matches = screen.getAllByText('sc0red Advisory can help you capture these opportunities')
+        const matches = screen.getAllByText('sc0red Services can help you capture these opportunities')
         expect(matches).toHaveLength(1)
     })
 
     it('omits the back cover when there are no opportunities', () => {
         render(<PrintReport analysis={{ ...fullAnalysis, opportunities: [] }} generatedDate="May 1, 2026" />)
         expect(
-            screen.queryByText('sc0red Advisory can help you capture these opportunities')
+            screen.queryByText('sc0red Services can help you capture these opportunities')
         ).not.toBeInTheDocument()
     })
 
@@ -129,7 +129,7 @@ describe('PrintReport composition', () => {
         expect(screen.queryByText('EBITDA Impact Model')).not.toBeInTheDocument()
         expect(screen.queryByText('Value Chain Analysis')).not.toBeInTheDocument()
         expect(
-            screen.queryByText('sc0red Advisory can help you capture these opportunities')
+            screen.queryByText('sc0red Services can help you capture these opportunities')
         ).not.toBeInTheDocument()
     })
 

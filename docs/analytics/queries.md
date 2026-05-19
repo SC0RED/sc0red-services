@@ -5,9 +5,9 @@ Reference queries for the `opportunities-cta-analytics` event stream. Run them i
 
 | Environment | Log group |
 |---|---|
-| Development | `/janus/development/analytics-events` |
-| Testing | `/janus/testing/analytics-events` |
-| Production | `/janus/production/analytics-events` |
+| Development | `/sc0red-services/development/analytics-events` |
+| Testing | `/sc0red-services/testing/analytics-events` |
+| Production | `/sc0red-services/production/analytics-events` |
 
 Retention is 90 days. Each event is a single JSON line; the fields below are
 already top-level so you can `fields ...` directly without `parse @message`.
@@ -34,7 +34,7 @@ the change is archived; until then see `openspec/changes/opportunities-cta-analy
 ## Running a query
 
 1. Open the AWS console → CloudWatch → **Logs Insights**.
-2. In the log-group selector, pick `/janus/<env>/analytics-events`.
+2. In the log-group selector, pick `/sc0red-services/<env>/analytics-events`.
 3. Set a time range (top-right).
 4. Paste a query below into the editor.
 5. Click **Run query**.
@@ -112,7 +112,7 @@ fields @timestamp, event_type
 
 ## Privacy & access
 
-- Log group is read-restricted via IAM; Janus engineers only.
+- Log group is read-restricted via IAM; sc0red Services engineers only.
 - No PII beyond Cognito `sub` (opaque UUID) is captured. No email, no IP, no
   page content.
 - Retention is 90 days. Don't relax this without a privacy review.

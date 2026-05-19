@@ -46,7 +46,7 @@ class StepFunctionsConstruct(Construct):
 
         send_wave_fn = self._create_lambda(
             "SendWave",
-            function_name=f"janus-send-wave-{environment}",
+            function_name=f"sc0red-services-send-wave-{environment}",
             handler="src.handlers.step_function_entry.handle_send_wave_event",
             bundling=bundling,
             architecture=lambda_architecture,
@@ -60,7 +60,7 @@ class StepFunctionsConstruct(Construct):
 
         check_wave_fn = self._create_lambda(
             "CheckWave",
-            function_name=f"janus-check-wave-{environment}",
+            function_name=f"sc0red-services-check-wave-{environment}",
             handler="src.handlers.step_function_entry.handle_check_wave_event",
             bundling=bundling,
             architecture=lambda_architecture,
@@ -72,7 +72,7 @@ class StepFunctionsConstruct(Construct):
 
         mark_complete_fn = self._create_lambda(
             "MarkComplete",
-            function_name=f"janus-mark-complete-{environment}",
+            function_name=f"sc0red-services-mark-complete-{environment}",
             handler="src.handlers.step_function_entry.handle_mark_complete_event",
             bundling=bundling,
             architecture=lambda_architecture,
@@ -155,7 +155,7 @@ class StepFunctionsConstruct(Construct):
         self._state_machine = sfn.StateMachine(
             self,
             "PortfolioBatchCoordinator",
-            state_machine_name=f"janus-portfolio-batch-{environment}",
+            state_machine_name=f"sc0red-services-portfolio-batch-{environment}",
             definition_body=sfn.DefinitionBody.from_chainable(definition),
             timeout=Duration.hours(2),
             tracing_enabled=True,

@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 
 /**
- * Theme system for the sc0red Advisory webapp.
+ * Theme system for the sc0red Services webapp.
  *
- * Three user-facing modes are persisted under `localStorage.janus.theme` (the
- * storage key keeps the internal `janus.*` namespace to avoid invalidating
+ * Three user-facing modes are persisted under `localStorage.sc0red-services.theme` (the
+ * storage key keeps the internal `sc0red-services.*` namespace to avoid invalidating
  * existing users' persisted theme preference on the rebrand):
  *   - `"dark"`   — explicit dark
  *   - `"light"`  — explicit light
@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
  * script in `app/layout.tsx` sets the attribute before React hydrates, so
  * the user never sees a flash-of-wrong-theme.
  *
- * Charts and other JS consumers subscribe to the `janus:theme-change` custom
+ * Charts and other JS consumers subscribe to the `sc0red-services:theme-change` custom
  * event dispatched by `setTheme`; that's how Recharts re-resolves CSS
  * variables when the user toggles the theme.
  */
@@ -25,8 +25,8 @@ import { useCallback, useEffect, useState } from 'react'
 export type ThemeMode = 'dark' | 'light' | 'system'
 export type ResolvedTheme = 'dark' | 'light'
 
-export const THEME_STORAGE_KEY = 'janus.theme'
-export const THEME_CHANGE_EVENT = 'janus:theme-change'
+export const THEME_STORAGE_KEY = 'sc0red-services.theme'
+export const THEME_CHANGE_EVENT = 'sc0red-services:theme-change'
 
 interface ThemeChangeDetail {
     mode: ThemeMode
@@ -68,7 +68,7 @@ export function resolveMode(mode: ThemeMode): ResolvedTheme {
 
 /**
  * Applies a theme choice: writes localStorage, updates `<html data-theme>`,
- * and dispatches `janus:theme-change` so JS subscribers (charts) can
+ * and dispatches `sc0red-services:theme-change` so JS subscribers (charts) can
  * re-resolve their CSS variables. Safe to call on the server (no-op).
  */
 export function setTheme(mode: ThemeMode): ResolvedTheme {

@@ -8,7 +8,7 @@ describe('PrintBackCover', () => {
         render(<PrintBackCover hasOpportunities={true} />)
         expect(screen.getByText('Next Steps')).toBeInTheDocument()
         expect(
-            screen.getByText('sc0red Advisory can help you capture these opportunities')
+            screen.getByText('sc0red Services can help you capture these opportunities')
         ).toBeInTheDocument()
         // Anchor href attr is set from getSc0redContactUrl().
         const link = screen.getByRole('link')

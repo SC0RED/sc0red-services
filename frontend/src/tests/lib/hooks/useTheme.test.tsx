@@ -66,7 +66,7 @@ describe('setTheme', () => {
         expect(document.documentElement.getAttribute('data-theme')).toBe('light')
     })
 
-    it('dispatches the janus:theme-change custom event', () => {
+    it('dispatches the sc0red-services:theme-change custom event', () => {
         const listener = vi.fn()
         window.addEventListener(THEME_CHANGE_EVENT, listener)
         setTheme('light')
@@ -99,7 +99,7 @@ describe('useTheme', () => {
 
     it('defaults to dark when nothing persisted (no OS-pref fallback)', () => {
         // Even with the OS reporting `prefers-color-scheme: light`, a new
-        // user with no `localStorage.janus.theme` lands on dark — sc0red
+        // user with no `localStorage.sc0red-services.theme` lands on dark — sc0red
         // is dark-first by design. Users who want OS-followed behaviour
         // can opt into `system` mode via Settings → Appearance.
         installMatchMedia(true)

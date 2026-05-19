@@ -1,4 +1,4 @@
-# Janus — Backend API Reference
+# sc0red Services — Backend API Reference
 
 Base URL (local): `http://localhost:8001`
 Base URL (LocalStack CDK): `https://<api-id>.execute-api.localhost.localstack.cloud:4566/development`

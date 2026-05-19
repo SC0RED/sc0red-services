@@ -92,8 +92,8 @@ export default function DashboardSidebar() {
                             }}
                         >
                             <Image
-                                src="/sc0red-advisory-logo.svg"
-                                alt="sc0red Advisory"
+                                src="/sc0red-services-logo.svg"
+                                alt="sc0red Services"
                                 width={36}
                                 height={36}
                                 style={{ objectFit: 'contain' }}
@@ -101,7 +101,7 @@ export default function DashboardSidebar() {
                         </div>
                         <div>
                             <div style={{ fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>
-                                sc0red Advisory
+                                sc0red Services
                             </div>
                             <div
                                 style={{

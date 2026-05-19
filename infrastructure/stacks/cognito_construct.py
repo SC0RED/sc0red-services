@@ -1,4 +1,4 @@
-"""Cognito User Pool construct for Janus authentication.
+"""Cognito User Pool construct for sc0red Services authentication.
 
 Creates a User Pool with:
 - Email-based sign-in with auto-verification
@@ -17,7 +17,7 @@ from constructs import Construct
 
 
 class CognitoConstruct(Construct):
-    """Cognito User Pool and App Client for Janus authentication."""
+    """Cognito User Pool and App Client for sc0red Services authentication."""
 
     def __init__(
         self,
@@ -69,7 +69,7 @@ class CognitoConstruct(Construct):
         log_group = logs.LogGroup(
             self,
             "CustomMessageLambdaLogs",
-            log_group_name=f"/aws/lambda/janus-cognito-custom-message-{self._environment}",
+            log_group_name=f"/aws/lambda/sc0red-services-cognito-custom-message-{self._environment}",
             retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=removal_policy,
         )
@@ -77,7 +77,7 @@ class CognitoConstruct(Construct):
         return lambda_.Function(
             self,
             "CustomMessageLambda",
-            function_name=f"janus-cognito-custom-message-{self._environment}",
+            function_name=f"sc0red-services-cognito-custom-message-{self._environment}",
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=architecture,
             handler="src.handlers.cognito_custom_message.handle_custom_message",
@@ -99,7 +99,7 @@ class CognitoConstruct(Construct):
         pool = cognito.UserPool(
             self,
             "UserPool",
-            user_pool_name=f"janus-users-{self._environment}",
+            user_pool_name=f"sc0red-services-users-{self._environment}",
             # Sign-in configuration
             sign_in_aliases=cognito.SignInAliases(email=True),
             self_sign_up_enabled=True,
@@ -139,8 +139,8 @@ class CognitoConstruct(Construct):
             mfa=cognito.Mfa.OFF,
             # Email configuration — use Cognito default (SES for production later)
             user_verification=cognito.UserVerificationConfig(
-                email_subject="Janus — Verify your email",
-                email_body="Your Janus verification code is {####}",
+                email_subject="sc0red Services — Verify your email",
+                email_body="Your sc0red Services verification code is {####}",
                 email_style=cognito.VerificationEmailStyle.CODE,
             ),
             # Invitation email is handled by the CustomMessage Lambda trigger
@@ -157,7 +157,7 @@ class CognitoConstruct(Construct):
         """Create the App Client for the frontend SPA."""
         return self._user_pool.add_client(
             "AppClient",
-            user_pool_client_name=f"janus-web-{self._environment}",
+            user_pool_client_name=f"sc0red-services-web-{self._environment}",
             generate_secret=False,
             auth_flows=cognito.AuthFlow(
                 user_password=True,

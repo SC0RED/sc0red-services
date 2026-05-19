@@ -22,7 +22,7 @@ Earlier draft used `user_repo.find_by_org` to discover users to fix.
 That has a chicken-and-egg problem: legacy users lack `GSI1PK`, so
 `find_by_org` returns empty, so the script processes zero records.
 Switched to a table-scan with `entity_type = "user"` filter, which
-finds every user regardless of GSI population. At Janus volumes
+finds every user regardless of GSI population. At sc0red Services volumes
 (low hundreds of users per org) this is fine; the alternative is
 unrecoverable.
 
@@ -31,7 +31,7 @@ fields set are counted as `already_complete` and skipped.
 
 Required environment
 --------------------
-  DYNAMODB_TABLE          full table name (e.g. `janus-production`)
+  DYNAMODB_TABLE          full table name (e.g. `sc0red-services-production`)
   AWS_REGION / AWS_DEFAULT_REGION  matching the table's region
   COGNITO_USER_POOL_ID    pool to look up missing subs against
   AWS_ENDPOINT_URL        set when running against LocalStack

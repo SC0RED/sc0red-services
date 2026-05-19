@@ -1,4 +1,4 @@
-"""CDK construct for the Janus MCP (Model Context Protocol) server.
+"""CDK construct for the sc0red Services MCP (Model Context Protocol) server.
 
 Creates:
 - RSA signing key in Secrets Manager (for OAuth JWT tokens)
@@ -85,7 +85,7 @@ class MCPConstruct(Construct):
         return secretsmanager.Secret(
             self,
             "OAuthSigningKey",
-            secret_name=f"janus-mcp-signing-key-{self._environment}",
+            secret_name=f"sc0red-services-mcp-signing-key-{self._environment}",
             description="RSA private key for signing MCP OAuth JWT tokens",
             generate_secret_string=secretsmanager.SecretStringGenerator(
                 generate_string_key="placeholder",
@@ -110,7 +110,7 @@ class MCPConstruct(Construct):
         cognito_client_id: str,
     ) -> lambda_.Function:
         """Create the MCP server Lambda function."""
-        function_name = f"janus-mcp-{self._environment}"
+        function_name = f"sc0red-services-mcp-{self._environment}"
 
         log_group = logs.LogGroup(
             self,

@@ -11,7 +11,7 @@ vi.mock('@aws-sdk/client-secrets-manager', () => ({
 
 import { _resetSecretCacheForTests, readSigningSecret } from '../src/secretSource'
 
-const ARN = 'arn:aws:secretsmanager:us-east-1:1:secret:janus/dev/pdf-token-AbCdEf'
+const ARN = 'arn:aws:secretsmanager:us-east-1:1:secret:sc0red-services/dev/pdf-token-AbCdEf'
 
 beforeEach(() => {
     sendMock.mockReset()

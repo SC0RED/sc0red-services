@@ -11,7 +11,7 @@
 #   docker compose -f docker-compose.e2e.yml down -v
 
 x-shared-env: &shared-env
-  DYNAMODB_TABLE: janus-e2e
+  DYNAMODB_TABLE: sc0red-services-e2e
   DYNAMODB_ENDPOINT: http://localstack:4566
   AWS_REGION: us-east-1
   AWS_DEFAULT_REGION: us-east-1
@@ -24,14 +24,14 @@ x-shared-env: &shared-env
   AI_PROVIDER: openai
   OPENAI_API_KEY: mock-key
   OPENAI_BASE_URL: http://ai-mock:8080/v1/
-  ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/janus-analysis-e2e
-  DOCUMENTS_BUCKET: janus-documents-e2e
+  ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/sc0red-services-analysis-e2e
+  DOCUMENTS_BUCKET: sc0red-services-documents-e2e
 
 services:
 
   localstack:
     image: localstack/localstack:3
-    container_name: janus-localstack-e2e
+    container_name: sc0red-services-localstack-e2e
     ports:
       - "4566:4566"
     environment:
@@ -47,7 +47,7 @@ services:
 
   ai-mock:
     image: python:3.12-slim
-    container_name: janus-ai-mock
+    container_name: sc0red-services-ai-mock
     command: python /mock/mock_ai_server.py
     volumes:
       - ./scripts:/mock:ro
@@ -67,7 +67,7 @@ services:
       dockerfile: Dockerfile
       args:
         GH_TOKEN: ${GH_TOKEN:-}
-    container_name: janus-backend-e2e
+    container_name: sc0red-services-backend-e2e
     ports:
       - "8001:8001"
     environment:
@@ -91,7 +91,7 @@ services:
       dockerfile: Dockerfile
       args:
         GH_TOKEN: ${GH_TOKEN:-}
-    container_name: janus-worker-e2e
+    container_name: sc0red-services-worker-e2e
     command: ["python", "scripts/sqs_worker.py"]
     environment:
       <<: *shared-env

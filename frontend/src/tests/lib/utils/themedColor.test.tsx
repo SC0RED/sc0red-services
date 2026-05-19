@@ -21,7 +21,7 @@ describe('useThemedColor', () => {
         expect(result.current).toBe('#fallback')
     })
 
-    it('re-resolves when janus:theme-change fires', () => {
+    it('re-resolves when sc0red-services:theme-change fires', () => {
         document.documentElement.style.setProperty('--risk-low', '#22c55e')
         const { result } = renderHook(() => useThemedColor('--risk-low', '#000'))
         expect(result.current).toBe('#22c55e')

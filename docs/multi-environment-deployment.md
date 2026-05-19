@@ -2,7 +2,7 @@
 
 ## Overview
 
-Deploy Janus to three AWS accounts (one per environment), each with its own full stack: Lambda, DynamoDB, SQS, S3, Cognito, Amplify, AppSync.
+Deploy sc0red Services to three AWS accounts (one per environment), each with its own full stack: Lambda, DynamoDB, SQS, S3, Cognito, Amplify, AppSync.
 
 | Environment | Git Branch | AWS Account | CDK Environment |
 |---|---|---|---|
@@ -109,7 +109,7 @@ Deploy Janus to three AWS accounts (one per environment), each with its own full
 
 ```
 Push to development → CI checks → deploy-backend.yml
-  → CDK deploy Janus-staging to DEV AWS account
+  → CDK deploy Sc0redServices-staging to DEV AWS account
   → Amplify auto-builds development branch
 ```
 
@@ -117,7 +117,7 @@ Push to development → CI checks → deploy-backend.yml
 
 ```
 Merge PR to testing → CI checks → deploy-testing.yml
-  → CDK deploy Janus-testing to TEST AWS account
+  → CDK deploy Sc0redServices-testing to TEST AWS account
   → Amplify auto-builds testing branch
 ```
 
@@ -125,7 +125,7 @@ Merge PR to testing → CI checks → deploy-testing.yml
 
 ```
 Merge PR to production (2 approvals) → CI checks → deploy-production.yml
-  → CDK deploy Janus-production to PROD AWS account
+  → CDK deploy Sc0redServices-production to PROD AWS account
   → Amplify auto-builds production branch
 ```
 

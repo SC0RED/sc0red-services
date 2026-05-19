@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from src.models.model_event import JanusEvent
-from src.pipeline.factories_factory import JanusFactoriesFactory
+from src.models.model_event import Sc0redServicesEvent
+from src.pipeline.factories_factory import Sc0redServicesFactoriesFactory
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 
@@ -15,7 +15,7 @@ class FactoryManager:
 
     def __init__(self, storage: DynamoDBStorageProvider | None = None) -> None:
         self._storage = storage or DynamoDBStorageProvider()
-        self._factories_factory = JanusFactoriesFactory(
+        self._factories_factory = Sc0redServicesFactoriesFactory(
             company_repo=self._storage.create_company_repository(),
             assessment_repo=self._storage.create_assessment_repository(),
         )
@@ -39,7 +39,7 @@ class FactoryManager:
         if request_id is None:
             raise ValueError("request_id is required — callers must pre-generate a UUID")
 
-        event = JanusEvent(
+        event = Sc0redServicesEvent(
             request_id=request_id,
             request_type="company_analysis",
             url=url,
@@ -68,7 +68,7 @@ class FactoryManager:
     ) -> dict[str, Any]:
         """Run portfolio discovery pipeline."""
         request_id = str(uuid.uuid4())
-        event = JanusEvent(
+        event = Sc0redServicesEvent(
             request_id=request_id,
             request_type="portfolio_scan",
             url=url,

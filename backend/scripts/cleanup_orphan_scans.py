@@ -43,7 +43,7 @@ Output:
         DELETED <scan_id>
 
 Required environment:
-    DYNAMODB_TABLE   — full table name (e.g. janus-development)
+    DYNAMODB_TABLE   — full table name (e.g. sc0red-services-development)
     AWS_REGION       — defaults to us-east-1
     AWS_ENDPOINT_URL — set to LocalStack URL for local testing
 

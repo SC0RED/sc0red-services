@@ -124,7 +124,7 @@ class PdfRenderConstruct(Construct):
         )
 
         # Surface the Lambda ARN so the API Lambda's environment can pick
-        # it up in `janus_stack.py` and `lambda:InvokeFunction` can be
+        # it up in `sc0red_services_stack.py` and `lambda:InvokeFunction` can be
         # granted at the right scope.
         CfnOutput(
             self,
@@ -152,7 +152,7 @@ class PdfRenderConstruct(Construct):
         The PDF Lambda has ``s3:PutObject`` on the bucket (granted in
         ``__init__``). The API Lambda needs ``s3:GetObject`` to mint
         the 60-second presigned download URLs — that grant is wired
-        in ``janus_stack.py``, where both Lambdas live.
+        in ``sc0red_services_stack.py``, where both Lambdas live.
         """
         return self._exports_bucket
 
@@ -182,7 +182,7 @@ class PdfRenderConstruct(Construct):
         return secretsmanager.Secret(
             self,
             "PdfTokenSecret",
-            secret_name=f"janus/{self._environment}/pdf-token-secret",
+            secret_name=f"sc0red-services/{self._environment}/pdf-token-secret",
             description=(
                 "HMAC-SHA256 key for signing short-lived URL tokens that authorise "
                 "the PDF render Lambda's headless browser navigation to /print/{id}."
@@ -207,7 +207,7 @@ class PdfRenderConstruct(Construct):
         return secretsmanager.Secret(
             self,
             "InternalApiKey",
-            secret_name=f"janus/{self._environment}/internal-api-key",
+            secret_name=f"sc0red-services/{self._environment}/internal-api-key",
             description=(
                 "Shared secret authorising the Next.js print route's "
                 "headless-browser-data-fetch path to call /api/internal/analysis."
@@ -232,7 +232,7 @@ class PdfRenderConstruct(Construct):
         return s3.Bucket(
             self,
             "PdfExportsBucket",
-            bucket_name=f"janus-{self._environment}-pdf-exports",
+            bucket_name=f"sc0red-services-{self._environment}-pdf-exports",
             encryption=s3.BucketEncryption.S3_MANAGED,
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
@@ -246,7 +246,7 @@ class PdfRenderConstruct(Construct):
         log_group = logs.LogGroup(
             self,
             "PdfRenderLogs",
-            log_group_name=f"/aws/lambda/janus-pdf-render-{self._environment}",
+            log_group_name=f"/aws/lambda/sc0red-services-pdf-render-{self._environment}",
             retention=log_retention,
             removal_policy=cdk.RemovalPolicy.DESTROY,
         )
@@ -260,7 +260,7 @@ class PdfRenderConstruct(Construct):
         function = lambda_.Function(
             self,
             "PdfRenderFunction",
-            function_name=f"janus-pdf-render-{self._environment}",
+            function_name=f"sc0red-services-pdf-render-{self._environment}",
             runtime=lambda_.Runtime.NODEJS_20_X,
             architecture=lambda_.Architecture.X86_64,
             handler="dist/handler.handler",
@@ -325,7 +325,7 @@ class PdfRenderConstruct(Construct):
         return sqs.Queue(
             self,
             "PdfRenderAsyncDlq",
-            queue_name=f"janus-pdf-render-async-dlq-{self._environment}",
+            queue_name=f"sc0red-services-pdf-render-async-dlq-{self._environment}",
             retention_period=Duration.days(14),
             encryption=sqs.QueueEncryption.SQS_MANAGED,
         )
@@ -345,7 +345,7 @@ class PdfRenderConstruct(Construct):
         cloudwatch.Alarm(
             self,
             "PdfRenderAsyncDlqAlarm",
-            alarm_name=f"janus-pdf-render-async-dlq-{self._environment}",
+            alarm_name=f"sc0red-services-pdf-render-async-dlq-{self._environment}",
             alarm_description=(
                 "PDF render Lambda async-invoke has DLQ messages — "
                 "renders are failing after retry exhaustion."

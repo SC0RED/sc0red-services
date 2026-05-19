@@ -14,7 +14,7 @@ from src.repositories.dynamodb.user_repository import (
 
 
 class DynamoDBStorageProvider:
-    """Bundles all DynamoDB repository factories for Janus."""
+    """Bundles all DynamoDB repository factories for sc0red Services."""
 
     def __init__(self, table: DynamoDBTable | None = None) -> None:
         self._table = table or DynamoDBTable()

@@ -19,9 +19,9 @@ const baseAnalysis: AnalysisData = {
 }
 
 describe('PrintCover', () => {
-    it('renders the sc0red Advisory wordmark in the eyebrow', () => {
+    it('renders the sc0red Services wordmark in the eyebrow', () => {
         render(<PrintCover analysis={baseAnalysis} generatedDate="May 19, 2026" />)
-        expect(screen.getByText('sc0red Advisory · AI Risk Report')).toBeInTheDocument()
+        expect(screen.getByText('sc0red Services · AI Risk Report')).toBeInTheDocument()
     })
 
     it('renders the company name as the cover title', () => {
@@ -31,7 +31,7 @@ describe('PrintCover', () => {
 
     it('renders the brand footer with generated date and product name', () => {
         render(<PrintCover analysis={baseAnalysis} generatedDate="May 19, 2026" />)
-        expect(screen.getByText(/Generated May 19, 2026 · sc0red Advisory/)).toBeInTheDocument()
+        expect(screen.getByText(/Generated May 19, 2026 · sc0red Services/)).toBeInTheDocument()
     })
 
     it('renders the overall risk score', () => {

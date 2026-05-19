@@ -1,6 +1,6 @@
 """DynamoDB table wrapper for single-table design.
 
-Provides low-level operations (put, get, query, delete) over the Janus
+Provides low-level operations (put, get, query, delete) over the sc0red Services
 single-table DynamoDB design.
 """
 
@@ -32,7 +32,7 @@ class DynamoDBTable:
     """Wrapper around a single DynamoDB table."""
 
     def __init__(self, table_name: str | None = None, endpoint_url: str | None = None) -> None:
-        self._table_name = table_name or os.environ.get("DYNAMODB_TABLE", "janus-dev")
+        self._table_name = table_name or os.environ.get("DYNAMODB_TABLE", "sc0red-services-dev")
         self._endpoint_url = endpoint_url or os.environ.get("DYNAMODB_ENDPOINT")
 
         kwargs: dict[str, Any] = {}

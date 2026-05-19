@@ -7,7 +7,7 @@ import RelativeTime from '@/components/ui/RelativeTime'
 import { useActivityPolling } from '@/lib/hooks/useActivityPolling'
 import type { ActivityEvent } from '@/lib/types/api'
 
-const LAST_VIEWED_KEY = 'janus-activity-last-viewed'
+const LAST_VIEWED_KEY = 'sc0red-services-activity-last-viewed'
 
 interface ActivityPanelProps {
     /**

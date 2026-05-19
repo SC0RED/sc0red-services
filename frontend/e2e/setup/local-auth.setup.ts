@@ -7,7 +7,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8001'
 
 setup('register and create authenticated session', async ({ page, context }) => {
     const timestamp = Date.now()
-    const email = `e2e-${timestamp}@janus-test.com`
+    const email = `e2e-${timestamp}@sc0red-services-test.com`
 
     // 1. Register via backend API (no Cognito in E2E mode)
     const registerResponse = await page.request.post(`${BACKEND_URL}/api/auth/register`, {

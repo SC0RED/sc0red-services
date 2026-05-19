@@ -1,4 +1,4 @@
-"""Janus OAuth Authorization Server provider for the MCP SDK.
+"""sc0red Services OAuth Authorization Server provider for the MCP SDK.
 
 Implements OAuthAuthorizationServerProvider with DynamoDB-backed storage.
 The MCP SDK auto-mounts OAuth endpoints when this provider is passed to FastMCP.
@@ -70,7 +70,7 @@ class StoredAccessToken:
     scopes: list[str]
 
 
-class JanusOAuthProvider:
+class Sc0redServicesOAuthProvider:
     """OAuth provider backed by DynamoDB, used by MCP SDK to handle OAuth flows."""
 
     def __init__(
@@ -89,7 +89,7 @@ class JanusOAuthProvider:
             private_key_pem: RSA private key for signing JWTs.
             public_key_pem: RSA public key for verifying JWTs.
             issuer_url: The MCP server URL (issuer in JWTs).
-            consent_base_url: The Janus frontend URL for the consent page.
+            consent_base_url: The sc0red Services frontend URL for the consent page.
         """
         self._repository = repository
         self._private_key_pem = private_key_pem
@@ -135,7 +135,7 @@ class JanusOAuthProvider:
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
-        """Redirect to the Janus consent UI for user authorization.
+        """Redirect to the sc0red Services consent UI for user authorization.
 
         Returns the URL to redirect the browser to.
         """

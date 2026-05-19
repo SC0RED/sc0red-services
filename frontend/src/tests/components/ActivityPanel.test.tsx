@@ -39,7 +39,7 @@ const SAMPLE_EVENTS: ActivityEvent[] = [
     },
 ]
 
-const LAST_VIEWED_KEY = 'janus-activity-last-viewed'
+const LAST_VIEWED_KEY = 'sc0red-services-activity-last-viewed'
 
 describe('ActivityPanel', () => {
     beforeEach(() => {
