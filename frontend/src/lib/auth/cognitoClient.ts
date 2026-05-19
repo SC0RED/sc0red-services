@@ -142,7 +142,7 @@ export function confirmForgotPassword(email: string, code: string, newPassword: 
 
 /**
  * Sign up a new user with Cognito (self-signup flow).
- * Note: For Janus, signup goes through the backend which creates the org
+ * Note: For sc0red Advisory, signup goes through the backend which creates the org
  * and Cognito user together. This function is available for direct signup
  * if needed in the future.
  */

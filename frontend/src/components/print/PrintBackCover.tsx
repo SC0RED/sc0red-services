@@ -6,7 +6,7 @@ interface PrintBackCoverProps {
 }
 
 /**
- * Back-cover page — the single sc0red CTA for the entire PDF.
+ * Back-cover page — the single sc0red Advisory CTA for the entire PDF.
  *
  * Returns `null` when the analysis has no opportunities, so a sparse
  * report doesn't end with an out-of-context "we can help" page.
@@ -47,7 +47,7 @@ export default function PrintBackCover({ hasOpportunities }: PrintBackCoverProps
                 Next Steps
             </div>
             <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, maxWidth: '640px' }}>
-                sc0red can help you capture these opportunities
+                sc0red Advisory can help you capture these opportunities
             </h2>
             <p
                 style={{

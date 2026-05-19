@@ -8,7 +8,7 @@ The PDF SHALL default to A4 portrait for every page and SHALL allow specific sec
 - `page-break-before: always` between major sections in the advisory-narrative order: **Cover → Executive Summary → Top Actions → Value Chain → EBITDA → Risk Profile → AI Opportunity Roadmap → Methodology → Back Cover**, when the previous section is short enough that the next would otherwise start mid-page
 - No-orphan-headings: a section heading SHALL NOT appear at the bottom of a page with the body content overflowing to the next page
 
-The advisory-narrative order replaces the previous analyst-tool order (Risk → Opportunities → EBITDA → Value Chain) so that the printed report reads in the same flow as the on-screen analysis page in the rebranded Vector Advisory product.
+The advisory-narrative order replaces the previous analyst-tool order (Risk → Opportunities → EBITDA → Value Chain) so that the printed report reads in the same flow as the on-screen analysis page in the rebranded sc0red Advisory product.
 
 #### Scenario: EBITDA tree page renders on a wider page format
 

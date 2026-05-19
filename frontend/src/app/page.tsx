@@ -120,14 +120,14 @@ export default async function LandingPage() {
                         }}
                     >
                         <Image
-                            src="/janus-logo.png"
-                            alt="Janus"
+                            src="/sc0red-advisory-logo.svg"
+                            alt="sc0red Advisory"
                             width={40}
                             height={40}
-                            style={{ objectFit: 'cover' }}
+                            style={{ objectFit: 'contain' }}
                         />
                     </div>
-                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>Janus</span>
+                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>sc0red Advisory</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <Link href="/login" className="btn btn-ghost btn-sm">
@@ -205,8 +205,8 @@ export default async function LandingPage() {
                             lineHeight: 1.7,
                         }}
                     >
-                        Janus analyzes your portfolio companies for AI-driven disruption risks and generates
-                        specific, tactical roadmaps to defend and grow.
+                        sc0red Advisory analyzes your portfolio companies for AI-driven disruption risks and
+                        generates specific, tactical roadmaps to defend and grow.
                     </p>
                     <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                         <Link href="/signup" className="btn btn-primary btn-lg">
@@ -265,7 +265,7 @@ export default async function LandingPage() {
                             )}
                         </div>
                         <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                            Janus Analysis — Acme Financial Services
+                            sc0red Advisory Analysis — Acme Financial Services
                         </span>
                     </div>
                     <div
@@ -455,8 +455,8 @@ export default async function LandingPage() {
                         Understand your AI risk today
                     </h2>
                     <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.7 }}>
-                        Join PE firms and operators using Janus to identify AI threats and build defensible,
-                        AI-native business strategies.
+                        Join PE firms and operators using sc0red Advisory to identify AI threats and build
+                        defensible, AI-native business strategies.
                     </p>
                     <Link
                         href="/signup"
@@ -473,7 +473,7 @@ export default async function LandingPage() {
                 style={{ padding: '2rem', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}
             >
                 <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
-                    © 2026 Janus · AI Risk & Opportunity Intelligence
+                    © 2026 sc0red Advisory · AI Risk & Strategic Intelligence
                 </p>
             </footer>
 

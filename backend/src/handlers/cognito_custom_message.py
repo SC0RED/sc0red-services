@@ -46,7 +46,7 @@ def _build_invitation_email(event: dict[str, Any]) -> dict[str, Any]:
 
     accept_url = f"{frontend_domain}/accept-invite?email={email}"
 
-    event["response"]["emailSubject"] = "You've been invited to Janus"
+    event["response"]["emailSubject"] = "You've been invited to sc0red Advisory"
     event["response"]["emailMessage"] = _INVITATION_HTML.format(
         email=email,
         temporary_password=temporary_password,

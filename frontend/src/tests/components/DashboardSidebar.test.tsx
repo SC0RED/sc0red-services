@@ -74,10 +74,10 @@ describe('DashboardSidebar', () => {
         expect(screen.getByText('T')).toBeInTheDocument()
     })
 
-    it('renders Janus branding', () => {
+    it('renders sc0red Advisory branding', () => {
         render(<DashboardSidebar />)
 
-        expect(screen.getByText('Janus')).toBeInTheDocument()
+        expect(screen.getByText('sc0red Advisory')).toBeInTheDocument()
         expect(screen.getByText('AI Intelligence')).toBeInTheDocument()
     })
 
