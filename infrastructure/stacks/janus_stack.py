@@ -3,7 +3,7 @@
 import os
 from typing import Any
 
-from aws_cdk import CfnOutput, Stack
+from aws_cdk import Annotations, CfnOutput, Stack
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources
 from constructs import Construct
@@ -52,7 +52,70 @@ class JanusStack(Stack):
 
         # Phase 1: Create Amplify app to get domain for CORS
         amplify = self._create_amplify()
-        frontend_domain = amplify.branch_url if amplify else os.environ.get("FRONTEND_DOMAIN", "")
+        amplify_default_url = amplify.branch_url if amplify else ""
+
+        # Phase 2 host cutover (rename-janus-to-sc0red-advisory):
+        # ``canonical_frontend_domain`` is the URL the app SHOULD canonicalize
+        # on — the sc0red Advisory custom domain in non-development environments
+        # once attached in the Amplify Console. It drives NEXTAUTH_URL,
+        # FRONTEND_BASE_URL (the print Lambda's navigation target),
+        # CONSENT_BASE_URL (MCP), and the invitation-email FRONTEND_DOMAIN.
+        # When no custom domain is configured (development, or non-Amplify
+        # CDK synth), we fall back to the Amplify branch URL, and lastly to
+        # the FRONTEND_DOMAIN env var for purely local synth.
+        configured_custom_domain = config.get("frontend_custom_domain") or None
+        configured_legacy_domain = config.get("frontend_legacy_domain") or None
+        canonical_frontend_domain = (
+            configured_custom_domain
+            or amplify_default_url
+            or os.environ.get("FRONTEND_DOMAIN", "")
+        )
+        # ``allowed_origins`` is the full list of hostnames CORS must accept.
+        # During the 90-day cutover (proposal §10), CORS allows BOTH the new
+        # sc0red Advisory host and the legacy ``*.janus.sc0red.com`` host so
+        # users hitting the old bookmark still receive a working app. After
+        # decommission, set ``frontend_legacy_domain`` to None in
+        # ``infrastructure/app.py`` to drop the legacy origin from the list.
+        # The Amplify default URL is always included so internal smoke tests
+        # and the headless Chromium PDF Lambda (which navigates the SSR
+        # Lambda's stable Amplify URL, not the public custom domain) can
+        # still make same-origin XHRs through the SSR proxy routes.
+        allowed_origins: list[str] = []
+        for origin in (canonical_frontend_domain, configured_legacy_domain, amplify_default_url):
+            if origin and origin not in allowed_origins:
+                allowed_origins.append(origin)
+
+        # Backwards-compat alias kept for existing call sites that take a
+        # single ``frontend_domain`` string for user-visible URLs (the
+        # Cognito CustomMessage invitation email's accept-invite link, the
+        # MCP OAuth CONSENT_BASE_URL the user sees during MCP authorisation).
+        # Internal navigation targets like the PDF Lambda's
+        # ``FRONTEND_BASE_URL`` use ``amplify_default_url`` instead (set
+        # explicitly below) so they don't depend on the user-visible
+        # domain's lifecycle.
+        frontend_domain = canonical_frontend_domain
+
+        # Phase 2 sequencing guard (rename-janus-to-sc0red-advisory):
+        # ``frontend_custom_domain`` becomes the public NEXTAUTH_URL the
+        # moment this stack synthesises, which means the Amplify build
+        # picks it up on its next build trigger after this CDK deploy.
+        # The matching Amplify Console custom-domain attachment + Route 53
+        # records are out-of-band ops (this stack does not manage the
+        # ``sc0red.com`` hosted zone). Surface that sequencing constraint
+        # in the deploy log so an operator running ``cdk deploy`` without
+        # the matching console work sees the warning rather than chasing
+        # a confusing post-deploy auth failure.
+        if configured_custom_domain:
+            Annotations.of(self).add_info(
+                f"Phase 2 host cutover: ``NEXTAUTH_URL`` will be set to "
+                f"``{configured_custom_domain}`` for the ``{environment}`` "
+                "Amplify branch. Verify the matching Amplify Console "
+                "custom-domain attachment, DNS records, and (if cutting "
+                "over) the 301-redirect on the legacy ``janus.sc0red.com`` "
+                "host are in place BEFORE Amplify rebuilds against this "
+                "stack — otherwise auth flow on the new host will fail "
+                "until the domain attachment completes."
+            )
 
         table = create_table(
             self,
@@ -65,7 +128,7 @@ class JanusStack(Stack):
             self,
             environment=environment,
             removal_policy=config["removal_policy"],
-            frontend_domain=frontend_domain,
+            allowed_origins=allowed_origins,
         )
         analytics_log_group = create_analytics_log_group(
             self,
@@ -151,7 +214,7 @@ class JanusStack(Stack):
             environment=environment,
             config=config,
             handler=api_handler,
-            frontend_domain=frontend_domain,
+            allowed_origins=allowed_origins,
         )
 
         # PDF render Lambda — Node.js + headless Chromium. The API Lambda
@@ -184,9 +247,19 @@ class JanusStack(Stack):
         # The async POST handler signs a fresh URL token + passes the
         # frontend base URL to the PDF Lambda so its headless browser
         # can navigate ``<frontend_base_url>/print/<id>?t=<token>``.
-        # Empty string outside Amplify-managed environments is fine —
-        # the handler fails fast at the env-var read.
-        api_handler.add_environment("FRONTEND_BASE_URL", frontend_domain)
+        # MUST be the Amplify default URL (not the sc0red Advisory custom
+        # domain): the PDF Lambda navigates from inside AWS and the
+        # Amplify default URL is the most stable target — it resolves
+        # immediately on stack creation, doesn't depend on the user-side
+        # AWS Console domain attachment, and stays valid after a legacy
+        # host is decommissioned. Amplify routes the canonical custom
+        # domain through the same SSR Lambda, so the headless browser
+        # would see identical content either way; we pin to the
+        # Amplify default for lifecycle independence. Empty string
+        # outside Amplify-managed environments is fine — the handler
+        # fails fast at the env-var read.
+        pdf_navigation_url = amplify_default_url or frontend_domain
+        api_handler.add_environment("FRONTEND_BASE_URL", pdf_navigation_url)
         api_handler.add_environment(
             "PDF_TOKEN_SECRET_ARN", pdf_render.token_secret.secret_arn
         )
@@ -229,6 +302,7 @@ class JanusStack(Stack):
                 cognito_client_id=cognito.app_client_id,
                 pdf_token_secret=pdf_token_secret_value,
                 internal_api_key=internal_api_key_value,
+                canonical_url=canonical_frontend_domain,
             )
 
         _mcp = MCPConstruct(

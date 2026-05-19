@@ -129,9 +129,18 @@ def create_documents_bucket(
     *,
     environment: str,
     removal_policy: RemovalPolicy,
-    frontend_domain: str,
+    allowed_origins: list[str],
 ) -> s3.Bucket:
-    """Create the documents bucket (for customer uploads) with CORS."""
+    """Create the documents bucket (for customer uploads) with CORS.
+
+    ``allowed_origins`` is the full list of frontend origins that may
+    issue presigned-PUT uploads — typically the sc0red Advisory custom
+    domain, the legacy ``*.janus.sc0red.com`` host (during the 90-day
+    cutover window), and the Amplify default URL. An empty list falls
+    back to the wildcard origin only for development synth where no
+    Amplify app is created.
+    """
+    cors_allowed_origins = list(allowed_origins) if allowed_origins else ["*"]
     return s3.Bucket(
         scope,
         "DocumentsBucket",
@@ -143,7 +152,7 @@ def create_documents_bucket(
         cors=[
             s3.CorsRule(
                 allowed_methods=[s3.HttpMethods.PUT],
-                allowed_origins=[frontend_domain] if frontend_domain else ["*"],
+                allowed_origins=cors_allowed_origins,
                 allowed_headers=["*"],
                 max_age=300,
             )
@@ -157,17 +166,20 @@ def create_api(
     environment: str,
     config: dict[str, Any],
     handler: lambda_.Function,
-    frontend_domain: str,
+    allowed_origins: list[str],
 ) -> apigw.LambdaRestApi:
     """Create the API Gateway that fronts the API Lambda.
 
-    Fails fast at synth time for non-development environments that do
-    not supply an explicit ``FRONTEND_DOMAIN`` (or Amplify-derived
-    domain) — a permissive ``*`` CORS policy in staging/production is a
-    security regression we refuse to paper over.
+    ``allowed_origins`` is the list of frontend hostnames that may
+    invoke the API — typically the sc0red Advisory custom domain, the
+    legacy ``*.janus.sc0red.com`` host during the 90-day cutover, and
+    the Amplify default URL. Fails fast at synth time for non-
+    development environments that don't supply any allowed origin — a
+    permissive ``*`` CORS policy in staging/production is a security
+    regression we refuse to paper over.
     """
-    if frontend_domain:
-        cors_origins = [frontend_domain]
+    if allowed_origins:
+        cors_origins = list(allowed_origins)
     elif environment == "development":
         cors_origins = apigw.Cors.ALL_ORIGINS
     else:

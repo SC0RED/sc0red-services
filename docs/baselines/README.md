@@ -36,7 +36,7 @@ Captured: 2026-04-07
 | `/dashboard` | TBD | TBD | TBD | TBD |
 | `/analysis/[id]` | TBD | TBD | TBD | TBD |
 
-> Fill in after running Lighthouse on dev.janus.sc0red.com
+> Fill in after running Lighthouse on dev.advisory.sc0red.com
 
 ## Frontend — Web Vitals
 

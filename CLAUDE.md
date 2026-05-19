@@ -6,6 +6,8 @@ The customer-facing product is **sc0red Advisory** — that's the brand string o
 
 If you're editing customer-visible text (a page, an email template, a PDF component, a brand string in CSS), use **sc0red Advisory**. If you're editing infrastructure, package metadata, or internal symbol names, the `janus-*` family stays.
 
+**Hosts (Phase 2 cutover):** The canonical customer-facing hostnames are `dev.advisory.sc0red.com` (dev), `testing.advisory.sc0red.com` (testing), and `advisory.sc0red.com` (production). The legacy `*.janus.sc0red.com` hosts continue to serve via 301 redirect for at least 90 days post-cutover. Internal references (Amplify default `*.amplifyapp.com` URLs, CDK CfnOutputs, smoke-test base URLs) keep the Amplify default URL — those aren't customer-visible and don't need to flip.
+
 ## MANDATORY: Architecture Review Gate
 
 **Before calling `git commit` on any code change, you MUST run the `architecture-reviewer` agent if ANY of these conditions are true:**

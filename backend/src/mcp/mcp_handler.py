@@ -47,8 +47,33 @@ def _load_signing_keys() -> tuple[str, str]:
 
 _private_key, _public_key = _load_signing_keys()
 
-_issuer_url = os.environ.get("MCP_ISSUER_URL", f"https://mcp.{STAGE}.janus.sc0red.com")
-_consent_base_url = os.environ.get("CONSENT_BASE_URL", f"https://{STAGE}.janus.sc0red.com")
+# Phase 2 host cutover defaults (rename-janus-to-sc0red-advisory): the
+# public sc0red Advisory hosts are ``dev.advisory.sc0red.com``,
+# ``testing.advisory.sc0red.com``, and ``advisory.sc0red.com`` (production
+# has no per-env subdomain). ``CONSENT_BASE_URL`` is injected by CDK
+# (``infrastructure/stacks/mcp_construct.py``) for every deployed env, so
+# the default below only fires under local-dev. ``MCP_ISSUER_URL`` is
+# NOT injected today — every deployed environment also falls through to
+# the default. This is a pre-existing wiring gap; the new
+# ``advisory.sc0red.com`` default is a better placeholder than the old
+# ``janus.sc0red.com`` one but is still a placeholder, not the live
+# issuer host. When the MCP OAuth issuer URL becomes operationally
+# relevant (e.g. external clients validating tokens), wire it through
+# ``mcp_construct.py`` from the Lambda Function URL or an explicit
+# config key, matching the pattern used for ``CONSENT_BASE_URL``.
+# The ``STAGE`` env var carries the CDK environment name
+# (``development`` / ``staging`` / ``testing`` / ``production``), which
+# is intentionally NOT the same as the public hostname prefix
+# (``dev`` / ``testing`` / no-prefix). The placeholder defaults here use
+# the CDK stage name verbatim, since no operator should be routing
+# traffic to them.
+_DEFAULT_STAGE_PREFIX = "" if STAGE == "production" else f"{STAGE}."
+_issuer_url = os.environ.get(
+    "MCP_ISSUER_URL", f"https://mcp.{_DEFAULT_STAGE_PREFIX}advisory.sc0red.com"
+)
+_consent_base_url = os.environ.get(
+    "CONSENT_BASE_URL", f"https://{_DEFAULT_STAGE_PREFIX}advisory.sc0red.com"
+)
 
 _repository = OAuthRepository(DYNAMODB_TABLE)
 _oauth_provider = JanusOAuthProvider(

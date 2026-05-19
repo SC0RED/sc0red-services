@@ -58,10 +58,10 @@ cd ..
 ./scripts/playwright.sh --mode=local --headed
 
 # Run smoke tests against deployed dev
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.advisory.sc0red.com
 
 # Run full E2E against deployed (uses real AI)
-./scripts/playwright.sh --mode=deployed --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=deployed --url=https://dev.advisory.sc0red.com
 ```
 
 Or use npm shortcuts from the `frontend/` directory:
@@ -120,11 +120,11 @@ The script automatically:
 Runs against a real deployed environment. Tests signup, login, navigation — no scans (saves AI credits).
 
 ```bash
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.advisory.sc0red.com
 ```
 
 Requires:
-- `--url` pointing to a deployed Janus frontend
+- `--url` pointing to a deployed sc0red Advisory frontend
 - The deployed backend must be running (Amplify + Lambda)
 - Real Cognito user pool must be available (tests register via the signup UI)
 
@@ -132,10 +132,10 @@ Requires:
 
 ```bash
 # Cleanup runs by default
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=smoke --url=https://dev.advisory.sc0red.com
 
 # Skip cleanup if needed
-./scripts/playwright.sh --mode=smoke --url=https://dev.janus.sc0red.com --skip-cleanup
+./scripts/playwright.sh --mode=smoke --url=https://dev.advisory.sc0red.com --skip-cleanup
 ```
 
 ### Deployed Mode
@@ -143,7 +143,7 @@ Requires:
 Full E2E with real Cognito and real AI. Creates a scan against `stripe.com` and verifies results.
 
 ```bash
-./scripts/playwright.sh --mode=deployed --url=https://dev.janus.sc0red.com
+./scripts/playwright.sh --mode=deployed --url=https://dev.advisory.sc0red.com
 ```
 
 This mode:
@@ -153,7 +153,7 @@ This mode:
 - Cleans up test data after completion (auto-discovers Cognito pool + DynamoDB table)
 
 Requires:
-- `--url` pointing to a deployed Janus frontend
+- `--url` pointing to a deployed sc0red Advisory frontend
 - AWS credentials configured (for cleanup — pass `--skip-cleanup` if unavailable)
 
 ---

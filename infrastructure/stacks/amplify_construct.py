@@ -86,23 +86,50 @@ class AmplifyConstruct(Construct):
         cognito_client_id: str,
         pdf_token_secret: str,
         internal_api_key: str,
+        canonical_url: str,
     ) -> None:
         """Phase 2: create the branch after API Gateway exists.
 
-        `pdf_token_secret` and `internal_api_key` are server-side env vars
-        consumed by the Next.js Lambda runtime (the `/api/export/pdf/[id]`
-        token-mint flow and the `/print/[id]` server component, respectively).
+        ``pdf_token_secret`` and ``internal_api_key`` are server-side env vars
+        consumed by the Next.js Lambda runtime (the ``/api/export/pdf/[id]``
+        token-mint flow and the ``/print/[id]`` server component, respectively).
         Both MUST agree with the same env vars on the API Lambda — they
-        come from the same Secrets Manager secret in `janus_stack.py`.
+        come from the same Secrets Manager secret in ``janus_stack.py``.
 
-        `FRONTEND_BASE_URL` is the public origin the headless Chromium
-        Lambda navigates to (`${BASE}/print/{id}?t=...`). On Amplify SSR
-        the Next.js process binds to `localhost:3000` internally, so
-        `req.nextUrl.origin` returns the wrong URL — we have to set this
-        explicitly. Value is the Amplify-default branch URL (Amplify
-        routes the custom domain `dev.janus.sc0red.com` to the same
-        SSR Lambda, so headless navigation against either works).
+        ``canonical_url`` is the public origin the app SHOULD canonicalize
+        on — the sc0red Advisory custom domain in non-development envs once
+        attached in the Amplify Console (Phase 2 of the
+        ``rename-janus-to-sc0red-advisory`` change). It drives:
+
+        - ``NEXTAUTH_URL`` — the canonical URL NextAuth uses for absolute
+          callback construction and CSRF host-matching. Setting it to the
+          canonical custom domain ensures the auth flow on the new host is
+          self-consistent (cookies + CSRF tokens align with the visible URL
+          users see). On the legacy ``*.janus.sc0red.com`` host the
+          configured 301 redirect (Amplify Console rewrite) bounces users to
+          the canonical host before NextAuth runs, so the mismatch window is
+          a single redirect.
+
+        ``FRONTEND_BASE_URL`` is the internal navigation target for the
+        headless Chromium PDF render Lambda
+        (``${BASE}/print/{id}?t=...``). It always points at the stable
+        Amplify-default branch URL — the SSR Lambda's intrinsic host —
+        because the PDF Lambda must navigate successfully even before the
+        sc0red Advisory custom domain is attached or after a legacy host is
+        decommissioned. Amplify routes the custom domain through the same
+        SSR Lambda, so the headless browser sees identical content; we
+        intentionally pin to the Amplify default to keep PDF export
+        independent of the public-domain lifecycle. Falls back to the
+        explicit canonical only if no Amplify-default URL is available
+        (defensive — should not happen in any current code path).
+
+        ``canonical_url`` may be a CDK token string at synth time, but it
+        is guaranteed non-empty by ``janus_stack.py`` (the call site
+        composes it from the Amplify default URL when no custom domain is
+        configured), so no fallback is required here.
         """
+        nextauth_url = canonical_url
+        pdf_navigation_url = self.branch_url
         branch = amplify.CfnBranch(
             self,
             "Branch",
@@ -122,7 +149,7 @@ class AmplifyConstruct(Construct):
                 ),
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="NEXTAUTH_URL",
-                    value=self.branch_url,
+                    value=nextauth_url,
                 ),
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="NEXT_PUBLIC_COGNITO_USER_POOL_ID",
@@ -142,7 +169,7 @@ class AmplifyConstruct(Construct):
                 ),
                 amplify.CfnBranch.EnvironmentVariableProperty(
                     name="FRONTEND_BASE_URL",
-                    value=self.branch_url,
+                    value=pdf_navigation_url,
                 ),
             ],
         )
@@ -153,7 +180,11 @@ class AmplifyConstruct(Construct):
             cdk.Stack.of(self),
             "AmplifyBranchUrl",
             value=self.branch_url,
-            description=f"Amplify frontend URL — {self._environment}",
+            description=(
+                f"Amplify default branch URL — {self._environment}. "
+                "Smoke-test target; canonical user-facing URL is "
+                "configured separately via the Amplify Console custom domain."
+            ),
         )
 
     # ── Private helpers ────────────────────────────────────────────────

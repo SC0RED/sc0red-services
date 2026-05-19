@@ -8,6 +8,8 @@ Customer-facing brand: **sc0red Advisory**. Internal codebase, repo, AWS resourc
 
 If you're editing customer-visible text, use **sc0red Advisory**. If you're editing infrastructure or internal symbols, the `janus-*` family stays.
 
+**Hosts:** Canonical customer-facing URLs are `dev.advisory.sc0red.com` (dev), `testing.advisory.sc0red.com` (testing), `advisory.sc0red.com` (production). The legacy `*.janus.sc0red.com` hosts redirect (HTTP 301) to the matching `advisory.sc0red.com` path during a 90-day decommission window.
+
 ---
 
 ## Table of Contents
