@@ -6,6 +6,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/authOptions'
 import { TIER_COLORS } from '@/lib/utils/riskUtils'
 
+// Per-env marketing site root, baked in at build time by the Amplify branch
+// env var (see infrastructure/stacks/sc0red_services_stack.py). Falls back
+// to the prod marketing site for local dev / preview builds where the env
+// var isn't set.
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL ?? 'https://www.sc0red.com'
+
 export default async function LandingPage() {
     const session = await getServerSession(authOptions)
     if (session) {
@@ -117,7 +123,7 @@ export default async function LandingPage() {
                 </a>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                     <a
-                        href="https://www.sc0red.com"
+                        href={MARKETING_URL}
                         style={{
                             color: 'var(--text-secondary)',
                             fontSize: '0.875rem',
@@ -482,21 +488,21 @@ export default async function LandingPage() {
                 <p style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>
                     Part of the{' '}
                     <a
-                        href="https://www.sc0red.com"
+                        href={MARKETING_URL}
                         style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}
                     >
                         sc0red
                     </a>{' '}
                     family ·{' '}
                     <a
-                        href="https://www.sc0red.com/advisory"
+                        href={`${MARKETING_URL}/advisory`}
                         style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
                     >
-                        Advisory
+                        Services
                     </a>{' '}
                     ·{' '}
                     <a
-                        href="https://www.sc0red.com/platform"
+                        href={`${MARKETING_URL}/platform`}
                         style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}
                     >
                         Platform

@@ -222,6 +222,19 @@ class Sc0redServicesStack(Stack):
             if not nextauth_secret and self._environment != "development":
                 message = "NEXTAUTH_SECRET must be set for Amplify frontend"
                 raise ValueError(message)
+            # Per-env sc0red marketing site URL. Wired into the Amplify
+            # branch as NEXT_PUBLIC_MARKETING_URL so the app's back-link
+            # lands on the right env's marketing site (dev → dev marketing,
+            # prod → prod marketing) rather than always pointing at prod.
+            marketing_url_by_env = {
+                "development": "https://development.sc0red.com",
+                "staging": "https://development.sc0red.com",
+                "testing": "https://testing.sc0red.com",
+                "production": "https://www.sc0red.com",
+            }
+            marketing_url = marketing_url_by_env.get(
+                self._environment, "https://www.sc0red.com"
+            )
             amplify.create_branch(
                 api_url=api.url,
                 nextauth_secret=nextauth_secret,
@@ -229,6 +242,7 @@ class Sc0redServicesStack(Stack):
                 cognito_client_id=cognito.app_client_id,
                 pdf_token_secret=pdf_token_secret_value,
                 internal_api_key=internal_api_key_value,
+                marketing_url=marketing_url,
             )
 
         _mcp = MCPConstruct(
