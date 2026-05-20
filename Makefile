@@ -43,9 +43,23 @@ test: ## Run backend tests with 95% coverage requirement
 
 security: ## Run security checks (bandit + pip-audit)
 	cd backend && bandit -r src/
-	# CVE-2026-4539 — pygments; CVE-2026-3219 / CVE-2026-6357 — pip itself.
-	# CVE-2026-6357 fix is in pip 26.1; GH Actions runner currently ships 26.0.1, so we ignore until the runner image catches up.
-	cd backend && pip-audit --ignore-vuln CVE-2026-4539 --ignore-vuln CVE-2026-3219 --ignore-vuln CVE-2026-6357
+	# Ignored CVEs (each with its reason):
+	#   CVE-2026-4539     — pygments; not exploitable in our usage path
+	#   CVE-2026-3219     — pip itself; runner-image issue
+	#   CVE-2026-6357     — pip itself; fix in pip 26.1, GH runner ships 26.0.1
+	#   PYSEC-2025-183    — pyjwt "weak encryption". Disputed by supplier
+	#                       (https://github.com/jpadilla/pyjwt) — the key length
+	#                       is chosen by the application, not the library.
+	#                       Our only PyJWT consumer is Cognito JWT validation
+	#                       using RS256 with cryptography-managed keys, so the
+	#                       weak-HMAC failure mode the advisory describes does
+	#                       not apply. No fix released; remove once an upstream
+	#                       fix ships and we can bump.
+	cd backend && pip-audit \
+		--ignore-vuln CVE-2026-4539 \
+		--ignore-vuln CVE-2026-3219 \
+		--ignore-vuln CVE-2026-6357 \
+		--ignore-vuln PYSEC-2025-183
 
 naming: ## Check naming conventions, abbreviations, imports, and skip comments
 	@echo "$(BLUE)Checking naming conventions...$(NC)"
