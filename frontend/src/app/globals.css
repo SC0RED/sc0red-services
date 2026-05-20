@@ -1464,6 +1464,36 @@ select {
     }
 }
 
+/* ── Opportunity hover-highlight (redesign-analysis-visuals P5) ──
+ *  When the user hovers an EBITDA leaf chip, a value-chain step,
+ *  or a strategy-map cell (P6), the matching opportunity cards in
+ *  ``OpportunitiesList`` apply ``.card-pulse`` — a one-shot 400 ms
+ *  outline glow that lands the user's eye on the linked card. The
+ *  effect is one-shot (no infinite loop) because the source-side
+ *  hover is intentional, and a continuously pulsing card while the
+ *  cursor sits still would be obnoxious. Re-entering the highlight
+ *  state re-triggers the animation by toggling the class. */
+@keyframes card-pulse {
+    0% {
+        box-shadow: 0 0 0 0 var(--accent-blue-glow);
+        outline-color: var(--accent-blue);
+    }
+    50% {
+        box-shadow: 0 0 0 6px var(--accent-blue-glow);
+        outline-color: var(--accent-blue);
+    }
+    100% {
+        box-shadow: 0 0 0 0 var(--accent-blue-glow);
+        outline-color: var(--accent-blue);
+    }
+}
+
+.card-pulse {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    animation: card-pulse 400ms ease-out;
+}
+
 /* ── Page Layout ──────────────────────────────────────────── */
 .page-layout {
     display: flex;

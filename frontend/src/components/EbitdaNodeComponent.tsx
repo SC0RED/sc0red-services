@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 
 import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
+import { useOpportunityHover } from '@/lib/hooks/useOpportunityHover'
 import type { Opportunity } from '@/lib/types/api'
 
 /**
@@ -147,6 +148,26 @@ function LeafChip({
     opportunities,
     accentColor,
 }: EbitdaCardProps & { accentColor: string }) {
+    // P5 hover-provider wiring (redesign-analysis-visuals): hovering /
+    // focusing the chip publishes its ``linkedIndices`` to the shared
+    // provider so the matching opportunity cards in OpportunitiesList
+    // below pulse + scroll into view. ``useOpportunityHover`` returns
+    // a no-op context when no provider is mounted (isolated tests,
+    // print path), so the chip stays harmless outside the analysis page.
+    const { highlightOpportunities, clearHighlight } = useOpportunityHover()
+    const hasLinks = linkedIndices.length > 0
+    const onEnter = () => {
+        if (hasLinks) highlightOpportunities(linkedIndices)
+    }
+    // ``onBlur`` bubbles from any focusable descendant — the dot strip's
+    // overflow ``+N`` badge has ``tabIndex={0}``, and if a future
+    // contributor adds another focusable child, tabbing to it would
+    // otherwise clear the highlight. Guard against the bubble.
+    const onBlur = (event: React.FocusEvent<HTMLElement>) => {
+        const next = event.relatedTarget as Node | null
+        if (event.currentTarget.contains(next)) return
+        clearHighlight()
+    }
     return (
         <article
             // Chip MUST be reachable in keyboard tab order between the
@@ -160,6 +181,10 @@ function LeafChip({
             // hovered or focused. Replaces the custom absolutely-
             // positioned overlay that overflowed neighbouring rows.
             title={description || undefined}
+            onMouseEnter={onEnter}
+            onMouseLeave={clearHighlight}
+            onFocus={onEnter}
+            onBlur={onBlur}
             style={chipStyle(accentColor)}
         >
             <div style={chipLabelStyle}>{label}</div>

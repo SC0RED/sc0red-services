@@ -17,6 +17,7 @@ import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import DeepDiveCTA from '@/components/strategy-map/DeepDiveCTA'
 import HelpTooltip from '@/components/ui/HelpTooltip'
+import { OpportunityHoverProvider } from '@/lib/hooks/useOpportunityHover'
 import { LoadingSpinner } from '@/components/ui'
 import { useReanalyze } from '@/lib/hooks/useReanalyze'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
@@ -115,7 +116,12 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     }
 
     return (
-        <>
+        // P5 (redesign-analysis-visuals): wrap the analysis body in the
+        // hover provider so EBITDA leaves, value-chain steps, the
+        // strategy-map cells (P6), and the Quick Wins matrix dots (P7)
+        // can all dispatch highlight events that the OpportunitiesList
+        // cards below subscribe to (and vice versa).
+        <OpportunityHoverProvider>
             {/* Beat 1 — IDENTITY.
                 Header / strap / overview render testid-only (no `title`
                 prop) by intentional design — none of these is a "section
@@ -271,6 +277,6 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     <DeepDiveCTA analysisId={analysisId} />
                 </AnalysisSection>
             )}
-        </>
+        </OpportunityHoverProvider>
     )
 }
