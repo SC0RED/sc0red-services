@@ -49,15 +49,15 @@
 
 ## 6. Strategy-map rewrite (Spec: `strategy-map-balanced-scorecard-layout`)
 
-- [ ] 6.1 Delete `frontend/src/components/strategy-map/StrategyMapCanvas.tsx`. The React Flow rendering path is gone.
-- [ ] 6.2 Create `frontend/src/components/strategy-map/StrategyMapTable.tsx` — the new CSS-grid table renderer. Props: `strategyMap: StrategyMap`. Renders: Vision eyebrow + Mission banner + 4-row × N-column table + Values strip. Each cell renders title (bold), first sentence of definition (muted, 2-line truncated), and `<OpportunityDotStrip>` keyed off the new `linked_opportunity_indices`.
-- [ ] 6.3 Rewrite `StrategyMapView.tsx` to render `<StrategyMapHeader>` (now simplified — just title) + `<StrategyMapTable>` + `<AnalysisLegend tool="strategy-map">` (legend above table). Drop the gap row, confidence dots, arrows, value-prop chip, strategic-priorities pill row — all per spec deltas.
-- [ ] 6.4 Rewrite `StrategyMapNode.tsx` → `StrategyMapCell.tsx`. The new cell component is the per-objective renderer used inside the table. Same hover provider wiring as other tools (Phase 5.3). Delete the confidence-dot render + the old tooltip block.
-- [ ] 6.5 Layout helper update: the old `α′ layout` algorithm (which assigned theme-column-index positions for the canvas) is repurposed. Instead of (x, y) coords, it now decides which theme column each non-Internal-Process objective belongs in. The four-row × N-column grid is built from that mapping. Move the logic into `frontend/src/lib/utils/strategyMapUtils.ts`.
-- [ ] 6.6 Responsive: at viewport < 900 px, the grid switches to a stacked layout (each perspective row becomes a section block, theme columns wrap to two-up grid). Verified via CSS Grid + a viewport size unit test using `vitest`'s `vi.stubGlobal('matchMedia', ...)`.
-- [ ] 6.7 Update `frontend/src/components/print/PrintStrategyMapObjectives.tsx` — print variant of the BSC table. Drop confidence chip, render dot strip, drop arrows. The print version may stack vertically (one perspective per page block) — design call.
-- [ ] 6.8 Tests: cover the table rendering (four rows, N columns, Mission banner, Values strip), the empty-cell placeholder behavior, the legacy-analysis path (no `linked_opportunity_indices`), the responsive break, the print component.
-- [ ] 6.9 Drop unused dependencies. Grep for `@xyflow/react` consumers; if no consumer remains, remove from `package.json`. Otherwise leave it — EBITDA likely still uses it.
+- [x] 6.1 Delete `frontend/src/components/strategy-map/StrategyMapCanvas.tsx`. The React Flow rendering path is gone.
+- [x] 6.2 Create `frontend/src/components/strategy-map/StrategyMapTable.tsx` — the new CSS-grid table renderer. Renders 4×N grid + per-cell title + first-sentence definition (2-line truncated) + `<OpportunityDotStrip>` + `<AnalysisLegend>` gated on resolvable links. Hover wiring goes through `useOpportunityHover` (P5).
+- [x] 6.3 Rewrite `StrategyMapView.tsx` to compose `<StrategyMapHeader>` + `<StrategyMapTable>` + `<CoreValuesStrip>`. ConfidenceLegend dropped. The `<AnalysisLegend>` lives inside the table so it only mounts when there is at least one resolvable linked index (avoids legend-stranding when opportunities are sparse).
+- [x] 6.4 Replace `StrategyMapNode.tsx` (per-canvas chip) with `ObjectiveEntry` inside `StrategyMapTable.tsx` — per-objective article carrying title + first-sentence definition + dot strip + hover wiring. Old file deleted; the per-cell renderer is private to the table.
+- [x] 6.5 Layout helper moved to `frontend/src/lib/utils/strategyMapLayout.ts` (NEW, separate from `strategyMapUtils.ts` which keeps the value-prop formatter). Pure function emits `themeNames` + 4×N `cells` from the raw `StrategyMap`. Old `frontend/src/lib/strategyMap/layout.ts` (canvas geometry helper) deleted.
+- [x] 6.6 Responsive: `globals.css` adds a `@media (max-width: 900px)` rule keyed on `[data-testid='strategy-map-table']` that collapses the grid to a single column on narrow viewports.
+- [x] 6.7 Update `frontend/src/components/print/PrintStrategyMapObjectives.tsx` — print parity: confidence chip dropped from every objective card; opportunity-link callout added (`Opportunities: #N (title), …`) following the `PrintEbitdaOutline` pattern.
+- [x] 6.8 Tests added: `StrategyMapTable.test.tsx` (10 tests — structural rendering, dot-strip + legend gating, hover dispatch, empty-cell placeholders); `strategyMapLayout.test.ts` (13 tests — perspective routing, fallback column, round-robin, zero-themes guard, `firstSentence` cases); `StrategyMapView.test.tsx` rewritten to assert always-visible header + no canvas + no confidence legend.
+- [x] 6.9 `@xyflow/react` had no remaining consumers after Phases 2+6 — dropped from `frontend/package.json` and lockfile.
 
 ## 7. Quick Wins matrix (Spec: `quick-wins-matrix`)
 

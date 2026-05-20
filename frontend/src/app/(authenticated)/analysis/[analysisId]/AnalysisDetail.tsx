@@ -171,7 +171,11 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 — legacy analyses produced before
                 ``redesign-strategy-map`` Phase 4 inlined map
                 generation into the scan. */}
-            <StrategyMapSlot analysisId={analysisId} strategyMap={data.strategyMap} />
+            <StrategyMapSlot
+                analysisId={analysisId}
+                strategyMap={data.strategyMap}
+                opportunities={opportunities}
+            />
 
             {/* Beat 4 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
                 lenses on the same question: where does value sit and how
