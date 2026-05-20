@@ -143,6 +143,17 @@ export interface FinancialObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** Index pointers into the analysis's `opportunities` array — same
+     *  idiom as `ValueChainStep.opportunity_indices` and
+     *  `EbitdaNode.linked_opportunity_indices`. Renders as coloured
+     *  opportunity dots on the BSC strategy-map cell.
+     *
+     *  Phase 1a of the `redesign-analysis-visuals` change ships only the
+     *  data shape: persisted records produced before this change carry
+     *  no value (deserialise to `undefined`); the AI does not yet
+     *  populate it (Phase 1b). Renderers MUST treat `undefined`,
+     *  missing, and empty-array as semantically identical "no links". */
+    linked_opportunity_indices?: number[]
 }
 
 export interface CustomerObjective {
@@ -157,6 +168,8 @@ export interface CustomerObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** See `FinancialObjective.linked_opportunity_indices`. */
+    linked_opportunity_indices?: number[]
 }
 
 export interface InternalProcessObjective {
@@ -169,6 +182,8 @@ export interface InternalProcessObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** See `FinancialObjective.linked_opportunity_indices`. */
+    linked_opportunity_indices?: number[]
 }
 
 export interface InternalProcessTheme {
@@ -186,6 +201,8 @@ export interface CapacityObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** See `FinancialObjective.linked_opportunity_indices`. */
+    linked_opportunity_indices?: number[]
 }
 
 export interface OrganizationalCapacityPerspective {

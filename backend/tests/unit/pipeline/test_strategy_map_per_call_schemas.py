@@ -44,11 +44,19 @@ from src.pipeline.pipeline_steps._strategy_map_corpus import load_per_call_schem
 # Each entry: (schema-name, model, excluded-fields).
 # - ``id`` is assigned by ``_strategy_map_assembly.py`` from title-list order.
 # - ``title`` is provided as INPUT to the Round-2 prompt, not re-emitted.
+# - ``linked_opportunity_indices`` is intentionally absent from the
+#   AI-facing per-call schema. The Phase 1a slice of
+#   ``redesign-analysis-visuals`` ships only the data shape on the
+#   Pydantic model — Pydantic supplies the empty-list default during
+#   assembly so the field is well-formed on every objective. Phase 1b
+#   will add the per-call schema entry + the prompt instruction that
+#   populates the field.
+_OBJECTIVE_EXCLUDED = {"id", "title", "linked_opportunity_indices"}
 _DETAIL_SCHEMA_MAPPINGS: list[tuple[str, type[BaseModel], set[str]]] = [
-    ("financial_objective_detail", FinancialObjective, {"id", "title"}),
-    ("customer_objective_detail", CustomerObjective, {"id", "title"}),
-    ("internal_objective_detail", InternalProcessObjective, {"id", "title"}),
-    ("capacity_objective_detail", CapacityObjective, {"id", "title"}),
+    ("financial_objective_detail", FinancialObjective, _OBJECTIVE_EXCLUDED),
+    ("customer_objective_detail", CustomerObjective, _OBJECTIVE_EXCLUDED),
+    ("internal_objective_detail", InternalProcessObjective, _OBJECTIVE_EXCLUDED),
+    ("capacity_objective_detail", CapacityObjective, _OBJECTIVE_EXCLUDED),
 ]
 
 
