@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent } from 'react'
 
+import QuickWinsOverflowBadge from '@/components/analysis/QuickWinsOverflowBadge'
 import { useOpportunityHover } from '@/lib/hooks/useOpportunityHover'
 import type { Opportunity } from '@/lib/types/api'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
@@ -11,30 +12,38 @@ import { QUADRANT_LABELS } from '@/lib/utils/quickWinsMatrixLayout'
 /**
  * Single cell of the Quick Wins matrix. Renders:
  *
- *   - Up to ``MAX_VISIBLE_DOTS`` opportunity dots, stacked vertically
- *     with a 4 px offset between centres (per spec).
- *   - A ``+N more`` overflow badge when ``opportunityIndices.length``
- *     exceeds ``MAX_VISIBLE_DOTS``. Clicking the badge opens a
- *     popover listing every opportunity in this cell.
+ *   - Up to ``MAX_VISIBLE_CHIPS`` opportunity title chips, stacked
+ *     vertically. Each chip pairs a small ``value_lever``-coloured
+ *     dot with the opportunity title (truncated with ellipsis).
+ *   - A ``+N more`` overflow badge when
+ *     ``opportunityIndices.length`` exceeds ``MAX_VISIBLE_CHIPS``.
+ *     Clicking the badge opens a popover listing every opportunity
+ *     in this cell.
  *   - A muted quadrant label in the four corner cells ("Quick Wins",
  *     "Strategic Bets", "Fill-Ins", "Deprioritise"). Center-axis
  *     cells get no label.
  *
- * Each dot is a real ``<button role="button">`` so it's reachable by
- * keyboard tab order and announceable by screen readers. Activation
- * (click, Enter, Space) publishes a hover-highlight via
- * ``OpportunityHoverProvider`` → matching opportunity card pulses
- * + scrolls into view. Focus / blur mirror the same dispatch so
- * keyboard navigation produces the same effect as a mouse hover.
+ * The original P7 design used bare dots that required hover to surface
+ * the opportunity title. In practice the AI clusters most opportunities
+ * into the High × Medium-term cell, so the dot-only render produced a
+ * single cluster of unlabelled dots — the reader couldn't tell what
+ * the matrix was showing without per-dot hover. Replacing the dots
+ * with title chips means every cell reads at a glance even when the
+ * dataset clusters, while preserving the cross-section hover wiring.
+ *
+ * Each chip is a real ``<button>`` so it's reachable by keyboard tab
+ * order and announceable by screen readers. Activation (click, Enter,
+ * Space) publishes a hover-highlight via ``OpportunityHoverProvider``
+ * → matching opportunity card pulses + scrolls into view. Focus / blur
+ * mirror the same dispatch so keyboard navigation produces the same
+ * effect as a mouse hover.
  */
 
-/** Spec: "If a cell would contain more than eight dots, the first
- *  seven dots SHALL render and the eighth slot SHALL be a `+N more`
- *  badge." */
-const MAX_VISIBLE_DOTS = 7
-
-const DOT_SIZE = 10
-const DOT_GAP = 4
+/** Visible chips per cell before the ``+N more`` overflow badge kicks
+ *  in. Lower than the original dot threshold (7) because title chips
+ *  take ~3× the vertical real estate of bare dots — keeping more than
+ *  four inline would blow out the cell height and crowd the page. */
+const MAX_VISIBLE_CHIPS = 4
 
 interface QuickWinsCellProps {
     rowIndex: number
@@ -55,8 +64,8 @@ export default function QuickWinsCell({
     opportunityIndices,
     opportunities,
 }: QuickWinsCellProps) {
-    const hasOverflow = opportunityIndices.length > MAX_VISIBLE_DOTS
-    const visibleIndices = hasOverflow ? opportunityIndices.slice(0, MAX_VISIBLE_DOTS) : opportunityIndices
+    const hasOverflow = opportunityIndices.length > MAX_VISIBLE_CHIPS
+    const visibleIndices = hasOverflow ? opportunityIndices.slice(0, MAX_VISIBLE_CHIPS) : opportunityIndices
     const overflowCount = opportunityIndices.length - visibleIndices.length
 
     const [overflowOpen, setOverflowOpen] = useState(false)
@@ -87,16 +96,16 @@ export default function QuickWinsCell({
             ) : null}
 
             {opportunityIndices.length === 0 ? null : (
-                <div style={dotStackStyle} ref={popoverContainerRef}>
+                <div style={chipStackStyle} ref={popoverContainerRef}>
                     {visibleIndices.map((opportunityIndex) => (
-                        <QuickWinsDot
+                        <QuickWinsChip
                             key={opportunityIndex}
                             opportunityIndex={opportunityIndex}
                             opportunity={opportunities[opportunityIndex]}
                         />
                     ))}
                     {hasOverflow ? (
-                        <OverflowBadge
+                        <QuickWinsOverflowBadge
                             overflowCount={overflowCount}
                             allIndices={opportunityIndices}
                             opportunities={opportunities}
@@ -112,12 +121,18 @@ export default function QuickWinsCell({
 }
 
 /**
- * One opportunity dot. Clicking, pressing Enter / Space, or focusing
- * publishes the linked-opportunity highlight. The dispatch is
- * symmetric across input modes so keyboard users and mouse users see
- * the same highlight + scroll behaviour.
+ * One opportunity chip — lever-coloured dot + the opportunity title
+ * (truncated). Clicking, pressing Enter / Space, or focusing publishes
+ * the linked-opportunity highlight. The dispatch is symmetric across
+ * input modes so keyboard users and mouse users see the same highlight
+ * + scroll behaviour.
+ *
+ * Test ID stays ``quick-wins-dot-{n}`` for backwards compatibility with
+ * tests that pin the per-opportunity surface — what the surface looks
+ * like changed (dot → chip), but it's still the same hover-source
+ * primitive at the same coordinate.
  */
-function QuickWinsDot({
+function QuickWinsChip({
     opportunityIndex,
     opportunity,
 }: {
@@ -138,93 +153,24 @@ function QuickWinsDot({
 
     const lever = opportunity.value_lever ?? 'Both'
     const color = LEVER_COLORS[lever] ?? 'var(--text-tertiary)'
-    const title = `${opportunity.title} (${lever})`
+    const hoverTitle = `${opportunity.title} (${lever})`
 
     return (
         <button
             type="button"
             data-testid={`quick-wins-dot-${opportunityIndex}`}
             aria-label={`Highlight opportunity: ${opportunity.title}`}
-            title={title}
+            title={hoverTitle}
             onClick={onActivate}
             onMouseEnter={onActivate}
             onMouseLeave={clearHighlight}
             onFocus={onActivate}
             onBlur={onBlur}
-            style={{ ...dotButtonStyle, background: color }}
-        />
-    )
-}
-
-interface OverflowBadgeProps {
-    overflowCount: number
-    allIndices: number[]
-    opportunities: Opportunity[]
-    open: boolean
-    onToggle: () => void
-    onClose: () => void
-}
-
-function OverflowBadge({
-    overflowCount,
-    allIndices,
-    opportunities,
-    open,
-    onToggle,
-    onClose,
-}: OverflowBadgeProps) {
-    const { highlightOpportunities } = useOpportunityHover()
-
-    const onPopoverKey = (event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === 'Escape') {
-            event.preventDefault()
-            onClose()
-        }
-    }
-
-    return (
-        <div style={{ position: 'relative', display: 'inline-flex' }}>
-            <button
-                type="button"
-                data-testid="quick-wins-overflow-badge"
-                aria-expanded={open}
-                aria-haspopup="dialog"
-                onClick={onToggle}
-                style={overflowBadgeStyle}
-            >
-                +{overflowCount} more
-            </button>
-            {open ? (
-                <div
-                    role="dialog"
-                    aria-label="All opportunities in this cell"
-                    data-testid="quick-wins-overflow-popover"
-                    onKeyDown={onPopoverKey}
-                    style={popoverStyle}
-                >
-                    <ul style={popoverListStyle}>
-                        {allIndices.map((opportunityIndex) => {
-                            const opp = opportunities[opportunityIndex]
-                            return (
-                                <li key={opportunityIndex}>
-                                    <button
-                                        type="button"
-                                        data-testid={`quick-wins-popover-item-${opportunityIndex}`}
-                                        onClick={() => {
-                                            highlightOpportunities([opportunityIndex])
-                                            onClose()
-                                        }}
-                                        style={popoverItemStyle}
-                                    >
-                                        {opp.title}
-                                    </button>
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </div>
-            ) : null}
-        </div>
+            style={chipButtonStyle}
+        >
+            <span style={{ ...chipDotStyle, background: color }} aria-hidden="true" />
+            <span style={chipLabelStyle}>{opportunity.title}</span>
+        </button>
     )
 }
 
@@ -232,15 +178,18 @@ function OverflowBadge({
 
 const cellStyle: CSSProperties = {
     position: 'relative',
-    padding: '12px 10px',
-    minHeight: '90px',
+    // Top-padding accommodates the absolute-positioned corner quadrant
+    // label without it overlapping the first chip. Bottom-padding does
+    // the same for bottom-row labels.
+    padding: '24px 8px 24px 8px',
+    minHeight: '96px',
     border: '1px solid var(--border-subtle)',
     background: 'var(--bg-surface-2)',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    gap: '4px',
 }
 
 function quadrantLabelStyle(rowIndex: number, columnIndex: number): CSSProperties {
@@ -262,68 +211,47 @@ function quadrantLabelStyle(rowIndex: number, columnIndex: number): CSSPropertie
         color: 'var(--text-tertiary)',
         textTransform: 'uppercase',
         letterSpacing: '0.06em',
+        pointerEvents: 'none',
     }
 }
 
-const dotStackStyle: CSSProperties = {
+const chipStackStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
+    gap: '4px',
+    minWidth: 0,
+}
+
+const chipButtonStyle: CSSProperties = {
+    display: 'flex',
     alignItems: 'center',
-    gap: `${DOT_GAP}px`,
-}
-
-const dotButtonStyle: CSSProperties = {
-    width: `${DOT_SIZE}px`,
-    height: `${DOT_SIZE}px`,
-    border: 'none',
-    borderRadius: '50%',
-    padding: 0,
-    cursor: 'pointer',
-}
-
-const overflowBadgeStyle: CSSProperties = {
-    background: 'var(--bg-surface-3)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: '999px',
-    padding: '2px 8px',
-    fontSize: '0.75rem',
-    color: 'var(--text-secondary)',
-    cursor: 'pointer',
-    marginTop: `${DOT_GAP}px`,
-}
-
-const popoverStyle: CSSProperties = {
-    position: 'absolute',
-    top: 'calc(100% + 4px)',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    minWidth: '220px',
-    maxWidth: '320px',
-    background: 'var(--bg-surface-3)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: '8px',
-    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.18)',
-    padding: '6px',
-    zIndex: 20,
-}
-
-const popoverListStyle: CSSProperties = {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-}
-
-const popoverItemStyle: CSSProperties = {
+    gap: '6px',
     width: '100%',
-    textAlign: 'left',
-    background: 'transparent',
-    border: 'none',
-    padding: '6px 8px',
-    borderRadius: '4px',
-    fontSize: '0.75rem',
-    color: 'var(--text-primary)',
+    minWidth: 0,
+    padding: '4px 8px',
+    background: 'var(--bg-surface-3)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: '6px',
     cursor: 'pointer',
+    textAlign: 'left',
+    font: 'inherit',
+    color: 'var(--text-primary)',
+}
+
+const chipDotStyle: CSSProperties = {
+    flex: '0 0 auto',
+    display: 'inline-block',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+}
+
+const chipLabelStyle: CSSProperties = {
+    flex: '1 1 auto',
+    minWidth: 0,
+    fontSize: '0.75rem',
+    lineHeight: 1.3,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
 }

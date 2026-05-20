@@ -153,22 +153,25 @@ describe('AnalysisDetail — Value Lever', () => {
         const data = buildAnalysisData()
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.getByText('Automate Support')).toBeInTheDocument()
-        expect(screen.getByText('AI Platform')).toBeInTheDocument()
+        // The Quick Wins matrix (P7) also renders each opportunity
+        // title as a chip, so a global ``getByText`` would find the
+        // title twice — once in the opportunities list, once in the
+        // matrix. Scope to the opportunities section to assert the
+        // FILTER changes the list (the matrix renders the full set
+        // unfiltered by design).
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).getByText('Automate Support')).toBeInTheDocument()
+        expect(within(oppSection).getByText('AI Platform')).toBeInTheDocument()
 
-        // Click the "Revenue Side" summary card (the one inside the Value Impact section).
-        // Pre-`extract-definition-popover` this used `.parentElement!` from
-        // the heading text — that walked into `.section-header-row`, which
-        // no longer contains the lever cards. The testid wrapper is the
-        // stable handle.
+        // Click the "Revenue Side" summary card inside the Value Impact section.
         const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const revenueSideCard = within(valueImpactSection).getAllByText('Revenue Side')[0]
         fireEvent.click(revenueSideCard.closest('[class*="card"]')!)
 
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
-        expect(screen.queryByText('AI Platform')).not.toBeInTheDocument()
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).queryByText('Automate Support')).not.toBeInTheDocument()
+        expect(within(oppSection).queryByText('AI Platform')).not.toBeInTheDocument()
     })
 
     it('clicking active lever card resets filter to All', () => {
@@ -179,16 +182,19 @@ describe('AnalysisDetail — Value Lever', () => {
         const costSideCard = within(valueImpactSection)
             .getAllByText('Cost Side')[0]
             .closest('[class*="card"]')!
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
 
         fireEvent.click(costSideCard)
-        expect(screen.queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
-        expect(screen.getByText('Automate Support')).toBeInTheDocument()
+        // Scope to the opportunities section — the matrix renders titles
+        // for the full unfiltered set.
+        expect(within(oppSection).queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
+        expect(within(oppSection).getByText('Automate Support')).toBeInTheDocument()
 
         // Click again to deselect
         fireEvent.click(costSideCard)
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.getByText('Automate Support')).toBeInTheDocument()
-        expect(screen.getByText('AI Platform')).toBeInTheDocument()
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).getByText('Automate Support')).toBeInTheDocument()
+        expect(within(oppSection).getByText('AI Platform')).toBeInTheDocument()
     })
 
     it('hides value lever section when no opportunities have value_lever', () => {
@@ -207,7 +213,9 @@ describe('AnalysisDetail — Value Lever', () => {
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
         expect(screen.queryByText('Value Impact')).not.toBeInTheDocument()
-        expect(screen.getByText('Old Opportunity')).toBeInTheDocument()
+        // Scope to opportunities — the title also appears in the matrix chip.
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
+        expect(within(oppSection).getByText('Old Opportunity')).toBeInTheDocument()
     })
 
     it('combined category and lever filter produces correct intersection', () => {
@@ -219,8 +227,8 @@ describe('AnalysisDetail — Value Lever', () => {
         const competitiveMoatButton = within(oppSection).getAllByText('Competitive Moat')[0]
         fireEvent.click(competitiveMoatButton)
 
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).queryByText('Automate Support')).not.toBeInTheDocument()
 
         // Now also filter by "Cost Side" lever — intersection should be empty
         const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
@@ -229,8 +237,8 @@ describe('AnalysisDetail — Value Lever', () => {
             .closest('[class*="card"]')!
         fireEvent.click(costSideCard)
 
-        expect(screen.queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
-        expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
+        expect(within(oppSection).queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
+        expect(within(oppSection).queryByText('Automate Support')).not.toBeInTheDocument()
     })
 
     it('displays value lever badge on opportunity cards', () => {

@@ -72,19 +72,22 @@ Every dot SHALL be a button (`role="button"`) carrying the opportunity's index. 
 - **THEN** the same scroll + pulse fires as on click
 - **AND** the dot's focus ring is visible
 
-### Requirement: Cells with multiple opportunities stack dots vertically with an overflow badge
+### Requirement: Cells render opportunity title chips with overflow popover
 
-When a cell contains more than one opportunity, dots SHALL stack vertically with a 4 px offset between centres, sorted by `strategic_category` then by opportunity index for stable ordering across renders. If a cell would contain more than eight dots, the first seven dots SHALL render and the eighth slot SHALL be a `+N more` badge that opens a click-popover listing all opportunities in that cell.
+Each opportunity SHALL render as a **title chip** — a small button pairing a `value_lever`-coloured dot with the opportunity title (truncated with ellipsis when needed). Chips stack vertically inside the cell, sorted by `strategic_category` then by opportunity index for stable ordering across renders. The earlier dot-only design (where the title was only reachable via hover) was abandoned during P7 verification because the AI clusters most opportunities into one cell, and a cluster of unlabelled dots told the reader nothing at a glance. Title chips keep the cell readable even when the dataset clusters.
 
-#### Scenario: Cell with three opportunities stacks all three dots
+If a cell would contain more than four chips, the first four chips SHALL render and the fifth slot SHALL be a `+N more` badge that opens a click-popover listing all opportunities in that cell.
+
+#### Scenario: Cell with three opportunities stacks all three chips
 
 - **WHEN** the High × Quick Win cell contains three opportunities at indices [0, 4, 7]
-- **THEN** three dots stack vertically in the cell in stable order
+- **THEN** three title chips stack vertically in the cell in stable order
+- **AND** each chip surfaces the opportunity title inline (no hover required to read it)
 
-#### Scenario: Cell with ten opportunities shows seven dots and a +3 badge
+#### Scenario: Cell with ten opportunities shows four chips and a +6 badge
 
 - **WHEN** a cell would contain ten opportunities
-- **THEN** seven dots render plus a `+3 more` badge
+- **THEN** four chips render plus a `+6 more` badge
 - **AND** clicking the badge opens a popover listing all ten opportunity titles
 - **AND** clicking a title in the popover scrolls the matching opportunity card into view
 
