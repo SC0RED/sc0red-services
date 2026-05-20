@@ -242,7 +242,12 @@ class GenerateStrategyMap(RequestStep):
             organizational_capacity=capacity_data,
         )
 
-        # Assemble + validate the full StrategyMap.
+        # Assemble + validate the full StrategyMap. The opportunity_count
+        # threads through so the assembly layer can clip any
+        # ``linked_opportunity_indices`` value the AI emitted outside
+        # ``[0, opportunity_count)`` — defends the dot strip on the
+        # frontend against AI drift and against context truncation if
+        # the opportunities JSON were ever cut short before the AI saw it.
         strategy_map = assemble_strategy_map(
             vision=vision_data,
             mission=mission_data,
@@ -253,6 +258,7 @@ class GenerateStrategyMap(RequestStep):
             organizational_capacity=capacity_data,
             core_values=core_values_data,
             finale=finale_data,
+            opportunity_count=len(company.opportunity_result.opportunities),
         )
 
         accessor.set_strategy_map(strategy_map)
