@@ -122,7 +122,7 @@ class FinancialObjective(BaseModel):
     # the AI output JSON schema is unchanged (so the AI does not yet emit
     # the field — the pipeline does not populate it either). Phase 1b
     # adds the AI population layer.
-    linked_opportunity_indices: list[int] = Field(default_factory=lambda: [])
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 class CustomerObjective(BaseModel):
@@ -141,7 +141,7 @@ class CustomerObjective(BaseModel):
     rationale_source: str | None = Field(default=None, max_length=400)
     # See ``FinancialObjective.linked_opportunity_indices`` for the
     # field's purpose and the Phase 1a/1b split.
-    linked_opportunity_indices: list[int] = Field(default_factory=lambda: [])
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 class InternalProcessObjective(BaseModel):
@@ -165,7 +165,7 @@ class InternalProcessObjective(BaseModel):
     rationale_source: str | None = Field(default=None, max_length=400)
     # See ``FinancialObjective.linked_opportunity_indices`` for the
     # field's purpose and the Phase 1a/1b split.
-    linked_opportunity_indices: list[int] = Field(default_factory=lambda: [])
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 class InternalProcessTheme(BaseModel):
@@ -197,7 +197,7 @@ class CapacityObjective(BaseModel):
     rationale_source: str | None = Field(default=None, max_length=400)
     # See ``FinancialObjective.linked_opportunity_indices`` for the
     # field's purpose and the Phase 1a/1b split.
-    linked_opportunity_indices: list[int] = Field(default_factory=lambda: [])
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 # ── Perspective containers ─────────────────────────────────────────────────
