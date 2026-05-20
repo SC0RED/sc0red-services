@@ -134,7 +134,15 @@ describe('hover highlight — value chain step → opportunity card', () => {
         expect(screen.getByTestId('opportunity-card-1')).toHaveClass('card-pulse')
     })
 
-    it('triggers scrollIntoView on the card transitioning into highlight', () => {
+    it('does NOT scroll the page on hover (hover pulses only)', () => {
+        // Regression test for the scroll-on-hover UX bug surfaced in
+        // post-P1b review. The original P5 design fired
+        // ``scrollIntoView`` on every transition into the highlight
+        // state — PE readers complained that hovering a strategy-map
+        // cell pulled the page out from under them. The hover provider
+        // was decoupled from scroll behaviour; only intentional
+        // navigation (e.g. clicking a Quick Wins matrix chip) triggers
+        // scroll, and that's wired imperatively at the click site.
         const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
         render(
             <OpportunityHoverProvider>
@@ -147,13 +155,10 @@ describe('hover highlight — value chain step → opportunity card', () => {
         const inboundInner = screen.getByTestId('value-chain-step-inbound').querySelector('.card')!
         fireEvent.mouseEnter(inboundInner)
 
-        // ``block: 'nearest'`` only scrolls when the card is offscreen
-        // (jsdom doesn't lay out so we just assert the call happened
-        // with the right options).
-        expect(scrollSpy).toHaveBeenCalledWith({
-            behavior: 'smooth',
-            block: 'nearest',
-        })
+        // Pulse should be applied (hover behaviour intact) ...
+        expect(screen.getByTestId('opportunity-card-0')).toHaveClass('card-pulse')
+        // ... but scrollIntoView must NOT have been called.
+        expect(scrollSpy).not.toHaveBeenCalled()
     })
 })
 

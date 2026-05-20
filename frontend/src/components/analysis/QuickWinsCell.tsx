@@ -123,9 +123,17 @@ export default function QuickWinsCell({
 /**
  * One opportunity chip — lever-coloured dot + the opportunity title
  * (truncated). Clicking, pressing Enter / Space, or focusing publishes
- * the linked-opportunity highlight. The dispatch is symmetric across
- * input modes so keyboard users and mouse users see the same highlight
- * + scroll behaviour.
+ * the linked-opportunity highlight via the hover provider so the
+ * matching opportunity card below applies the ``.card-pulse`` class.
+ *
+ * **Click is a navigation gesture**: in addition to the highlight
+ * dispatch, click imperatively scrolls the matching opportunity card
+ * into view. Hover and focus do NOT scroll — the hover provider was
+ * decoupled from scroll behaviour post-P1b after PE readers complained
+ * that hovering a strategy-map cell pulled the page out from under
+ * them. The matrix click stays click-to-navigate because it's the only
+ * place on the page where the user can pick a specific opportunity
+ * and expect to land on it.
  *
  * Test ID stays ``quick-wins-dot-{n}`` for backwards compatibility with
  * tests that pin the per-opportunity surface — what the surface looks
@@ -142,6 +150,17 @@ function QuickWinsChip({
     const { highlightOpportunities, clearHighlight } = useOpportunityHover()
 
     const onActivate = () => highlightOpportunities([opportunityIndex])
+
+    const onClick = () => {
+        highlightOpportunities([opportunityIndex])
+        // Imperative scroll — click is intentional navigation. The
+        // matching opportunity card carries ``opportunity-card-{n}``
+        // testid from ``HoverableOpportunityCard``; query directly
+        // rather than threading a ref through the hover provider
+        // because we don't need any reactive state.
+        const target = document.querySelector(`[data-testid="opportunity-card-${opportunityIndex}"]`)
+        target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
 
     const onBlur = (event: FocusEvent<HTMLButtonElement>) => {
         // Same containment guard EBITDA / value chain / strategy map
@@ -161,7 +180,7 @@ function QuickWinsChip({
             data-testid={`quick-wins-dot-${opportunityIndex}`}
             aria-label={`Highlight opportunity: ${opportunity.title}`}
             title={hoverTitle}
-            onClick={onActivate}
+            onClick={onClick}
             onMouseEnter={onActivate}
             onMouseLeave={clearHighlight}
             onFocus={onActivate}
