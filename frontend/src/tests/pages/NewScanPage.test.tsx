@@ -71,7 +71,12 @@ describe('NewScanPage', () => {
         render(<NewScanPage />)
         expect(screen.getByLabelText('PE Firm Website URL')).toBeInTheDocument()
         expect(screen.getByText('Discover Portfolio & Analyze')).toBeInTheDocument()
-        expect(screen.getByPlaceholderText('https://a16z.com')).toBeInTheDocument()
+        // Placeholders dropped the explicit ``https://`` scheme as part
+        // of Diagnostic Tool Feedback #1 — the input now accepts bare
+        // hostnames and auto-prepends ``https://`` via
+        // ``normalizeUserUrl``. Updating the placeholder reinforces that
+        // bare-domain input is the expected form.
+        expect(screen.getByPlaceholderText('a16z.com')).toBeInTheDocument()
     })
 
     it('switches to standalone mode when Single Company is clicked', () => {
@@ -81,7 +86,7 @@ describe('NewScanPage', () => {
 
         expect(screen.getByLabelText('Company Website URL')).toBeInTheDocument()
         expect(screen.getByText('Analyze Company')).toBeInTheDocument()
-        expect(screen.getByPlaceholderText('https://stripe.com')).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('stripe.com')).toBeInTheDocument()
     })
 
     it('switches back to portfolio mode when PE Portfolio Scan is clicked', () => {

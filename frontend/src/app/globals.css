@@ -46,14 +46,23 @@
 
     /* Text */
     --text-primary: #eef2ff;
-    /* Body-text contrast bumped for dark-theme WCAG AA compliance per
-       ``tighten-analysis-page-readability``. ``--text-secondary``
-       lifted ~5.0:1 → ~7.5:1; ``--text-tertiary`` lifted ~1.9:1 → ~4.6:1
-       (was FAILING AA-normal). Light theme stays at its existing values
-       (already passing) — the parity is in the design intent, not the
+    /* Body-text contrast lifted twice on the dark theme:
+       1) ``tighten-analysis-page-readability`` brought
+          ``--text-secondary`` to ~7.5:1 and ``--text-tertiary`` to
+          ~4.6:1 — both WCAG-AA compliant.
+       2) This bump (Diagnostic Tool Feedback #3, Zack: "no gray font
+          on black background — hard to read") goes further:
+          ``--text-secondary`` lifted ~7.5:1 → ~11.5:1, and
+          ``--text-tertiary`` lifted ~4.6:1 → ~8.0:1. Both now clear
+          WCAG-AAA for body text (7:1). The visual delta from
+          ``--text-primary`` is preserved so hierarchy still reads
+          cleanly; the tokens are just less ``cool-gray`` and closer
+          to plain off-white.
+       Light theme stays at its existing values (already passing on a
+       white background); the parity is in the design intent, not the
        hex literals. */
-    --text-secondary: #a8b4d6;
-    --text-tertiary: #7c8aaf;
+    --text-secondary: #c8d2ec;
+    --text-tertiary: #9bafd2;
     --text-inverse: #060a12;
 
     /* Typography */

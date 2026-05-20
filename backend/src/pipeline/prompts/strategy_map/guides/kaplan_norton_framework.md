@@ -4,8 +4,8 @@ This guide distils the canonical Balanced Scorecard / Strategy Map
 framework introduced by Robert S. Kaplan and David P. Norton (HBR,
 September–October 2000, "Having Trouble with Your Strategy? Then Map
 It"). Use it as the THEORETICAL FOUNDATION for every strategy-map
-generation. The Vector Advisory house style (encoded separately in
-`vector_style_guide.md`) builds on top of this framework but does not
+generation. The sc0red Advisory house style (encoded separately in
+`sc0red_advisory_style_guide.md`) builds on top of this framework but does not
 replace it.
 
 ## The four perspectives, in causal order
@@ -105,9 +105,9 @@ and corporate culture that enable everything above. Three buckets:
 - **Culture** — values, ways of working, behavioural norms,
   organisational alignment.
 
-(Note: the Vector Advisory house style renames this perspective from
+(Note: the sc0red Advisory house style renames this perspective from
 "Learning and Growth" to "Organizational Capacity". The substance is
-the same; the rename is positioning. See `vector_style_guide.md`.)
+the same; the rename is positioning. See `sc0red_advisory_style_guide.md`.)
 
 The financial benefits from improved capacity reveal themselves in
 stages:
@@ -176,7 +176,7 @@ so. But the description of strategy should not be an art."
 
 For our case: AI-generated strategy maps DESCRIBE strategy from
 public signals. The FORMULATION of a real strategy — what the company
-should actually do — remains a human conversation. Vector Advisory's
+should actually do — remains a human conversation. sc0red Advisory's
 deep-dive engagement is where formulation happens. The generated map
 is the input to that conversation, not the output of it.
 

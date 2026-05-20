@@ -91,11 +91,11 @@ def compose_system_prompt() -> str:
         [
             load_system_prompt(),
             load_guide("kaplan_norton_framework"),
-            load_guide("vector_style_guide"),
+            load_guide("sc0red_advisory_style_guide"),
             load_guide("anti_patterns"),
             "## Exemplar 1 — Mobil 2000 (HBR canonical, hybrid value-prop case)\n\n"
             + load_exemplar("mobil_2000"),
-            "## Exemplar 2 — Wawa 2011 (Vector house-style example)\n\n"
+            "## Exemplar 2 — Wawa 2011 (sc0red Advisory house-style example)\n\n"
             + load_exemplar("wawa_2011"),
         ]
     )

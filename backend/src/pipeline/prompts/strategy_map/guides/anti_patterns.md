@@ -178,7 +178,7 @@ company's intent, not as the customer's voice.
    quotation marks)
 
 The Vector house style requires first-person customer voice with
-quotation marks. (See `vector_style_guide.md`.) This is a stylistic
+quotation marks. (See `sc0red_advisory_style_guide.md`.) This is a stylistic
 choice, but it's load-bearing — it's what makes Vector-style maps
 recognisable.
 

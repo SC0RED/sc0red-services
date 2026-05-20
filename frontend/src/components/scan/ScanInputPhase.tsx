@@ -154,10 +154,20 @@ export default function ScanInputPhase({
                         </span>
                         <input
                             id="scan-url"
-                            type="url"
+                            // `type="text"` rather than `type="url"` so we run our
+                            // own validator in the parent's submit handler (see
+                            // `normalizeUserUrl` in `lib/utils/url.ts`). The
+                            // browser-native URL check rejects bare hostnames like
+                            // `www.example.com` with a generic message; our
+                            // validator accepts them and auto-prepends `https://`
+                            // (Diagnostic Tool Feedback #1).
+                            type="text"
+                            inputMode="url"
+                            autoComplete="url"
+                            spellCheck={false}
                             className="input"
                             style={{ paddingLeft: '2.75rem' }}
-                            placeholder={mode === 'portfolio' ? 'https://a16z.com' : 'https://stripe.com'}
+                            placeholder={mode === 'portfolio' ? 'a16z.com' : 'stripe.com'}
                             value={url}
                             onChange={(e) => onUrlChange(e.target.value)}
                             required

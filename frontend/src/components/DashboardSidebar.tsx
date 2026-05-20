@@ -9,6 +9,13 @@ import ActivityPanel from '@/components/ActivityPanel'
 import navItems from '@/components/sidebar/navItems'
 import { useMobileMenu } from '@/lib/hooks/useMobileMenu'
 
+// Per-env marketing site root, baked in at build time by the Amplify
+// branch env var (see infrastructure/stacks/sc0red_services_stack.py).
+// Mirrors the constant used in app/page.tsx and app/login/page.tsx so
+// every "back to marketing" link points at the right environment. Falls
+// back to prod for local dev / preview builds where the var isn't set.
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL ?? 'https://www.sc0red.com'
+
 export default function DashboardSidebar() {
     const pathname = usePathname()
     const { data: session } = useSession()
@@ -73,11 +80,27 @@ export default function DashboardSidebar() {
                     </svg>
                 </button>
 
-                {/* Logo */}
+                {/*
+                 * Logo block — links to the marketing homepage rather than
+                 * `/dashboard`. The Dashboard nav item right below covers
+                 * the in-app destination, so the brand block follows the
+                 * web convention of "wordmark → homepage" (Diagnostic Tool
+                 * Feedback #2). Uses a plain `<a>` not `<Link>` because
+                 * the target is external to the Next.js app router.
+                 * Same tab — mirrors the back-to-marketing footer pattern
+                 * already in app/page.tsx + login/signup.
+                 */}
                 <div style={{ padding: '1.25rem 1rem', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <Link
-                        href="/dashboard"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}
+                    <a
+                        href={MARKETING_URL}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.625rem',
+                            textDecoration: 'none',
+                            color: 'inherit',
+                        }}
+                        aria-label="sc0red Services — back to sc0red.com"
                     >
                         <div
                             style={{
@@ -113,7 +136,7 @@ export default function DashboardSidebar() {
                                 AI Intelligence
                             </div>
                         </div>
-                    </Link>
+                    </a>
                 </div>
 
                 {/* Nav */}

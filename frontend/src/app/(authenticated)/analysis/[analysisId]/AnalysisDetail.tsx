@@ -15,6 +15,7 @@ import EbitdaSection from '@/components/analysis/EbitdaSection'
 import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
+import DeepDiveCTA from '@/components/strategy-map/DeepDiveCTA'
 import HelpTooltip from '@/components/ui/HelpTooltip'
 import { LoadingSpinner } from '@/components/ui'
 import { useReanalyze } from '@/lib/hooks/useReanalyze'
@@ -239,6 +240,37 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     documentError={reanalyze.documentError}
                 />
             </AnalysisSection>
+
+            {/*
+             * End-of-analysis Contact-us CTA — Diagnostic Tool Feedback #8.
+             * Zack: "at the end of this analysis I would duplicate the
+             * 'contact us' bar you have in the middle of the analysis as
+             * well, since ideally when they get to the end they'll want to
+             * get in touch."
+             *
+             * Renders only when the analysis actually has opportunities —
+             * matches the same "no orphan CTA on sparse reports" rule that
+             * ``PrintBackCover`` uses for the PDF. A sparse / failed
+             * analysis has no actionable next step, so the bottom-CTA
+             * doesn't appear.
+             *
+             * Analytics note: this re-uses ``DeepDiveCTA`` verbatim, which
+             * means a page with a strategy map fires
+             * ``sc0red_cta_rendered_strategy_map`` TWICE (once from the
+             * mid-page slot, once here). The conversion query that matters
+             * is ``count(distinct analysis_id)`` for impressions, which is
+             * unaffected; raw event counts are not the funnel signal.
+             * Adding a distinct ``_analysis_end`` event type would force
+             * matching changes in the backend Pydantic union + the parity
+             * script, which is out-of-scope for a polish PR — promote to a
+             * follow-up if funnel-attribution by placement becomes
+             * operationally necessary.
+             */}
+            {opportunities.length > 0 && (
+                <AnalysisSection id="deep-dive-cta-end">
+                    <DeepDiveCTA analysisId={analysisId} />
+                </AnalysisSection>
+            )}
         </>
     )
 }
