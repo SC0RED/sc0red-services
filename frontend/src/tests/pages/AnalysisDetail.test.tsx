@@ -804,6 +804,10 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'risk-breakdown',
             'value-lever',
             'opportunities',
+            // Quick Wins matrix (P7 of redesign-analysis-visuals) sits
+            // between ``opportunities`` and ``document-upload`` when
+            // ``opportunities.length >= 1``.
+            'quick-wins-matrix',
             'document-upload',
             'deep-dive-cta-end',
         ]
@@ -838,6 +842,9 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'risk-breakdown',
             'value-lever',
             'opportunities',
+            // Quick Wins matrix (P7) renders here too — gated on
+            // opportunities.length, not on strategy-map presence.
+            'quick-wins-matrix',
             'document-upload',
             'deep-dive-cta-end',
         ])

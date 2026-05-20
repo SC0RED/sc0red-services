@@ -9,6 +9,7 @@ import {
     PrintExecutiveSummary,
     PrintMethodologyAppendix,
     PrintOpportunityList,
+    PrintQuickWinsMatrix,
     PrintRiskTable,
     PrintStrategyMap,
     PrintValueChainList,
@@ -131,6 +132,12 @@ export default function PrintReport({ analysis, generatedDate }: PrintReportProp
                     opportunities={analysis.opportunities ?? []}
                 />
             ) : null}
+
+            {/* Quick Wins matrix — Phase 7 of redesign-analysis-visuals.
+                Static parallel to the screen QuickWinsMatrix. Gated on
+                opportunityCount > 0 — matches the screen rule and the
+                back cover's "no orphan CTA on sparse reports" rule. */}
+            {opportunityCount > 0 ? <PrintQuickWinsMatrix sortedOpportunities={sortedOpportunities} /> : null}
 
             <PrintMethodologyAppendix analysis={analysis} />
 
