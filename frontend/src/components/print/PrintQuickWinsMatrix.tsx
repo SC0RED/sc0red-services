@@ -169,7 +169,10 @@ const gridShellStyle: CSSProperties = {
 function columnHeaderRowStyle(columnCount: number): CSSProperties {
     return {
         display: 'grid',
-        gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+        // ``minmax(0, 1fr)`` so the chip text doesn't push columns
+        // wider than their fraction — see the screen variant for the
+        // full rationale.
+        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         gap: '6px',
     }
 }
@@ -205,7 +208,10 @@ const rowHeaderStyle: CSSProperties = {
 function cellGridStyle(columnCount: number): CSSProperties {
     return {
         display: 'grid',
-        gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+        // ``minmax(0, 1fr)`` so the chip text doesn't push columns
+        // wider than their fraction — see the screen variant for the
+        // full rationale.
+        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         gridTemplateRows: 'repeat(3, 1fr)',
         gap: '6px',
     }

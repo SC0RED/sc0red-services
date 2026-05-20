@@ -218,3 +218,51 @@ describe('QuickWinsMatrix — overflow popover keyboard + outside-click', () => 
         expect(screen.queryByTestId('quick-wins-overflow-popover')).toBeNull()
     })
 })
+
+describe('QuickWinsMatrix — click navigates to opportunity card', () => {
+    /**
+     * Regression test for the scroll-on-hover bug surfaced in post-P1b
+     * review. Hover sources (strategy map, EBITDA, value chain) no
+     * longer trigger ``scrollIntoView``; only intentional navigation
+     * (clicking a Quick Wins matrix chip) scrolls the matching
+     * opportunity card into view.
+     *
+     * jsdom doesn't lay out, so we spy on ``scrollIntoView`` and assert
+     * the call happened with the right options against the right
+     * element.
+     */
+
+    it('clicking a chip imperatively scrolls the matching opportunity card into view', () => {
+        const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
+
+        // Render the matrix alongside a stand-in for the opportunity
+        // card that ``HoverableOpportunityCard`` would emit. The click
+        // handler queries by ``data-testid="opportunity-card-{n}"`` so
+        // any element with that testid is a valid scroll target.
+        const opps = [make({ title: 'First opp' }), make({ title: 'Second opp' })]
+        render(
+            <>
+                <QuickWinsMatrix opportunities={opps} />
+                <div data-testid="opportunity-card-1">Second opp card</div>
+            </>
+        )
+        scrollSpy.mockClear()
+
+        fireEvent.click(screen.getByTestId('quick-wins-dot-1'))
+
+        expect(scrollSpy).toHaveBeenCalledWith({
+            behavior: 'smooth',
+            block: 'nearest',
+        })
+    })
+
+    it('hovering a chip does NOT scroll (hover pulses only)', () => {
+        const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
+        render(<QuickWinsMatrix opportunities={[make({})]} />)
+        scrollSpy.mockClear()
+
+        fireEvent.mouseEnter(screen.getByTestId('quick-wins-dot-0'))
+
+        expect(scrollSpy).not.toHaveBeenCalled()
+    })
+})

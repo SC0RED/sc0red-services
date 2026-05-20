@@ -137,7 +137,15 @@ const emptyCornerStyle: CSSProperties = {
 function columnHeaderRowStyle(columnCount: number): CSSProperties {
     return {
         display: 'grid',
-        gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+        // ``minmax(0, 1fr)`` (not bare ``1fr``) — CSS Grid's ``1fr`` is
+        // shorthand for ``minmax(auto, 1fr)``, which lets columns grow
+        // when content's intrinsic min-width exceeds the fractional
+        // share. The chip labels use ``whiteSpace: nowrap``, so their
+        // intrinsic width is the full title — bare ``1fr`` columns
+        // would expand to fit and overflow siblings. ``minmax(0, …)``
+        // pins columns to the fraction and lets the chip's
+        // ``text-overflow: ellipsis`` truncate cleanly.
+        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         gap: '8px',
     }
 }
@@ -173,7 +181,10 @@ const rowHeaderStyle: CSSProperties = {
 function cellGridStyle(columnCount: number): CSSProperties {
     return {
         display: 'grid',
-        gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+        // See ``columnHeaderRowStyle`` for the rationale on
+        // ``minmax(0, 1fr)`` vs. bare ``1fr``. The cell grid carries the
+        // same constraint or chip text overflows the cell boundary.
+        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
         gridTemplateRows: 'repeat(3, 1fr)',
         gap: '8px',
     }
