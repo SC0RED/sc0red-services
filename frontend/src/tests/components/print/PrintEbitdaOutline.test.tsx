@@ -64,6 +64,39 @@ describe('PrintEbitdaOutline', () => {
         expect(screen.getByText('Subscriptions')).toBeInTheDocument()
     })
 
+    it('renders percentage_of_parent as the integer the backend emits (no x100 doubling)', () => {
+        // Regression guard for the ``Math.round(... * 100)`` bug PR #327
+        // introduced. The backend emits ``percentage_of_parent`` as an
+        // integer 0–100 (validated in ``_apply_percentage``). Rendering
+        // it via ``* 100`` produced "8000% of parent" for an 80% node;
+        // the architecture-reviewer pass for redesign-analysis-visuals
+        // P2 caught it because the test fixture had no
+        // ``percentage_of_parent`` set and the bug was invisible.
+        const treeWithPct: EbitdaTree = {
+            treeData: [
+                node({
+                    id: 'root',
+                    label: 'Operating Revenue',
+                    type: 'revenue',
+                    value_range: '$10M-$15M',
+                    children: [
+                        node({
+                            id: 'sub-1',
+                            label: 'Subscriptions',
+                            type: 'revenue',
+                            value_range: '$8M',
+                            percentage_of_parent: 80,
+                        }),
+                    ],
+                }),
+            ],
+        }
+        render(<PrintEbitdaOutline ebitdaTree={treeWithPct} sortedOpportunities={sortedOpportunities} />)
+        // Anti-bug: must NOT show "8000% of parent". Must show "80% of parent".
+        expect(screen.getByText('80% of parent')).toBeInTheDocument()
+        expect(screen.queryByText('8000% of parent')).toBeNull()
+    })
+
     it('resolves linkage callouts to the printed-index opportunity title', () => {
         render(<PrintEbitdaOutline ebitdaTree={smallTree} sortedOpportunities={sortedOpportunities} />)
         // originalIndex 1 → "Up-sell automation" (still printedIndex 2 because
@@ -130,10 +163,10 @@ describe('PrintEbitdaOutline', () => {
         expect(container.querySelector('.print-ebitda')).not.toBeNull()
     })
 
-    it('renders the confidence level inline when the node carries one', () => {
-        // Print medium can't render a hover tooltip for the basis, so the
-        // chip glyph would be misleading; we render the level inline as
-        // plain text instead.
+    it('does NOT render the legacy confidence inline marker (removed in redesign-analysis-visuals P2)', () => {
+        // Print parity follows screen: the confidence chip + inline
+        // marker are gone. The data still flows on EbitdaNode for any
+        // future surface, but no rendering here.
         const treeWithConfidence: EbitdaTree = {
             treeData: [
                 node({
@@ -154,13 +187,10 @@ describe('PrintEbitdaOutline', () => {
                 }),
             ],
         }
-        const { getAllByTestId } = render(
+        const { queryAllByTestId } = render(
             <PrintEbitdaOutline ebitdaTree={treeWithConfidence} sortedOpportunities={sortedOpportunities} />
         )
-        const markers = getAllByTestId('ebitda-confidence-print')
-        const markerTexts = markers.map((node) => node.textContent)
-        expect(markerTexts).toContain('(high)')
-        expect(markerTexts).toContain('(medium)')
+        expect(queryAllByTestId('ebitda-confidence-print')).toHaveLength(0)
     })
 
     it('omits the confidence marker when the node has no confidence level', () => {

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 
-import ConfidenceIndicator from '@/components/analysis/ConfidenceIndicator'
-import { LEVER_COLORS } from '@/lib/utils/leverColors'
+import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
+import type { Opportunity } from '@/lib/types/api'
 
 /**
  * Single P&L line-item used by the EBITDA Impact Model section.
@@ -13,18 +13,23 @@ import { LEVER_COLORS } from '@/lib/utils/leverColors'
  *   - ``isSubtotalHeading: true`` — **band header**: a single-row
  *     element with a colored left-edge strip, the subtotal label in
  *     ``<h3>`` (preserves screen-reader heading navigation), and the
- *     value range inline. No confidence chip, no opportunity dots,
- *     no description tooltip — subtotals don't carry those surfaces.
+ *     value range inline. No opportunity dots, no description tooltip
+ *     — subtotals don't carry those surfaces.
  *
  *   - ``isSubtotalHeading: false`` (default) — **compact chip**:
  *     dimensioned to fit beside its siblings inside the band row
  *     (~150-200 px wide, ~80-100 px tall). Surfaces the label,
- *     value range, percentage-of-parent, ``ConfidenceIndicator``,
- *     and opportunity-link indicator dots. The long-form
- *     ``description`` is surfaced via the native HTML ``title``
- *     attribute on the chip's outer element — no custom
- *     absolutely-positioned overlay (kills the overlap bug from
- *     the pre-``compact-ebitda-bands`` design).
+ *     value range, percentage-of-parent, and the shared
+ *     ``OpportunityDotStrip``. The long-form ``description`` is
+ *     surfaced via the native HTML ``title`` attribute on the chip's
+ *     outer element — no custom absolutely-positioned overlay (kills
+ *     the overlap bug from the pre-``compact-ebitda-bands`` design).
+ *
+ * Confidence chip removed by P2 of the ``redesign-analysis-visuals``
+ * change — see the ``ebitda-tree-confidence`` spec deltas. The
+ * ``confidence_level`` / ``confidence_basis`` fields still flow on
+ * ``EbitdaNode`` for any future surface (audit panel, debug overlay);
+ * only the visual rendering was dropped.
  *
  * Both variants share the same ``NODE_COLORS`` palette keyed on
  * ``type``.
@@ -35,14 +40,13 @@ export interface EbitdaCardProps {
     valueRange?: string
     percentageOfParent?: number
     description: string
-    linkedOpportunities: Array<{ title: string; valueLever: string }>
-    /** Derivation-provenance level emitted by the backend. ``null`` /
-     *  undefined suppresses the chip (no "unknown" badge — silence is
-     *  more honest). */
-    confidenceLevel?: 'high' | 'medium' | 'low' | null
-    /** Human-readable explanation of which build inputs drove the
-     *  figure; surfaced as a native ``title`` tooltip on the chip. */
-    confidenceBasis?: string | null
+    /** Index pointers into ``opportunities`` — same idiom the strategy
+     *  map and value chain use. The shared ``OpportunityDotStrip``
+     *  resolves them at render time. */
+    linkedIndices: number[]
+    /** Full opportunities array — required so the dot strip can colour
+     *  each dot from the linked opportunity's ``value_lever``. */
+    opportunities: Opportunity[]
     /** When ``true`` the component renders the band-header variant
      *  (single row, colored left strip, ``<h3>`` label, no surfaces
      *  beyond label + value range). When ``false`` (default) the
@@ -81,10 +85,9 @@ export default function EbitdaNodeComponent(props: EbitdaCardProps) {
  *
  *  Visual treatment mirrors the strategy-map perspective-band
  *  headers: a thick colored left strip, the label in ``<h3>``, the
- *  value range surfaced inline to the right. No confidence chip
- *  (subtotals carry no own confidence per ``ebitda-tree-confidence``).
- *  No opportunity dots (subtotals don't carry ``linked_opportunity_indices``
- *  in production). No description overlay (subtotal descriptions
+ *  value range surfaced inline to the right. No opportunity dots
+ *  (subtotals don't carry ``linked_opportunity_indices`` in
+ *  production). No description overlay (subtotal descriptions
  *  duplicate the band's role). */
 function BandHeader({ label, valueRange, accentColor }: EbitdaCardProps & { accentColor: string }) {
     return (
@@ -132,36 +135,25 @@ function BandHeader({ label, valueRange, accentColor }: EbitdaCardProps & { acce
 /** Compact-chip variant — leaf driver of a subtotal.
  *
  *  ~150-180 px wide, ~80-100 px tall. Surfaces:
- *  label / value range / percentage / confidence indicator /
- *  opportunity-link dot row. The leaf's long-form ``description``
- *  is delivered via the native HTML ``title`` attribute on the chip
- *  itself — no custom overlay. */
+ *  label / value range / percentage / opportunity-link dot strip. The
+ *  leaf's long-form ``description`` is delivered via the native HTML
+ *  ``title`` attribute on the chip itself — no custom overlay. */
 function LeafChip({
     label,
-    type,
     valueRange,
     percentageOfParent,
     description,
-    linkedOpportunities,
-    confidenceLevel,
-    confidenceBasis,
+    linkedIndices,
+    opportunities,
     accentColor,
 }: EbitdaCardProps & { accentColor: string }) {
-    // Show a confidence chip when the backend supplied a level AND
-    // this is a leaf (revenue/cost) node. Subtotal / margin rollups
-    // carry no own confidence per ebitda-tree-confidence.
-    const showConfidenceChip =
-        (confidenceLevel === 'high' || confidenceLevel === 'medium' || confidenceLevel === 'low') &&
-        type !== 'subtotal' &&
-        type !== 'margin'
-
     return (
         <article
             // Chip MUST be reachable in keyboard tab order between the
             // band header above and the next connector below per
-            // ``ebitda-impact-model`` spec. A chip with no confidence
-            // chip + no opportunity dots would otherwise have zero
-            // focusable surface and be skipped by Tab navigation.
+            // ``ebitda-impact-model`` spec. A chip with no opportunity
+            // dots would otherwise have zero focusable surface and be
+            // skipped by Tab navigation.
             tabIndex={0}
             // The native ``title`` attribute delivers the long-form
             // description as a browser tooltip when the chip is
@@ -174,43 +166,16 @@ function LeafChip({
             {valueRange && (
                 <div style={chipValueRowStyle}>
                     <span>{valueRange}</span>
-                    {showConfidenceChip && confidenceLevel && (
-                        <span
-                            data-testid="ebitda-confidence-chip"
-                            tabIndex={0}
-                            // The chip's ``aria-label`` already comes from
-                            // ``ConfidenceIndicator``; the native ``title``
-                            // here adds the basis text for sighted users.
-                            title={confidenceBasis ?? undefined}
-                            style={{ display: 'inline-flex', cursor: 'help' }}
-                        >
-                            <ConfidenceIndicator
-                                confidence={confidenceLevel.toUpperCase() as 'HIGH' | 'MEDIUM' | 'LOW'}
-                                size="small"
-                            />
-                        </span>
-                    )}
                 </div>
             )}
             {percentageOfParent != null && (
                 <div style={chipPercentStyle}>{percentageOfParent}% of parent</div>
             )}
-            {linkedOpportunities.length > 0 && (
-                <div data-testid="ebitda-linked-opportunity-dots" style={chipOpportunityDotRowStyle}>
-                    {linkedOpportunities.map((opp, i) => (
-                        <div
-                            key={i}
-                            style={{
-                                width: '8px',
-                                height: '8px',
-                                borderRadius: '50%',
-                                background: LEVER_COLORS[opp.valueLever] || 'var(--text-secondary)',
-                            }}
-                            title={`${opp.title} (${opp.valueLever})`}
-                        />
-                    ))}
-                </div>
-            )}
+            <OpportunityDotStrip
+                linkedIndices={linkedIndices}
+                opportunities={opportunities}
+                testId="ebitda-linked-opportunity-dots"
+            />
         </article>
     )
 }
@@ -257,10 +222,4 @@ const chipValueRowStyle: CSSProperties = {
 const chipPercentStyle: CSSProperties = {
     fontSize: '0.75rem',
     color: 'var(--text-secondary)',
-}
-
-const chipOpportunityDotRowStyle: CSSProperties = {
-    display: 'flex',
-    gap: '4px',
-    flexWrap: 'wrap',
 }
