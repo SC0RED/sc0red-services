@@ -53,36 +53,47 @@ describe('QuickWinsMatrix — structural rendering', () => {
 })
 
 describe('QuickWinsMatrix — dot rendering', () => {
-    it('places a single High × Quick opportunity in the top-left cell', () => {
-        render(<QuickWinsMatrix opportunities={[make({})]} />)
+    it('places a single High × Quick opportunity in the top-left cell with its title visible inline', () => {
+        const opps = [make({ title: 'Roll out signature beverage' })]
+        render(<QuickWinsMatrix opportunities={opps} />)
         const cell = screen.getByTestId('quick-wins-cell-0-0')
-        expect(within(cell).getByTestId('quick-wins-dot-0')).toBeInTheDocument()
+        const chip = within(cell).getByTestId('quick-wins-dot-0')
+        expect(chip).toBeInTheDocument()
+        // Title is rendered inline in the chip (no hover required).
+        expect(chip).toHaveTextContent('Roll out signature beverage')
     })
 
-    it('places three opportunities in the same cell as three dots', () => {
+    it('places three opportunities in the same cell as three title chips', () => {
         const opps = [
-            make({ strategic_category: 'A', impact_rating: 'High', timeline: 'Quick Win' }),
-            make({ strategic_category: 'B', impact_rating: 'High', timeline: 'Quick Win' }),
-            make({ strategic_category: 'C', impact_rating: 'High', timeline: 'Quick Win' }),
+            make({ title: 'A-title', strategic_category: 'A', impact_rating: 'High', timeline: 'Quick Win' }),
+            make({ title: 'B-title', strategic_category: 'B', impact_rating: 'High', timeline: 'Quick Win' }),
+            make({ title: 'C-title', strategic_category: 'C', impact_rating: 'High', timeline: 'Quick Win' }),
         ]
         render(<QuickWinsMatrix opportunities={opps} />)
         const cell = screen.getByTestId('quick-wins-cell-0-0')
-        expect(within(cell).getByTestId('quick-wins-dot-0')).toBeInTheDocument()
-        expect(within(cell).getByTestId('quick-wins-dot-1')).toBeInTheDocument()
-        expect(within(cell).getByTestId('quick-wins-dot-2')).toBeInTheDocument()
+        expect(within(cell).getByText('A-title')).toBeInTheDocument()
+        expect(within(cell).getByText('B-title')).toBeInTheDocument()
+        expect(within(cell).getByText('C-title')).toBeInTheDocument()
     })
 
-    it('renders 7 dots + a +N more badge when a cell has 10 opportunities', () => {
+    it('renders 4 chips + a +N more badge when a cell has 10 opportunities', () => {
+        // Chip threshold (MAX_VISIBLE_CHIPS = 4) is lower than the
+        // original dot threshold (7) because title chips take ~3× the
+        // vertical real estate per item.
         const opps = Array.from({ length: 10 }, (_, i) =>
-            make({ strategic_category: `cat-${i}`, impact_rating: 'High', timeline: 'Quick Win' })
+            make({
+                title: `Opp ${i}`,
+                strategic_category: `cat-${i}`,
+                impact_rating: 'High',
+                timeline: 'Quick Win',
+            })
         )
         render(<QuickWinsMatrix opportunities={opps} />)
         const cell = screen.getByTestId('quick-wins-cell-0-0')
-        // 7 dots visible (indices 0-6 after the stable sort).
-        const dots = within(cell).getAllByTestId(/^quick-wins-dot-/)
-        expect(dots).toHaveLength(7)
-        // Overflow badge counts the remaining 3.
-        expect(within(cell).getByTestId('quick-wins-overflow-badge')).toHaveTextContent('+3 more')
+        const chips = within(cell).getAllByTestId(/^quick-wins-dot-/)
+        expect(chips).toHaveLength(4)
+        // Overflow badge counts the remaining 6.
+        expect(within(cell).getByTestId('quick-wins-overflow-badge')).toHaveTextContent('+6 more')
     })
 
     it('opens a popover listing all 10 opportunities when the +N badge is clicked', () => {
