@@ -36,6 +36,16 @@ logger = logging.getLogger(__name__)
 MAX_SCRAPED_TEXT_CHARS = 6_000
 MAX_DOCUMENT_TEXT_CHARS = 6_000
 MAX_JSON_FRAGMENT_CHARS = 4_000
+# Dedicated higher cap for the full ``opportunities`` JSON. The strategy-
+# map Round 2/3 detail prompts ask the AI to emit
+# ``linked_opportunity_indices`` indexing into THIS array. Truncating at
+# ``MAX_JSON_FRAGMENT_CHARS`` (4 KB) would silently cut the array short
+# on analyses with > ~12 opportunities, and the AI would emit indices
+# only into the visible window — leaving "phantom" tail opportunities
+# unreachable from the strategy map. 10 KB comfortably holds ~25-30
+# typical-length opportunity records; the assembly-level clip below is
+# the safety net if truncation still trips on very dense analyses.
+MAX_OPPORTUNITIES_JSON_CHARS = 10_000
 
 # Opportunities filtered into the customer-perspective prompt — the
 # Customer perspective cares about revenue-side levers (and the
@@ -118,7 +128,7 @@ def build_shared_context(company: Company) -> dict[str, Any]:
         ),
         "opportunities": truncate(
             json.dumps([o.model_dump() for o in opportunities]),
-            MAX_JSON_FRAGMENT_CHARS,
+            MAX_OPPORTUNITIES_JSON_CHARS,
         ),
         "customer_risk_signals": truncate(
             json.dumps(customer_risk_signals), MAX_JSON_FRAGMENT_CHARS

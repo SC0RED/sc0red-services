@@ -11,6 +11,7 @@ path surfaces it (per CLAUDE.md fail-fast: do not swallow exceptions).
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from src.models.model_strategy_map import (
@@ -32,6 +33,8 @@ from src.models.model_strategy_map import (
     VisionStatement,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def assemble_strategy_map(
     *,
@@ -44,6 +47,7 @@ def assemble_strategy_map(
     organizational_capacity: dict[str, Any],
     core_values: dict[str, Any],
     finale: dict[str, Any],
+    opportunity_count: int,
 ) -> StrategyMap:
     """Build a validated StrategyMap from the seven-step outputs.
 
@@ -52,7 +56,22 @@ def assemble_strategy_map(
     call may also produce a ``whatsMissing`` block — it is silently
     dropped here (the field was removed from the assembled output as
     part of the ``redesign-strategy-map`` Phase 2 change).
+
+    ``opportunity_count`` is the length of the canonical opportunities
+    array the AI was indexing into via ``linked_opportunity_indices``.
+    Out-of-range indices are clipped here with a warning log before
+    Pydantic validation — defends against AI drift (hallucinating an
+    index past the array end) and against context truncation if the
+    opportunities JSON were cut short before the AI saw it (see the
+    ``MAX_OPPORTUNITIES_JSON_CHARS`` cap in ``_strategy_map_context.py``).
     """
+    _clip_linked_opportunity_indices(
+        financial=financial,
+        customer=customer,
+        internal_processes=internal_processes,
+        organizational_capacity=organizational_capacity,
+        opportunity_count=opportunity_count,
+    )
     return StrategyMap(
         vision=VisionStatement(**vision),
         mission=MissionStatement(**mission),
@@ -82,6 +101,63 @@ def assemble_strategy_map(
         arrows=[Arrow(**a) for a in finale["arrows"]],
         coreValues=CoreValues(**core_values),
     )
+
+
+def _clip_linked_opportunity_indices(
+    *,
+    financial: dict[str, Any],
+    customer: dict[str, Any],
+    internal_processes: dict[str, Any],
+    organizational_capacity: dict[str, Any],
+    opportunity_count: int,
+) -> None:
+    """Drop any ``linked_opportunity_indices`` value outside [0, opportunity_count).
+
+    Mutates the per-objective dicts in place — callers don't need the
+    cleaned data anywhere else, and the downstream Pydantic constructor
+    reads from the same dicts. Logs a single warning per affected
+    objective so the operator can spot AI drift in production without
+    each scan emitting a flood of log noise.
+
+    The schema (and Pydantic) only enforce ``minimum: 0`` on items —
+    they have no view of the actual opportunity count for a given
+    scan, so the upper-bound check has to live here at assembly time
+    where ``opportunity_count`` is known.
+    """
+    if opportunity_count < 0:
+        message = f"opportunity_count must be non-negative, got {opportunity_count}"
+        raise ValueError(message)
+
+    def clip(objective: dict[str, Any], objective_label: str) -> None:
+        indices = objective.get("linked_opportunity_indices") or []
+        if not indices:
+            return
+        in_range = [i for i in indices if 0 <= i < opportunity_count]
+        if len(in_range) != len(indices):
+            dropped = [i for i in indices if i not in in_range]
+            _LOGGER.warning(
+                "Strategy map %s: AI emitted %d out-of-range "
+                "linked_opportunity_indices %s (opportunity_count=%d); clipping.",
+                objective_label,
+                len(dropped),
+                dropped,
+                opportunity_count,
+            )
+        objective["linked_opportunity_indices"] = in_range
+
+    for obj in financial.get("objectives", []):
+        clip(obj, f"financial objective {obj.get('id', '?')}")
+    for obj in customer.get("objectives", []):
+        clip(obj, f"customer objective {obj.get('id', '?')}")
+    for theme in internal_processes.get("themes", []):
+        for obj in theme.get("objectives", []):
+            clip(obj, f"internal objective {obj.get('id', '?')}")
+    for bucket in ("people", "technology", "culture"):
+        if bucket in organizational_capacity:
+            clip(
+                organizational_capacity[bucket],
+                f"capacity objective {organizational_capacity[bucket].get('id', '?')}",
+            )
 
 
 def extract_core_values(capacity_response: dict[str, Any]) -> dict[str, Any]:
