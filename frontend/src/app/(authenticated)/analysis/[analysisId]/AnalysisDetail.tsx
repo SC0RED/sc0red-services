@@ -7,6 +7,7 @@ import DocumentUpload from '@/components/DocumentUpload'
 import RiskBreakdown from '@/components/RiskBreakdown'
 import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
+import QuickWinsMatrix from '@/components/analysis/QuickWinsMatrix'
 import AnalysisExecutiveStrap from '@/components/analysis/AnalysisExecutiveStrap'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import AnalysisOverviewCards from '@/components/analysis/AnalysisOverviewCards'
@@ -226,6 +227,20 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
             >
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
             </AnalysisSection>
+
+            {/* Quick Wins 2×2 matrix — Phase 7 of redesign-analysis-visuals.
+                Sits immediately after the OpportunitiesList so the reader
+                sees the same opportunities plotted by impact × timeline
+                right after they read the cards. Clicking a dot pulses +
+                scrolls the matching opportunity card into view via the
+                P5 hover provider. Gated on opportunities.length >= 1 to
+                match the "no orphan visualisations on sparse reports"
+                rule the other sections use. */}
+            {opportunities.length >= 1 && (
+                <AnalysisSection id="quick-wins-matrix" title="Quick Wins Matrix">
+                    <QuickWinsMatrix opportunities={opportunities} />
+                </AnalysisSection>
+            )}
 
             {/* Beat 7 — IMPROVE THIS ANALYSIS. The reanalyze progress bar
                 and any reanalyze polling errors render INSIDE the

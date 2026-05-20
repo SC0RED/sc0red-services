@@ -61,13 +61,13 @@
 
 ## 7. Quick Wins matrix (Spec: `quick-wins-matrix`)
 
-- [ ] 7.1 Create `frontend/src/components/analysis/QuickWinsMatrix.tsx`. Props: `opportunities: Opportunity[]`. Internal: maps each opportunity to a `(impact-row, timeline-col)` cell via the rules in the spec; positions a dot in each cell; stacks dots vertically with 4 px offset for cells with > 1 opportunity; renders `+N more` badge for cells with > 7 dots.
-- [ ] 7.2 Create `frontend/src/components/analysis/QuickWinsCell.tsx` — per-cell component handling the dot-stack + popover for `+N more`. Each dot is a `<button role="button">` calling `highlightOpportunities([oppIndex])` on click/focus.
-- [ ] 7.3 Insert `<AnalysisSection id="quick-wins-matrix">` in `AnalysisDetail.tsx` after the OpportunitiesList section, gated on `opportunities.length >= 1`.
-- [ ] 7.4 Quadrant labels — "Quick Wins" (top-left), "Strategic Bets" (top-right), "Fill-Ins" (bottom-left), "Deprioritise" (bottom-right). Labels rendered as muted overlays inside each corner cell. Per OQ1, the "Avoid" label resolves to "Deprioritise" — confirm with leadership before merge if they prefer different wording.
-- [ ] 7.5 Create `frontend/src/components/print/PrintQuickWinsMatrix.tsx` — static SVG rendering of the matrix. Renders all dots positioned per the same rules but with no event handlers.
-- [ ] 7.6 Insert the print matrix into `PrintReport.tsx` after the opportunities section, gated on `hasOpportunities`.
-- [ ] 7.7 Tests: cover the bucketing rules (each impact × timeline combination), the fallback to Medium-term for unrecognised timeline strings (with `console.warn` assertion), the stacking, the +N overflow, the click-to-highlight integration with the hover provider, the print variant.
+- [x] 7.1 Created `frontend/src/components/analysis/QuickWinsMatrix.tsx` — composes column / row headers + 3×3 cell grid via `buildQuickWinsMatrixLayout`. No legend (lever vocabulary taught 3× above on the page already).
+- [x] 7.2 Created `frontend/src/components/analysis/QuickWinsCell.tsx` — per-cell dot stack, quadrant-corner label, `+N more` popover, outside-click + Escape close. Each dot is `<button>` wired through `useOpportunityHover` (P5) — click / focus / mouseEnter dispatches `highlightOpportunities([oppIndex])`, mouseLeave / blur clears (with relatedTarget containment guard).
+- [x] 7.3 Inserted `<AnalysisSection id="quick-wins-matrix">` between `opportunities` and `document-upload` in `AnalysisDetail.tsx`, gated on `opportunities.length >= 1`. Updated section-ordering regression tests.
+- [x] 7.4 Quadrant labels render as absolute-positioned overlays in the four corner cells. Center-axis cells render no label (shared territory). "Deprioritise" used for bot-right per OQ1.
+- [x] 7.5 Created `frontend/src/components/print/PrintQuickWinsMatrix.tsx` — same layout as screen but no event handlers; each cell additionally lists `#printedIndex Title` references under the dot stack so the dot↔opportunity link survives the export.
+- [x] 7.6 Inserted print matrix into `PrintReport.tsx` between value-chain and methodology sections, gated on `opportunityCount > 0`. Exported via `components/print/index.ts` barrel.
+- [x] 7.7 Tests: `quickWinsMatrixLayout.test.ts` (16), `QuickWinsMatrix.test.tsx` (15), `PrintQuickWinsMatrix.test.tsx` (7). All 1078 frontend tests pass; lint + tsc + audit clean.
 
 ## 8. Documentation + visual verification
 
