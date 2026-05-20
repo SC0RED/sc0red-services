@@ -116,6 +116,14 @@ export default function PrintReport({ analysis, generatedDate }: PrintReportProp
                 <PrintValueChainList
                     valueChain={analysis.valueChain}
                     sortedOpportunities={sortedOpportunities}
+                    // ``analysis.opportunities`` is typed non-optional in
+                    // ``AnalysisData`` but legacy / partially-hydrated API
+                    // responses can omit it at runtime. ``?? []`` keeps
+                    // the headless Chromium PDF export from crashing on
+                    // ``opportunities[index]`` lookups in the dot strip
+                    // — the screen path already uses the same guard via
+                    // the ``deriveSummary`` chain.
+                    opportunities={analysis.opportunities ?? []}
                 />
             ) : null}
 

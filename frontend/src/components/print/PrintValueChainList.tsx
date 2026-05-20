@@ -1,10 +1,17 @@
+import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
 import { findByOriginalIndex, type OpportunityWithIndex } from '@/lib/pdf/sortOpportunities'
 import { CAT_LABELS, RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
-import type { ValueChain, ValueChainStep } from '@/lib/types/api'
+import type { Opportunity, ValueChain, ValueChainStep } from '@/lib/types/api'
 
 interface PrintValueChainListProps {
     valueChain: ValueChain
     sortedOpportunities: OpportunityWithIndex[]
+    /** Full opportunities array in original-index order — used by the
+     *  shared ``OpportunityDotStrip`` to colour each dot from the
+     *  linked opportunity's ``value_lever``. The print path additionally
+     *  surfaces opportunity titles below the dot strip since print has
+     *  no hover affordance. */
+    opportunities: Opportunity[]
 }
 
 /**
@@ -15,10 +22,17 @@ interface PrintValueChainListProps {
  * label + chips never fit).
  *
  * Each row shows the activity name, role description, risk-category
- * chips, and a "Linked opportunities" callout (using the sorted-PDF-
- * index of each opportunity card so cross-references stay stable).
+ * chips, the shared ``OpportunityDotStrip`` (colour-per-lever signal),
+ * AND a "Linked opportunities" callout listing the opportunity titles
+ * with their printed-PDF-card index so cross-references stay stable.
+ * The screen variant relies on hover tooltips for the titles; print
+ * has no hover, so titles + dots both render here.
  */
-export default function PrintValueChainList({ valueChain, sortedOpportunities }: PrintValueChainListProps) {
+export default function PrintValueChainList({
+    valueChain,
+    sortedOpportunities,
+    opportunities,
+}: PrintValueChainListProps) {
     if (!valueChain.steps.length) return null
 
     const primary = valueChain.steps.filter((step) => step.category === 'primary')
@@ -46,6 +60,7 @@ export default function PrintValueChainList({ valueChain, sortedOpportunities }:
                     title="Primary Activities"
                     steps={primary}
                     sortedOpportunities={sortedOpportunities}
+                    opportunities={opportunities}
                 />
             ) : null}
 
@@ -54,6 +69,7 @@ export default function PrintValueChainList({ valueChain, sortedOpportunities }:
                     title="Support Activities"
                     steps={support}
                     sortedOpportunities={sortedOpportunities}
+                    opportunities={opportunities}
                 />
             ) : null}
         </section>
@@ -64,9 +80,10 @@ interface ChainGroupProps {
     title: string
     steps: ValueChainStep[]
     sortedOpportunities: OpportunityWithIndex[]
+    opportunities: Opportunity[]
 }
 
-function ChainGroup({ title, steps, sortedOpportunities }: ChainGroupProps) {
+function ChainGroup({ title, steps, sortedOpportunities, opportunities }: ChainGroupProps) {
     return (
         <div style={{ marginBottom: '24px' }}>
             <h3
@@ -93,7 +110,12 @@ function ChainGroup({ title, steps, sortedOpportunities }: ChainGroupProps) {
                 }}
             >
                 {steps.map((step) => (
-                    <ChainRow key={step.id} step={step} sortedOpportunities={sortedOpportunities} />
+                    <ChainRow
+                        key={step.id}
+                        step={step}
+                        sortedOpportunities={sortedOpportunities}
+                        opportunities={opportunities}
+                    />
                 ))}
             </ol>
         </div>
@@ -103,11 +125,14 @@ function ChainGroup({ title, steps, sortedOpportunities }: ChainGroupProps) {
 function ChainRow({
     step,
     sortedOpportunities,
+    opportunities,
 }: {
     step: ValueChainStep
     sortedOpportunities: OpportunityWithIndex[]
+    opportunities: Opportunity[]
 }) {
-    const links = (step.opportunity_indices ?? [])
+    const indices = step.opportunity_indices ?? []
+    const links = indices
         .map((originalIndex) => findByOriginalIndex(sortedOpportunities, originalIndex))
         .filter((entry): entry is OpportunityWithIndex => entry != null)
 
@@ -159,6 +184,16 @@ function ChainRow({
                         )
                     })}
                 </div>
+            ) : null}
+            {/* Opportunity-link dot strip — same shared component as the
+                screen variant. Print has no hover, so the title list
+                below still renders explicitly. */}
+            {indices.length > 0 ? (
+                <OpportunityDotStrip
+                    linkedIndices={indices}
+                    opportunities={opportunities}
+                    testId={`print-value-chain-linked-opportunity-dots-${step.id}`}
+                />
             ) : null}
             {links.length > 0 ? (
                 <div
