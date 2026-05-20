@@ -1494,6 +1494,31 @@ select {
     animation: card-pulse 400ms ease-out;
 }
 
+/* ── Strategy-map Balanced Scorecard table (redesign-analysis-visuals P6) ──
+ *  The CSS-grid table (``StrategyMapTable.tsx``) lays out as
+ *  ``160px repeat(N, 1fr)`` at the default breakpoint — perspective
+ *  label column on the left, theme columns stretching to fill. On
+ *  narrow viewports (< 900 px) the fixed label column would crowd the
+ *  cells, and theme columns would shrink below readability. The
+ *  override converts each row to a single column flow: perspective
+ *  label stacks above its cells, cells span the full width, and the
+ *  theme-header row becomes a horizontal scroll target so the column
+ *  context remains visible.
+ *
+ *  Mitigation for "React Flow → CSS grid migration breaks responsive
+ *  layout below ~900 px viewport" risk noted in design.md. */
+@media (max-width: 900px) {
+    [data-testid='strategy-map-table'] > div {
+        grid-template-columns: 1fr !important;
+    }
+
+    [data-testid='strategy-map-table'] [data-testid^='strategy-map-row-'] > :first-child {
+        border-right: none;
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 8px;
+    }
+}
+
 /* ── Page Layout ──────────────────────────────────────────── */
 .page-layout {
     display: flex;

@@ -93,7 +93,12 @@ export default function PrintReport({ analysis, generatedDate }: PrintReportProp
 
             <PrintExecutiveSummary summary={summary} />
 
-            {analysis.strategyMap ? <PrintStrategyMap strategyMap={analysis.strategyMap} /> : null}
+            {analysis.strategyMap ? (
+                <PrintStrategyMap
+                    strategyMap={analysis.strategyMap}
+                    sortedOpportunities={sortedOpportunities}
+                />
+            ) : null}
 
             {topActions.length > 0 ? (
                 <section className="print-section print-section--break-before">
