@@ -50,11 +50,26 @@ describe('normalizeUserUrl', () => {
         expect(result).toEqual({ error: 'Please enter a website URL (e.g. example.com)' })
     })
 
-    it('rejects single-word hostnames (no dot)', () => {
+    it('rejects bare single-word hostnames (no dot)', () => {
         // `localhost`, `foo`, etc. parse as valid URLs but the scrape
-        // pipeline can't fetch them — catch them at the form layer.
+        // pipeline can't fetch them on the public internet — catch them
+        // at the form layer when no scheme was provided.
         const result = normalizeUserUrl('localhost')
         expect(result).toEqual({ error: 'Please enter a website URL (e.g. example.com)' })
+    })
+
+    it('accepts single-label hostnames when the user typed an explicit scheme', () => {
+        // Power-user / E2E path: `http://ai-mock:8080/foo` is the docker-
+        // DNS hostname the Playwright local-scan test uses. The "must
+        // have a dot" guard only applies when we auto-prepend the
+        // scheme; once the user has committed to `http://` or
+        // `https://`, we trust them.
+        expect(normalizeUserUrl('http://ai-mock:8080/company')).toEqual({
+            url: 'http://ai-mock:8080/company',
+        })
+        expect(normalizeUserUrl('http://localhost:3000/foo')).toEqual({
+            url: 'http://localhost:3000/foo',
+        })
     })
 
     it('rejects pure garbage with the same friendly error', () => {

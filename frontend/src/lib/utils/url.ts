@@ -54,7 +54,8 @@ export function normalizeUserUrl(input: string): { url: string } | { error: stri
     // `://foo.com` still gets normalised rather than coerced into
     // `https://://foo.com`. Anything with a scheme already (including
     // `http://`, `ftp://`, etc.) is left for URL constructor to judge.
-    const withScheme = trimmed.includes('://') ? trimmed : `https://${trimmed}`
+    const hasExplicitScheme = trimmed.includes('://')
+    const withScheme = hasExplicitScheme ? trimmed : `https://${trimmed}`
 
     let parsed: URL
     try {
@@ -63,12 +64,18 @@ export function normalizeUserUrl(input: string): { url: string } | { error: stri
         return { error: 'Please enter a website URL (e.g. example.com)' }
     }
 
-    // Soft hostname-shape check: a bare-domain hostname must contain at
-    // least one dot. Catches `localhost`-style and typos like `foo` that
-    // URL accepts as a valid host but the scrape pipeline can't fetch.
-    // `localhost` itself is intentionally rejected — this is the
-    // customer-facing scan input, not a dev tool.
-    if (!parsed.hostname.includes('.')) {
+    // Soft hostname-shape check is ONLY applied when we auto-prepended
+    // the scheme. The intent of the check is to catch bare-word input
+    // like ``foo`` or ``localhost`` that the URL constructor accepts as
+    // a valid host but the scrape pipeline can't fetch on the public
+    // internet. When the user has already typed an explicit scheme
+    // (``http://...``, ``https://...``), we trust them — they may be
+    // pointing at a docker-DNS hostname (``http://ai-mock:8080/...`` in
+    // E2E setups), an IP address, or an intranet host. Skipping the
+    // guard here keeps the validator out of the way of legitimate
+    // power-user input without weakening the rejection of typos in the
+    // common path.
+    if (!hasExplicitScheme && !parsed.hostname.includes('.')) {
         return { error: 'Please enter a website URL (e.g. example.com)' }
     }
 
