@@ -102,17 +102,98 @@ Estimated wall-clock: **~30 min including verification.** No team-wide downtime 
      s3://janus-documents-staging/ s3://sc0red-services-documents-staging/
    ```
 
-5. **Re-create the 2 Cognito users in the new pool.** Pull the new pool ID from CFN outputs, then:
+5. **Re-create the 2 Cognito users in the new pool with the custom attributes the backend requires.** Pull the new pool ID from CFN outputs, then run the loop below.
+
+   **CRITICAL — set every `custom:*` attribute at user-creation time.** The backend's auth middleware (`backend/src/handlers/auth_middleware.py`) requires `custom:org_id` on every JWT or it returns 401 `Token missing required org_id claim`. The pool schema (see `backend/infrastructure/stacks/cognito_construct.py`) also declares `custom:legacy_user_id` as **immutable** — once the user exists, `admin-update-user-attributes` CANNOT touch it. So skipping the custom attributes at create-time and trying to backfill later partially works (only `org_id` + `role` are mutable), and atomically aborts if `legacy_user_id` is in the batch. Always set all three at create-time.
+
    ```bash
-   for email in vedratna.velani@sc0red.com zack.walmer@sc0red.com; do
-     aws --profile sc0red-dev cognito-idp admin-create-user \
-       --user-pool-id <NEW_POOL_ID> \
-       --username "$email" \
-       --user-attributes Name=email,Value="$email" Name=email_verified,Value=true \
+   # New pool ID — also set explicitly because the default region of the
+   # `sc0red-dev` profile may not be us-east-1.
+   NEW_POOL_ID=$(aws --profile sc0red-dev --region us-east-1 cognito-idp list-user-pools \
+     --max-results 60 \
+     --query 'UserPools[?contains(Name, `sc0red-services-users`)].Id | [0]' \
+     --output text)
+   NEW_TABLE=sc0red-services-staging
+   AWS_REGION=us-east-1
+
+   for EMAIL in vedratna.velani@sc0red.com zack.walmer@sc0red.com; do
+     # Look up the user's existing org_id / role / id from the migrated DDB.
+     # The DDB scan-and-migrate step (above) already copied USER#* records
+     # into the new table, so GSI4 (EMAIL#*) returns the historic values.
+     RECORD=$(aws --profile sc0red-dev --region "$AWS_REGION" dynamodb query \
+       --table-name "$NEW_TABLE" \
+       --index-name GSI4 \
+       --key-condition-expression "GSI4PK = :pk" \
+       --expression-attribute-values "{\":pk\":{\"S\":\"EMAIL#$EMAIL\"}}" \
+       --output json | jq '.Items[0]')
+
+     if [ "$RECORD" = "null" ]; then
+       echo "ERROR: no DDB record for $EMAIL — abort migration; data sync incomplete" >&2
+       exit 1
+     fi
+
+     ORG_ID=$(echo "$RECORD" | jq -r '.org_id.S')
+     ROLE=$(echo "$RECORD" | jq -r '.role.S // "analyst"')
+     USER_ID=$(echo "$RECORD" | jq -r '.id.S')
+
+     # admin-create-user — every `custom:*` attribute set at create time.
+     # `legacy_user_id` MUST be set here; the pool schema marks it immutable
+     # so it cannot be backfilled later via admin-update-user-attributes.
+     aws --profile sc0red-dev --region "$AWS_REGION" cognito-idp admin-create-user \
+       --user-pool-id "$NEW_POOL_ID" \
+       --username "$EMAIL" \
+       --user-attributes \
+         Name=email,Value="$EMAIL" \
+         Name=email_verified,Value=true \
+         Name=custom:org_id,Value="$ORG_ID" \
+         Name=custom:role,Value="$ROLE" \
+         Name=custom:legacy_user_id,Value="$USER_ID" \
        --desired-delivery-mediums EMAIL
    done
    ```
    Cognito sends each user a "your sc0red Services account is ready" email using the renamed custom-message Lambda template.
+
+   **Smoke-verify that every migrated user actually has the custom attributes set BEFORE moving on to step 6.** If any attribute is missing, the user can complete the password reset and still be unable to use the app (every authenticated API call 401's). The cheapest assertion:
+
+   ```bash
+   for EMAIL in vedratna.velani@sc0red.com zack.walmer@sc0red.com; do
+     echo ""
+     echo "=== $EMAIL ==="
+     aws --profile sc0red-dev --region "$AWS_REGION" cognito-idp admin-get-user \
+       --user-pool-id "$NEW_POOL_ID" \
+       --username "$EMAIL" \
+       --query 'UserAttributes[?starts_with(Name, `custom:`)]' --output table
+   done
+   # Every user MUST show three rows: custom:org_id, custom:role, custom:legacy_user_id.
+   # If any row is missing, see scripts/repair_cognito_attrs.py — but note that
+   # `custom:legacy_user_id` cannot be repaired post-creation; you must delete
+   # and re-create the affected user with the correct attributes at create time.
+   ```
+
+   **Post-recovery: backfill `cognito_sub` on the DDB user records.** Each new Cognito user has a new `sub` UUID that differs from the OLD pool's sub. The DDB user record's `cognito_sub` field (and the `GSI5PK = COGNITO_SUB#...` index attribute) still points at the OLD sub, which means the auth-middleware's primary resolution path (`find_by_cognito_sub`) returns None and login falls through to the secondary email lookup. Login still works via the fallback, but for cleanliness:
+
+   ```bash
+   for EMAIL in vedratna.velani@sc0red.com zack.walmer@sc0red.com; do
+     # Read the new sub
+     NEW_SUB=$(aws --profile sc0red-dev --region "$AWS_REGION" cognito-idp admin-get-user \
+       --user-pool-id "$NEW_POOL_ID" \
+       --username "$EMAIL" \
+       --query 'UserAttributes[?Name==`sub`].Value | [0]' --output text)
+     # Read the user_id from DDB
+     USER_ID=$(aws --profile sc0red-dev --region "$AWS_REGION" dynamodb query \
+       --table-name "$NEW_TABLE" \
+       --index-name GSI4 \
+       --key-condition-expression "GSI4PK = :pk" \
+       --expression-attribute-values "{\":pk\":{\"S\":\"EMAIL#$EMAIL\"}}" \
+       --query 'Items[0].id.S' --output text)
+     # Stamp the new sub into the DDB record (+ GSI5PK so the index entry matches)
+     aws --profile sc0red-dev --region "$AWS_REGION" dynamodb update-item \
+       --table-name "$NEW_TABLE" \
+       --key "{\"pk\":{\"S\":\"USER#$USER_ID\"},\"sk\":{\"S\":\"USER#METADATA\"}}" \
+       --update-expression "SET cognito_sub = :sub, GSI5PK = :gsi5pk" \
+       --expression-attribute-values "{\":sub\":{\"S\":\"$NEW_SUB\"},\":gsi5pk\":{\"S\":\"COGNITO_SUB#$NEW_SUB\"}}"
+   done
+   ```
 
 6. **Re-point `services.sc0red.ai` at the new Amplify app.** The new CDK stack creates `sc0red-services-frontend-staging` Amplify app with its own `*.amplifyapp.com` URL. Move the custom domain:
    - Remove the domain association from `janus-frontend-staging`: `aws amplify delete-domain-association --app-id d3s20952i7opqs --domain-name services.sc0red.ai`
