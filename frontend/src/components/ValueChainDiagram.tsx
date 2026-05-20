@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-
+import AnalysisLegend from '@/components/analysis/AnalysisLegend'
+import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
 import type { ValueChainStep, Opportunity } from '@/lib/types/api'
 import { CAT_LABELS, RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
 
@@ -11,11 +11,38 @@ interface ValueChainDiagramProps {
     summary: string
 }
 
+/**
+ * Porter-style value chain renderer.
+ *
+ * Each step is a static card carrying the step label, a one-line
+ * description, the risk-category tags, and a shared
+ * ``OpportunityDotStrip`` showing the linked opportunities (one
+ * coloured dot per linked ``opportunity_indices`` entry; colour from
+ * ``LEVER_COLORS`` keyed on the opportunity's ``value_lever``).
+ *
+ * The previous click-to-expand interaction that surfaced a text list
+ * of linked opportunity titles was removed by P4 of
+ * ``redesign-analysis-visuals``. The dot strip carries the same
+ * "this step has N opportunities" signal more compactly, and each
+ * dot's native ``title`` attribute surfaces the opportunity name on
+ * hover. The Phase-5 hover provider will further wire dot hover →
+ * highlight matching opportunity card below; the diagram is hover-
+ * provider-ready by virtue of using the shared strip component.
+ */
 export default function ValueChainDiagram({ steps, opportunities, summary }: ValueChainDiagramProps) {
-    const [expandedStep, setExpandedStep] = useState<string | null>(null)
-
     const primarySteps = steps.filter((s) => s.category === 'primary')
     const supportSteps = steps.filter((s) => s.category === 'support')
+
+    // Show the shared legend only when at least one step would actually
+    // render a visible dot — i.e. some step has an in-range opportunity
+    // index that resolves to an entry in ``opportunities``. Gating
+    // purely on ``opportunity_indices.length > 0`` would leave the
+    // legend stranded above an empty strip if ``opportunities=[]``
+    // (e.g. a stale analysis where opportunities were cleared but the
+    // value-chain step indices weren't).
+    const showLegend = steps.some((step) =>
+        (step.opportunity_indices ?? []).some((index) => index >= 0 && index < opportunities.length)
+    )
 
     return (
         <div className="analysis-section-spacing">
@@ -31,6 +58,8 @@ export default function ValueChainDiagram({ steps, opportunities, summary }: Val
             >
                 {summary}
             </p>
+
+            {showLegend && <AnalysisLegend tool="value-chain" />}
 
             {/* Primary Activities */}
             <div
@@ -61,8 +90,6 @@ export default function ValueChainDiagram({ steps, opportunities, summary }: Val
                         opportunities={opportunities}
                         variant="primary"
                         isLast={index === primarySteps.length - 1}
-                        isExpanded={expandedStep === step.id}
-                        onToggle={() => setExpandedStep(expandedStep === step.id ? null : step.id)}
                     />
                 ))}
             </div>
@@ -97,8 +124,6 @@ export default function ValueChainDiagram({ steps, opportunities, summary }: Val
                                 opportunities={opportunities}
                                 variant="support"
                                 isLast={true}
-                                isExpanded={expandedStep === step.id}
-                                onToggle={() => setExpandedStep(expandedStep === step.id ? null : step.id)}
                             />
                         ))}
                     </div>
@@ -115,18 +140,15 @@ interface StepCardProps {
     opportunities: Opportunity[]
     variant: 'primary' | 'support'
     isLast: boolean
-    isExpanded: boolean
-    onToggle: () => void
 }
 
-function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }: StepCardProps) {
-    const linkedOpportunities = step.opportunity_indices
-        .filter((i) => i >= 0 && i < opportunities.length)
-        .map((i) => ({ index: i, opportunity: opportunities[i] }))
+function StepCard({ step, opportunities, variant, isLast }: StepCardProps) {
     const isPrimary = variant === 'primary'
+    const indices = step.opportunity_indices ?? []
 
     return (
         <div
+            data-testid={`value-chain-step-${step.id}`}
             style={{
                 display: 'flex',
                 alignItems: 'stretch',
@@ -134,25 +156,26 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                 minWidth: isPrimary ? '140px' : '160px',
             }}
         >
-            <button
-                onClick={onToggle}
-                aria-expanded={isExpanded}
+            <div
+                // ``tabIndex={0}`` so keyboard users can land on each
+                // step card and read its content (label, description,
+                // risk tags, opportunity dots). Matches the EBITDA leaf
+                // chip's keyboard-reachability pattern. Steps with no
+                // overflow badge and no risk-tag interactivity would
+                // otherwise have zero focusable surface inside the
+                // card, breaking Tab navigation.
+                tabIndex={0}
                 className="card"
                 style={{
                     flex: 1,
                     padding: '0.875rem',
-                    cursor: 'pointer',
                     background: 'none',
-                    borderTop: `1px solid ${isExpanded ? 'var(--accent-blue)' : 'var(--border)'}`,
-                    borderBottom: `1px solid ${isExpanded ? 'var(--accent-blue)' : 'var(--border)'}`,
-                    borderLeft: `1px solid ${isExpanded ? 'var(--accent-blue)' : 'var(--border)'}`,
-                    borderRight:
-                        isPrimary && !isLast
-                            ? 'none'
-                            : `1px solid ${isExpanded ? 'var(--accent-blue)' : 'var(--border)'}`,
+                    borderTop: '1px solid var(--border)',
+                    borderBottom: '1px solid var(--border)',
+                    borderLeft: '1px solid var(--border)',
+                    borderRight: isPrimary && !isLast ? 'none' : '1px solid var(--border)',
                     borderRadius: isPrimary && !isLast ? '0' : undefined,
                     textAlign: 'left',
-                    transition: 'border-color 0.2s, background 0.2s',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '0.5rem',
@@ -202,57 +225,14 @@ function StepCard({ step, opportunities, variant, isLast, isExpanded, onToggle }
                     ))}
                 </div>
 
-                {/* Opportunity count */}
-                {linkedOpportunities.length > 0 && (
-                    <div
-                        style={{
-                            fontSize: '0.75rem',
-                            color: 'var(--accent-blue)',
-                            fontWeight: 500,
-                        }}
-                    >
-                        {linkedOpportunities.length} opportunit
-                        {linkedOpportunities.length === 1 ? 'y' : 'ies'}
-                    </div>
-                )}
-
-                {/* Expanded detail */}
-                {isExpanded && linkedOpportunities.length > 0 && (
-                    <div
-                        style={{
-                            borderTop: '1px solid var(--border)',
-                            paddingTop: '0.5rem',
-                            marginTop: '0.25rem',
-                        }}
-                    >
-                        <div
-                            style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                color: 'var(--text-tertiary)',
-                                marginBottom: '0.375rem',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.04em',
-                            }}
-                        >
-                            Linked Opportunities
-                        </div>
-                        {linkedOpportunities.map(({ index, opportunity }) => (
-                            <div
-                                key={index}
-                                style={{
-                                    fontSize: '0.75rem',
-                                    color: 'var(--text-primary)',
-                                    padding: '0.25rem 0',
-                                    lineHeight: 1.4,
-                                }}
-                            >
-                                {opportunity.title}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </button>
+                {/* Opportunity-link dot strip — same shared component as
+                    EBITDA leaves (and Phase 6 strategy-map cells). */}
+                <OpportunityDotStrip
+                    linkedIndices={indices}
+                    opportunities={opportunities}
+                    testId={`value-chain-linked-opportunity-dots-${step.id}`}
+                />
+            </div>
 
             {/* Arrow between primary steps */}
             {isPrimary && !isLast && (
