@@ -2,6 +2,7 @@
 
 import AnalysisLegend from '@/components/analysis/AnalysisLegend'
 import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
+import { useOpportunityHover } from '@/lib/hooks/useOpportunityHover'
 import type { ValueChainStep, Opportunity } from '@/lib/types/api'
 import { CAT_LABELS, RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
 
@@ -145,6 +146,24 @@ interface StepCardProps {
 function StepCard({ step, opportunities, variant, isLast }: StepCardProps) {
     const isPrimary = variant === 'primary'
     const indices = step.opportunity_indices ?? []
+    // P5 hover-provider wiring: hovering / focusing the card publishes
+    // the step's ``opportunity_indices`` so OpportunitiesList cards
+    // below pulse. ``useOpportunityHover`` returns a no-op outside
+    // the provider so isolated component tests stay harmless.
+    const { highlightOpportunities, clearHighlight } = useOpportunityHover()
+    const hasLinks = indices.length > 0
+    const onEnter = () => {
+        if (hasLinks) highlightOpportunities(indices)
+    }
+    // ``onBlur`` bubbles from focusable descendants (the dot strip's
+    // overflow ``+N`` badge has ``tabIndex={0}``). Guard against the
+    // bubble so tabbing into a descendant doesn't clear the highlight
+    // ``onFocus`` had just set.
+    const onBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+        const next = event.relatedTarget as Node | null
+        if (event.currentTarget.contains(next)) return
+        clearHighlight()
+    }
 
     return (
         <div
@@ -165,6 +184,10 @@ function StepCard({ step, opportunities, variant, isLast }: StepCardProps) {
                 // otherwise have zero focusable surface inside the
                 // card, breaking Tab navigation.
                 tabIndex={0}
+                onMouseEnter={onEnter}
+                onMouseLeave={clearHighlight}
+                onFocus={onEnter}
+                onBlur={onBlur}
                 className="card"
                 style={{
                     flex: 1,
