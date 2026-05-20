@@ -40,6 +40,17 @@ vi.mock('@/components/DocumentUpload', () => ({
     ),
 }))
 
+// Silence the CTA analytics emit so Reanalysis-polling tests' tightly
+// queued `fetchMock.mockResolvedValueOnce` sequences aren't intercepted
+// by the analytics POST that fires when `DeepDiveCTA` mounts. The end-
+// of-analysis CTA (Diagnostic Tool Feedback #8) mounts on every render
+// of `AnalysisDetail` with opportunities present, so without this mock
+// the analytics fetch would consume the first queued response intended
+// for the reanalyze POST.
+vi.mock('@/lib/analytics/emitEvent', () => ({
+    emit: vi.fn(),
+}))
+
 const mockRealtimeStart = vi.fn().mockResolvedValue(false)
 const mockRealtimeStop = vi.fn()
 
@@ -660,26 +671,55 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-nar
 
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        const cta = screen.getByTestId('strategy-map-cta')
+        // Diagnostic Tool Feedback #8 added a second ``DeepDiveCTA`` at
+        // the very end of the analysis (id ``deep-dive-cta-end``). Both
+        // CTAs use the same ``strategy-map-cta`` testid because they
+        // share the underlying component. We scope this assertion to the
+        // FIRST CTA — the one rendered alongside the strategy map — to
+        // preserve the original ``redesign-analysis-detail-narrative``
+        // intent of this test: confirm the mid-page CTA sits after the
+        // map. The end-page CTA's placement is asserted via the section-
+        // ordering test in the other describe block.
+        const ctas = screen.getAllByTestId('strategy-map-cta')
+        expect(ctas.length).toBeGreaterThanOrEqual(1)
+        const midPageCta = ctas[0]
         const map = screen.getByTestId('strategy-map-view')
 
         // The CTA must appear AFTER the strategy map in document order
         // (i.e. it's later in the DOM tree). compareDocumentPosition
         // returns DOCUMENT_POSITION_PRECEDING (2) when the argument
         // precedes the receiver — i.e. `map` comes before `cta`.
-        const relationship = cta.compareDocumentPosition(map)
+        const relationship = midPageCta.compareDocumentPosition(map)
         expect(relationship & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
     })
 
-    it('does NOT render the deep-dive CTA when the analysis has no strategy map', () => {
+    it('omits the mid-page deep-dive CTA when the analysis has no strategy map (end-CTA still renders)', () => {
         const data = buildAnalysisData()
         // No ``strategyMap`` on the data → ``StrategyMapSlot`` returns
-        // ``null`` (per ``redesign-strategy-map`` Phase 4). Both the
-        // strategy-map section wrapper AND the deep-dive CTA wrapper
-        // are absent from the DOM.
+        // ``null`` (per ``redesign-strategy-map`` Phase 4). The mid-page
+        // strategy-map section wrapper AND its companion deep-dive CTA
+        // wrapper are absent from the DOM.
+        //
+        // The end-of-analysis CTA (``deep-dive-cta-end``, added by
+        // Diagnostic Tool Feedback #8) is independent of the strategy
+        // map — it renders whenever ``opportunities.length > 0``. The
+        // default fixture has opportunities, so the end-CTA IS present
+        // even without a strategy map. This is intentional: a useful
+        // analysis without a strategy map should still close on a CTA.
         render(<AnalysisDetail data={data} analysisId="test-id" />)
         expect(screen.queryByTestId('analysis-section-strategy-map')).toBeNull()
         expect(screen.queryByTestId('analysis-section-deep-dive-cta')).toBeNull()
+        expect(screen.queryByTestId('analysis-section-deep-dive-cta-end')).toBeInTheDocument()
+    })
+
+    it('omits the end-of-analysis CTA when the analysis has no opportunities', () => {
+        // Diagnostic Tool Feedback #8's end-CTA mirrors ``PrintBackCover``'s
+        // "no orphan CTA on sparse reports" rule — when there's nothing
+        // to capture, the closing "we can help you capture these" bar
+        // doesn't belong.
+        const data = buildAnalysisData({ opportunities: [] })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        expect(screen.queryByTestId('analysis-section-deep-dive-cta-end')).toBeNull()
     })
 })
 
@@ -747,6 +787,11 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         //   - The strategy-map slot moved up to Beat 3 (immediately
         //     after the Top-3 immediate actions). With a populated
         //     map the slot renders <StrategyMapView/> + <DeepDiveCTA/>.
+        // Per Diagnostic Tool Feedback #8 (Zack: "duplicate the
+        // 'contact us' bar at the end of this analysis"), a second
+        // ``DeepDiveCTA`` now renders after ``document-upload`` when the
+        // analysis has opportunities. Sparse analyses (no opportunities)
+        // still get no end-CTA — same omission rule as ``PrintBackCover``.
         const expectedOrder = [
             'header',
             'strap',
@@ -760,6 +805,7 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'value-lever',
             'opportunities',
             'document-upload',
+            'deep-dive-cta-end',
         ]
         expect(getRenderedSectionIds()).toEqual(expectedOrder)
     })
@@ -779,7 +825,11 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         expect(ids).not.toContain('deep-dive-cta')
         // Sc0redCTABanner deleted in Phase 5 — no ``sc0red-cta`` slot.
         expect(ids).not.toContain('sc0red-cta')
-        // Remaining sections still in the same relative order.
+        // Remaining sections still in the same relative order. The
+        // bottom ``deep-dive-cta-end`` is present because
+        // ``buildAnalysisData()`` includes opportunities — the end-CTA
+        // is gated on ``opportunities.length > 0``, NOT on the strategy
+        // map's presence.
         expect(ids).toEqual([
             'header',
             'strap',
@@ -789,6 +839,7 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'value-lever',
             'opportunities',
             'document-upload',
+            'deep-dive-cta-end',
         ])
     })
 

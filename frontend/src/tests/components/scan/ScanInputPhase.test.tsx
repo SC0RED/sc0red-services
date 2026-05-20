@@ -23,14 +23,17 @@ describe('ScanInputPhase', () => {
         render(<ScanInputPhase {...defaultProps} />)
         expect(screen.getByLabelText('PE Firm Website URL')).toBeInTheDocument()
         expect(screen.getByText('Discover Portfolio & Analyze')).toBeInTheDocument()
-        expect(screen.getByPlaceholderText('https://a16z.com')).toBeInTheDocument()
+        // Placeholder dropped the explicit scheme per Diagnostic Tool
+        // Feedback #1 — the input accepts bare hostnames and auto-
+        // prepends ``https://`` via ``normalizeUserUrl`` in the parent.
+        expect(screen.getByPlaceholderText('a16z.com')).toBeInTheDocument()
     })
 
     it('shows standalone-specific labels in standalone mode', () => {
         render(<ScanInputPhase {...defaultProps} mode="standalone" />)
         expect(screen.getByLabelText('Company Website URL')).toBeInTheDocument()
         expect(screen.getByText('Analyze Company')).toBeInTheDocument()
-        expect(screen.getByPlaceholderText('https://stripe.com')).toBeInTheDocument()
+        expect(screen.getByPlaceholderText('stripe.com')).toBeInTheDocument()
     })
 
     it('calls onModeChange when mode button is clicked', () => {

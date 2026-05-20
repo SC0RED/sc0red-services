@@ -9,6 +9,7 @@ import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
 import { useScanPolling } from '@/lib/hooks/useScanPolling'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import type { Mode, Phase, Company, ScanPollResponse } from '@/lib/types/scan'
+import { normalizeUserUrl } from '@/lib/utils/url'
 
 function NewScanContent() {
     const router = useRouter()
@@ -188,6 +189,18 @@ function NewScanContent() {
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         setError('')
+
+        // Normalise + shape-check the URL BEFORE flipping the phase to
+        // `analyzing`. Two reasons: (1) lets us keep the user on the form
+        // with an inline error rather than briefly flashing the progress
+        // UI, (2) auto-prepends `https://` so `www.foo.com` and
+        // `foo.com` work — see Diagnostic Tool Feedback #1.
+        const normalized = normalizeUserUrl(url)
+        if ('error' in normalized) {
+            setError(normalized.error)
+            return
+        }
+
         setPhase('analyzing')
         setProgress(5)
         setProgressLabel(mode === 'portfolio' ? 'Finding portfolio companies...' : 'Starting analysis...')
@@ -196,7 +209,7 @@ function NewScanContent() {
             const res = await fetch('/api/scan/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url.trim(), type: mode }),
+                body: JSON.stringify({ url: normalized.url, type: mode }),
             })
 
             const data = await res.json()

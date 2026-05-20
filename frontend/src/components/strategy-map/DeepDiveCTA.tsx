@@ -135,7 +135,7 @@ export default function DeepDiveCTA({ analysisId, gapId, variant = 'headline' }:
                         lineHeight: 1.6,
                     }}
                 >
-                    Vector Advisory&rsquo;s deep-dive engagement validates the strategic hypotheses in this
+                    sc0red Advisory&rsquo;s deep-dive engagement validates the strategic hypotheses in this
                     map and translates the objectives into measures, targets, and named initiatives.
                 </p>
             </div>

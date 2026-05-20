@@ -76,7 +76,7 @@ export interface AnalysisData {
     topActions?: string[]
     ebitdaTree?: EbitdaTree
     valueChain?: ValueChain
-    /** AI-generated Balanced Scorecard strategy map (Vector Advisory).
+    /** AI-generated Balanced Scorecard strategy map (sc0red Advisory).
      * Optional because legacy analyses pre-date this field. */
     strategyMap?: StrategyMap
     documents?: DocumentInfo[]
