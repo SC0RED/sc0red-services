@@ -188,7 +188,11 @@ describe('PortfolioConfirmPhase', () => {
             })
             fireEvent.click(screen.getByText('Add'))
 
-            expect(screen.getByText('Please enter a website URL (e.g. example.com)')).toBeInTheDocument()
+            expect(
+                screen.getByText(
+                    "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com"
+                )
+            ).toBeInTheDocument()
         })
 
         it('clears form and collapses after successful add', () => {

@@ -710,24 +710,23 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-nar
         //
         // The end-of-analysis CTA (``deep-dive-cta-end``, added by
         // Diagnostic Tool Feedback #8) is independent of the strategy
-        // map — it renders whenever ``opportunities.length > 0``. The
-        // default fixture has opportunities, so the end-CTA IS present
-        // even without a strategy map. This is intentional: a useful
-        // analysis without a strategy map should still close on a CTA.
+        // map and renders on every successful analysis.
         render(<AnalysisDetail data={data} analysisId="test-id" />)
         expect(screen.queryByTestId('analysis-section-strategy-map')).toBeNull()
         expect(screen.queryByTestId('analysis-section-deep-dive-cta')).toBeNull()
         expect(screen.queryByTestId('analysis-section-deep-dive-cta-end')).toBeInTheDocument()
     })
 
-    it('omits the end-of-analysis CTA when the analysis has no opportunities', () => {
-        // Diagnostic Tool Feedback #8's end-CTA mirrors ``PrintBackCover``'s
-        // "no orphan CTA on sparse reports" rule — when there's nothing
-        // to capture, the closing "we can help you capture these" bar
-        // doesn't belong.
+    it('renders the end-of-analysis CTA even when the analysis has no opportunities', () => {
+        // Phase 11 of ``redesign-analysis-visuals`` removed the prior
+        // ``opportunities.length > 0`` gate on the bottom CTA. The CTA's
+        // purpose is "the user reached the end of the page; offer them
+        // the next step" — that purpose holds whether or not the AI
+        // surfaced specific opportunities. Gating would leave sparse
+        // reports without a contact path, the opposite of what we want.
         const data = buildAnalysisData({ opportunities: [] })
         render(<AnalysisDetail data={data} analysisId="test-id" />)
-        expect(screen.queryByTestId('analysis-section-deep-dive-cta-end')).toBeNull()
+        expect(screen.queryByTestId('analysis-section-deep-dive-cta-end')).toBeInTheDocument()
     })
 })
 
@@ -797,9 +796,10 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         //     map the slot renders <StrategyMapView/> + <DeepDiveCTA/>.
         // Per Diagnostic Tool Feedback #8 (Zack: "duplicate the
         // 'contact us' bar at the end of this analysis"), a second
-        // ``DeepDiveCTA`` now renders after ``document-upload`` when the
-        // analysis has opportunities. Sparse analyses (no opportunities)
-        // still get no end-CTA — same omission rule as ``PrintBackCover``.
+        // ``DeepDiveCTA`` now renders after ``document-upload`` on every
+        // successful analysis page. Phase 11 of redesign-analysis-visuals
+        // removed the prior ``opportunities.length > 0`` gate so sparse
+        // reports keep their contact path.
         const expectedOrder = [
             'header',
             'strap',
@@ -838,10 +838,10 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         // Sc0redCTABanner deleted in Phase 5 — no ``sc0red-cta`` slot.
         expect(ids).not.toContain('sc0red-cta')
         // Remaining sections still in the same relative order. The
-        // bottom ``deep-dive-cta-end`` is present because
-        // ``buildAnalysisData()`` includes opportunities — the end-CTA
-        // is gated on ``opportunities.length > 0``, NOT on the strategy
-        // map's presence.
+        // bottom ``deep-dive-cta-end`` is present because Phase 11 of
+        // redesign-analysis-visuals removed the prior opportunity-count
+        // gate — the end-CTA now renders on every successful analysis
+        // page, independent of strategy map AND opportunity count.
         expect(ids).toEqual([
             'header',
             'strap',

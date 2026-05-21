@@ -47,7 +47,9 @@ describe('normalizeUserUrl', () => {
 
     it('rejects empty input with a friendly error', () => {
         const result = normalizeUserUrl('   ')
-        expect(result).toEqual({ error: 'Please enter a website URL (e.g. example.com)' })
+        expect(result).toEqual({
+            error: "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com",
+        })
     })
 
     it('rejects bare single-word hostnames (no dot)', () => {
@@ -55,7 +57,9 @@ describe('normalizeUserUrl', () => {
         // pipeline can't fetch them on the public internet — catch them
         // at the form layer when no scheme was provided.
         const result = normalizeUserUrl('localhost')
-        expect(result).toEqual({ error: 'Please enter a website URL (e.g. example.com)' })
+        expect(result).toEqual({
+            error: "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com",
+        })
     })
 
     it('accepts single-label hostnames when the user typed an explicit scheme', () => {
@@ -74,7 +78,9 @@ describe('normalizeUserUrl', () => {
 
     it('rejects pure garbage with the same friendly error', () => {
         const result = normalizeUserUrl('not a url at all')
-        expect(result).toEqual({ error: 'Please enter a website URL (e.g. example.com)' })
+        expect(result).toEqual({
+            error: "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com",
+        })
     })
 
     it('handles a URL that already includes a path + query', () => {

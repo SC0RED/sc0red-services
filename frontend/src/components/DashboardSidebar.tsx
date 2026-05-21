@@ -87,12 +87,19 @@ export default function DashboardSidebar() {
                  * web convention of "wordmark → homepage" (Diagnostic Tool
                  * Feedback #2). Uses a plain `<a>` not `<Link>` because
                  * the target is external to the Next.js app router.
-                 * Same tab — mirrors the back-to-marketing footer pattern
-                 * already in app/page.tsx + login/signup.
+                 *
+                 * Opens in a NEW TAB (``target="_blank"``) so an
+                 * accidental click on the logo doesn't tear the user out
+                 * of their in-progress analysis. Phase 11 of
+                 * ``redesign-analysis-visuals`` corrected the prior
+                 * same-tab behaviour after Zack reported losing a session
+                 * mid-review.
                  */}
                 <div style={{ padding: '1.25rem 1rem', borderBottom: '1px solid var(--border-subtle)' }}>
                     <a
                         href={MARKETING_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -100,7 +107,7 @@ export default function DashboardSidebar() {
                             textDecoration: 'none',
                             color: 'inherit',
                         }}
-                        aria-label="sc0red Services — back to sc0red.com"
+                        aria-label="sc0red Services — back to sc0red.com (opens in new tab)"
                     >
                         <div
                             style={{

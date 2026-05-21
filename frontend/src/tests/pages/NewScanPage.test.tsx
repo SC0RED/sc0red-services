@@ -99,10 +99,22 @@ describe('NewScanPage', () => {
         expect(screen.getByLabelText('PE Firm Website URL')).toBeInTheDocument()
     })
 
-    it('shows browser validation on submit with empty URL (required field)', () => {
+    it('surfaces the inline error (not the browser-native popup) on empty URL submit', async () => {
+        // Phase 11 of redesign-analysis-visuals removed the native
+        // ``required`` attribute so empty-submit flows through
+        // ``normalizeUserUrl`` and surfaces in the form's
+        // ``.alert-error`` bar — same styling as every other
+        // validation failure. Browser-native popups don't match the
+        // form's design language.
         render(<NewScanPage />)
         const input = screen.getByLabelText('PE Firm Website URL') as HTMLInputElement
-        expect(input.required).toBe(true)
+        expect(input.required).toBe(false)
+        // The submit handler still validates — clicking with empty
+        // input shows the friendly inline error.
+        fireEvent.click(screen.getByRole('button', { name: /Discover Portfolio & Analyze/i }))
+        expect(
+            await screen.findByText(/Enter a website URL — we'll add https:\/\/ for you/)
+        ).toBeInTheDocument()
     })
 
     it('respects type=standalone from search params', () => {

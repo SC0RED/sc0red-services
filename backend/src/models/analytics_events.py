@@ -29,23 +29,37 @@ AnalyticsEventType = Literal[
     # ``_rendered_in_pdf`` is emitted by the PDF renderer when the
     # strategy-map deep-dive CTA appears on the printable export.
     "sc0red_cta_rendered_in_pdf",
-    # Strategy-map deep-dive CTA on the analysis page —
-    # ``_rendered_strategy_map`` fires on component mount (the CTA is
-    # always-visible below the map), ``_clicked_strategy_map`` fires
-    # on the contact-link click. Both are web-source. Strategy-map
-    # has no lever-filter concept, so ``active_lever_filter`` MUST
-    # be null for these events (enforced in the model_validator below).
+    # Strategy-map deep-dive CTA — the variant rendered DIRECTLY under
+    # the strategy-map table (mid-page placement). ``_rendered`` fires
+    # on component mount (the CTA is always-visible when the strategy
+    # map is present); ``_clicked`` fires on the contact-link click.
     "sc0red_cta_rendered_strategy_map",
     "sc0red_cta_clicked_strategy_map",
+    # End-of-analysis deep-dive CTA — the variant rendered at the
+    # BOTTOM of the analysis page, after every other section. Same
+    # component (``DeepDiveCTA``) as the strategy-map placement but
+    # the analytics event name MUST differ so the funnel can attribute
+    # impressions and clicks to the correct surface. Without distinct
+    # names, the bottom CTA's impressions double-count the strategy-
+    # map funnel — the bug Phase 11 of redesign-analysis-visuals
+    # fixes (see ``analysis-detail-narrative`` spec requirement
+    # "DeepDiveCTA distinguishes placement in analytics").
+    "sc0red_cta_rendered_analysis_end",
+    "sc0red_cta_clicked_analysis_end",
 ]
 
-# Internal-only set of strategy-map event types — kept beside the
+# Internal-only set of CTA event types that share the strategy-map
+# surface invariants (web-source + no lever filter). Kept beside the
 # Literal so the validator can branch on them without restating the
-# names.
-_STRATEGY_MAP_EVENT_TYPES = frozenset(
+# names. The analysis-end CTA shares the same invariants because it's
+# the same component in a different placement — no lever-filter
+# concept either, still web-source.
+_DEEP_DIVE_CTA_EVENT_TYPES = frozenset(
     {
         "sc0red_cta_rendered_strategy_map",
         "sc0red_cta_clicked_strategy_map",
+        "sc0red_cta_rendered_analysis_end",
+        "sc0red_cta_clicked_analysis_end",
     }
 )
 
@@ -108,7 +122,7 @@ class AnalyticsEvent(BaseModel):
         if self.source != "web":
             raise ValueError(f"{self.event_type} requires source='web'")
 
-        if self.event_type in _STRATEGY_MAP_EVENT_TYPES and self.active_lever_filter is not None:
+        if self.event_type in _DEEP_DIVE_CTA_EVENT_TYPES and self.active_lever_filter is not None:
             raise ValueError(f"{self.event_type} must not carry active_lever_filter")
 
         return self

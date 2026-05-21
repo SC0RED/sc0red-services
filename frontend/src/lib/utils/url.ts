@@ -46,7 +46,9 @@ export function prettifyUrl(url: string): string {
 export function normalizeUserUrl(input: string): { url: string } | { error: string } {
     const trimmed = input.trim()
     if (trimmed === '') {
-        return { error: 'Please enter a website URL (e.g. example.com)' }
+        return {
+            error: "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com",
+        }
     }
 
     // Auto-prepend https:// only if NO scheme is present. We detect by
@@ -61,7 +63,9 @@ export function normalizeUserUrl(input: string): { url: string } | { error: stri
     try {
         parsed = new URL(withScheme)
     } catch {
-        return { error: 'Please enter a website URL (e.g. example.com)' }
+        return {
+            error: "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com",
+        }
     }
 
     // Soft hostname-shape check is ONLY applied when we auto-prepended
@@ -76,7 +80,9 @@ export function normalizeUserUrl(input: string): { url: string } | { error: stri
     // power-user input without weakening the rejection of typos in the
     // common path.
     if (!hasExplicitScheme && !parsed.hostname.includes('.')) {
-        return { error: 'Please enter a website URL (e.g. example.com)' }
+        return {
+            error: "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com",
+        }
     }
 
     return { url: parsed.toString() }

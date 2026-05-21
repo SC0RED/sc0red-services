@@ -81,18 +81,23 @@ describe('DashboardSidebar', () => {
         expect(screen.getByText('AI Intelligence')).toBeInTheDocument()
     })
 
-    it('brand block links to the marketing site, not /dashboard', () => {
+    it('brand block links to the marketing site in a new tab', () => {
         // Diagnostic Tool Feedback #2: the sidebar logo should "link
         // back to the sc0red services homepage, since the dashboard
-        // already has its own button". The Dashboard nav item (asserted
-        // above) is the in-app destination; the brand block is the
-        // external homepage link. Falls back to https://www.sc0red.com
-        // when NEXT_PUBLIC_MARKETING_URL is unset (the test env).
+        // already has its own button". Phase 11 of
+        // ``redesign-analysis-visuals`` added ``target="_blank"`` so an
+        // accidental logo click doesn't tear the user out of an
+        // in-progress analysis.
         render(<DashboardSidebar />)
 
         const brandLink = screen.getByText('sc0red Services').closest('a')
         expect(brandLink).toHaveAttribute('href', 'https://www.sc0red.com')
-        expect(brandLink).toHaveAttribute('aria-label', 'sc0red Services — back to sc0red.com')
+        expect(brandLink).toHaveAttribute('target', '_blank')
+        expect(brandLink).toHaveAttribute('rel', 'noopener noreferrer')
+        expect(brandLink).toHaveAttribute(
+            'aria-label',
+            'sc0red Services — back to sc0red.com (opens in new tab)'
+        )
     })
 
     describe('mobile menu', () => {

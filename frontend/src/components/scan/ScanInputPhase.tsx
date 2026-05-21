@@ -161,6 +161,15 @@ export default function ScanInputPhase({
                             // `www.example.com` with a generic message; our
                             // validator accepts them and auto-prepends `https://`
                             // (Diagnostic Tool Feedback #1).
+                            //
+                            // The native ``required`` attribute is INTENTIONALLY
+                            // omitted — it would trigger the browser-native
+                            // empty-field popup, which doesn't match the rest of
+                            // the form's error styling. The empty case is caught
+                            // by ``normalizeUserUrl`` in the parent submit
+                            // handler and surfaced via the same ``.alert-error``
+                            // bar as every other validation failure (Phase 11 of
+                            // ``redesign-analysis-visuals``).
                             type="text"
                             inputMode="url"
                             autoComplete="url"
@@ -170,13 +179,13 @@ export default function ScanInputPhase({
                             placeholder={mode === 'portfolio' ? 'a16z.com' : 'stripe.com'}
                             value={url}
                             onChange={(e) => onUrlChange(e.target.value)}
-                            required
+                            aria-describedby="scan-url-help"
                         />
                     </div>
-                    <span style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
+                    <span id="scan-url-help" style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
                         {mode === 'portfolio'
-                            ? "We'll automatically discover portfolio companies from this URL"
-                            : "We'll analyze this company's website and public data"}
+                            ? "We'll add https:// for you — a16z.com or www.a16z.com both work. Portfolio companies are auto-discovered from the URL."
+                            : "We'll add https:// for you — stripe.com or www.stripe.com both work."}
                     </span>
                 </div>
 
