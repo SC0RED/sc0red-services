@@ -79,6 +79,68 @@ class TestPersistResults:
 
         step._request_executor.mark_question_complete.assert_called_with("persist_results")
 
+    def test_persist_carries_all_opportunity_fields_through(self):
+        """Regression test for the Phase 14 silent-drop bug — a hand-rolled
+        dict literal in PersistResults whitelisted Opportunity fields by
+        name, so when ``investment_value_usd`` and ``roi_estimate_pct``
+        were added in Phase 14 they got silently dropped at persistence
+        time, blanking the ROI x Investment matrix in production.
+
+        The fix swapped the dict literal for ``opp.model_dump()``. This
+        test pins the contract — every field defined on the Opportunity
+        model must appear in the persisted payload, including the
+        Phase-14 numeric axes.
+        """
+        company = self._make_full_company()
+        # Override the opportunity with one that exercises every field.
+        company.opportunity_result = OpportunityResult(
+            opportunities=[
+                Opportunity(
+                    title="Deploy AI",
+                    impact_rating="High",
+                    strategic_category="Revenue Capture",
+                    description="Test",
+                    implementation_steps=["Step 1", "Step 2"],
+                    timeline="Quick Win (1-3 months)",
+                    investment_range="$100K-$500K",
+                    roi_estimate="30% reduction in churn",
+                    value_lever="Revenue Side",
+                    investment_value_usd=300000,
+                    roi_estimate_pct=30.0,
+                )
+            ],
+            top_three_immediate_actions=["Action 1"],
+        )
+        accessor = CompanyAccessor(company)
+
+        mock_company_repo = MagicMock()
+        mock_assessment_repo = MagicMock()
+        step = PersistResults(
+            company_repo=mock_company_repo,
+            assessment_repo=mock_assessment_repo,
+        )
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+        step.execute()
+
+        persisted = mock_assessment_repo.batch_save_opportunities.call_args[0][1][0]
+
+        # Every Opportunity field must appear in the persisted payload.
+        # Pin the Phase-14 numeric axes explicitly so a future refactor
+        # back to a whitelist-style dict literal can't silently drop
+        # them again.
+        assert persisted["investment_value_usd"] == 300000
+        assert persisted["roi_estimate_pct"] == 30.0
+        # Plus all the pre-Phase-14 fields, to lock in the full contract.
+        assert persisted["title"] == "Deploy AI"
+        assert persisted["impact_rating"] == "High"
+        assert persisted["strategic_category"] == "Revenue Capture"
+        assert persisted["implementation_steps"] == ["Step 1", "Step 2"]
+        assert persisted["timeline"] == "Quick Win (1-3 months)"
+        assert persisted["investment_range"] == "$100K-$500K"
+        assert persisted["roi_estimate"] == "30% reduction in churn"
+        assert persisted["value_lever"] == "Revenue Side"
+
     def test_persist_writes_created_by_when_user_id_present(self):
         """`created_by` is written on the company doc when the Sc0redServicesEvent
         carried a user_id through to the pipeline. Read by the activity
