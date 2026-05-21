@@ -67,27 +67,30 @@ Where `<noun>` is "P&L line" for EBITDA, "value-chain step" for value chain, and
 - **THEN** no `AnalysisLegend` is rendered for that tool
 - **AND** the tool's canvas/table renders normally without an explanatory line above it
 
-### Requirement: Hovering a node or step highlights its linked opportunities
+### Requirement: Hovering a node or step pulses its linked opportunities
 
-The analysis detail page SHALL wrap its sections in an `OpportunityHoverProvider` that lets any node/step/cell in any analysis tool publish a hover-highlight signal carrying its `opportunity_indices`. Cards in the `OpportunitiesList` below SHALL subscribe to this signal and apply a visual highlight (background pulse + scroll-into-view with `block: 'nearest'`) when their index appears in the active set.
+The analysis detail page SHALL wrap its sections in an `OpportunityHoverProvider` that lets any node/step/cell in any analysis tool publish a hover-highlight signal carrying its `opportunity_indices`. Cards in the `OpportunitiesList` below SHALL subscribe to this signal and apply a visual highlight (background pulse only — NOT scroll-into-view) when their index appears in the active set.
 
-#### Scenario: Hovering an EBITDA leaf highlights its linked opportunities
+**Scroll-on-hover was removed by PR #361** after production PE reviewers complained the page was scrolling out from under them. The pulse remains as the visual highlight; scroll behaviour is reserved for **intentional navigation gestures** (clicking a Quick Wins matrix chip, clicking a source-side popover entry per the next requirement). Hovering is information-seeking, not navigation.
+
+#### Scenario: Hovering an EBITDA leaf pulses its linked opportunities (no scroll)
 
 - **WHEN** the user hovers an EBITDA leaf node with `linked_opportunity_indices: [0, 2]`
 - **THEN** the opportunity cards at index 0 and 2 in the `OpportunitiesList` apply a 400 ms pulse animation
-- **AND** if either card is fully outside the current viewport, the page scrolls so it becomes visible
+- **AND** the page does NOT scroll, regardless of whether the cards are in view
 - **AND** when the pointer leaves the leaf, the pulse and highlight class are removed
 
-#### Scenario: Hovering a value-chain step highlights its linked opportunities
+#### Scenario: Hovering a value-chain step pulses its linked opportunities
 
 - **WHEN** the user hovers a value-chain step with `opportunity_indices: [1]`
-- **THEN** the opportunity card at index 1 pulses and scrolls into view if needed
+- **THEN** the opportunity card at index 1 pulses
+- **AND** the page does NOT scroll
 
-#### Scenario: Hovering a strategy-map objective cell highlights its linked opportunities
+#### Scenario: Hovering a strategy-map objective cell pulses its linked opportunities
 
 - **WHEN** the user hovers a strategy-map objective cell with `linked_opportunity_indices: [3, 5]`
 - **THEN** the opportunity cards at indices 3 and 5 pulse
-- **AND** the page does not scroll if both cards are partially visible
+- **AND** the page does NOT scroll
 
 #### Scenario: Hovering an opportunity card highlights matching nodes in all three tools
 
@@ -95,11 +98,68 @@ The analysis detail page SHALL wrap its sections in an `OpportunityHoverProvider
 - **THEN** every strategy-map cell, EBITDA leaf, and value-chain step whose linked-indices set contains 4 receives a visual highlight class
 - **AND** when the pointer leaves the card, every node returns to its default state
 
-#### Scenario: Keyboard focus triggers the same highlight as hover
+#### Scenario: Keyboard focus triggers the same pulse as hover
 
 - **WHEN** a keyboard user focuses any hover-source (objective cell, leaf, step, opportunity card) via tab
-- **THEN** the same highlight set fires as on pointer hover
-- **AND** the highlight is cleared on blur
+- **THEN** the same pulse set fires as on pointer hover
+- **AND** the pulse clears on blur
+
+### Requirement: Hover sources surface a popover listing linked opportunity titles
+
+Every analysis-tool source surface (strategy-map cell, EBITDA leaf, value-chain step) that carries `linked_opportunity_indices` (or `opportunity_indices`) SHALL render an inline floating popover near the source when hovered or focused. The popover SHALL list the linked opportunity titles — each entry prefixed with a small lever-coloured dot matching the opportunity's `value_lever`. Each entry SHALL be a button: clicking imperatively scrolls + pulses the matching opportunity card via the same imperative `scrollIntoView({ behavior: 'smooth', block: 'nearest' })` pattern used by Quick Wins matrix clicks.
+
+The popover lifecycle:
+
+- **Open**: 150 ms dwell after `mouseEnter` (debounce against fast cursor transit) OR on `focus` (no debounce for keyboard).
+- **Close**: 200 ms grace after `mouseLeave` (so the cursor can transit from source → popover without dismissal). Also close on `Escape` keypress and on outside click. Focus-blur closes when the relatedTarget is NOT inside the popover.
+
+The popover is rendered by a single shared component (`SourceLinkedOpportunitiesPopover`) so the three tools cannot drift on visual treatment.
+
+Sources with **zero linked opportunities** SHALL NOT render the popover (no empty surface). Sources with **1-5 linked opportunities** render every title inline. Sources with **6+ linked opportunities** render the first 5 titles + a `+N more` row that, when clicked, opens the existing OpportunitiesList in a "filtered to linked indices" view (or, lacking that, falls back to scrolling the OpportunitiesList section into view).
+
+#### Scenario: Hovering a source opens the popover after 150 ms dwell
+
+- **WHEN** the user hovers a strategy-map cell with `linked_opportunity_indices: [0, 2, 5]` and the pointer remains on the source for ≥ 150 ms
+- **THEN** a floating popover renders adjacent to the source listing three rows: "● Opportunity title 0", "● Opportunity title 2", "● Opportunity title 5" (each ● coloured per the matching opportunity's `value_lever`)
+- **AND** the matching opportunity cards below pulse via the existing hover provider
+
+#### Scenario: Cursor transit from source to popover does not close it
+
+- **WHEN** the popover is open and the user moves the cursor from the source into the popover content
+- **THEN** the popover remains open (the 200 ms close grace period absorbs the transit)
+- **AND** entries in the popover are interactive
+
+#### Scenario: Clicking a popover entry scrolls + pulses the matching card
+
+- **WHEN** the popover is open and the user clicks the entry for opportunity index 5
+- **THEN** the page scrolls so the matching opportunity card is in view (`scrollIntoView({ behavior: 'smooth', block: 'nearest' })`)
+- **AND** the card pulses
+- **AND** the popover closes
+
+#### Scenario: Escape closes the popover
+
+- **WHEN** the popover is open and the user presses `Escape`
+- **THEN** the popover closes
+- **AND** focus returns to the source surface (if focus was inside the popover)
+
+#### Scenario: Source with no linked opportunities renders no popover
+
+- **WHEN** a strategy-map cell has `linked_opportunity_indices: []` (or absent) and the user hovers it
+- **THEN** no popover renders
+- **AND** the cell still receives the standard focus / hover styling
+
+#### Scenario: Source with 7 linked opportunities shows 5 + "+2 more"
+
+- **WHEN** a source has 7 linked opportunities and the user opens the popover
+- **THEN** the first 5 titles render as clickable entries
+- **AND** a "+2 more" row renders at the bottom
+- **AND** clicking "+2 more" scrolls the OpportunitiesList section into view (or opens a filtered view if implemented)
+
+#### Scenario: Keyboard focus opens the popover immediately (no debounce)
+
+- **WHEN** a keyboard user tabs into a source surface with linked opportunities
+- **THEN** the popover renders immediately (no 150 ms debounce)
+- **AND** the first popover entry is focusable via Tab
 
 ### Requirement: Confidence dots are removed from analysis-tool visuals
 

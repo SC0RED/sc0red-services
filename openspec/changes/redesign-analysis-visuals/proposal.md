@@ -31,7 +31,7 @@ This change treats those seven items as one design pass and ships them together 
 
 ### New visualisation
 
-- **Add** a 2x2 Quick Wins matrix below the OpportunitiesList — opportunities plotted by `impact_rating` (Y axis: High/Medium/Low) × `timeline` (X axis: Quick Win / Medium-term / Long-term). Each opportunity is a dot, clicking jumps to the matching card. Quadrants labeled: "Quick Wins" (top-left), "Strategic Bets" (top-right), "Fill-Ins" (bottom-left), "Avoid" (bottom-right). V1 uses the categorical fields the AI already produces; Path B (adding numeric `investment_value` + `roi_estimate_pct` fields to the AI schema for a true numeric plot) is captured as a follow-up in design.md.
+- **Add** a Quick Wins matrix below the OpportunitiesList. **Original scope (path C):** a 3×3 categorical matrix on `impact_rating` × `timeline`. **Revised scope (path B, post-P7 design review):** a 2D scatter plot on numeric ROI × Investment, requiring two new opportunity fields (`investment_value_usd: Optional[int]`, `roi_estimate_pct: Optional[float]`) populated by the AI. The path-C version shipped in P7 but missed Zack's literal "ROI × Investment 2×2" ask in Diagnostic Tool Feedback #6 — Section 14 of `tasks.md` flips to path B. Quadrants labelled "Quick Wins" / "Strategic Bets" / "Fill-Ins" / "Deprioritise" stay; the axes change.
 
 ## Capabilities
 

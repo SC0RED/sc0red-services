@@ -204,9 +204,68 @@ This change has no data migration. The AI schema gains one optional field; all e
 
 **Rollback:** Each phase is git-revertable independently. The Phase 1 schema field is additive; even if Phases 2–5 are reverted, the field stays harmless in the pipeline.
 
+### 7. Source-side opportunity popover (revises D5)
+
+**Decision:** Hovering a source surface (strategy-map cell, EBITDA leaf, value-chain step) SHALL open an inline floating popover near the source that lists the 1-3 linked opportunity titles (each prefixed with a small lever-coloured dot). Each entry in the popover is a button — clicking imperatively scrolls + pulses the matching opportunity card via the same imperative-scroll pattern used by the Quick Wins matrix chip click. The hover ALSO pulses the matching cards below as before (D5 still applies for the pulse; what changes is that the hover provider no longer fires `scrollIntoView`).
+
+**Background — why this update is needed:** D5 originally specified "pulse + scroll into view on hover". P5 (PR #356) shipped that behavior; in production a PE reviewer complained that hovering any strategy-map cell pulled the page down 1-2 sections. The opportunity cards always live below the strategy-map section, so `block: 'nearest'` never short-circuited the scroll. PR #361 removed scroll-on-hover entirely, leaving only the pulse. But the pulse alone is invisible when the linked card is below the fold — Diagnostic Tool Feedback #5c ("hover points to specific initiatives") fails because the user sees no per-initiative cue. This decision restores the missing source-side signal without re-introducing the scroll bug.
+
+**Alternatives considered:**
+
+| Alternative | Why rejected |
+|---|---|
+| Scroll-on-hover with 300 ms dwell guard | Still surprises new users on first hover; complex timing logic that the production complaint already invalidated |
+| Replace the dot strip with a count pill ("→ 3 opportunities"); click-only navigation | Loses the at-a-glance lever-colour signal the dot strip gives today; removes a primitive we just shipped in P2 |
+| Keep pulse-only and accept the gap | Leaves the reviewer's #5c check unfixed; offscreen targets feel broken |
+
+The popover surfaces the same titles a user would reach by scrolling, without forcing the scroll. The click-to-navigate path stays consistent with the Quick Wins matrix chip click — both are intentional-navigation gestures.
+
+Popover lifecycle:
+
+- Open on **`mouseEnter` after 150 ms dwell** (avoids flicker when the user is moving the cursor past the source).
+- Close on **`mouseLeave` after 200 ms grace** (so the cursor can transit from source → popover without dismissal).
+- Close on **`Escape` keypress** + on outside click.
+- Open on **keyboard focus**; close on blur with the same containment guard used elsewhere (P5 pattern).
+
+The popover is a NEW shared primitive at `frontend/src/components/analysis/SourceLinkedOpportunitiesPopover.tsx`. Three consumers wire it in: `StrategyMapTable`'s `ObjectiveEntry`, `EbitdaNodeComponent`'s `LeafChip`, and `ValueChainDiagram`'s `StepCard`. The Quick Wins matrix chips do NOT need it — their titles are already inline.
+
+### 8. Matrix axes flip — path B (numeric ROI × Investment), supersedes D4
+
+**Decision:** Replace the 3×3 categorical matrix (impact_rating × timeline) with a continuous 2D scatter plot on numeric ROI vs Investment. The `Opportunity` Pydantic model + the AI opportunity-generation prompt gain two new fields:
+
+- `investment_value_usd: int | None` — estimated USD cost to implement. `None` when the AI cannot infer a number from the available context.
+- `roi_estimate_pct: float | None` — estimated ROI percentage, range 0 .. 500. `None` when the AI cannot infer a number.
+
+The matrix's X axis is **log-scale Investment** (10K → 10M+ USD — investment ranges span 3 orders of magnitude in practice; linear scale crushes everything below $100K into a single column). The Y axis is **linear ROI** (0 → 300%, with a clamp to 300% so a single outlier doesn't squash the rest). Each opportunity is a dot positioned by its (investment, ROI) pair. Four quadrant labels render in the corners:
+
+- **Quick Wins** (top-left): low investment + high ROI
+- **Strategic Bets** (top-right): high investment + high ROI
+- **Fill-Ins** (bottom-left): low investment + low ROI
+- **Deprioritise** (bottom-right): high investment + low ROI
+
+Opportunities with either field `None` render in a grey "uncalibrated" footer strip below the scatter (a horizontal row of dots labelled "Opportunities without ROI / investment estimates"). This is deliberate: forcing the AI to invent numbers it doesn't have produces worse data than admitting the gap.
+
+**Background — why this overrides D4:** D4 chose path C (categorical impact × timeline) because the AI fields were free-text strings. The reviewer (Zack via the design review) pushed back: "this isn't a ROI × Investment 2×2, it's an impact × timeline 3×3 — and the 9-cell layout muddies the four-quadrant story". Zack literally asked for ROI × Investment in the original feedback (Diagnostic Tool Feedback #6). Path B is what was requested. The schema migration that D4 deferred as a follow-up is now in-scope.
+
+**Alternatives considered (re-evaluated):**
+
+| Alternative | Why rejected |
+|---|---|
+| Keep path C, tighten the copy | Doesn't address the literal ask; the reviewer flagged the axes |
+| Binarise impact × timeline into a true 2×2 | Still uses the wrong axes; same complaint applies |
+| Path B with no nullable fields (force AI to estimate every time) | AI hallucinates numbers when it has no signal; produces brittle, misleading plots |
+
+**Migration:** The shipped path-C `QuickWinsMatrix` component is replaced wholesale. No flag, no fallback — the prior version stays in git history only. Legacy analyses that pre-date the new fields render their opportunities in the uncalibrated strip until re-analysed. The schema fields are `Optional[int]` / `Optional[float]` with `None` defaults, so existing API responses validate against the updated model without backfill.
+
+**Print:** Static SVG render of the scatter; same axes, same quadrant labels, no event handlers. Uncalibrated strip survives in print.
+
+**Dot-overlap handling:** Opportunities that land on the same (x, y) pixel get a small jitter (±4 px) to remain individually clickable. If a single quadrant has > 10 dots after jitter, the renderer collapses them into a "+N more" cluster pin that opens a popover listing all opportunities in that quadrant (same UI primitive as Decision 7).
+
 ## Open Questions
 
-- **OQ1** — Should the matrix `Avoid` quadrant be labeled differently? "Avoid" reads judgmental on the AI's own output. Alternative: "Deprioritise" or "Low ROI". Lean toward "Deprioritise" for the v1 demo.
-- **OQ2** — When an objective has more linked opportunities than fit in a single cell, do we render `+N more` inline or move all opportunity dots into a per-cell tooltip? Inline `+N more` keeps the visual density honest; tooltip avoids cell-height blowout. Pick inline for v1, revisit if cells overflow in practice.
-- **OQ3** — Should the strategy-map cells render the objective's `definition` prose, or only the `title`? The wawa exemplar shows both; current React Flow chips show only the title. Inline definition risks runaway cell height. Recommend: title bold + first sentence of definition in muted text, truncated to 2 lines with `text-overflow: ellipsis`.
-- **OQ4** — Does the OpportunitiesList itself host the matrix, or does the matrix get its own `<AnalysisSection>`? Hosting inside OpportunitiesList tightens the visual link ("here's the list, here's the same data plotted"). Separate section makes it scrollable independently. Lean toward a separate `<AnalysisSection id="quick-wins-matrix">` for navigability via the in-page nav.
+- **OQ1** — Should the matrix `Avoid` quadrant be labeled differently? "Avoid" reads judgmental on the AI's own output. Alternative: "Deprioritise" or "Low ROI". Lean toward "Deprioritise" for the v1 demo. **RESOLVED: Deprioritise.**
+- **OQ2** — When an objective has more linked opportunities than fit in a single cell, do we render `+N more` inline or move all opportunity dots into a per-cell tooltip? Inline `+N more` keeps the visual density honest; tooltip avoids cell-height blowout. Pick inline for v1, revisit if cells overflow in practice. **RESOLVED: Inline `+N more` shipped in P7.**
+- **OQ3** — Should the strategy-map cells render the objective's `definition` prose, or only the `title`? The wawa exemplar shows both; current React Flow chips show only the title. Inline definition risks runaway cell height. Recommend: title bold + first sentence of definition in muted text, truncated to 2 lines with `text-overflow: ellipsis`. **RESOLVED: Title + first-sentence preview shipped in P6.**
+- **OQ4** — Does the OpportunitiesList itself host the matrix, or does the matrix get its own `<AnalysisSection>`? Hosting inside OpportunitiesList tightens the visual link ("here's the list, here's the same data plotted"). Separate section makes it scrollable independently. Lean toward a separate `<AnalysisSection id="quick-wins-matrix">` for navigability via the in-page nav. **RESOLVED: Separate section shipped in P7.**
+- **OQ5** — When the AI cannot estimate `investment_value_usd` or `roi_estimate_pct`, should we drop the opportunity from the matrix entirely or render it in an "uncalibrated" footer strip? The footer strip preserves the "every opportunity is on this surface somewhere" promise. Dropping silently is the worse failure. **RESOLVED: Footer strip per D8.**
+- **OQ6** — What does the source-side popover (D7) show for sources with > 3 linked opportunities? Inline list of the first 3 + "+N more" expander? Or always show all? Three is the typical case per the prompt heuristics in P1b; show all up to 5, then `+N more` for the rare cluster. Decision pending review.

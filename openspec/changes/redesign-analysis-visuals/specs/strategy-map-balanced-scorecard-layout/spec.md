@@ -74,6 +74,37 @@ The bottom of the strategy-map table SHALL render the Core Values as a single-ro
 - **THEN** the Values strip is not rendered
 - **AND** the table ends with the Organizational Capacity row
 
+### Requirement: Value Proposition and Strategic Priorities render in a collapsed section below the table
+
+The strategy-map header SHALL contain Mission + Vision only (per the requirement above). The Value Proposition classification + rationale AND the Strategic Priorities list SHALL render in a separate `<ExpandableSection>` (default closed) that sits between the Balanced Scorecard table and the next page section (EBITDA / value-chain / risk breakdown — whichever comes next). The summary label of the expandable section SHALL read "Value Proposition & Strategic Priorities" with a count badge showing the number of strategic priorities (e.g. "Value Proposition & Strategic Priorities · 3").
+
+The expanded body SHALL contain, in order:
+
+1. A "VALUE PROPOSITION" eyebrow label, the primary classification (and secondary if present), and the rationale prose.
+2. A horizontal rule.
+3. A "STRATEGIC PRIORITIES" eyebrow label and a numbered list of each priority's `name` + `result`.
+
+This relocation responds to Diagnostic Tool Feedback #4 ("at the top here I would just have mission and vision") + the reviewer's recommendation that VP + Strategic Priorities are reference content, not above-the-fold content.
+
+#### Scenario: VP + Strategic Priorities render below the table when both are present
+
+- **WHEN** an analysis with `strategyMap.valueProposition.primary` and `strategyMap.strategicPriorities.length >= 1` renders
+- **THEN** an `<ExpandableSection>` labelled "Value Proposition & Strategic Priorities · N" (where N is the priority count) renders between the table's Values strip and the next page section
+- **AND** the section is collapsed by default
+- **AND** no Value Proposition block appears inside the strategy-map header
+
+#### Scenario: Section is omitted when both fields are absent
+
+- **WHEN** an analysis has no value proposition AND no strategic priorities
+- **THEN** the expandable section is not rendered
+- **AND** the next page section follows directly after the Values strip
+
+#### Scenario: Section renders when only one of the two is present
+
+- **WHEN** an analysis has `valueProposition.primary` set but `strategicPriorities` empty
+- **THEN** the section renders with the VP block only and the priority badge omitted (label reads "Value Proposition")
+- **AND** the STRATEGIC PRIORITIES eyebrow is omitted from the expanded body
+
 ### Requirement: Strategy-map table is responsive below 900 px viewport
 
 The strategy-map table SHALL maintain readable layout below 900 px viewport by wrapping theme columns into two-up grids and stacking the perspective rows vertically. Row labels SHALL remain visible on every perspective row regardless of viewport width.
