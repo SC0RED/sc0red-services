@@ -1,16 +1,28 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 import type { Opportunity } from '@/lib/types/api'
-import { bucketTimeline, buildQuickWinsMatrixLayout, quadrantFor } from '@/lib/utils/quickWinsMatrixLayout'
+import {
+    CLUSTER_THRESHOLD,
+    INVESTMENT_MAX_USD,
+    INVESTMENT_MIN_USD,
+    ROI_MAX_PCT,
+    buildQuickWinsMatrixLayout,
+    projectInvestmentX,
+    projectRoiY,
+    quadrantFor,
+} from '@/lib/utils/quickWinsMatrixLayout'
 
 /**
- * Unit tests for the pure Quick Wins matrix layout helper introduced
- * in P7 of ``redesign-analysis-visuals``. The helper has no React or
- * DOM dependency and runs on the raw ``Opportunity[]`` shape only.
+ * Unit tests for the Phase-14 ROI × Investment scatter layout helper.
+ * The helper has no React or DOM dependency, so these tests run on
+ * raw arrays of opportunities + plot dimensions.
  */
 
+const PLOT_W = 600
+const PLOT_H = 400
+
 const make = (overrides: Partial<Opportunity>): Opportunity => ({
-    title: 'Test opportunity',
+    title: 'Test opp',
     description: 'desc',
     impact_rating: 'High',
     timeline: 'Quick Win (1-3 months)',
@@ -19,144 +31,236 @@ const make = (overrides: Partial<Opportunity>): Opportunity => ({
     ...overrides,
 })
 
-describe('bucketTimeline', () => {
-    let warnSpy: ReturnType<typeof vi.spyOn>
+// ── Axis projection ────────────────────────────────────────────────
 
-    beforeEach(() => {
-        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+describe('projectInvestmentX (log-scale X)', () => {
+    it('maps INVESTMENT_MIN_USD to x = 0', () => {
+        expect(projectInvestmentX(INVESTMENT_MIN_USD, PLOT_W)).toBeCloseTo(0)
     })
 
-    afterEach(() => {
-        warnSpy.mockRestore()
+    it('maps INVESTMENT_MAX_USD to x = plotWidth', () => {
+        expect(projectInvestmentX(INVESTMENT_MAX_USD, PLOT_W)).toBeCloseTo(PLOT_W)
     })
 
-    it('matches the "Quick" prefix into the quick column', () => {
-        expect(bucketTimeline('Quick Win (1-3 months)')).toBe('quick')
-        expect(bucketTimeline('quick fix')).toBe('quick')
+    it('places mid-decade investments along the log curve, not the linear midpoint', () => {
+        // INVESTMENT_MIN_USD = 1e4, INVESTMENT_MAX_USD = 1e7 → 3 decades.
+        // $100K is one decade into the range → 1/3 of the plot width,
+        // not 1/100 (which a linear projection would yield).
+        const x = projectInvestmentX(100_000, PLOT_W)
+        expect(x).toBeCloseTo(PLOT_W / 3, 0)
     })
 
-    it('matches the "Medium" prefix into the medium column', () => {
-        expect(bucketTimeline('Medium-term (3-9 months)')).toBe('medium')
-        expect(bucketTimeline('medium')).toBe('medium')
+    it('clamps below-minimum investments to x = 0', () => {
+        expect(projectInvestmentX(1_000, PLOT_W)).toBeCloseTo(0)
     })
 
-    it('matches the "Long" prefix into the long column', () => {
-        expect(bucketTimeline('Long-term (9+ months)')).toBe('long')
-        expect(bucketTimeline('longer than expected')).toBe('long')
-    })
-
-    it('is whitespace-tolerant', () => {
-        expect(bucketTimeline('  Quick Win  ')).toBe('quick')
-    })
-
-    it('falls back to medium with a dev-mode console.warn for unknown strings', () => {
-        // The helper is meant to log loudly when AI output drifts.
-        // Tests run in NODE_ENV=test which is !== 'production', so the
-        // warn path executes.
-        expect(bucketTimeline('Unspecified')).toBe('medium')
-        expect(warnSpy).toHaveBeenCalledOnce()
-        expect(warnSpy.mock.calls[0][0]).toContain('Unspecified')
-        expect(warnSpy.mock.calls[0][0]).toContain('Medium-term')
+    it('clamps above-maximum investments to x = plotWidth', () => {
+        expect(projectInvestmentX(50_000_000, PLOT_W)).toBeCloseTo(PLOT_W)
     })
 })
+
+describe('projectRoiY (linear Y, SVG-inverted)', () => {
+    it('maps 0% ROI to the BOTTOM of the plot (y = plotHeight)', () => {
+        // SVG Y grows down, so 0% ROI = bottom of the chart.
+        const { y, clampedUp } = projectRoiY(0, PLOT_H)
+        expect(y).toBeCloseTo(PLOT_H)
+        expect(clampedUp).toBe(false)
+    })
+
+    it('maps ROI_MAX_PCT to the TOP (y = 0)', () => {
+        const { y, clampedUp } = projectRoiY(ROI_MAX_PCT, PLOT_H)
+        expect(y).toBeCloseTo(0)
+        expect(clampedUp).toBe(false)
+    })
+
+    it('flags clampedUp when ROI exceeds the cap', () => {
+        // 450% → clamps visually at the top, caret renders.
+        const { y, clampedUp } = projectRoiY(450, PLOT_H)
+        expect(y).toBeCloseTo(0)
+        expect(clampedUp).toBe(true)
+    })
+
+    it('places mid-range ROI proportionally', () => {
+        // 150% = halfway between 0 and 300, so y = halfway down.
+        const { y } = projectRoiY(150, PLOT_H)
+        expect(y).toBeCloseTo(PLOT_H / 2)
+    })
+})
+
+// ── Quadrant assignment ────────────────────────────────────────────
 
 describe('quadrantFor', () => {
-    it('assigns the four corners to their quadrants', () => {
-        expect(quadrantFor('High', 'quick')).toBe('quick-wins')
-        expect(quadrantFor('High', 'long')).toBe('strategic-bets')
-        expect(quadrantFor('Low', 'quick')).toBe('fill-ins')
-        expect(quadrantFor('Low', 'long')).toBe('deprioritise')
+    // Plot origin at top-left, splits at (300, 200) for the test grid.
+    it('assigns top-left to "quick-wins"', () => {
+        expect(quadrantFor(100, 50, 300, 200)).toBe('quick-wins')
     })
 
-    it('returns null for center-axis cells (Medium row + Medium column)', () => {
-        expect(quadrantFor('Medium', 'quick')).toBeNull()
-        expect(quadrantFor('Medium', 'medium')).toBeNull()
-        expect(quadrantFor('Medium', 'long')).toBeNull()
-        expect(quadrantFor('High', 'medium')).toBeNull()
-        expect(quadrantFor('Low', 'medium')).toBeNull()
+    it('assigns top-right to "strategic-bets"', () => {
+        expect(quadrantFor(500, 50, 300, 200)).toBe('strategic-bets')
+    })
+
+    it('assigns bottom-left to "fill-ins"', () => {
+        expect(quadrantFor(100, 350, 300, 200)).toBe('fill-ins')
+    })
+
+    it('assigns bottom-right to "deprioritise"', () => {
+        expect(quadrantFor(500, 350, 300, 200)).toBe('deprioritise')
+    })
+
+    it('treats dots on the split lines as belonging to the right/bottom halves', () => {
+        // Dots exactly ON the median land in the right + bottom halves
+        // via the ``< splitX`` / ``< splitY`` comparisons. Documented
+        // here so a future refactor that flips the comparison can
+        // catch the regression.
+        expect(quadrantFor(300, 200, 300, 200)).toBe('deprioritise')
     })
 })
 
-describe('buildQuickWinsMatrixLayout — bucketing', () => {
-    it('emits a 3×3 grid', () => {
-        const layout = buildQuickWinsMatrixLayout([])
-        expect(layout.cells.length).toBe(3)
-        for (const row of layout.cells) expect(row.length).toBe(3)
+// ── buildQuickWinsMatrixLayout ─────────────────────────────────────
+
+describe('buildQuickWinsMatrixLayout — routing', () => {
+    it('routes both-populated opportunities into the in-plot dots', () => {
+        const layout = buildQuickWinsMatrixLayout(
+            [make({ investment_value_usd: 100_000, roi_estimate_pct: 150 })],
+            PLOT_W,
+            PLOT_H
+        )
+        expect(layout.inPlot).toHaveLength(1)
+        expect(layout.uncalibrated).toHaveLength(0)
+        expect(layout.inPlot[0].opportunityIndex).toBe(0)
     })
 
-    it('routes High × Quick into top-left (quick-wins)', () => {
-        const layout = buildQuickWinsMatrixLayout([make({})])
-        expect(layout.cells[0][0].quadrant).toBe('quick-wins')
-        expect(layout.cells[0][0].opportunityIndices).toEqual([0])
+    it('routes opportunities missing either axis into the uncalibrated strip', () => {
+        const layout = buildQuickWinsMatrixLayout(
+            [
+                make({ investment_value_usd: 100_000, roi_estimate_pct: null }),
+                make({ investment_value_usd: null, roi_estimate_pct: 50 }),
+                make({ investment_value_usd: null, roi_estimate_pct: null }),
+            ],
+            PLOT_W,
+            PLOT_H
+        )
+        expect(layout.inPlot).toHaveLength(0)
+        expect(layout.uncalibrated).toHaveLength(3)
+        expect(layout.uncalibrated.map((u) => u.opportunityIndex)).toEqual([0, 1, 2])
     })
 
-    it('routes High × Long into top-right (strategic-bets)', () => {
-        const layout = buildQuickWinsMatrixLayout([make({ timeline: 'Long-term (9+ months)' })])
-        expect(layout.cells[0][2].quadrant).toBe('strategic-bets')
-        expect(layout.cells[0][2].opportunityIndices).toEqual([0])
+    it('treats undefined the same as null (legacy persisted shape)', () => {
+        const legacy = make({})
+        // Don't set investment_value_usd or roi_estimate_pct at all.
+        const layout = buildQuickWinsMatrixLayout([legacy], PLOT_W, PLOT_H)
+        expect(layout.uncalibrated).toHaveLength(1)
+    })
+})
+
+describe('buildQuickWinsMatrixLayout — quadrant medians', () => {
+    it('splits at the median of the in-plot subset (not fixed thresholds)', () => {
+        // Three opportunities all "low-investment" by any external
+        // scale, but the median splits them relative to EACH OTHER —
+        // the matrix shows the spread within this scan.
+        const layout = buildQuickWinsMatrixLayout(
+            [
+                make({ investment_value_usd: 20_000, roi_estimate_pct: 250 }),
+                make({ investment_value_usd: 40_000, roi_estimate_pct: 150 }),
+                make({ investment_value_usd: 60_000, roi_estimate_pct: 50 }),
+            ],
+            PLOT_W,
+            PLOT_H
+        )
+        // Median investment = $40K → splitX ≈ projectInvestmentX(40K).
+        // The dot at $40K lands ON the median line; per quadrantFor it
+        // goes to the right half. Verify the routing.
+        const dotAtMedian = layout.inPlot.find((d) => d.opportunityIndex === 1)
+        expect(dotAtMedian).toBeDefined()
+        // At the median split point, our quadrantFor rule routes to
+        // the right + bottom halves. With ROI = 150 (the median of the
+        // three values), this dot lands in deprioritise (bottom-right).
+        expect(dotAtMedian!.quadrant).toBe('deprioritise')
     })
 
-    it('routes Low × Quick into bottom-left (fill-ins)', () => {
-        const layout = buildQuickWinsMatrixLayout([
-            make({ impact_rating: 'Low', timeline: 'Quick Win (1-3 months)' }),
-        ])
-        expect(layout.cells[2][0].quadrant).toBe('fill-ins')
-        expect(layout.cells[2][0].opportunityIndices).toEqual([0])
+    it('falls back to plot centre when there are no in-plot dots', () => {
+        // All uncalibrated → quadrant labels still need a stable
+        // anchor so the renderer can show the empty grid framework.
+        const layout = buildQuickWinsMatrixLayout(
+            [make({ investment_value_usd: null, roi_estimate_pct: null })],
+            PLOT_W,
+            PLOT_H
+        )
+        expect(layout.investmentSplitX).toBeCloseTo(PLOT_W / 2)
+        expect(layout.roiSplitY).toBeCloseTo(PLOT_H / 2)
+    })
+})
+
+describe('buildQuickWinsMatrixLayout — clamp + jitter + cluster', () => {
+    it('flags clampedUp on dots whose ROI exceeds the cap', () => {
+        const layout = buildQuickWinsMatrixLayout(
+            [
+                make({ investment_value_usd: 100_000, roi_estimate_pct: 50 }),
+                make({ investment_value_usd: 200_000, roi_estimate_pct: 450 }),
+            ],
+            PLOT_W,
+            PLOT_H
+        )
+        const lowRoi = layout.inPlot.find((d) => d.opportunityIndex === 0)!
+        const highRoi = layout.inPlot.find((d) => d.opportunityIndex === 1)!
+        expect(lowRoi.clampedUp).toBe(false)
+        expect(highRoi.clampedUp).toBe(true)
     })
 
-    it('routes Low × Long into bottom-right (deprioritise)', () => {
-        const layout = buildQuickWinsMatrixLayout([
-            make({ impact_rating: 'Low', timeline: 'Long-term (9+ months)' }),
-        ])
-        expect(layout.cells[2][2].quadrant).toBe('deprioritise')
-        expect(layout.cells[2][2].opportunityIndices).toEqual([0])
+    it('jitters identical-coordinate opportunities so each stays individually addressable', () => {
+        const layout = buildQuickWinsMatrixLayout(
+            [
+                make({ investment_value_usd: 100_000, roi_estimate_pct: 150 }),
+                make({ investment_value_usd: 100_000, roi_estimate_pct: 150 }),
+            ],
+            PLOT_W,
+            PLOT_H
+        )
+        expect(layout.inPlot).toHaveLength(2)
+        const distance = Math.hypot(
+            layout.inPlot[0].x - layout.inPlot[1].x,
+            layout.inPlot[0].y - layout.inPlot[1].y
+        )
+        // Either separated by at least the dot diameter or by the
+        // jitter radius — both leave each dot individually clickable.
+        expect(distance).toBeGreaterThan(0)
     })
 
-    it('routes unrecognised timeline into the Medium-term column', () => {
-        // Suppress the dev warning during this test so it doesn't
-        // pollute the test output.
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-        const layout = buildQuickWinsMatrixLayout([make({ impact_rating: 'High', timeline: 'Unspecified' })])
-        expect(layout.cells[0][1].opportunityIndices).toEqual([0])
-        warnSpy.mockRestore()
+    it('collapses a single quadrant into a cluster pin when it exceeds CLUSTER_THRESHOLD', () => {
+        // CLUSTER_THRESHOLD + 1 opportunities all in the High-ROI /
+        // low-investment corner. The whole quadrant collapses.
+        const count = CLUSTER_THRESHOLD + 1
+        const opps = Array.from({ length: count }, () =>
+            make({ investment_value_usd: 20_000, roi_estimate_pct: 250 })
+        )
+        const layout = buildQuickWinsMatrixLayout(opps, PLOT_W, PLOT_H)
+        // No individual dots in that quadrant.
+        expect(layout.quadrantDots['quick-wins']).toHaveLength(0)
+        // Single cluster pin instead.
+        expect(layout.clusterPins).toHaveLength(1)
+        expect(layout.clusterPins[0].opportunityIndices).toHaveLength(count)
     })
 
-    it('groups multiple opportunities into the same cell', () => {
+    it('keeps dots individual when a quadrant has exactly CLUSTER_THRESHOLD entries', () => {
+        // Boundary case — `> threshold` means equal is fine.
+        const opps = Array.from({ length: CLUSTER_THRESHOLD }, () =>
+            make({ investment_value_usd: 20_000, roi_estimate_pct: 250 })
+        )
+        const layout = buildQuickWinsMatrixLayout(opps, PLOT_W, PLOT_H)
+        expect(layout.clusterPins).toHaveLength(0)
+        expect(layout.inPlot.length + layout.uncalibrated.length).toBe(CLUSTER_THRESHOLD)
+    })
+})
+
+describe('buildQuickWinsMatrixLayout — deterministic output', () => {
+    it('produces identical (x, y) coordinates across re-renders for the same input', () => {
         const opps = [
-            make({ impact_rating: 'High', timeline: 'Quick Win' }),
-            make({ impact_rating: 'High', timeline: 'Quick Win' }),
-            make({ impact_rating: 'High', timeline: 'Quick Win' }),
+            make({ investment_value_usd: 100_000, roi_estimate_pct: 150 }),
+            make({ investment_value_usd: 200_000, roi_estimate_pct: 100 }),
+            make({ investment_value_usd: 50_000, roi_estimate_pct: 200 }),
         ]
-        const layout = buildQuickWinsMatrixLayout(opps)
-        expect(layout.cells[0][0].opportunityIndices).toEqual([0, 1, 2])
-    })
-})
-
-describe('buildQuickWinsMatrixLayout — sort order', () => {
-    it('sorts in-cell opportunities by strategic_category then by index', () => {
-        const opps = [
-            make({ strategic_category: 'Z-cat' }), // index 0
-            make({ strategic_category: 'A-cat' }), // index 1
-            make({ strategic_category: 'M-cat' }), // index 2
-            make({ strategic_category: 'A-cat' }), // index 3 — tie with index 1
-        ]
-        const layout = buildQuickWinsMatrixLayout(opps)
-        // All four land in High × Quick. Expected sort:
-        // (A-cat, 1), (A-cat, 3), (M-cat, 2), (Z-cat, 0)
-        expect(layout.cells[0][0].opportunityIndices).toEqual([1, 3, 2, 0])
-    })
-})
-
-describe('buildQuickWinsMatrixLayout — coordinates', () => {
-    it('every cell carries its impact + timeline coordinates', () => {
-        const layout = buildQuickWinsMatrixLayout([])
-        const impactOrder = ['High', 'Medium', 'Low'] as const
-        const timelineOrder = ['quick', 'medium', 'long'] as const
-        for (let r = 0; r < 3; r += 1) {
-            for (let c = 0; c < 3; c += 1) {
-                expect(layout.cells[r][c].impact).toBe(impactOrder[r])
-                expect(layout.cells[r][c].timeline).toBe(timelineOrder[c])
-            }
-        }
+        const a = buildQuickWinsMatrixLayout(opps, PLOT_W, PLOT_H)
+        const b = buildQuickWinsMatrixLayout(opps, PLOT_W, PLOT_H)
+        expect(a.inPlot.map((d) => [d.x, d.y])).toEqual(b.inPlot.map((d) => [d.x, d.y]))
     })
 })

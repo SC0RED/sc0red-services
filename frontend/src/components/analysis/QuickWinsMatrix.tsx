@@ -1,14 +1,22 @@
 'use client'
 
-import type { CSSProperties } from 'react'
+import { type CSSProperties } from 'react'
 
-import QuickWinsCell from '@/components/analysis/QuickWinsCell'
+import ClusterPinMarker from '@/components/analysis/quick-wins-matrix/ClusterPinMarker'
+import ScatterDot from '@/components/analysis/quick-wins-matrix/ScatterDot'
+import UncalibratedStrip from '@/components/analysis/quick-wins-matrix/UncalibratedStrip'
 import type { Opportunity } from '@/lib/types/api'
 import {
-    IMPACT_ROW_ORDER,
-    TIMELINE_COLUMN_LABELS,
-    TIMELINE_COLUMN_ORDER,
+    INVESTMENT_MAX_USD,
+    INVESTMENT_MIN_USD,
+    QUADRANT_LABELS,
+    ROI_MAX_PCT,
+    ROI_MIN_PCT,
     buildQuickWinsMatrixLayout,
+    formatInvestmentTick,
+    projectInvestmentTickX,
+    projectRoiTickY,
+    type Quadrant,
 } from '@/lib/utils/quickWinsMatrixLayout'
 
 interface QuickWinsMatrixProps {
@@ -16,93 +24,221 @@ interface QuickWinsMatrixProps {
 }
 
 /**
- * Quick Wins 2×2 matrix (Phase 7 of ``redesign-analysis-visuals``).
+ * ROI × Investment Matrix — true 2D scatter plot replacing the
+ * pre-Phase-14 categorical 3×3. Plots every opportunity at its
+ * (``investment_value_usd``, ``roi_estimate_pct``) coordinates,
+ * routing rows with either axis ``null`` into a separate
+ * "uncalibrated" strip below the chart.
  *
- * Renders every opportunity as a dot positioned by ``impact_rating``
- * (Y axis) × ``timeline`` (X axis) — a 3×3 grid that visually
- * collapses into four conceptual quadrants:
+ * Design D8 of ``redesign-analysis-visuals``. Diagnostic Tool
+ * Feedback #6 read literally — Zack asked for ROI × Investment, and
+ * P7's categorical Path-C substitute was the wrong call.
  *
- *   - Top-left  (High × Quick)  → "Quick Wins"
- *   - Top-right (High × Long)   → "Strategic Bets"
- *   - Bot-left  (Low × Quick)   → "Fill-Ins"
- *   - Bot-right (Low × Long)    → "Deprioritise"
+ * Quadrant split lines are drawn at the MEDIAN investment + median
+ * ROI of the in-plot subset (per-scan, not fixed thresholds), so the
+ * quadrant labels stay meaningful regardless of the analysis's
+ * absolute scale.
  *
- * Center-axis cells (Medium impact row + Medium-term column) are
- * shared territory — no quadrant label. Per the spec, the matrix
- * uses categorical buckets (path C) instead of numeric ROI / investment
- * plotting (path B) because the AI fields are still free-text strings;
- * a future schema change adding ``investment_value: int`` + ``roi_pct:
- * float`` is on the back-burner for v1.
- *
- * Click / focus / hover any dot → ``OpportunityHoverProvider`` (P5)
- * publishes the linked-opportunity index → matching opportunity card
- * below pulses + scrolls into view.
+ * Sub-components live in ``quick-wins-matrix/`` to keep this file
+ * under the 360-line frontend cap.
  */
 export default function QuickWinsMatrix({ opportunities }: QuickWinsMatrixProps) {
-    const layout = buildQuickWinsMatrixLayout(opportunities)
+    // Fixed plot dimensions in viewBox coordinate space. The wrapping
+    // SVG uses ``preserveAspectRatio="xMidYMid meet"`` so the actual
+    // rendered size scales to the container width while keeping the
+    // aspect ratio fixed. Pixel coordinates from
+    // ``buildQuickWinsMatrixLayout`` are in this same space — click
+    // hit-testing works the same regardless of the rendered scale.
+    const PLOT_WIDTH = 720
+    const PLOT_HEIGHT = 420
+
+    const layout = buildQuickWinsMatrixLayout(opportunities, PLOT_WIDTH, PLOT_HEIGHT)
+
     return (
         <div data-testid="quick-wins-matrix" style={containerStyle}>
-            {/*
-             * No ``AnalysisLegend`` here — the lever-color vocabulary is
-             * already taught three times above (EBITDA, value chain,
-             * strategy map). Repeating it on the page's last analysis
-             * surface would read as redundant. Each dot's ``title``
-             * attribute exposes the lever name verbatim on hover for
-             * any reader who landed on the matrix without scrolling
-             * past the upper sections.
-             */}
             <p style={leadStyle}>
-                Each opportunity is plotted by impact (vertical) and timeline (horizontal). Dots in the
-                top-left quadrant are the highest-leverage near-term plays; bottom-right are low-impact,
-                slow-payoff — deprioritise unless context shifts.
+                Each opportunity is plotted by investment cost (horizontal, log scale) and ROI (vertical). The
+                top-left quadrant carries the highest-leverage near-term plays. Opportunities the AI
+                couldn&rsquo;t size land in the uncalibrated strip below.
             </p>
 
-            <div style={gridShellStyle}>
-                <div style={emptyCornerStyle} />
-                <div style={columnHeaderRowStyle(TIMELINE_COLUMN_ORDER.length)}>
-                    {TIMELINE_COLUMN_ORDER.map((column, columnIndex) => (
-                        <div
-                            key={column}
-                            data-testid={`quick-wins-column-header-${columnIndex}`}
-                            style={columnHeaderStyle}
-                        >
-                            {TIMELINE_COLUMN_LABELS[column]}
-                        </div>
-                    ))}
-                </div>
+            <ScatterPlot
+                plotWidth={PLOT_WIDTH}
+                plotHeight={PLOT_HEIGHT}
+                layout={layout}
+                opportunities={opportunities}
+            />
 
-                <div style={rowLabelColumnStyle}>
-                    {IMPACT_ROW_ORDER.map((impact, rowIndex) => (
-                        <div
-                            key={impact}
-                            data-testid={`quick-wins-row-header-${rowIndex}`}
-                            style={rowHeaderStyle}
-                        >
-                            {impact} impact
-                        </div>
-                    ))}
-                </div>
-
-                <div style={cellGridStyle(TIMELINE_COLUMN_ORDER.length)}>
-                    {layout.cells.flatMap((row, rowIndex) =>
-                        row.map((cell, columnIndex) => (
-                            <QuickWinsCell
-                                key={`${rowIndex}-${columnIndex}`}
-                                rowIndex={rowIndex}
-                                columnIndex={columnIndex}
-                                quadrant={cell.quadrant}
-                                opportunityIndices={cell.opportunityIndices}
-                                opportunities={opportunities}
-                            />
-                        ))
-                    )}
-                </div>
-            </div>
+            <UncalibratedStrip
+                indices={layout.uncalibrated.map((u) => u.opportunityIndex)}
+                opportunities={opportunities}
+            />
         </div>
     )
 }
 
-// ── styles ─────────────────────────────────────────────────────────
+// ── Scatter plot composition ──────────────────────────────────────
+
+interface ScatterPlotProps {
+    plotWidth: number
+    plotHeight: number
+    layout: ReturnType<typeof buildQuickWinsMatrixLayout>
+    opportunities: Opportunity[]
+}
+
+function ScatterPlot({ plotWidth, plotHeight, layout, opportunities }: ScatterPlotProps) {
+    // Axes margins — leave space outside the plot area for tick
+    // labels + axis titles. The plot area itself sits at (margin.left,
+    // margin.top) within the SVG viewBox; layout coordinates are
+    // relative to the plot area, so we translate them in the render.
+    const margin = { top: 16, right: 16, bottom: 56, left: 64 }
+    const svgWidth = plotWidth + margin.left + margin.right
+    const svgHeight = plotHeight + margin.top + margin.bottom
+
+    // Tick positions sourced from the shared axis constants so the
+    // screen + print + layout helper all move together if the visual
+    // cap ever changes.
+    const xTicks = [INVESTMENT_MIN_USD, 100_000, 1_000_000, INVESTMENT_MAX_USD]
+    const yTicks = [ROI_MIN_PCT, 100, 200, ROI_MAX_PCT]
+
+    return (
+        <svg
+            data-testid="quick-wins-matrix-svg"
+            role="img"
+            aria-label="ROI versus Investment scatter plot. Each dot is one opportunity; the four quadrants are labelled Quick Wins (top-left), Strategic Bets (top-right), Fill-Ins (bottom-left), Deprioritise (bottom-right)."
+            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+            preserveAspectRatio="xMidYMid meet"
+            style={svgStyle}
+        >
+            <g transform={`translate(${margin.left}, ${margin.top})`}>
+                <rect
+                    x={0}
+                    y={0}
+                    width={plotWidth}
+                    height={plotHeight}
+                    fill="var(--bg-surface-2)"
+                    stroke="var(--border-subtle)"
+                    strokeWidth={1}
+                />
+
+                {/* Quadrant split lines (median-based, dashed) */}
+                <line
+                    x1={layout.investmentSplitX}
+                    y1={0}
+                    x2={layout.investmentSplitX}
+                    y2={plotHeight}
+                    stroke="var(--border-subtle)"
+                    strokeWidth={1}
+                    strokeDasharray="4 3"
+                />
+                <line
+                    x1={0}
+                    y1={layout.roiSplitY}
+                    x2={plotWidth}
+                    y2={layout.roiSplitY}
+                    stroke="var(--border-subtle)"
+                    strokeWidth={1}
+                    strokeDasharray="4 3"
+                />
+
+                {/* Quadrant labels in corners */}
+                <QuadrantCornerLabel quadrant="quick-wins" x={8} y={20} textAnchor="start" />
+                <QuadrantCornerLabel quadrant="strategic-bets" x={plotWidth - 8} y={20} textAnchor="end" />
+                <QuadrantCornerLabel quadrant="fill-ins" x={8} y={plotHeight - 10} textAnchor="start" />
+                <QuadrantCornerLabel
+                    quadrant="deprioritise"
+                    x={plotWidth - 8}
+                    y={plotHeight - 10}
+                    textAnchor="end"
+                />
+
+                {/* Dots + cluster pins */}
+                {layout.inPlot.map((dot) => (
+                    <ScatterDot
+                        key={`dot-${dot.opportunityIndex}`}
+                        dot={dot}
+                        opportunity={opportunities[dot.opportunityIndex]}
+                    />
+                ))}
+                {layout.clusterPins.map((pin) => (
+                    <ClusterPinMarker
+                        key={`cluster-${pin.quadrant}`}
+                        pin={pin}
+                        opportunities={opportunities}
+                    />
+                ))}
+            </g>
+
+            {/* X axis tick labels + title */}
+            <g transform={`translate(${margin.left}, ${margin.top + plotHeight})`}>
+                {xTicks.map((tick) => {
+                    const x = projectInvestmentTickX(tick, plotWidth)
+                    return (
+                        <g key={`xtick-${tick}`} transform={`translate(${x}, 0)`}>
+                            <line y1={0} y2={4} stroke="var(--text-tertiary)" />
+                            <text y={18} textAnchor="middle" style={tickLabelStyle}>
+                                {formatInvestmentTick(tick)}
+                            </text>
+                        </g>
+                    )
+                })}
+                <text x={plotWidth / 2} y={42} textAnchor="middle" style={axisTitleStyle}>
+                    Investment (USD, log scale)
+                </text>
+            </g>
+
+            {/* Y axis tick labels + title */}
+            <g transform={`translate(${margin.left}, ${margin.top})`}>
+                {yTicks.map((tick) => {
+                    const y = projectRoiTickY(tick, plotHeight)
+                    return (
+                        <g key={`ytick-${tick}`} transform={`translate(0, ${y})`}>
+                            <line x1={-4} x2={0} stroke="var(--text-tertiary)" />
+                            <text x={-8} y={4} textAnchor="end" style={tickLabelStyle}>
+                                {tick}%
+                            </text>
+                        </g>
+                    )
+                })}
+                <text
+                    transform={`translate(${-48}, ${plotHeight / 2}) rotate(-90)`}
+                    textAnchor="middle"
+                    style={axisTitleStyle}
+                >
+                    ROI (%)
+                </text>
+            </g>
+        </svg>
+    )
+}
+
+// ── Quadrant label ────────────────────────────────────────────────
+
+function QuadrantCornerLabel({
+    quadrant,
+    x,
+    y,
+    textAnchor,
+}: {
+    quadrant: Quadrant
+    x: number
+    y: number
+    textAnchor: 'start' | 'end'
+}) {
+    return (
+        <text
+            data-testid={`quick-wins-quadrant-label-${quadrant}`}
+            x={x}
+            y={y}
+            textAnchor={textAnchor}
+            style={quadrantLabelStyle}
+        >
+            {QUADRANT_LABELS[quadrant].toUpperCase()}
+        </text>
+    )
+}
+
+// ── styles ────────────────────────────────────────────────────────
 
 const containerStyle: CSSProperties = {
     display: 'flex',
@@ -117,75 +253,26 @@ const leadStyle: CSSProperties = {
     lineHeight: 1.6,
 }
 
-/** Outer grid: 1 fixed row-label column + N cell columns; 1 fixed
- *  column-header row + 1 cells row. Layout via display:grid with
- *  named regions would be tidier, but the simple two-track shape
- *  keeps the inline-style budget small and readable.
- */
-const gridShellStyle: CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '110px 1fr',
-    gridTemplateRows: 'auto 1fr',
-    gap: '8px',
-    alignItems: 'stretch',
+const svgStyle: CSSProperties = {
+    width: '100%',
+    height: 'auto',
+    maxWidth: '100%',
 }
 
-const emptyCornerStyle: CSSProperties = {
-    /* deliberate empty top-left corner */
+const quadrantLabelStyle: CSSProperties = {
+    fontSize: '11px',
+    fontWeight: 700,
+    fill: 'var(--text-tertiary)',
+    letterSpacing: '0.08em',
 }
 
-function columnHeaderRowStyle(columnCount: number): CSSProperties {
-    return {
-        display: 'grid',
-        // ``minmax(0, 1fr)`` (not bare ``1fr``) — CSS Grid's ``1fr`` is
-        // shorthand for ``minmax(auto, 1fr)``, which lets columns grow
-        // when content's intrinsic min-width exceeds the fractional
-        // share. The chip labels use ``whiteSpace: nowrap``, so their
-        // intrinsic width is the full title — bare ``1fr`` columns
-        // would expand to fit and overflow siblings. ``minmax(0, …)``
-        // pins columns to the fraction and lets the chip's
-        // ``text-overflow: ellipsis`` truncate cleanly.
-        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-        gap: '8px',
-    }
+const tickLabelStyle: CSSProperties = {
+    fontSize: '11px',
+    fill: 'var(--text-tertiary)',
 }
 
-const columnHeaderStyle: CSSProperties = {
-    fontSize: '0.75rem',
-    color: 'var(--text-tertiary)',
+const axisTitleStyle: CSSProperties = {
+    fontSize: '12px',
     fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    textAlign: 'center',
-}
-
-const rowLabelColumnStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-}
-
-const rowHeaderStyle: CSSProperties = {
-    flex: '1 1 0',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    fontSize: '0.75rem',
-    color: 'var(--text-tertiary)',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    paddingRight: '8px',
-}
-
-function cellGridStyle(columnCount: number): CSSProperties {
-    return {
-        display: 'grid',
-        // See ``columnHeaderRowStyle`` for the rationale on
-        // ``minmax(0, 1fr)`` vs. bare ``1fr``. The cell grid carries the
-        // same constraint or chip text overflows the cell boundary.
-        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-        gridTemplateRows: 'repeat(3, 1fr)',
-        gap: '8px',
-    }
+    fill: 'var(--text-secondary)',
 }

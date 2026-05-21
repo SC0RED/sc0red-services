@@ -263,7 +263,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 match the "no orphan visualisations on sparse reports"
                 rule the other sections use. */}
             {opportunities.length >= 1 && (
-                <AnalysisSection id="quick-wins-matrix" title="Quick Wins Matrix">
+                <AnalysisSection id="quick-wins-matrix" title="ROI × Investment Matrix">
                     <QuickWinsMatrix opportunities={opportunities} />
                 </AnalysisSection>
             )}
