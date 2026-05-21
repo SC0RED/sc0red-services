@@ -12,17 +12,24 @@
 export const ANALYTICS_VERSION = '1'
 
 /*
- * Strategy-map deep-dive CTA event types.
+ * Deep-dive CTA event types (the DeepDiveCTA component fires these
+ * across two placements + the PDF render variant):
  *
- *   sc0red_cta_rendered_strategy_map — fires on component mount
- *     (the CTA is always-visible below the strategy map).
- *   sc0red_cta_clicked_strategy_map  — fires on the contact-link click.
+ *   sc0red_cta_rendered_in_pdf       — PDF render of the CTA.
+ *   sc0red_cta_rendered_strategy_map — mid-page CTA below the strategy map.
+ *   sc0red_cta_clicked_strategy_map  — click on the mid-page CTA.
+ *   sc0red_cta_rendered_analysis_end — end-of-analysis CTA at the bottom of the page.
+ *   sc0red_cta_clicked_analysis_end  — click on the end-of-analysis CTA.
  *
- * Both are web-source. The backend model_validator enforces
- * active_lever_filter=null for these (no lever-filter concept on the
- * strategy-map surface; non-null would corrupt cross-surface funnel
- * queries that join on event_type). Callers MUST pass
- * activeLeverFilter as null.
+ * All web variants share the same surface invariants enforced by the
+ * backend model_validator: source='web', active_lever_filter=null
+ * (no lever-filter concept on the CTA surface; non-null would corrupt
+ * cross-surface funnel queries that join on event_type).
+ *
+ * The analysis_end variants were added in Phase 11 of
+ * redesign-analysis-visuals to fix the analytics conflation bug
+ * (bottom CTA was firing the strategy_map events, double-counting
+ * the strategy-map funnel).
  *
  * IMPORTANT — keep the union body below comment-free:
  * scripts/check_analytics_type_parity.py extracts string literals from
@@ -35,6 +42,8 @@ export type AnalyticsEventType =
     | 'sc0red_cta_rendered_in_pdf'
     | 'sc0red_cta_rendered_strategy_map'
     | 'sc0red_cta_clicked_strategy_map'
+    | 'sc0red_cta_rendered_analysis_end'
+    | 'sc0red_cta_clicked_analysis_end'
 
 export type WebAnalyticsEventType = Exclude<AnalyticsEventType, 'sc0red_cta_rendered_in_pdf'>
 

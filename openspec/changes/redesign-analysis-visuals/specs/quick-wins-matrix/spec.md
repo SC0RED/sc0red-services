@@ -1,14 +1,59 @@
 ## ADDED Requirements
 
-### Requirement: Analysis detail renders a 2x2 Quick Wins matrix below the opportunities list
+### Requirement: Opportunity schema carries numeric ROI + Investment fields
 
-The analysis detail page SHALL render a Quick Wins matrix as a dedicated section (`<AnalysisSection id="quick-wins-matrix">`) immediately after the `OpportunitiesList` section. The matrix SHALL plot every opportunity as a dot positioned by `impact_rating` (Y axis) and `timeline` (X axis), with the conceptual quadrants labeled "Quick Wins", "Strategic Bets", "Fill-Ins", and "Deprioritise".
+The `Opportunity` Pydantic model and the AI opportunity-generation prompt SHALL produce two new fields filled per-opportunity:
+
+- `investment_value_usd: Optional[int]` — estimated USD cost to implement the opportunity end-to-end. `None` when the AI cannot infer a number from the available context (the AI MUST emit `None` rather than guess).
+- `roi_estimate_pct: Optional[float]` — estimated ROI percentage in the range 0 .. 500. `None` when the AI cannot infer a number.
+
+The AI prompt SHALL include explicit instructions that:
+
+- `investment_value_usd` is total cash + opportunity cost of implementing the opportunity in the next 12-24 months. Software licences, integration cost, dedicated headcount fraction × salary, opportunity cost of redirected effort.
+- `roi_estimate_pct` is `(annualised_value_created - annualised_cost) / annualised_cost × 100`. A 50% ROI means the opportunity returns 1.5× its cost in year one.
+- Both fields MAY be `None` if the AI cannot ground the number in the provided context. **`None` is preferred over a hallucinated guess.**
+
+The frontend `Opportunity` TypeScript type SHALL match the Pydantic model exactly:
+
+```ts
+interface Opportunity {
+  // ... existing fields ...
+  investment_value_usd?: number | null
+  roi_estimate_pct?: number | null
+}
+```
+
+#### Scenario: AI emits both fields for a well-grounded opportunity
+
+- **WHEN** the AI generates an opportunity "Migrate to managed Postgres" with a public-cloud-pricing-grounded cost estimate
+- **THEN** the `investment_value_usd` field contains an integer (e.g. `120000`)
+- **AND** the `roi_estimate_pct` field contains a float (e.g. `45.0`)
+- **AND** both fields validate against the Pydantic model
+
+#### Scenario: AI emits null when it cannot estimate
+
+- **WHEN** the AI generates an opportunity "Build a strategic partnership with X" where the implementation cost depends on negotiation outcomes
+- **THEN** the `investment_value_usd` field is `None` (or absent)
+- **AND** the `roi_estimate_pct` field is `None` (or absent)
+- **AND** both fields validate against the Pydantic model
+
+#### Scenario: Legacy analyses validate without the new fields
+
+- **WHEN** an analysis persisted before this change is re-hydrated
+- **THEN** every opportunity object validates against the updated `Opportunity` model
+- **AND** the missing fields default to `None`
+
+### Requirement: Analysis detail renders a Quick Wins matrix below the opportunities list
+
+The analysis detail page SHALL render a Quick Wins matrix as a dedicated section (`<AnalysisSection id="quick-wins-matrix">`) immediately after the `OpportunitiesList` section. The matrix SHALL plot every opportunity as a dot positioned by `investment_value_usd` (X axis) and `roi_estimate_pct` (Y axis), with four quadrant labels — "Quick Wins" (top-left), "Strategic Bets" (top-right), "Fill-Ins" (bottom-left), "Deprioritise" (bottom-right) — rendered in the cell corners.
+
+Opportunities that carry `None` for either axis SHALL render in an "uncalibrated" footer strip below the scatter, NOT in the main plot area. The strip SHALL be labelled "Opportunities without ROI / investment estimates" and use the same lever-colour treatment as in-plot dots.
 
 #### Scenario: Matrix renders when at least one opportunity is present
 
 - **WHEN** the analysis has `opportunities.length >= 1`
-- **THEN** a `QuickWinsMatrix` component renders in an `<AnalysisSection id="quick-wins-matrix">` between `opportunities` and `document-upload` (or between `opportunities` and `deep-dive-cta-end` if the end-CTA renders)
-- **AND** the section heading reads "Quick Wins Matrix"
+- **THEN** a `QuickWinsMatrix` component renders in an `<AnalysisSection id="quick-wins-matrix">` between `opportunities` and `document-upload`
+- **AND** the section heading reads "ROI × Investment Matrix"
 
 #### Scenario: Matrix is omitted on sparse analyses
 
@@ -16,49 +61,60 @@ The analysis detail page SHALL render a Quick Wins matrix as a dedicated section
 - **THEN** no `quick-wins-matrix` section is rendered
 - **AND** the page transitions directly from `opportunities` to the next section
 
-### Requirement: Matrix axes use existing opportunity fields
+### Requirement: Matrix axes are log-scale Investment × linear ROI
 
-The Y axis SHALL bucket on `impact_rating ∈ {High, Medium, Low}` (top-to-bottom: High, Medium, Low). The X axis SHALL bucket on `timeline` parsed into one of three categories based on which substring it starts with:
+The X axis SHALL be log-scale Investment spanning 10K USD → 10M USD, with tick labels at 10K, 100K, 1M, 10M. Opportunities with `investment_value_usd < 10000` SHALL clamp visually to the 10K tick. Opportunities with `investment_value_usd > 10_000_000` SHALL clamp visually to the 10M tick.
 
-- "Quick" → Quick Win column (leftmost)
-- "Medium" → Medium-term column (centre)
-- "Long" → Long-term column (rightmost)
+The Y axis SHALL be linear ROI spanning 0% → 300%, with tick labels at 0%, 100%, 200%, 300%. Opportunities with `roi_estimate_pct > 300` SHALL clamp visually to the 300% tick and render with a small "↑" caret marker on the dot to indicate the clamp.
 
-`timeline` strings that don't match any of the three prefixes (legacy or malformed data) SHALL be placed in the Medium-term column with a console warning in development mode.
+The four-quadrant split lines SHALL be drawn at the **median investment** and **median ROI** of all in-plot opportunities for that analysis (not at fixed thresholds). This keeps the quadrant labels meaningful regardless of the scan's absolute scale — a portfolio of all-low-investment opportunities still has a relative "high investment" half.
 
-#### Scenario: High-impact quick-win opportunity lands in the top-left quadrant
+#### Scenario: High-ROI low-investment opportunity lands in the Quick Wins quadrant
 
-- **WHEN** an opportunity has `impact_rating: "High"` and `timeline: "Quick Win (1-3 months)"`
-- **THEN** its dot is plotted in the top-left cell of the matrix
-- **AND** the cell is part of the "Quick Wins" quadrant
+- **WHEN** an opportunity has `investment_value_usd: 50000` and `roi_estimate_pct: 180.0`, and the in-plot opportunities have median investment of `200000` and median ROI of `80.0`
+- **THEN** its dot is plotted in the top-left quadrant of the matrix (below the investment median, above the ROI median)
+- **AND** the dot's enclosing cell carries the "Quick Wins" label
 
-#### Scenario: High-impact long-term opportunity lands in the top-right quadrant
+#### Scenario: High-ROI high-investment opportunity lands in Strategic Bets
 
-- **WHEN** an opportunity has `impact_rating: "High"` and `timeline: "Long-term (9+ months)"`
-- **THEN** its dot is plotted in the top-right cell
-- **AND** the cell is part of the "Strategic Bets" quadrant
+- **WHEN** an opportunity has `investment_value_usd: 2_500_000` and `roi_estimate_pct: 220.0`, and the in-plot opportunities' median investment is `200000` and median ROI is `80.0`
+- **THEN** its dot is plotted in the top-right quadrant
+- **AND** the dot's enclosing cell carries the "Strategic Bets" label
 
-#### Scenario: Low-impact quick-win lands in the bottom-left
+#### Scenario: ROI above 300% clamps with caret marker
 
-- **WHEN** an opportunity has `impact_rating: "Low"` and `timeline: "Quick Win (1-3 months)"`
-- **THEN** its dot is plotted in the bottom-left cell
-- **AND** the cell is part of the "Fill-Ins" quadrant
+- **WHEN** an opportunity has `roi_estimate_pct: 450.0`
+- **THEN** its dot is positioned at the 300% tick of the Y axis
+- **AND** a "↑" caret renders adjacent to the dot to indicate the clamp
 
-#### Scenario: Low-impact long-term lands in the bottom-right
+### Requirement: Opportunities without estimates render in an uncalibrated footer strip
 
-- **WHEN** an opportunity has `impact_rating: "Low"` and `timeline: "Long-term (9+ months)"`
-- **THEN** its dot is plotted in the bottom-right cell
-- **AND** the cell is part of the "Deprioritise" quadrant
+When an opportunity has `investment_value_usd === None` or `roi_estimate_pct === None`, the matrix SHALL render its dot in a horizontal "uncalibrated" footer strip below the main scatter. The strip SHALL be a single row of dots, each clickable (same hover-provider wiring as in-plot dots).
 
-#### Scenario: Unrecognised timeline string falls back to Medium-term
+#### Scenario: One opportunity has no ROI estimate
 
-- **WHEN** an opportunity has `impact_rating: "High"` and `timeline: "Unspecified"` (or any string not matching the three prefixes)
-- **THEN** its dot is plotted in the top-centre cell (High × Medium-term)
-- **AND** in development builds a `console.warn` records the unrecognised timeline value
+- **WHEN** the analysis has three opportunities, two with both fields populated and one with `roi_estimate_pct: None`
+- **THEN** the scatter shows two dots
+- **AND** the uncalibrated strip below the scatter shows one dot
+- **AND** the strip's label reads "Opportunities without ROI / investment estimates"
 
-### Requirement: Each dot is interactive and respects the hover provider
+#### Scenario: All opportunities lack estimates (legacy analysis pre-schema-flip)
 
-Every dot SHALL be a button (`role="button"`) carrying the opportunity's index. Clicking or focusing a dot SHALL publish a hover-highlight signal via the `OpportunityHoverProvider` (same provider that `analysis-opportunity-overlays` defines) and scroll the matching opportunity card into view.
+- **WHEN** the analysis pre-dates this change and every opportunity has both axes `None`
+- **THEN** the scatter renders empty (axes + quadrant labels visible)
+- **AND** every opportunity dot renders in the uncalibrated strip below
+- **AND** the user can still click any dot to navigate to its card
+
+### Requirement: Each dot is interactive
+
+Every dot — in-plot AND in the uncalibrated strip — SHALL be a button (`role="button"`) carrying the opportunity's index. Clicking or activating a dot SHALL:
+
+1. Publish a hover-highlight signal via the `OpportunityHoverProvider` (same provider that `analysis-opportunity-overlays` defines), and
+2. Imperatively scroll the matching `opportunity-card-{n}` element into view with `scrollIntoView({ behavior: 'smooth', block: 'nearest' })`.
+
+Hover (without click) SHALL pulse the matching card via the hover provider but SHALL NOT scroll. This matches the pattern established in `analysis-opportunity-overlays` and prevents the scroll-on-hover regression PR #361 fixed.
+
+Each dot's `title` attribute SHALL display the opportunity title + value lever (e.g. `"Launch citation-backed AI audit (Revenue Side)"`) so a hover-pointer reader sees the identity without clicking.
 
 #### Scenario: Clicking a dot scrolls the matching opportunity card into view
 
@@ -66,40 +122,46 @@ Every dot SHALL be a button (`role="button"`) carrying the opportunity's index. 
 - **THEN** the opportunity card at index 3 in the `OpportunitiesList` scrolls into view
 - **AND** the card applies the standard highlight-pulse animation
 
+#### Scenario: Hovering a dot pulses but does not scroll
+
+- **WHEN** the user hovers (mouse-enter without click) a dot
+- **THEN** the matching opportunity card receives the `.card-pulse` class
+- **AND** the page does NOT scroll
+
 #### Scenario: Dot click is keyboard-accessible
 
 - **WHEN** a keyboard user focuses a dot via tab and presses Enter or Space
 - **THEN** the same scroll + pulse fires as on click
 - **AND** the dot's focus ring is visible
 
-### Requirement: Cells render opportunity title chips with overflow popover
+### Requirement: Overlapping dots are individually addressable
 
-Each opportunity SHALL render as a **title chip** — a small button pairing a `value_lever`-coloured dot with the opportunity title (truncated with ellipsis when needed). Chips stack vertically inside the cell, sorted by `strategic_category` then by opportunity index for stable ordering across renders. The earlier dot-only design (where the title was only reachable via hover) was abandoned during P7 verification because the AI clusters most opportunities into one cell, and a cluster of unlabelled dots told the reader nothing at a glance. Title chips keep the cell readable even when the dataset clusters.
+Opportunities whose pixel position would collide (within 4 px) SHALL render with a small jitter offset (±4 px) so each dot remains individually clickable. When a single quadrant accumulates more than 10 jittered dots, the renderer SHALL collapse them into a single "+N more" cluster pin. Clicking the cluster pin SHALL open a popover listing every opportunity in that quadrant. Clicking an entry in the popover SHALL scroll + pulse the matching opportunity card (same imperative-scroll pattern as a normal dot click).
 
-If a cell would contain more than four chips, the first four chips SHALL render and the fifth slot SHALL be a `+N more` badge that opens a click-popover listing all opportunities in that cell.
+#### Scenario: Two opportunities at the same coordinate jitter apart
 
-#### Scenario: Cell with three opportunities stacks all three chips
+- **WHEN** two opportunities have identical `investment_value_usd` and `roi_estimate_pct`
+- **THEN** they render as two distinct dots offset by ~4 px so each can be individually targeted by mouse and keyboard
 
-- **WHEN** the High × Quick Win cell contains three opportunities at indices [0, 4, 7]
-- **THEN** three title chips stack vertically in the cell in stable order
-- **AND** each chip surfaces the opportunity title inline (no hover required to read it)
+#### Scenario: Quadrant with 12 opportunities collapses to a cluster pin
 
-#### Scenario: Cell with ten opportunities shows four chips and a +6 badge
-
-- **WHEN** a cell would contain ten opportunities
-- **THEN** four chips render plus a `+6 more` badge
-- **AND** clicking the badge opens a popover listing all ten opportunity titles
-- **AND** clicking a title in the popover scrolls the matching opportunity card into view
+- **WHEN** a single quadrant contains 12 opportunities after jittering
+- **THEN** the quadrant renders one "+12" cluster pin (no individual dots)
+- **AND** clicking the pin opens a popover listing all 12 opportunity titles
+- **AND** clicking any popover entry scrolls + pulses the matching card
 
 ### Requirement: Matrix mirrors to the PDF print export as a static block
 
-The print export SHALL include a static rendering of the matrix between the opportunity list and the back cover. The print variant SHALL drop hover/click interactivity (no event handlers) but SHALL preserve the dot positions, quadrant labels, and dot colours so the visual landmark survives the export.
+The print export SHALL include a static SVG rendering of the matrix between the opportunity list and the methodology appendix. The print variant SHALL drop hover / click interactivity (no event handlers) but SHALL preserve dot positions, quadrant labels, axis ticks, and dot colours so the visual landmark survives the export.
+
+Opportunities in the uncalibrated strip SHALL also render in print, with the same labelled strip below the scatter.
 
 #### Scenario: PDF includes the matrix when opportunities are present
 
 - **WHEN** the print export renders an analysis with `opportunities.length >= 1`
-- **THEN** the PDF includes a section with the same layout, axes, and dots as the screen matrix
+- **THEN** the PDF includes a section with the same axes, quadrant labels, and dots as the screen matrix
 - **AND** the dots carry no `onClick` handlers in the print DOM
+- **AND** opportunities without estimates appear in the uncalibrated footer strip
 
 #### Scenario: PDF omits the matrix on sparse analyses
 

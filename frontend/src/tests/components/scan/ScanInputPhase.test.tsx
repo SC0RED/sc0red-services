@@ -73,10 +73,16 @@ describe('ScanInputPhase', () => {
         expect(errorDiv).toBeNull()
     })
 
-    it('has required attribute on URL input', () => {
+    it('omits the native required attribute on the URL input', () => {
+        // Phase 11 of redesign-analysis-visuals removed the native
+        // ``required`` so empty-submit surfaces the same inline
+        // ``.alert-error`` bar as every other validation failure —
+        // not the browser-native popup whose styling doesn't match
+        // the form. ``normalizeUserUrl`` in the parent's submit
+        // handler catches the empty case.
         render(<ScanInputPhase {...defaultProps} />)
         const input = screen.getByLabelText('PE Firm Website URL') as HTMLInputElement
-        expect(input.required).toBe(true)
+        expect(input.required).toBe(false)
     })
 
     it('renders description text for each mode', () => {

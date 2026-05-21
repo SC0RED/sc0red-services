@@ -33,7 +33,7 @@ export default function StrategyMapSlot({ analysisId, strategyMap, opportunities
                 <StrategyMapView strategyMap={strategyMap} opportunities={opportunities} />
             </AnalysisSection>
             <AnalysisSection id="deep-dive-cta">
-                <DeepDiveCTA analysisId={analysisId} />
+                <DeepDiveCTA analysisId={analysisId} placement="strategy-map" />
             </AnalysisSection>
         </>
     )

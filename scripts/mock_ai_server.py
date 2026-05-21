@@ -533,7 +533,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                     " beyond direct outbound effort."
                 ),
                 "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would map the partner"
+                    "A sc0red Advisory deep-dive would map the partner"
                     " landscape and prioritise the channel motion most"
                     " likely to accelerate F1."
                 ),
@@ -548,7 +548,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                     " defensible product moat."
                 ),
                 "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would shape the data-asset"
+                    "A sc0red Advisory deep-dive would shape the data-asset"
                     " strategy that converts F3 from hypothesis into"
                     " operating plan."
                 ),

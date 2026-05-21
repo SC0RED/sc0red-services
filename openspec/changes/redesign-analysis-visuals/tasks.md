@@ -86,6 +86,93 @@
 
 ## 10. Follow-ups (out of scope, captured)
 
-- [ ] 10.1 Path B (numeric matrix axes) — add `investment_value: int` and `roi_estimate_pct: float` fields to the opportunity Pydantic model + AI schema. AI fills both prose and numbers. Matrix switches from categorical bucketing to continuous (x, y) plotting. Separate change.
+- [x] 10.1 ~~Path B (numeric matrix axes) — separate change~~ **MOVED IN-SCOPE: see section 14 below.** Post-P7 design review (Diagnostic Tool Feedback PDF re-read) made it clear Zack asked for ROI × Investment literally; path C was the wrong call. Schema work + scatter rewrite is now part of this change.
 - [ ] 10.2 Strategy-map "story view" — if PE readers ask for the cause-and-effect arrows back, build a separate toggleable view that renders arrows on top of the BSC table. Out of scope for v1.
 - [ ] 10.3 ConfidenceIndicator component cleanup — once Phase 5 of this change ships and no consumer of `ConfidenceIndicator` remains, delete the component file + its tests.
+
+## 11. Post-deploy bug-fix wave (PR A)
+
+Issues caught in production / via design review after P1b shipped. Small individual fixes, batched into one PR.
+
+- [ ] 11.1 `DeepDiveCTA` placement-aware analytics. Accept a `placement: 'strategy-map' | 'analysis-end'` prop. Switch `emit()` event names (`sc0red_cta_rendered_strategy_map` ↔ `sc0red_cta_rendered_analysis_end`, same for `_clicked_`) and the outbound URL's `?source=` query param on the prop. See `analysis-detail-narrative` spec requirement "DeepDiveCTA distinguishes placement in analytics". Update both call sites in `AnalysisDetail.tsx` (mid-page slot + bottom slot) + `StrategyMapSlot.tsx` to pass the appropriate placement.
+- [ ] 11.2 Bottom-CTA gating fix. Remove the `opportunities.length > 0` gate from the end-of-analysis `DeepDiveCTA` render in `AnalysisDetail.tsx`. Render on every successful analysis page. Update `tests/pages/AnalysisDetail.test.tsx` section-order regression tests.
+- [ ] 11.3 "Vector Advisory" string sweep (NOT a brand rename — Zack confirmed sc0red Advisory stays). Replace literal "Vector Advisory" → "sc0red Advisory" in:
+  - [ ] `backend/scripts/benchmark/benchmark_prompts.json` (6 hits)
+  - [ ] `backend/tests/unit/models/test_strategy_map_roundtrip.py:340`
+  - [ ] `backend/tests/unit/models/test_analytics_events.py:58`
+  - [ ] `scripts/mock_ai_server.py:536,551` (the mock AI response strings — leaks to dev/E2E if any field renders the prose)
+- [ ] 11.4 URL input polish on `ScanInputPhase.tsx`:
+  - [ ] Replace the native `required` attribute with a custom inline error so the empty-submit path uses the same styling as the rest of the form (no browser-native popup).
+  - [ ] Update help text under the input to: "We'll add `https://` for you — `stripe.com` or `www.stripe.com` both work."
+  - [ ] Error copy: "Enter a website URL — we'll add `https://` for you. e.g. `stripe.com` or `www.stripe.com`."
+- [ ] 11.5 Sidebar logo target. Add `target="_blank" rel="noopener"` to the marketing-site link in `DashboardSidebar.tsx:93–95` so users don't lose their analysis on accidental logo click.
+- [ ] 11.6 Tests for 11.1 + 11.2 in `tests/components/strategy-map/DeepDiveCTA.test.tsx` + `tests/pages/AnalysisDetail.test.tsx`.
+- [ ] 11.7 Architecture-reviewer + lint + audit + full frontend suite.
+
+## 12. Strategy-map header trim — VP + Priorities relocate (PR B)
+
+Diagnostic Tool Feedback #4 + reviewer's "fold the header into Mission/Vision only". The current `StrategyMapHeader` violates the spec by rendering four sections; this PR makes the code match the spec and adds a new home for VP + Strategic Priorities.
+
+- [ ] 12.1 Trim `StrategyMapHeader.tsx` to render Mission banner + Vision eyebrow only. Delete the Value Proposition block + the Strategic Priorities list from the header component entirely.
+- [ ] 12.2 Create `frontend/src/components/strategy-map/StrategyMapDetailsSection.tsx` — the new `<ExpandableSection>` carrying VP + Strategic Priorities, default closed. Props: `valueProposition`, `strategicPriorities`. Renders per the new requirement in `strategy-map-balanced-scorecard-layout/spec.md`.
+- [ ] 12.3 Wire `StrategyMapDetailsSection` into `AnalysisDetail.tsx` immediately after `StrategyMapSlot` (position 6 in the section order). Gate on `(valueProposition.primary || strategicPriorities.length >= 1)` so absent fields don't render an empty section.
+- [ ] 12.4 Update `StrategyMapView.test.tsx` to assert the header now contains only Mission + Vision (no VP block, no priorities list). Update `AnalysisDetail.test.tsx` section-order regression test to include `value-proposition-priorities` at position 6.
+- [ ] 12.5 Add `StrategyMapDetailsSection.test.tsx` covering: default-closed render, expanding shows both VP + priorities, single-field-present render (only one of the two), absent-both → not rendered.
+- [ ] 12.6 Update `PrintStrategyMap.tsx` if VP + Priorities currently render in the printed header — relocate to a new print block between the table and the next print section. Match the screen ordering for parity.
+- [ ] 12.7 Architecture-reviewer + lint + audit.
+
+## 13. Source-side opportunity popover (PR C)
+
+Diagnostic Tool Feedback #5c. The pulse-on-hover (post-PR #361) is invisible when the linked card is below the fold. This PR adds a source-side popover listing the linked opportunity titles so the user can see + navigate without scrolling.
+
+- [ ] 13.1 Create `frontend/src/components/analysis/SourceLinkedOpportunitiesPopover.tsx`. Props: `linkedIndices: number[]`, `opportunities: Opportunity[]`, anchor positioning. Renders a small floating popover with the lever-coloured dot + opportunity title per linked index. Click an entry → imperative `scrollIntoView` on the matching `opportunity-card-{n}` element + `highlightOpportunities([index])` dispatch.
+- [ ] 13.2 Lifecycle hook (`useHoverIntent` or extend existing): 150 ms dwell to open on `mouseEnter`, 200 ms grace before close on `mouseLeave`, immediate open on `focus`, close on `Escape` + outside click + blur (with containment guard).
+- [ ] 13.3 Wire popover into `StrategyMapTable`'s `ObjectiveEntry`, `EbitdaNodeComponent`'s `LeafChip`, and `ValueChainDiagram`'s `StepCard`. Each source becomes the popover anchor.
+- [ ] 13.4 Sources with `linked_opportunity_indices: []` (or absent) MUST NOT render the popover — no empty surface. Sources with 1-5 entries show all titles; sources with 6+ show the first 5 + a "+N more" row.
+- [ ] 13.5 Update `analysis-opportunity-overlays` spec (already drafted in this proposal) — the popover requirement is the source of truth.
+- [ ] 13.6 Tests: `SourceLinkedOpportunitiesPopover.test.tsx` — dwell timing, transit grace, Escape close, outside-click close, click-entry-scrolls-card, keyboard immediate-open. Integration test in `HoverHighlight.test.tsx` extending the existing fixture to assert popover appears + click navigates.
+- [ ] 13.7 Print path: the popover is screen-only (paper has no hover). No print change needed.
+- [ ] 13.8 Architecture-reviewer + lint + audit + full suite.
+
+## 14. ROI × Investment matrix flip (PR D, formerly 10.1)
+
+Diagnostic Tool Feedback #6 read literally: replace the categorical 3×3 with a true 2D scatter on numeric ROI vs Investment. Substantial — backend schema migration + AI prompt update + full frontend component rewrite + print parity.
+
+### Backend
+
+- [ ] 14.1 `Opportunity` Pydantic model in `backend/src/models/model_company.py` (or wherever it lives) gains:
+  - `investment_value_usd: Optional[int] = None`
+  - `roi_estimate_pct: Optional[float] = None`
+  - Field constraints: `investment_value_usd >= 0` when present; `0 <= roi_estimate_pct <= 500` when present (the spec clamps higher values visually but stores the truth).
+- [ ] 14.2 Update the opportunity-generation AI prompt(s) in `backend/src/pipeline/prompts/` to instruct the model to fill both fields. Include the field definitions from the spec (investment = total cash + opportunity cost over 12-24 months; ROI = `(value - cost) / cost × 100`). Emphasise `null` is preferred over a hallucinated guess.
+- [ ] 14.3 Update the opportunity-generation JSON schema to require both fields (nullable). Add validation that the schema accepts `None` as valid.
+- [ ] 14.4 Backend tests:
+  - [ ] Pydantic model accepts both fields nullable; out-of-range values rejected.
+  - [ ] AI prompt template tests confirm both fields are mentioned + their definitions.
+  - [ ] Regression test for re-hydrating legacy analyses (both fields default to `None`).
+- [ ] 14.5 Update `scripts/mock_ai_server.py` to emit the new fields in mock opportunities so dev / E2E exercise the new shape. Mix populated + null to cover both paths.
+
+### Frontend types + helpers
+
+- [ ] 14.6 `frontend/src/lib/types/api.ts` `Opportunity` interface: add `investment_value_usd?: number | null` + `roi_estimate_pct?: number | null` matching the Pydantic model.
+- [ ] 14.7 Layout helper rewrite: replace `frontend/src/lib/utils/quickWinsMatrixLayout.ts` with a new module that produces `(x, y)` pixel positions from numeric inputs given an SVG plot area. Compute medians for the quadrant split lines per-analysis. Handle clamps + jitter for overlapping dots.
+- [ ] 14.8 Layout helper unit tests — log-scale X mapping, linear-Y mapping, median computation with even/odd counts, clamp behaviour at extremes, jitter for collision, "+N more" cluster pin threshold (>10 in a quadrant).
+
+### Frontend component rewrite
+
+- [ ] 14.9 Replace `QuickWinsMatrix.tsx` body with an SVG-based scatter plot. Axes, tick labels, quadrant split lines, dot rendering, "+N more" cluster pin, uncalibrated footer strip. Section heading changes to "ROI × Investment Matrix".
+- [ ] 14.10 Replace `QuickWinsCell.tsx` with a dot-renderer / cluster-pin component (cells no longer exist as a layout concept under path B). Click + hover wiring identical to the path-C version (hover provider for pulse; click for imperative scroll).
+- [ ] 14.11 Uncalibrated strip component: horizontal row of dots for opportunities with either axis `None`. Same click + hover semantics as in-plot dots.
+- [ ] 14.12 Component tests: structural rendering, dot positioning (mock the SVG measurement), quadrant labels in corners, in-plot vs uncalibrated routing, hover pulses (no scroll), click scrolls, jitter for collisions, "+N more" cluster pin click opens popover.
+
+### Print parity
+
+- [ ] 14.13 Rewrite `PrintQuickWinsMatrix.tsx` as a static SVG (no event handlers, no popover). Same axes, dots, uncalibrated strip. Print component tests confirm zero `<button>` elements + all opportunities are addressable in the print DOM (in-plot OR strip).
+
+### Tests + lint + ship
+
+- [ ] 14.14 Update `AnalysisDetail.test.tsx` section-order regression: heading text changes to "ROI × Investment Matrix".
+- [ ] 14.15 Update integration tests to use opportunity fixtures with the new fields populated + null cases.
+- [ ] 14.16 Architecture-reviewer pass — specifically validate the schema migration is additive (Optional fields, default None) + that legacy data flows through cleanly.
+- [ ] 14.17 Lint + audit + full frontend & backend suites green.
+- [ ] 14.18 Update `quick-wins-matrix/spec.md` (already drafted in this proposal — confirm it matches the implementation before ship).

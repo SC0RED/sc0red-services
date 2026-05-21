@@ -337,7 +337,7 @@ class TestLegacyTolerance:
                     "DynamoDB. The new code should accept it without error."
                 ),
                 "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would explore this legacy area."
+                    "A sc0red Advisory deep-dive would explore this legacy area."
                 ),
                 "relatedObjectiveIds": ["O.C"],
             },

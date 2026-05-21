@@ -273,29 +273,25 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
              * well, since ideally when they get to the end they'll want to
              * get in touch."
              *
-             * Renders only when the analysis actually has opportunities —
-             * matches the same "no orphan CTA on sparse reports" rule that
-             * ``PrintBackCover`` uses for the PDF. A sparse / failed
-             * analysis has no actionable next step, so the bottom-CTA
-             * doesn't appear.
+             * Renders on EVERY successful analysis page (Phase 11 of
+             * ``redesign-analysis-visuals`` removed the prior
+             * ``opportunities.length > 0`` gate). The CTA's purpose is
+             * "the user reached the end of the page; offer them the next
+             * step" — that purpose holds whether or not the AI surfaced
+             * specific opportunities. Gating on opportunity count would
+             * leave sparse reports without a contact path, the opposite of
+             * what we want.
              *
-             * Analytics note: this re-uses ``DeepDiveCTA`` verbatim, which
-             * means a page with a strategy map fires
-             * ``sc0red_cta_rendered_strategy_map`` TWICE (once from the
-             * mid-page slot, once here). The conversion query that matters
-             * is ``count(distinct analysis_id)`` for impressions, which is
-             * unaffected; raw event counts are not the funnel signal.
-             * Adding a distinct ``_analysis_end`` event type would force
-             * matching changes in the backend Pydantic union + the parity
-             * script, which is out-of-scope for a polish PR — promote to a
-             * follow-up if funnel-attribution by placement becomes
-             * operationally necessary.
+             * The ``placement="analysis-end"`` prop switches the analytics
+             * event name to ``sc0red_cta_rendered_analysis_end`` and the
+             * outbound URL's ``?source=analysis-end``. Funnel queries can
+             * now attribute impressions and clicks to the right surface
+             * (the prior implementation double-counted the strategy-map
+             * funnel by firing the ``_strategy_map`` events here).
              */}
-            {opportunities.length > 0 && (
-                <AnalysisSection id="deep-dive-cta-end">
-                    <DeepDiveCTA analysisId={analysisId} />
-                </AnalysisSection>
-            )}
+            <AnalysisSection id="deep-dive-cta-end">
+                <DeepDiveCTA analysisId={analysisId} placement="analysis-end" />
+            </AnalysisSection>
         </OpportunityHoverProvider>
     )
 }
