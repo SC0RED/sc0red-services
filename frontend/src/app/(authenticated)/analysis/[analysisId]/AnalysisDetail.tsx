@@ -17,6 +17,7 @@ import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import DeepDiveCTA from '@/components/strategy-map/DeepDiveCTA'
+import StrategyMapDetailsSection from '@/components/strategy-map/StrategyMapDetailsSection'
 import HelpTooltip from '@/components/ui/HelpTooltip'
 import { OpportunityHoverProvider } from '@/lib/hooks/useOpportunityHover'
 import { LoadingSpinner } from '@/components/ui'
@@ -94,6 +95,15 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     // skip rendering entirely on missing data, rather than emitting an
     // empty `<AnalysisSection>` wrapper around a `null` body.
     const hasValueLevers = opportunities.some((o) => o.value_lever)
+    // Gate the relocated Value Proposition + Strategic Priorities
+    // ExpandableSection at the call site so the AnalysisSection wrapper
+    // doesn't render an empty heading when both fields are absent (the
+    // component's internal null-return would still leave an orphan
+    // wrapper otherwise). Matches the spec's "renders when the strategy
+    // map is present AND has at least one of VP or priorities" rule.
+    const hasStrategyDetails =
+        !!data.strategyMap &&
+        (!!data.strategyMap.valueProposition.primary || data.strategyMap.strategicPriorities.length > 0)
 
     // Failed analysis — show error + retry UI instead of the full analysis.
     if (data.error && !data.analyzedAt) {
@@ -177,6 +187,22 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 strategyMap={data.strategyMap}
                 opportunities={opportunities}
             />
+
+            {/* Value Proposition + Strategic Priorities — relocated
+                here from the strategy-map header by Phase 12 of
+                redesign-analysis-visuals (Diagnostic Tool Feedback #4:
+                "at the top here I would just have mission and vision").
+                Collapsed by default; the section renders nothing when
+                both fields are absent. Gating is internal to the
+                component to keep this call site simple. */}
+            {hasStrategyDetails && data.strategyMap ? (
+                <AnalysisSection id="value-proposition-priorities">
+                    <StrategyMapDetailsSection
+                        valueProposition={data.strategyMap.valueProposition}
+                        strategicPriorities={data.strategyMap.strategicPriorities}
+                    />
+                </AnalysisSection>
+            ) : null}
 
             {/* Beat 4 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
                 lenses on the same question: where does value sit and how

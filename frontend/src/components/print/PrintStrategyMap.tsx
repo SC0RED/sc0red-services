@@ -114,14 +114,30 @@ export default function PrintStrategyMap({ strategyMap, sortedOpportunities }: P
                 values={strategyMap.coreValues.values}
                 synthesised={strategyMap.coreValues.synthesised}
             />
+
+            {/* Value Proposition + Strategic Priorities — relocated
+                from the header to AFTER the table by Phase 12 of
+                redesign-analysis-visuals (Diagnostic Tool Feedback #4).
+                Print mirrors the screen ordering: header now carries
+                Mission + Vision only; VP + priorities sit below the
+                Balanced Scorecard. Paper has no expand/collapse, so
+                the section is always-visible here. */}
+            <PrintStrategyDetailsBlock strategyMap={strategyMap} />
         </section>
     )
 }
 
 // ── Header ───────────────────────────────────────────────────────────────
 
+/**
+ * Print header — Mission + Vision only. Phase 12 of
+ * ``redesign-analysis-visuals`` (Diagnostic Tool Feedback #4) trimmed
+ * the printed header to match the screen header. VP + Strategic
+ * Priorities relocate to ``PrintStrategyDetailsBlock`` below the
+ * table.
+ */
 function PrintHeader({ strategyMap }: { strategyMap: StrategyMap }) {
-    const { vision, mission, valueProposition, strategicPriorities } = strategyMap
+    const { vision, mission } = strategyMap
     return (
         <div style={{ marginBottom: '20px' }}>
             <p style={{ fontSize: '0.95rem', fontStyle: 'italic', margin: '0 0 6px' }}>
@@ -140,12 +156,38 @@ function PrintHeader({ strategyMap }: { strategyMap: StrategyMap }) {
                     </span>
                 ) : null}
             </p>
-            <p style={{ fontSize: '0.85rem', margin: '0 0 10px', color: 'var(--text-secondary)' }}>
-                <strong>Value Proposition:</strong>{' '}
-                {formatValueProposition(valueProposition.primary, valueProposition.secondary)} —{' '}
-                <em>{valueProposition.rationale}</em>
-            </p>
-            {strategicPriorities.length > 0 ? (
+        </div>
+    )
+}
+
+/**
+ * VP + Strategic Priorities — relocated below the table in Phase 12.
+ * Paper has no expand/collapse so the block is always-visible. Renders
+ * nothing when both inputs are empty so a sparse strategy map doesn't
+ * produce a label-only block.
+ */
+function PrintStrategyDetailsBlock({ strategyMap }: { strategyMap: StrategyMap }) {
+    const { valueProposition, strategicPriorities } = strategyMap
+    const hasValueProp = Boolean(valueProposition.primary)
+    const hasPriorities = strategicPriorities.length > 0
+    if (!hasValueProp && !hasPriorities) return null
+
+    return (
+        <div style={{ marginTop: '14px' }}>
+            {hasValueProp ? (
+                <p
+                    style={{
+                        fontSize: '0.85rem',
+                        margin: '0 0 10px',
+                        color: 'var(--text-secondary)',
+                    }}
+                >
+                    <strong>Value Proposition:</strong>{' '}
+                    {formatValueProposition(valueProposition.primary, valueProposition.secondary)} —{' '}
+                    <em>{valueProposition.rationale}</em>
+                </p>
+            ) : null}
+            {hasPriorities ? (
                 <div
                     style={{
                         display: 'grid',

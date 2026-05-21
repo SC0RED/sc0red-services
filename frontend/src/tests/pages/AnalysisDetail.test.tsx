@@ -807,6 +807,11 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'top-actions',
             'strategy-map',
             'deep-dive-cta',
+            // Phase 12 of redesign-analysis-visuals relocated VP +
+            // Strategic Priorities here, OUT of the strategy-map
+            // header (Diagnostic Tool Feedback #4). Renders when the
+            // strategy map carries either field.
+            'value-proposition-priorities',
             'ebitda',
             'value-chain',
             'risk-breakdown',
