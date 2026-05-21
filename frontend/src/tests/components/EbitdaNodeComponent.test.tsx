@@ -163,36 +163,58 @@ describe('EbitdaNodeComponent — band-header variant (isSubtotalHeading=true)',
 })
 
 describe('EbitdaNodeComponent — no custom hover overlay (compact-ebitda-bands)', () => {
-    it("exposes the leaf description via the chip's native title attribute", () => {
-        const { container } = render(
+    it("exposes the leaf description via the chip label's native title attribute (empty linkage)", () => {
+        // Phase 13 of redesign-analysis-visuals wraps the chip in a
+        // ``SourceLinkedOpportunitiesPopover``. When the chip has
+        // linked opportunities, the popover surfaces them on hover —
+        // the native ``title`` would compete with that popover, so it
+        // moves to the inner label and only renders when there is NO
+        // linked-opportunity popover to display.
+        const { getByTestId } = render(
             <EbitdaNodeComponent
                 {...makeProps({
                     description: 'Recurring subscription revenue across all tiers.',
+                    linkedIndices: [],
                 })}
             />
         )
-        const article = container.querySelector('article')
-        expect(article).not.toBeNull()
-        expect(article!.getAttribute('title')).toBe('Recurring subscription revenue across all tiers.')
+        const label = getByTestId('ebitda-leaf-chip-label')
+        expect(label.getAttribute('title')).toBe('Recurring subscription revenue across all tiers.')
     })
 
     it('omits the title attribute when the description is empty', () => {
-        const { container } = render(<EbitdaNodeComponent {...makeProps({ description: '' })} />)
-        const article = container.querySelector('article')
-        expect(article).not.toBeNull()
-        expect(article!.hasAttribute('title')).toBe(false)
+        const { getByTestId } = render(<EbitdaNodeComponent {...makeProps({ description: '' })} />)
+        const label = getByTestId('ebitda-leaf-chip-label')
+        expect(label.hasAttribute('title')).toBe(false)
+    })
+
+    it('omits the title attribute when the chip has linked opportunities (popover takes over)', () => {
+        // When the popover is the hover surface, the native title
+        // would render on top of it. Skip the title in that case —
+        // the popover already exposes the same context (and more).
+        const { getByTestId } = render(
+            <EbitdaNodeComponent
+                {...makeProps({
+                    description: 'Recurring subscription revenue.',
+                    linkedIndices: [0],
+                    opportunities: [makeOpportunity({ title: 'Roll out SKU', value_lever: 'Revenue Side' })],
+                })}
+            />
+        )
+        const label = getByTestId('ebitda-leaf-chip-label')
+        expect(label.hasAttribute('title')).toBe(false)
     })
 
     it('the chip is keyboard-focusable even with no opportunity dots', () => {
         // Per ``ebitda-impact-model`` spec: chips MUST be reachable in
         // keyboard tab order between the band header above and the next
-        // connector below. The outer ``<article>`` carries
-        // ``tabIndex={0}`` to guarantee reachability even when there
-        // are no inline focusable children.
-        const { container } = render(<EbitdaNodeComponent {...makeProps({ linkedIndices: [] })} />)
-        const article = container.querySelector('article')
-        expect(article).not.toBeNull()
-        expect(article!.getAttribute('tabindex')).toBe('0')
+        // connector below. Phase 13 moved the focusable surface from
+        // ``<article>`` to the ``SourceLinkedOpportunitiesPopover``
+        // wrapper (a ``<div>`` carrying ``tabIndex={0}``). Same
+        // keyboard-reachability guarantee, different tag.
+        const { getByTestId } = render(<EbitdaNodeComponent {...makeProps({ linkedIndices: [] })} />)
+        const chip = getByTestId('ebitda-leaf-chip')
+        expect(chip.getAttribute('tabindex')).toBe('0')
     })
 
     it('renders no element with position: absolute (no custom overlay)', () => {
@@ -222,7 +244,7 @@ describe('EbitdaNodeComponent — neutral body + colored-left-edge (tighten-anal
         const { container } = render(
             <EbitdaNodeComponent {...makeProps({ type: 'revenue', label: 'Subscriptions' })} />
         )
-        const article = container.querySelector('article')
+        const article = container.querySelector('[data-testid="ebitda-leaf-chip"]')
         expect(article).not.toBeNull()
         const style = article!.getAttribute('style') ?? ''
         expect(/border-left\s*:\s*3px\s+solid/i.test(style)).toBe(true)
@@ -236,7 +258,7 @@ describe('EbitdaNodeComponent — neutral body + colored-left-edge (tighten-anal
 
     it('does NOT bathe the chip in semantic color (anywhere — outer or descendant)', () => {
         const { container } = render(<EbitdaNodeComponent {...makeProps({ type: 'revenue' })} />)
-        const article = container.querySelector('article') as HTMLElement
+        const article = container.querySelector('[data-testid="ebitda-leaf-chip"]') as HTMLElement
         const styled: HTMLElement[] = [
             article,
             ...Array.from(article.querySelectorAll<HTMLElement>('[style]')),
@@ -255,7 +277,7 @@ describe('EbitdaNodeComponent — neutral body + colored-left-edge (tighten-anal
         ]
         for (const { type, rgb } of accents) {
             const { container, unmount } = render(<EbitdaNodeComponent {...makeProps({ type })} />)
-            const article = container.querySelector('article')
+            const article = container.querySelector('[data-testid="ebitda-leaf-chip"]')
             const style = (article!.getAttribute('style') ?? '').toLowerCase()
             expect(style).toContain(`border-left: 3px solid ${rgb}`)
             unmount()

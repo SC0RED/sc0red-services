@@ -4,6 +4,7 @@ import type { CSSProperties, FocusEvent } from 'react'
 
 import AnalysisLegend from '@/components/analysis/AnalysisLegend'
 import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
+import SourceLinkedOpportunitiesPopover from '@/components/analysis/SourceLinkedOpportunitiesPopover'
 import { useOpportunityHover } from '@/lib/hooks/useOpportunityHover'
 import type { Opportunity, StrategyMap } from '@/lib/types/api'
 import {
@@ -182,29 +183,29 @@ function ObjectiveEntry({
         clearHighlight()
     }
 
+    // Phase 13: wrap the source in ``SourceLinkedOpportunitiesPopover``
+    // so hovering / focusing surfaces an inline popover listing the
+    // linked opportunity titles. The wrapper carries the testid +
+    // tabIndex + hover handlers; the inner ``<article>`` is purely
+    // visual content (no event handlers, no focusable surface). This
+    // keeps a single hover surface — the wrapper — so the popover's
+    // open/close timers and the cross-section pulse dispatch stay in
+    // sync. Sources with empty linked-indices render the wrapper but
+    // the popover short-circuits internally (no popover surface).
     return (
-        <article
-            data-testid={`strategy-map-objective-${objective.id}`}
-            // ``tabIndex={0}`` for keyboard reachability (matches the
-            // EBITDA leaf chip + value-chain step card pattern). The
-            // hover-source surface mirrors those components exactly:
-            // mouse-enter / focus highlights the linked opportunity
-            // cards below; mouse-leave / blur clears.
-            //
-            // ``onMouseLeave`` / ``onBlur`` attach unconditionally — same
-            // shape as ``EbitdaNodeComponent`` and ``ValueChainDiagram``.
-            // The reducer treats ``clearHighlight`` on an already-empty
-            // set as a no-op (reference-equal short-circuit), so the
-            // unlinked-objective case is harmless. The ``hasLinks`` guard
-            // sits on ``onMouseEnter`` / ``onFocus`` only — that's where
-            // an unguarded dispatch would clobber the previous source's
-            // highlight by replacing it with an empty set.
-            tabIndex={0}
-            onMouseEnter={handleEnter}
-            onMouseLeave={clearHighlight}
-            onFocus={handleEnter}
-            onBlur={handleBlur}
-            style={objectiveStyle}
+        <SourceLinkedOpportunitiesPopover
+            anchorId={`objective-${objective.id}`}
+            linkedIndices={linkedIndices}
+            opportunities={opportunities}
+            sourceProps={{
+                tabIndex: 0,
+                'data-testid': `strategy-map-objective-${objective.id}`,
+                onMouseEnter: handleEnter,
+                onMouseLeave: clearHighlight,
+                onFocus: handleEnter,
+                onBlur: handleBlur,
+                style: objectiveStyle,
+            }}
         >
             <div style={objectiveTitleStyle}>{objective.title}</div>
             <div style={objectiveDefinitionStyle} title={objective.definition}>
@@ -215,7 +216,7 @@ function ObjectiveEntry({
                 opportunities={opportunities}
                 testId={`strategy-map-linked-opportunity-dots-${objective.id}`}
             />
-        </article>
+        </SourceLinkedOpportunitiesPopover>
     )
 }
 
