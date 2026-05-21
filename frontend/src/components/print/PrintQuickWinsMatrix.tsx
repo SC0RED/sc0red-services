@@ -1,279 +1,77 @@
 import type { CSSProperties } from 'react'
 
-import { findByOriginalIndex, type OpportunityWithIndex } from '@/lib/pdf/sortOpportunities'
+import PrintLegend from '@/components/print/quick-wins-matrix/PrintLegend'
+import PrintScatterPlot from '@/components/print/quick-wins-matrix/PrintScatterPlot'
+import type { OpportunityWithIndex } from '@/lib/pdf/sortOpportunities'
 import type { Opportunity } from '@/lib/types/api'
-import { LEVER_COLORS } from '@/lib/utils/leverColors'
-import {
-    IMPACT_ROW_ORDER,
-    QUADRANT_LABELS,
-    TIMELINE_COLUMN_LABELS,
-    TIMELINE_COLUMN_ORDER,
-    buildQuickWinsMatrixLayout,
-} from '@/lib/utils/quickWinsMatrixLayout'
+import { buildQuickWinsMatrixLayout } from '@/lib/utils/quickWinsMatrixLayout'
 
 interface PrintQuickWinsMatrixProps {
     /** Same sorted-with-original-index list used elsewhere in the PDF.
-     *  Required so each dot can render its printed-index reference
-     *  inline next to the opportunity title in the popover-equivalent
-     *  list under each cell. */
+     *  Required so each dot can render its printed-index reference in
+     *  the legend below the plot. */
     sortedOpportunities: OpportunityWithIndex[]
 }
 
 /**
- * Print-only Quick Wins matrix (Phase 7 of ``redesign-analysis-visuals``).
+ * Print-only ROI × Investment Matrix (Phase 14 path B).
  *
- * Static parallel to the screen ``QuickWinsMatrix``: same 3×3 grid,
- * same quadrant labels, same dot positions, but with no event
- * handlers and no popover state. The dots survive as visual landmarks
- * in the PDF; the per-cell opportunity list under each cell makes the
- * dot-to-opportunity linkage explicit on paper (where hover doesn't
- * exist).
+ * Static parallel to the screen ``QuickWinsMatrix``: same SVG scatter
+ * plot on log-scale investment (X) × linear ROI (Y), same quadrant
+ * labels at the corners, same uncalibrated strip for opportunities
+ * the AI couldn't size. No event handlers, no popovers.
  *
- * Sits inside ``PrintReport.tsx`` between the opportunity list and
- * the back cover, gated on ``opportunities.length >= 1`` — matches
- * the screen rule.
+ * Paper readers can't hover, so each dot also carries a printed-index
+ * label (``#N``) and a legend below the chart maps ``#N`` → opportunity
+ * title. Cluster pins survive as a "+N" overlay; their member
+ * opportunities show up in the legend instead of a popover.
+ *
+ * Sits inside ``PrintReport.tsx`` between the opportunity list and the
+ * back cover, gated on ``opportunities.length >= 1``.
+ *
+ * The SVG plot and the numbered legend live in ``quick-wins-matrix/``
+ * to keep this file under the 360-line frontend cap.
  */
 export default function PrintQuickWinsMatrix({ sortedOpportunities }: PrintQuickWinsMatrixProps) {
     // The matrix layout helper expects ``Opportunity[]`` in original-
-    // index order — that's what every dot's ``opportunityIndices``
-    // value points into. ``sortedOpportunities`` is a print-display
-    // sort (by impact / lever) layered ON TOP of the original list, so
-    // we rebuild an original-index-keyed array first.
+    // index order — every dot's ``opportunityIndex`` points into that
+    // array. ``sortedOpportunities`` is print-display sort (by impact)
+    // layered on top, so reverse the sort first.
     const opportunities = sortedOpportunities
         .slice()
         .sort((a, b) => a.originalIndex - b.originalIndex)
         .map((entry) => entry.opportunity) as Opportunity[]
 
-    const layout = buildQuickWinsMatrixLayout(opportunities)
+    const PLOT_WIDTH = 540
+    const PLOT_HEIGHT = 320
+    const layout = buildQuickWinsMatrixLayout(opportunities, PLOT_WIDTH, PLOT_HEIGHT)
 
     return (
         <section className="print-section print-section--break-before print-quick-wins-matrix">
-            <h2>Quick Wins Matrix</h2>
+            <h2>ROI × Investment Matrix</h2>
 
             <p style={leadStyle}>
-                Each opportunity is plotted by impact (vertical) and timeline (horizontal). The top-left
-                quadrant carries the highest-leverage near-term plays.
+                Each opportunity is plotted by investment cost (horizontal, log scale) and ROI (vertical).
+                Opportunities the AI couldn&rsquo;t size land in the uncalibrated strip beneath the plot.
             </p>
 
-            <div style={gridShellStyle}>
-                <div />
-                <div style={columnHeaderRowStyle(TIMELINE_COLUMN_ORDER.length)}>
-                    {TIMELINE_COLUMN_ORDER.map((column) => (
-                        <div key={column} style={columnHeaderStyle}>
-                            {TIMELINE_COLUMN_LABELS[column]}
-                        </div>
-                    ))}
-                </div>
+            <PrintScatterPlot
+                plotWidth={PLOT_WIDTH}
+                plotHeight={PLOT_HEIGHT}
+                layout={layout}
+                sortedOpportunities={sortedOpportunities}
+            />
 
-                <div style={rowLabelColumnStyle}>
-                    {IMPACT_ROW_ORDER.map((impact) => (
-                        <div key={impact} style={rowHeaderStyle}>
-                            {impact} impact
-                        </div>
-                    ))}
-                </div>
-
-                <div style={cellGridStyle(TIMELINE_COLUMN_ORDER.length)}>
-                    {layout.cells.flatMap((row, rowIndex) =>
-                        row.map((cell, columnIndex) => (
-                            <PrintCell
-                                key={`${rowIndex}-${columnIndex}`}
-                                rowIndex={rowIndex}
-                                columnIndex={columnIndex}
-                                opportunityIndices={cell.opportunityIndices}
-                                quadrantLabel={cell.quadrant ? QUADRANT_LABELS[cell.quadrant] : null}
-                                opportunities={opportunities}
-                                sortedOpportunities={sortedOpportunities}
-                            />
-                        ))
-                    )}
-                </div>
-            </div>
+            <PrintLegend layout={layout} sortedOpportunities={sortedOpportunities} />
         </section>
     )
 }
 
-function PrintCell({
-    rowIndex,
-    columnIndex,
-    opportunityIndices,
-    quadrantLabel,
-    opportunities,
-    sortedOpportunities,
-}: {
-    rowIndex: number
-    columnIndex: number
-    opportunityIndices: number[]
-    quadrantLabel: string | null
-    opportunities: Opportunity[]
-    sortedOpportunities: OpportunityWithIndex[]
-}) {
-    return (
-        <div style={cellStyle}>
-            {quadrantLabel ? (
-                <div style={quadrantLabelStyle(rowIndex, columnIndex)}>{quadrantLabel}</div>
-            ) : null}
-            <div style={dotStackStyle}>
-                {opportunityIndices.map((originalIndex) => {
-                    const opp = opportunities[originalIndex]
-                    const lever = opp.value_lever ?? 'Both'
-                    const color = LEVER_COLORS[lever] ?? 'var(--text-tertiary)'
-                    return (
-                        <span
-                            key={originalIndex}
-                            style={{ ...dotStyle, background: color }}
-                            aria-hidden="true"
-                        />
-                    )
-                })}
-            </div>
-            {opportunityIndices.length > 0 ? (
-                <ul style={cellListStyle}>
-                    {opportunityIndices.map((originalIndex) => {
-                        // Resolve through the shared helper rather than an
-                        // inline ``.find`` — matches PrintEbitdaOutline,
-                        // PrintStrategyMapObjectives, PrintValueChainList.
-                        // If the helper ever gains a stricter "throw on
-                        // missing" mode the print components all upgrade
-                        // together.
-                        const entry = findByOriginalIndex(sortedOpportunities, originalIndex)
-                        if (!entry) return null
-                        return (
-                            <li key={originalIndex} style={cellListItemStyle}>
-                                #{entry.printedIndex} {entry.opportunity.title}
-                            </li>
-                        )
-                    })}
-                </ul>
-            ) : null}
-        </div>
-    )
-}
-
-// ── styles ─────────────────────────────────────────────────────────
+// ── styles ────────────────────────────────────────────────────────
 
 const leadStyle: CSSProperties = {
     margin: '0 0 12px',
     fontSize: '0.85rem',
     color: 'var(--text-secondary)',
     lineHeight: 1.5,
-}
-
-const gridShellStyle: CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '110px 1fr',
-    gridTemplateRows: 'auto 1fr',
-    gap: '6px',
-}
-
-function columnHeaderRowStyle(columnCount: number): CSSProperties {
-    return {
-        display: 'grid',
-        // ``minmax(0, 1fr)`` so the chip text doesn't push columns
-        // wider than their fraction — see the screen variant for the
-        // full rationale.
-        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-        gap: '6px',
-    }
-}
-
-const columnHeaderStyle: CSSProperties = {
-    fontSize: '0.7rem',
-    color: 'var(--text-tertiary)',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    textAlign: 'center',
-}
-
-const rowLabelColumnStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-}
-
-const rowHeaderStyle: CSSProperties = {
-    flex: '1 1 0',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingRight: '6px',
-    fontSize: '0.7rem',
-    color: 'var(--text-tertiary)',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-}
-
-function cellGridStyle(columnCount: number): CSSProperties {
-    return {
-        display: 'grid',
-        // ``minmax(0, 1fr)`` so the chip text doesn't push columns
-        // wider than their fraction — see the screen variant for the
-        // full rationale.
-        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-        gridTemplateRows: 'repeat(3, 1fr)',
-        gap: '6px',
-    }
-}
-
-const cellStyle: CSSProperties = {
-    position: 'relative',
-    padding: '10px 8px',
-    minHeight: '60px',
-    border: '1px solid var(--border-subtle)',
-    background: 'var(--bg-surface-2)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: '6px',
-}
-
-function quadrantLabelStyle(rowIndex: number, columnIndex: number): CSSProperties {
-    const top = rowIndex === 0 ? '4px' : 'auto'
-    const bottom = rowIndex === 2 ? '4px' : 'auto'
-    const left = columnIndex === 0 ? '6px' : 'auto'
-    const right = columnIndex === 2 ? '6px' : 'auto'
-    return {
-        position: 'absolute',
-        top,
-        bottom,
-        left,
-        right,
-        fontSize: '0.65rem',
-        fontWeight: 700,
-        color: 'var(--text-tertiary)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-    }
-}
-
-const dotStackStyle: CSSProperties = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: '12px',
-}
-
-const dotStyle: CSSProperties = {
-    display: 'inline-block',
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-}
-
-const cellListStyle: CSSProperties = {
-    listStyle: 'none',
-    margin: 0,
-    padding: 0,
-    fontSize: '0.65rem',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.4,
-}
-
-const cellListItemStyle: CSSProperties = {
-    margin: 0,
 }

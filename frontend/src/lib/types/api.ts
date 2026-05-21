@@ -14,6 +14,15 @@ export interface Opportunity {
     investment_range?: string
     roi_estimate?: string
     value_lever?: 'Revenue Side' | 'Cost Side' | 'Both'
+    // Numeric ROI × Investment axes for the Quick Wins matrix scatter
+    // plot (Phase 14 of redesign-analysis-visuals, design D8).
+    // ``null`` / undefined → opportunity routes to the matrix's
+    // "uncalibrated" footer strip rather than the main scatter.
+    // Range constraints (enforced server-side):
+    //   - ``investment_value_usd``: integer >= 0 (USD).
+    //   - ``roi_estimate_pct``: number 0..500 (renderer clamps at 300%).
+    investment_value_usd?: number | null
+    roi_estimate_pct?: number | null
 }
 
 export interface EbitdaNode {
