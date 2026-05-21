@@ -176,6 +176,48 @@ describe('QuickWinsMatrix — in-plot dot routing', () => {
         expect(dot.textContent).toContain('↑')
     })
 
+    it('renders an inline title label next to the dot so the chart is readable without hover', () => {
+        render(
+            <QuickWinsMatrix
+                opportunities={[
+                    make({
+                        title: 'Cut SaaS sprawl',
+                        investment_value_usd: 100_000,
+                        roi_estimate_pct: 150,
+                    }),
+                ]}
+            />
+        )
+        const label = screen.getByTestId('quick-wins-dot-label-0')
+        expect(label).toHaveTextContent('Cut SaaS sprawl')
+    })
+
+    it('truncates long titles in the inline dot label with an ellipsis', () => {
+        // 30-char title; the inline label budget is 22 chars, so we
+        // expect a "…" suffix and a shortened prefix.
+        render(
+            <QuickWinsMatrix
+                opportunities={[
+                    make({
+                        title: 'Deploy AI churn prediction model end-to-end',
+                        investment_value_usd: 100_000,
+                        roi_estimate_pct: 150,
+                    }),
+                ]}
+            />
+        )
+        const label = screen.getByTestId('quick-wins-dot-label-0')
+        // Truncation produces "Deploy AI churn predi…" (21 chars + ellipsis).
+        expect(label.textContent ?? '').toMatch(/…$/)
+        expect((label.textContent ?? '').length).toBeLessThanOrEqual(22)
+        // The full title still appears in the SVG <title> tooltip + aria-label,
+        // so screen readers and hover-tooltip users get the unabridged text.
+        const dot = screen.getByTestId('quick-wins-dot-0')
+        expect(dot.querySelector('title')?.textContent).toContain(
+            'Deploy AI churn prediction model end-to-end'
+        )
+    })
+
     it('does NOT render the clamp caret for in-range ROI values', () => {
         render(
             <QuickWinsMatrix

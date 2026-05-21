@@ -153,12 +153,12 @@ describe('AnalysisDetail — Value Lever', () => {
         const data = buildAnalysisData()
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        // The ROI × Investment matrix (Phase 14) embeds titles in
-        // SVG ``<title>`` tooltips and aria-labels for accessibility,
-        // not as visible chips, so global ``getByText`` won't double-
-        // match — but we still scope to the opportunities section
-        // because that's where the filter is meant to take effect
-        // (the matrix renders the full set unfiltered by design).
+        // The ROI × Investment matrix (Phase 14) renders each opportunity
+        // title inline next to its dot, so global ``getByText`` would
+        // find each title twice — once in the opportunities list, once
+        // in the matrix. Scope to the opportunities section to assert
+        // the FILTER changes the list (the matrix renders the full set
+        // unfiltered by design).
         const oppSection = screen.getByTestId('analysis-section-opportunities')
         expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
         expect(within(oppSection).getByText('Automate Support')).toBeInTheDocument()
