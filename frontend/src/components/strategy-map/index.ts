@@ -16,4 +16,5 @@
 export { default as StrategyMapView } from './StrategyMapView'
 export { default as StrategyMapHeader } from './StrategyMapHeader'
 export { default as StrategyMapTable } from './StrategyMapTable'
+export { default as StrategyMapDetailsSection } from './StrategyMapDetailsSection'
 export { default as DeepDiveCTA } from './DeepDiveCTA'

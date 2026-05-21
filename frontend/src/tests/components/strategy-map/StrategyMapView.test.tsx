@@ -6,13 +6,16 @@ import StrategyMapView from '@/components/strategy-map/StrategyMapView'
 import { fullStrategyMap } from './_fixtures'
 
 /**
- * `StrategyMapView` tests under the Phase-6 Balanced Scorecard table
- * composition. The React-Flow canvas was deleted; the section now
- * composes:
+ * `StrategyMapView` tests under the Phase-12 composition. Phase 6
+ * deleted the React-Flow canvas and replaced the layout with the CSS-
+ * grid table; Phase 12 trimmed the header to Mission + Vision only.
+ * The section now composes:
  *
- *   1. ``StrategyMapHeader``  — Mission banner + Vision eyebrow +
- *                                Value Proposition + Strategic Priorities,
- *                                all always visible.
+ *   1. ``StrategyMapHeader``  — Mission banner + Vision eyebrow only.
+ *                                VP + Strategic Priorities live in
+ *                                ``StrategyMapDetailsSection``
+ *                                (rendered separately by AnalysisDetail
+ *                                below the table; see that file's tests).
  *   2. ``StrategyMapTable``   — 4 perspective rows × N theme columns.
  *   3. ``CoreValuesStrip``    — bottom strip listing core values.
  *
@@ -56,7 +59,7 @@ describe('StrategyMapView — structural composition', () => {
     })
 })
 
-describe('StrategyMapView — header (always-visible, no accordion)', () => {
+describe('StrategyMapView — header shape (Mission + Vision only, Phase 12)', () => {
     it('renders the section title eyebrow', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} opportunities={[]} />)
         expect(screen.getByText('Strategy Map')).toBeInTheDocument()
@@ -78,22 +81,19 @@ describe('StrategyMapView — header (always-visible, no accordion)', () => {
         expect(screen.getByText(/To be the most appetizing convenience retailer/)).toBeInTheDocument()
     })
 
-    it('renders the value-proposition label + rationale without any toggle', () => {
+    it('does NOT render the value-proposition block inside the header', () => {
+        // Phase 12 of redesign-analysis-visuals relocated VP +
+        // Strategic Priorities OUT of the header and into a separate
+        // ``<StrategyMapDetailsSection>`` below the table (see the
+        // dedicated test file). The header now only carries Mission +
+        // Vision per Diagnostic Tool Feedback #4.
         render(<StrategyMapView strategyMap={fullStrategyMap} opportunities={[]} />)
-        expect(screen.getByTestId('strategy-map-value-proposition')).toBeInTheDocument()
-        expect(screen.getByText('Customer Intimacy')).toBeInTheDocument()
-        expect(screen.getByText(/Public materials emphasise associate friendliness/)).toBeInTheDocument()
+        expect(screen.queryByTestId('strategy-map-value-proposition')).toBeNull()
     })
 
-    it('lists every strategic priority with its result text', () => {
+    it('does NOT render the strategic-priorities list inside the header', () => {
         render(<StrategyMapView strategyMap={fullStrategyMap} opportunities={[]} />)
-        expect(screen.getByTestId('strategy-map-strategic-priorities')).toBeInTheDocument()
-        expect(screen.getAllByText('Grow Through Foodservice').length).toBeGreaterThanOrEqual(1)
-        expect(screen.getAllByText('Deliver Convenience and Value').length).toBeGreaterThanOrEqual(1)
-        expect(screen.getByText(/Best-in-class signature food platform/)).toBeInTheDocument()
-        expect(
-            screen.getByText(/Industry-leading customer perception of speed and value/)
-        ).toBeInTheDocument()
+        expect(screen.queryByTestId('strategy-map-strategic-priorities')).toBeNull()
     })
 
     it('renders no <details> disclosure elements — accordion removed', () => {

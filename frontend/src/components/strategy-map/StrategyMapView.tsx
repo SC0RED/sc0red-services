@@ -21,12 +21,14 @@ interface StrategyMapViewProps {
  * AI-generated Balanced Scorecard strategy map.
  *
  * Phase 6 of ``redesign-analysis-visuals`` (design D3) replaced the
- * React-Flow free-form canvas with a CSS-grid table. The composition
+ * React-Flow free-form canvas with a CSS-grid table. Phase 12 trimmed
+ * the header further (Diagnostic Tool Feedback #4). The composition
  * is now:
  *
- *   1. ``StrategyMapHeader`` — Mission banner + Vision eyebrow +
- *      Value Proposition + Strategic Priorities, all always visible
- *      (the previous accordion was removed in this phase).
+ *   1. ``StrategyMapHeader`` — Mission banner + Vision eyebrow only.
+ *      Value Proposition + Strategic Priorities relocated to
+ *      ``StrategyMapDetailsSection`` (rendered separately below the
+ *      table by ``AnalysisDetail``, not by this component).
  *   2. ``StrategyMapTable``  — 4 perspective rows × N theme columns,
  *      objectives stacked in each cell with the shared
  *      ``OpportunityDotStrip``. No confidence dots (dropped in P2).
