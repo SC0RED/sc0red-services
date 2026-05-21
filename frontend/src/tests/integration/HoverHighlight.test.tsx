@@ -197,12 +197,16 @@ describe('hover highlight — EBITDA leaf chip → opportunity card', () => {
         const card1 = screen.getByTestId('opportunity-card-1')
         expect(card1).not.toHaveClass('card-pulse')
 
-        // The leaf chip is an <article>; locate it via its data-testid
-        // for the dot strip (which is rendered inside) and walk up.
-        const dotStrip = screen.getByTestId('ebitda-linked-opportunity-dots')
-        const article = dotStrip.closest('article')
-        expect(article).not.toBeNull()
-        fireEvent.mouseEnter(article!)
+        // Phase 13 of redesign-analysis-visuals wraps the leaf chip
+        // in ``SourceLinkedOpportunitiesPopover`` (a ``<div>``, not
+        // ``<article>``). The wrapper carries the hover handlers; find
+        // it via its ``data-testid="ebitda-leaf-chip"`` and dispatch
+        // ``mouseEnter`` there.
+        const chip = screen
+            .getAllByTestId('ebitda-leaf-chip')
+            .find((el) => el.contains(screen.queryByTestId('ebitda-linked-opportunity-dots')))
+        expect(chip).toBeDefined()
+        fireEvent.mouseEnter(chip!)
 
         expect(card1).toHaveClass('card-pulse')
         expect(screen.getByTestId('opportunity-card-0')).not.toHaveClass('card-pulse')

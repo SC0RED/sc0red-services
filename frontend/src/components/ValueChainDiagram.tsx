@@ -2,6 +2,7 @@
 
 import AnalysisLegend from '@/components/analysis/AnalysisLegend'
 import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
+import SourceLinkedOpportunitiesPopover from '@/components/analysis/SourceLinkedOpportunitiesPopover'
 import { useOpportunityHover } from '@/lib/hooks/useOpportunityHover'
 import type { ValueChainStep, Opportunity } from '@/lib/types/api'
 import { CAT_LABELS, RISK_CATEGORY_COLORS } from '@/lib/utils/riskUtils'
@@ -159,10 +160,35 @@ function StepCard({ step, opportunities, variant, isLast }: StepCardProps) {
     // overflow ``+N`` badge has ``tabIndex={0}``). Guard against the
     // bubble so tabbing into a descendant doesn't clear the highlight
     // ``onFocus`` had just set.
-    const onBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    const onBlur = (event: React.FocusEvent<HTMLElement>) => {
+        // Loosened from ``HTMLDivElement`` to ``HTMLElement`` so the
+        // handler matches the ``SourceLinkedOpportunitiesPopover``
+        // ``sourceProps.onBlur`` signature. The runtime behaviour is
+        // unchanged — the popover wrapper is still a ``<div>``.
         const next = event.relatedTarget as Node | null
         if (event.currentTarget.contains(next)) return
         clearHighlight()
+    }
+
+    // Phase 13: wrap the inner ``.card`` div in
+    // ``SourceLinkedOpportunitiesPopover`` so hovering / focusing
+    // surfaces an inline popover listing the linked opportunity
+    // titles. The wrapper carries the tabIndex + hover handlers; the
+    // inner content is purely visual. Empty-linkage steps render the
+    // wrapper but the popover short-circuits internally.
+    const cardStyle = {
+        flex: 1,
+        padding: '0.875rem',
+        background: 'none',
+        borderTop: '1px solid var(--border)',
+        borderBottom: '1px solid var(--border)',
+        borderLeft: '1px solid var(--border)',
+        borderRight: isPrimary && !isLast ? 'none' : '1px solid var(--border)',
+        borderRadius: isPrimary && !isLast ? '0' : undefined,
+        textAlign: 'left' as const,
+        display: 'flex' as const,
+        flexDirection: 'column' as const,
+        gap: '0.5rem',
     }
 
     return (
@@ -175,33 +201,18 @@ function StepCard({ step, opportunities, variant, isLast }: StepCardProps) {
                 minWidth: isPrimary ? '140px' : '160px',
             }}
         >
-            <div
-                // ``tabIndex={0}`` so keyboard users can land on each
-                // step card and read its content (label, description,
-                // risk tags, opportunity dots). Matches the EBITDA leaf
-                // chip's keyboard-reachability pattern. Steps with no
-                // overflow badge and no risk-tag interactivity would
-                // otherwise have zero focusable surface inside the
-                // card, breaking Tab navigation.
-                tabIndex={0}
-                onMouseEnter={onEnter}
-                onMouseLeave={clearHighlight}
-                onFocus={onEnter}
-                onBlur={onBlur}
-                className="card"
-                style={{
-                    flex: 1,
-                    padding: '0.875rem',
-                    background: 'none',
-                    borderTop: '1px solid var(--border)',
-                    borderBottom: '1px solid var(--border)',
-                    borderLeft: '1px solid var(--border)',
-                    borderRight: isPrimary && !isLast ? 'none' : '1px solid var(--border)',
-                    borderRadius: isPrimary && !isLast ? '0' : undefined,
-                    textAlign: 'left',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
+            <SourceLinkedOpportunitiesPopover
+                anchorId={`value-chain-step-${step.id}`}
+                linkedIndices={indices}
+                opportunities={opportunities}
+                sourceProps={{
+                    tabIndex: 0,
+                    onMouseEnter: onEnter,
+                    onMouseLeave: clearHighlight,
+                    onFocus: onEnter,
+                    onBlur,
+                    className: 'card',
+                    style: cardStyle,
                 }}
             >
                 {/* Label */}
@@ -255,7 +266,7 @@ function StepCard({ step, opportunities, variant, isLast }: StepCardProps) {
                     opportunities={opportunities}
                     testId={`value-chain-linked-opportunity-dots-${step.id}`}
                 />
-            </div>
+            </SourceLinkedOpportunitiesPopover>
 
             {/* Arrow between primary steps */}
             {isPrimary && !isLast && (

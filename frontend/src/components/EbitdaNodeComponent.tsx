@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 
 import OpportunityDotStrip from '@/components/analysis/OpportunityDotStrip'
+import SourceLinkedOpportunitiesPopover from '@/components/analysis/SourceLinkedOpportunitiesPopover'
 import { useOpportunityHover } from '@/lib/hooks/useOpportunityHover'
 import type { Opportunity } from '@/lib/types/api'
 
@@ -168,26 +169,52 @@ function LeafChip({
         if (event.currentTarget.contains(next)) return
         clearHighlight()
     }
+    // Stable anchor id per chip — the EBITDA chip carries no explicit
+    // ID prop, so synthesise from the label (the canonical signal that
+    // identifies a leaf to a reader). Same label-slug pattern other
+    // pre-existing testids use. Whitespace + non-alphanumeric collapse
+    // to ``-`` for HTML id-token validity.
+    const anchorId = `ebitda-${label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')}`
+
+    // Phase 13: wrap the chip in ``SourceLinkedOpportunitiesPopover``
+    // so hovering / focusing surfaces an inline popover listing the
+    // linked opportunity titles. The wrapper carries the testid +
+    // tabIndex + hover handlers; the inner content is purely visual.
+    // Empty-linkage chips render the wrapper but the popover
+    // short-circuits internally (no popover surface).
+    //
+    // Native ``title`` (description tooltip) is preserved on the
+    // inner content ONLY for empty-linkage chips — when the popover
+    // is active, it owns the hover real estate, and a competing
+    // browser-tooltip would render on top of it. The DOM ``title``
+    // is the empty-linkage fallback so leaves without an opportunity
+    // linkage still expose their description on hover.
+    const showNativeTitle = !hasLinks && Boolean(description)
     return (
-        <article
-            // Chip MUST be reachable in keyboard tab order between the
-            // band header above and the next connector below per
-            // ``ebitda-impact-model`` spec. A chip with no opportunity
-            // dots would otherwise have zero focusable surface and be
-            // skipped by Tab navigation.
-            tabIndex={0}
-            // The native ``title`` attribute delivers the long-form
-            // description as a browser tooltip when the chip is
-            // hovered or focused. Replaces the custom absolutely-
-            // positioned overlay that overflowed neighbouring rows.
-            title={description || undefined}
-            onMouseEnter={onEnter}
-            onMouseLeave={clearHighlight}
-            onFocus={onEnter}
-            onBlur={onBlur}
-            style={chipStyle(accentColor)}
+        <SourceLinkedOpportunitiesPopover
+            anchorId={anchorId}
+            linkedIndices={linkedIndices}
+            opportunities={opportunities}
+            sourceProps={{
+                tabIndex: 0,
+                'data-testid': 'ebitda-leaf-chip',
+                onMouseEnter: onEnter,
+                onMouseLeave: clearHighlight,
+                onFocus: onEnter,
+                onBlur,
+                style: chipStyle(accentColor),
+            }}
         >
-            <div style={chipLabelStyle}>{label}</div>
+            <div
+                data-testid="ebitda-leaf-chip-label"
+                style={chipLabelStyle}
+                title={showNativeTitle ? description : undefined}
+            >
+                {label}
+            </div>
             {valueRange && (
                 <div style={chipValueRowStyle}>
                     <span>{valueRange}</span>
@@ -201,7 +228,7 @@ function LeafChip({
                 opportunities={opportunities}
                 testId="ebitda-linked-opportunity-dots"
             />
-        </article>
+        </SourceLinkedOpportunitiesPopover>
     )
 }
 
