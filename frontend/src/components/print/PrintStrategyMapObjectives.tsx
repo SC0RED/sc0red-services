@@ -1,3 +1,4 @@
+import { findByOriginalIndex, type OpportunityWithIndex } from '@/lib/pdf/sortOpportunities'
 import type {
     CapacityObjective,
     CustomerObjective,
@@ -12,6 +13,15 @@ import type {
  * 360-line limit. Each component is a thin wrapper around the shared
  * `PrintObjectiveCard` that knows how to format its specific
  * perspective's data shape.
+ *
+ * Phase 6 of ``redesign-analysis-visuals`` (design D6) updated print
+ * parity:
+ *   - confidence chip dropped from every card (matches the screen
+ *     change in P2),
+ *   - opportunity-link callout added, formatted as
+ *     ``Opportunities: #N (title), #M (title)``. References the
+ *     printed index from ``sortedOpportunities`` so a reader can flip
+ *     from an objective to the matching opportunity card.
  */
 
 export function ObjectivesGrid({ columns, children }: { columns: number; children: React.ReactNode }) {
@@ -28,30 +38,49 @@ export function ObjectivesGrid({ columns, children }: { columns: number; childre
     )
 }
 
-export function PrintFinancialObjective({ objective }: { objective: FinancialObjective }) {
+interface PerspectiveProps<T> {
+    objective: T
+    sortedOpportunities: OpportunityWithIndex[]
+}
+
+export function PrintFinancialObjective({
+    objective,
+    sortedOpportunities,
+}: PerspectiveProps<FinancialObjective>) {
     return (
         <PrintObjectiveCard
             id={objective.id}
             title={objective.title}
             definition={objective.definition}
-            confidence={objective.confidence}
+            linkedIndices={objective.linked_opportunity_indices ?? []}
+            sortedOpportunities={sortedOpportunities}
         />
     )
 }
 
-export function PrintCustomerObjective({ objective }: { objective: CustomerObjective }) {
+export function PrintCustomerObjective({
+    objective,
+    sortedOpportunities,
+}: PerspectiveProps<CustomerObjective>) {
     return (
         <PrintObjectiveCard
             id={objective.id}
             title={`"${objective.title}"`}
             definition={objective.definition}
-            confidence={objective.confidence}
+            linkedIndices={objective.linked_opportunity_indices ?? []}
+            sortedOpportunities={sortedOpportunities}
             italic
         />
     )
 }
 
-export function PrintInternalProcessTheme({ theme }: { theme: InternalProcessTheme }) {
+export function PrintInternalProcessTheme({
+    theme,
+    sortedOpportunities,
+}: {
+    theme: InternalProcessTheme
+    sortedOpportunities: OpportunityWithIndex[]
+}) {
     return (
         <div style={{ marginBottom: '12px' }}>
             <div
@@ -76,7 +105,8 @@ export function PrintInternalProcessTheme({ theme }: { theme: InternalProcessThe
                         id={objective.id}
                         title={objective.title}
                         definition={objective.definition}
-                        confidence={objective.confidence}
+                        linkedIndices={objective.linked_opportunity_indices ?? []}
+                        sortedOpportunities={sortedOpportunities}
                     />
                 ))}
             </ObjectivesGrid>
@@ -87,9 +117,11 @@ export function PrintInternalProcessTheme({ theme }: { theme: InternalProcessThe
 export function PrintCapacityObjective({
     bucket,
     objective,
+    sortedOpportunities,
 }: {
     bucket: string
     objective: CapacityObjective
+    sortedOpportunities: OpportunityWithIndex[]
 }) {
     return (
         <div>
@@ -109,7 +141,8 @@ export function PrintCapacityObjective({
                 id={objective.id}
                 title={objective.title}
                 definition={objective.definition}
-                confidence={objective.confidence}
+                linkedIndices={objective.linked_opportunity_indices ?? []}
+                sortedOpportunities={sortedOpportunities}
             />
         </div>
     )
@@ -120,20 +153,30 @@ export function PrintCapacityObjective({
  * strategy map. Smaller and denser than the screen
  * `ObjectiveCard` — paper-friendly typography, no hover states,
  * fully-expanded definitions.
+ *
+ * Confidence chip removed in P2 of the redesign-analysis-visuals
+ * change; the linked-opportunities callout below the description is
+ * the new signal carrying value-of-this-objective information.
  */
 function PrintObjectiveCard({
     id,
     title,
     definition,
-    confidence,
+    linkedIndices,
+    sortedOpportunities,
     italic = false,
 }: {
     id: string
     title: string
     definition: string
-    confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+    linkedIndices: number[]
+    sortedOpportunities: OpportunityWithIndex[]
     italic?: boolean
 }) {
+    const links = linkedIndices
+        .map((originalIndex) => findByOriginalIndex(sortedOpportunities, originalIndex))
+        .filter((entry): entry is OpportunityWithIndex => entry != null)
+
     return (
         <div
             className="print-card"
@@ -172,16 +215,6 @@ function PrintObjectiveCard({
                 >
                     {title}
                 </strong>
-                <span
-                    style={{
-                        fontSize: '0.6rem',
-                        fontWeight: 700,
-                        color: 'var(--text-tertiary)',
-                        letterSpacing: '0.04em',
-                    }}
-                >
-                    {confidence}
-                </span>
             </div>
             <p
                 style={{
@@ -193,6 +226,24 @@ function PrintObjectiveCard({
             >
                 {definition}
             </p>
+            {links.length > 0 ? (
+                <div
+                    style={{
+                        marginTop: '6px',
+                        fontSize: '0.7rem',
+                        color: 'var(--accent-blue)',
+                        lineHeight: 1.5,
+                    }}
+                >
+                    Opportunities:{' '}
+                    {links.map((link, idx) => (
+                        <span key={link.printedIndex}>
+                            #{link.printedIndex} ({link.opportunity.title})
+                            {idx < links.length - 1 ? ', ' : ''}
+                        </span>
+                    ))}
+                </div>
+            ) : null}
         </div>
     )
 }

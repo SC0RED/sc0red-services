@@ -1,61 +1,58 @@
 'use client'
 
-import ConfidenceIndicator from '@/components/analysis/ConfidenceIndicator'
-import ProvenanceMarker from '@/components/analysis/ProvenanceMarker'
-import type { ConfidenceMarker, StrategyMap } from '@/lib/types/api'
+import type { CSSProperties } from 'react'
 
-import StrategyMapCanvas from './StrategyMapCanvas'
+import ProvenanceMarker from '@/components/analysis/ProvenanceMarker'
+import type { Opportunity, StrategyMap } from '@/lib/types/api'
+
 import StrategyMapHeader from './StrategyMapHeader'
+import StrategyMapTable from './StrategyMapTable'
 
 interface StrategyMapViewProps {
     strategyMap: StrategyMap
+    /** Full opportunities array — threaded through to the table so each
+     *  objective cell can render an ``OpportunityDotStrip`` keyed on
+     *  ``linked_opportunity_indices``. The strip resolves each index to
+     *  the linked opportunity's ``value_lever`` for dot colour. */
+    opportunities: Opportunity[]
 }
 
 /**
  * AI-generated Balanced Scorecard strategy map.
  *
- * Composition root for the strategy-map section on the analysis page:
+ * Phase 6 of ``redesign-analysis-visuals`` (design D3) replaced the
+ * React-Flow free-form canvas with a CSS-grid table. Phase 12 trimmed
+ * the header further (Diagnostic Tool Feedback #4). The composition
+ * is now:
  *
- *   1. `StrategyMapHeader`       — vision, mission disclosure,
- *                                  value-prop chip, strategic-priority
- *                                  legend
- *   2. `StrategyMapCanvas`       — graphical 2D React Flow canvas
- *                                  with the four perspective bands,
- *                                  objective chips, and arrows
- *   3. `ConfidenceLegend`        — explains the three-dot confidence
- *                                  scale used on every chip
- *   4. `CoreValuesStrip`         — bottom strip listing the company's
- *                                  values
+ *   1. ``StrategyMapHeader`` — Mission banner + Vision eyebrow only.
+ *      Value Proposition + Strategic Priorities relocated to
+ *      ``StrategyMapDetailsSection`` (rendered separately below the
+ *      table by ``AnalysisDetail``, not by this component).
+ *   2. ``StrategyMapTable``  — 4 perspective rows × N theme columns,
+ *      objectives stacked in each cell with the shared
+ *      ``OpportunityDotStrip``. No confidence dots (dropped in P2).
+ *   3. **Values strip**     — bottom strip listing the company's
+ *      core values. The strip is unchanged from the old layout
+ *      apart from sitting outside the (gone) canvas.
  *
- * The "What's Missing" / gaps panel was previously rendered below the
- * canvas; it has been removed end-to-end as part of the
- * ``redesign-strategy-map`` Phase 2 change. The deep-dive CTA was
- * previously rendered below this section; it has been relocated to
- * the top of `AnalysisDetail` (above the page).
+ * Removed in this phase:
  *
- * Print rendering uses `PrintStrategyMap.tsx` (untouched by this
- * redesign) — paper has no scroll constraint, the verbose layout is
- * the right artefact for print.
+ *   - ``StrategyMapCanvas`` (React Flow) — deleted entirely; cause-
+ *     and-effect arrows that lived on the canvas are now implied by
+ *     the canonical Kaplan-Norton row order in the table (Financial
+ *     at top = outcome, Capacity at bottom = cause).
+ *   - ``ConfidenceLegend`` — confidence dots themselves were dropped
+ *     by P2 of this change; the legend explaining them is now dead.
+ *
+ * Print rendering uses ``PrintStrategyMapObjectives.tsx``; that path
+ * was updated in this same phase for print parity.
  */
-export default function StrategyMapView({ strategyMap }: StrategyMapViewProps) {
+export default function StrategyMapView({ strategyMap, opportunities }: StrategyMapViewProps) {
     return (
-        <section
-            data-testid="strategy-map-view"
-            className="strategy-map"
-            style={{
-                marginBottom: '24px',
-                padding: '20px',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-            }}
-        >
+        <section data-testid="strategy-map-view" className="strategy-map" style={sectionStyle}>
             <StrategyMapHeader strategyMap={strategyMap} />
-            <StrategyMapCanvas strategyMap={strategyMap} />
-            <ConfidenceLegend />
+            <StrategyMapTable strategyMap={strategyMap} opportunities={opportunities} />
             <CoreValuesStrip
                 values={strategyMap.coreValues.values}
                 synthesised={strategyMap.coreValues.synthesised}
@@ -65,116 +62,16 @@ export default function StrategyMapView({ strategyMap }: StrategyMapViewProps) {
 }
 
 /**
- * Inline legend explaining the confidence dots on each objective chip.
- *
- * Every chip on the canvas renders a ``small``-variant
- * ``ConfidenceIndicator``: 3 dots, partially filled, single neutral
- * colour. Without context the dots read as decorative — users have
- * to hover (and even then the small variant has no tooltip). This
- * legend sits directly under the canvas so the meaning is one glance
- * away. Each row reuses ``ConfidenceIndicator`` so the legend dots
- * are guaranteed pixel-identical to the chip dots; if the
- * indicator's rendering ever changes the legend follows automatically.
+ * Bottom strip listing the company's stated (or synthesised) values.
+ * Unchanged from the previous layout — it just lives outside the
+ * (gone) React-Flow canvas now. Centered, muted, single line; values
+ * separated by a centered middot.
  */
-function ConfidenceLegend() {
-    const entries: { confidence: ConfidenceMarker; label: string; description: string }[] = [
-        {
-            confidence: 'HIGH',
-            label: 'High',
-            description: 'directly inferred from concrete public data.',
-        },
-        {
-            confidence: 'MEDIUM',
-            label: 'Medium',
-            description: 'typical of similar companies; pattern-matched but not directly observed.',
-        },
-        {
-            confidence: 'LOW',
-            label: 'Low',
-            description: 'inferred from absence; reasonable but unverified — deep-dive candidate.',
-        },
-    ]
-
-    return (
-        <div
-            data-testid="strategy-map-confidence-legend"
-            style={{
-                padding: '10px 14px',
-                background: 'var(--bg-surface-2)',
-                borderRadius: '6px',
-                fontSize: '0.75rem',
-                color: 'var(--text-secondary)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-            }}
-        >
-            <span
-                style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--text-tertiary)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                }}
-            >
-                Confidence in each objective
-            </span>
-            <ul
-                style={{
-                    listStyle: 'none',
-                    padding: 0,
-                    margin: 0,
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '16px',
-                }}
-            >
-                {entries.map(({ confidence, label, description }) => (
-                    <li
-                        key={confidence}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            flex: '1 1 240px',
-                            minWidth: '240px',
-                        }}
-                    >
-                        <ConfidenceIndicator confidence={confidence} size="small" />
-                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{label}</span>
-                        <span style={{ color: 'var(--text-secondary)' }}>— {description}</span>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    )
-}
-
 function CoreValuesStrip({ values, synthesised }: { values: string[]; synthesised: boolean }) {
+    if (values.length === 0) return null
     return (
-        <div
-            style={{
-                padding: '8px 14px',
-                background: 'var(--bg-surface-3)',
-                borderRadius: '6px',
-                fontSize: '0.75rem',
-                color: 'var(--text-secondary)',
-                textAlign: 'center',
-            }}
-        >
-            <span
-                style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--text-tertiary)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    marginRight: '8px',
-                }}
-            >
-                Live our values:
-            </span>
+        <div data-testid="strategy-map-core-values-strip" style={coreValuesStripStyle}>
+            <span style={coreValuesLabelStyle}>Live our values:</span>
             {values.join(' · ')}
             {synthesised ? (
                 <span style={{ marginLeft: '8px' }}>
@@ -183,4 +80,35 @@ function CoreValuesStrip({ values, synthesised }: { values: string[]; synthesise
             ) : null}
         </div>
     )
+}
+
+// ── styles ─────────────────────────────────────────────────────────
+
+const sectionStyle: CSSProperties = {
+    marginBottom: '24px',
+    padding: '20px',
+    background: 'var(--bg-surface)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: '12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+}
+
+const coreValuesStripStyle: CSSProperties = {
+    padding: '8px 14px',
+    background: 'var(--bg-surface-3)',
+    borderRadius: '6px',
+    fontSize: '0.75rem',
+    color: 'var(--text-secondary)',
+    textAlign: 'center',
+}
+
+const coreValuesLabelStyle: CSSProperties = {
+    fontSize: '0.75rem',
+    color: 'var(--text-tertiary)',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    marginRight: '8px',
 }

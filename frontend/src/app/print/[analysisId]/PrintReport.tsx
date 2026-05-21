@@ -9,6 +9,7 @@ import {
     PrintExecutiveSummary,
     PrintMethodologyAppendix,
     PrintOpportunityList,
+    PrintQuickWinsMatrix,
     PrintRiskTable,
     PrintStrategyMap,
     PrintValueChainList,
@@ -93,7 +94,12 @@ export default function PrintReport({ analysis, generatedDate }: PrintReportProp
 
             <PrintExecutiveSummary summary={summary} />
 
-            {analysis.strategyMap ? <PrintStrategyMap strategyMap={analysis.strategyMap} /> : null}
+            {analysis.strategyMap ? (
+                <PrintStrategyMap
+                    strategyMap={analysis.strategyMap}
+                    sortedOpportunities={sortedOpportunities}
+                />
+            ) : null}
 
             {topActions.length > 0 ? (
                 <section className="print-section print-section--break-before">
@@ -116,8 +122,22 @@ export default function PrintReport({ analysis, generatedDate }: PrintReportProp
                 <PrintValueChainList
                     valueChain={analysis.valueChain}
                     sortedOpportunities={sortedOpportunities}
+                    // ``analysis.opportunities`` is typed non-optional in
+                    // ``AnalysisData`` but legacy / partially-hydrated API
+                    // responses can omit it at runtime. ``?? []`` keeps
+                    // the headless Chromium PDF export from crashing on
+                    // ``opportunities[index]`` lookups in the dot strip
+                    // — the screen path already uses the same guard via
+                    // the ``deriveSummary`` chain.
+                    opportunities={analysis.opportunities ?? []}
                 />
             ) : null}
+
+            {/* Quick Wins matrix — Phase 7 of redesign-analysis-visuals.
+                Static parallel to the screen QuickWinsMatrix. Gated on
+                opportunityCount > 0 — matches the screen rule and the
+                back cover's "no orphan CTA on sparse reports" rule. */}
+            {opportunityCount > 0 ? <PrintQuickWinsMatrix sortedOpportunities={sortedOpportunities} /> : null}
 
             <PrintMethodologyAppendix analysis={analysis} />
 

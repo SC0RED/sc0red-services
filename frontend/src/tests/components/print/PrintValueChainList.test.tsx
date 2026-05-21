@@ -49,13 +49,20 @@ describe('PrintValueChainList', () => {
             <PrintValueChainList
                 valueChain={{ summary: '', steps: [] }}
                 sortedOpportunities={sortedOpportunities}
+                opportunities={opportunities}
             />
         )
         expect(container.firstChild).toBeNull()
     })
 
     it('renders all six primary activities and all five support activities', () => {
-        render(<PrintValueChainList valueChain={valueChain} sortedOpportunities={sortedOpportunities} />)
+        render(
+            <PrintValueChainList
+                valueChain={valueChain}
+                sortedOpportunities={sortedOpportunities}
+                opportunities={opportunities}
+            />
+        )
         const labels = [
             'Inbound Logistics',
             'Operations',
@@ -76,7 +83,11 @@ describe('PrintValueChainList', () => {
 
     it('uses vertical row layout with no horizontal flex', () => {
         const { container } = render(
-            <PrintValueChainList valueChain={valueChain} sortedOpportunities={sortedOpportunities} />
+            <PrintValueChainList
+                valueChain={valueChain}
+                sortedOpportunities={sortedOpportunities}
+                opportunities={opportunities}
+            />
         )
         // Rows are <li> with class print-value-chain-row.
         const rows = container.querySelectorAll('.print-value-chain-row')
@@ -89,7 +100,13 @@ describe('PrintValueChainList', () => {
     })
 
     it('resolves linkage callouts using the printed index', () => {
-        render(<PrintValueChainList valueChain={valueChain} sortedOpportunities={sortedOpportunities} />)
+        render(
+            <PrintValueChainList
+                valueChain={valueChain}
+                sortedOpportunities={sortedOpportunities}
+                opportunities={opportunities}
+            />
+        )
         // originalIndex 1 → "Customer-success automation". Both opps are High,
         // stable sort preserves API order, so printedIndex of "Customer-success
         // automation" is 2.
@@ -97,7 +114,13 @@ describe('PrintValueChainList', () => {
     })
 
     it('renders Primary and Support group headings', () => {
-        render(<PrintValueChainList valueChain={valueChain} sortedOpportunities={sortedOpportunities} />)
+        render(
+            <PrintValueChainList
+                valueChain={valueChain}
+                sortedOpportunities={sortedOpportunities}
+                opportunities={opportunities}
+            />
+        )
         expect(screen.getByText('Primary Activities')).toBeInTheDocument()
         expect(screen.getByText('Support Activities')).toBeInTheDocument()
     })
@@ -107,7 +130,13 @@ describe('PrintValueChainList', () => {
             summary: '',
             steps: valueChain.steps.filter((step) => step.category === 'primary'),
         }
-        render(<PrintValueChainList valueChain={primaryOnly} sortedOpportunities={sortedOpportunities} />)
+        render(
+            <PrintValueChainList
+                valueChain={primaryOnly}
+                sortedOpportunities={sortedOpportunities}
+                opportunities={opportunities}
+            />
+        )
         expect(screen.queryByText('Support Activities')).not.toBeInTheDocument()
     })
 })

@@ -1,5 +1,4 @@
 import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { describe, it, expect } from 'vitest'
 
 import ValueChainDiagram from '@/components/ValueChainDiagram'
@@ -122,64 +121,86 @@ describe('ValueChainDiagram', () => {
         expect(screen.getAllByText('Tech Obsolescence').length).toBeGreaterThanOrEqual(1)
     })
 
-    it('shows opportunity count for linked steps', () => {
+    it('renders the shared opportunity-link dot strip on steps with linked opportunities', () => {
+        // P4 of ``redesign-analysis-visuals`` replaced the "X opportunities"
+        // count + click-to-expand title list with the shared
+        // ``OpportunityDotStrip`` (one coloured dot per linked
+        // opportunity, colour from ``LEVER_COLORS``).
         render(
             <ValueChainDiagram steps={SAMPLE_STEPS} opportunities={SAMPLE_OPPORTUNITIES} summary="summary" />
         )
-        expect(screen.getByText('1 opportunity')).toBeInTheDocument()
-        expect(screen.getByText('2 opportunities')).toBeInTheDocument()
+        // Lead Generation step has opportunity_indices: [0] → 1 dot
+        const leadGenStrip = screen.getByTestId('value-chain-linked-opportunity-dots-lead_generation')
+        expect(leadGenStrip.querySelectorAll('span[aria-hidden="true"]')).toHaveLength(1)
+        expect(leadGenStrip).toHaveAttribute('aria-label', '1 opportunity targets this')
+
+        // Product Delivery step has opportunity_indices: [0, 1] → 2 dots
+        const deliveryStrip = screen.getByTestId('value-chain-linked-opportunity-dots-product_delivery')
+        expect(deliveryStrip.querySelectorAll('span[aria-hidden="true"]')).toHaveLength(2)
+        expect(deliveryStrip).toHaveAttribute('aria-label', '2 opportunities target this')
     })
 
-    it('does not show opportunity count for steps with no links', () => {
+    it('omits the dot strip on steps with no linked opportunities', () => {
         render(
             <ValueChainDiagram steps={SAMPLE_STEPS} opportunities={SAMPLE_OPPORTUNITIES} summary="summary" />
         )
-        const salesCard = screen.getByText('Sales & Conversion').closest('button')!
-        expect(within(salesCard).queryByText(/opportunit/)).toBeNull()
+        // Sales step has opportunity_indices: [] → no strip rendered.
+        expect(screen.queryByTestId('value-chain-linked-opportunity-dots-sales')).toBeNull()
     })
 
-    it('expands step to show linked opportunities on click', async () => {
-        const user = userEvent.setup()
+    it('renders the shared AnalysisLegend when at least one step carries linked opportunities', () => {
         render(
             <ValueChainDiagram steps={SAMPLE_STEPS} opportunities={SAMPLE_OPPORTUNITIES} summary="summary" />
         )
-        expect(screen.queryByText('AI Chatbot')).toBeNull()
-
-        const leadGenButton = screen.getByText('Lead Generation & Marketing').closest('button')!
-        await user.click(leadGenButton)
-
-        expect(screen.getByText('Linked Opportunities')).toBeInTheDocument()
-        expect(screen.getByText('AI Chatbot')).toBeInTheDocument()
+        const legend = screen.getByTestId('value-chain-opportunity-link-legend')
+        expect(legend).toBeInTheDocument()
+        // Canonical legend copy from the shared ``AnalysisLegend`` —
+        // tool-specific noun is "value-chain step".
+        expect(legend.textContent).toContain('AI opportunities targeting this value-chain step')
     })
 
-    it('collapses expanded step on second click', async () => {
-        const user = userEvent.setup()
+    it('omits the legend when no step carries linked opportunities', () => {
+        const stepsWithNoLinks: ValueChainStep[] = SAMPLE_STEPS.map((step) => ({
+            ...step,
+            opportunity_indices: [],
+        }))
         render(
-            <ValueChainDiagram steps={SAMPLE_STEPS} opportunities={SAMPLE_OPPORTUNITIES} summary="summary" />
+            <ValueChainDiagram
+                steps={stepsWithNoLinks}
+                opportunities={SAMPLE_OPPORTUNITIES}
+                summary="summary"
+            />
         )
-        const button = screen.getByText('Lead Generation & Marketing').closest('button')!
-        await user.click(button)
-        expect(screen.getByText('AI Chatbot')).toBeInTheDocument()
-
-        await user.click(button)
-        expect(screen.queryByText('AI Chatbot')).toBeNull()
+        expect(screen.queryByTestId('value-chain-opportunity-link-legend')).toBeNull()
     })
 
-    it('only one step is expanded at a time', async () => {
-        const user = userEvent.setup()
+    it('does NOT render the legacy expand/collapse button (P4 removed it)', () => {
+        // Anti-regression for the click-to-expand interaction. The dot
+        // strip's tooltip + the future Phase-5 hover provider replace it.
         render(
             <ValueChainDiagram steps={SAMPLE_STEPS} opportunities={SAMPLE_OPPORTUNITIES} summary="summary" />
         )
-        const leadGen = screen.getByText('Lead Generation & Marketing').closest('button')!
-        const delivery = screen.getByText('Product Delivery & Platform').closest('button')!
+        // No buttons inside primary-activities — cards are plain <div>s now.
+        const primaryContainer = screen.getByTestId('primary-activities')
+        expect(primaryContainer.querySelectorAll('button')).toHaveLength(0)
+        // And no "Linked Opportunities" heading anywhere (the expand UI
+        // surfaced that label).
+        expect(screen.queryByText('Linked Opportunities')).toBeNull()
+    })
 
-        await user.click(leadGen)
-        expect(screen.getByText('AI Chatbot')).toBeInTheDocument()
-
-        await user.click(delivery)
-        expect(screen.getByText('Process Automation')).toBeInTheDocument()
-        // First step's detail should be gone (only one expanded at a time)
-        expect(screen.queryByText('Linked Opportunities')).toBeInTheDocument()
+    it('keeps step cards keyboard-reachable via tabIndex=0', () => {
+        // Cards used to be <button> wrappers (the click-to-expand
+        // interaction). Now they are <div>s but still need a Tab
+        // landing so keyboard users can read each step's content.
+        // Mirrors the EBITDA leaf chip's ``<article tabIndex={0}>``
+        // pattern.
+        render(
+            <ValueChainDiagram steps={SAMPLE_STEPS} opportunities={SAMPLE_OPPORTUNITIES} summary="summary" />
+        )
+        const card = screen.getByTestId('value-chain-step-lead_generation')
+        // The inner ``.card`` div is the focusable element.
+        const inner = card.querySelector('.card')
+        expect(inner?.getAttribute('tabindex')).toBe('0')
     })
 
     it('hides support section when no support steps exist', () => {
@@ -191,8 +212,14 @@ describe('ValueChainDiagram', () => {
         expect(screen.queryByText('Support Activities')).toBeNull()
     })
 
-    it('handles empty opportunities array gracefully', () => {
+    it('handles empty opportunities array gracefully — no strips, no legend', () => {
+        // With opportunities=[], every step's linkedIndices resolve to
+        // nothing through the strip's out-of-range filter. The legend
+        // predicate also requires at least one index that resolves
+        // against a real opportunity, so both go away — leaving no
+        // orphan "explanation for dots that aren't there".
         render(<ValueChainDiagram steps={SAMPLE_STEPS} opportunities={[]} summary="summary" />)
-        expect(screen.queryByText(/opportunit/)).toBeNull()
+        expect(screen.queryAllByTestId(/^value-chain-linked-opportunity-dots-/)).toHaveLength(0)
+        expect(screen.queryByTestId('value-chain-opportunity-link-legend')).toBeNull()
     })
 })

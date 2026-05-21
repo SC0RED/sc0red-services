@@ -1,10 +1,14 @@
 import AnalysisSection from '@/components/analysis/AnalysisSection'
 import { DeepDiveCTA, StrategyMapView } from '@/components/strategy-map'
-import type { StrategyMap } from '@/lib/types/api'
+import type { Opportunity, StrategyMap } from '@/lib/types/api'
 
 interface StrategyMapSlotProps {
     analysisId: string
     strategyMap?: StrategyMap | null
+    /** Threaded through to the table so each objective cell can render
+     *  an ``OpportunityDotStrip`` keyed on the objective's
+     *  ``linked_opportunity_indices``. */
+    opportunities: Opportunity[]
 }
 
 /**
@@ -19,17 +23,17 @@ interface StrategyMapSlotProps {
  * state, no on-demand CTA, and no "regenerate" affordance —
  * re-analysing the company regenerates the map as part of the scan.
  */
-export default function StrategyMapSlot({ analysisId, strategyMap }: StrategyMapSlotProps) {
+export default function StrategyMapSlot({ analysisId, strategyMap, opportunities }: StrategyMapSlotProps) {
     if (!strategyMap) {
         return null
     }
     return (
         <>
             <AnalysisSection id="strategy-map">
-                <StrategyMapView strategyMap={strategyMap} />
+                <StrategyMapView strategyMap={strategyMap} opportunities={opportunities} />
             </AnalysisSection>
             <AnalysisSection id="deep-dive-cta">
-                <DeepDiveCTA analysisId={analysisId} />
+                <DeepDiveCTA analysisId={analysisId} placement="strategy-map" />
             </AnalysisSection>
         </>
     )

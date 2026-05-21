@@ -337,7 +337,7 @@ class TestLegacyTolerance:
                     "DynamoDB. The new code should accept it without error."
                 ),
                 "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would explore this legacy area."
+                    "A sc0red Advisory deep-dive would explore this legacy area."
                 ),
                 "relatedObjectiveIds": ["O.C"],
             },
@@ -394,3 +394,78 @@ class TestStrategyMapNullableOptionalFields:
         assert sm.value_proposition.exemplar_company is None
         dumped = sm.model_dump(by_alias=True)
         assert dumped["valueProposition"]["exemplar_company"] is None
+
+
+class TestLinkedOpportunityIndices:
+    """``linked_opportunity_indices`` data-shape additions (Phase 1a of
+    ``redesign-analysis-visuals``).
+
+    Phase 1a ships only the model shape: the field defaults to an empty
+    list on every objective type so persisted records produced before
+    this change deserialise cleanly, and the AI output JSON schema is
+    unchanged (so the AI does not yet emit the field). Phase 1b will add
+    AI population.
+
+    These tests pin the data shape so the frontend renderer (Phase 6)
+    can rely on ``linked_opportunity_indices`` always being a
+    well-formed ``list[int]`` on the persisted shape.
+    """
+
+    def test_default_empty_list_on_every_objective_type(self) -> None:
+        """Payloads that omit the field deserialise to an empty list.
+
+        ``_make_full_strategy_map_dict()`` does not include
+        ``linked_opportunity_indices`` on any objective — it pre-dates the
+        field. Every loaded objective MUST expose the field as an empty
+        list (not ``None``, not missing) so callers can iterate without a
+        nullability guard.
+        """
+        payload = _make_full_strategy_map_dict()
+        sm = StrategyMap.model_validate(payload)
+
+        assert sm.financial.objectives[0].linked_opportunity_indices == []
+        assert sm.customer.objectives[0].linked_opportunity_indices == []
+        assert sm.internal_processes.themes[0].objectives[0].linked_opportunity_indices == []
+        assert sm.organizational_capacity.people.linked_opportunity_indices == []
+        assert sm.organizational_capacity.technology.linked_opportunity_indices == []
+        assert sm.organizational_capacity.culture.linked_opportunity_indices == []
+
+    def test_explicit_indices_are_preserved_through_roundtrip(self) -> None:
+        """Explicit indices flow through validate → dump → validate intact."""
+        payload = _make_full_strategy_map_dict()
+        payload["financial"]["objectives"][0]["linked_opportunity_indices"] = [0, 3]
+        payload["customer"]["objectives"][0]["linked_opportunity_indices"] = [1]
+        payload["internalProcesses"]["themes"][0]["objectives"][0][
+            "linked_opportunity_indices"
+        ] = [2, 4, 7]
+        payload["organizationalCapacity"]["people"]["linked_opportunity_indices"] = [5]
+
+        sm = StrategyMap.model_validate(payload)
+        dumped = sm.model_dump(by_alias=True)
+
+        assert dumped["financial"]["objectives"][0]["linked_opportunity_indices"] == [0, 3]
+        assert dumped["customer"]["objectives"][0]["linked_opportunity_indices"] == [1]
+        assert dumped["internalProcesses"]["themes"][0]["objectives"][0][
+            "linked_opportunity_indices"
+        ] == [2, 4, 7]
+        assert dumped["organizationalCapacity"]["people"][
+            "linked_opportunity_indices"
+        ] == [5]
+
+        # Round-trip stays stable.
+        sm2 = StrategyMap.model_validate(dumped)
+        assert sm2.financial.objectives[0].linked_opportunity_indices == [0, 3]
+
+    def test_field_serialises_even_when_empty(self) -> None:
+        """``model_dump`` MUST emit the field (as ``[]``) when default-empty.
+
+        The frontend type marks the field optional, but the renderer
+        prefers a stable shape on the wire — empty list rather than
+        missing — so downstream consumers don't need to ``?? []`` every
+        access.
+        """
+        payload = _make_full_strategy_map_dict()
+        sm = StrategyMap.model_validate(payload)
+        dumped = sm.model_dump(by_alias=True)
+        assert dumped["financial"]["objectives"][0]["linked_opportunity_indices"] == []
+        assert dumped["organizationalCapacity"]["culture"]["linked_opportunity_indices"] == []

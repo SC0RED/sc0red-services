@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { Company } from '@/lib/types/scan'
+import { normalizeUserUrl } from '@/lib/utils/url'
 
 interface PortfolioConfirmPhaseProps {
     companies: Company[]
@@ -25,22 +26,28 @@ export default function PortfolioConfirmPhase({
 
     function handleAddCompany() {
         const trimmedName = newName.trim()
-        const trimmedUrl = newUrl.trim()
 
-        if (!trimmedName || !trimmedUrl) {
+        if (!trimmedName || !newUrl.trim()) {
             setAddError('Both name and URL are required.')
             return
         }
-        if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
-            setAddError('URL must start with http:// or https://')
+
+        // Same normaliser as the main scan input — accepts bare/www
+        // hostnames and auto-prepends `https://`. The previous check
+        // required the user to type the scheme manually, which Zack
+        // flagged as friction (Diagnostic Tool Feedback #1).
+        const normalized = normalizeUserUrl(newUrl)
+        if ('error' in normalized) {
+            setAddError(normalized.error)
             return
         }
-        if (companies.some((c) => c.url === trimmedUrl)) {
+
+        if (companies.some((c) => c.url === normalized.url)) {
             setAddError('This URL is already in the list.')
             return
         }
 
-        onAddCompany(trimmedName, trimmedUrl)
+        onAddCompany(trimmedName, normalized.url)
         setNewName('')
         setNewUrl('')
         setAddError('')
@@ -179,8 +186,15 @@ export default function PortfolioConfirmPhase({
                                 }}
                             />
                             <input
-                                type="url"
-                                placeholder="https://company.com"
+                                // `type="text"` so the parent's `normalizeUserUrl`
+                                // call decides validity, rather than the browser
+                                // rejecting bare hostnames (Diagnostic Tool
+                                // Feedback #1).
+                                type="text"
+                                inputMode="url"
+                                autoComplete="url"
+                                spellCheck={false}
+                                placeholder="company.com"
                                 value={newUrl}
                                 onChange={(e) => setNewUrl(e.target.value)}
                                 aria-label="Company URL"

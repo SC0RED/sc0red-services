@@ -33,11 +33,17 @@ def _make_ranked_ideation(
 
 
 def _make_detail_response() -> dict:
+    # Phase 14 of redesign-analysis-visuals added the two numeric
+    # ROI x Investment fields. The mock returns populated numbers
+    # (in-plot scatter path); the null path is exercised by the
+    # ``test_detail_response_with_null_numeric_axes`` case below.
     return {
         "implementation_steps": ["Step 1", "Step 2", "Step 3"],
         "timeline": "Medium-term (3-9 months)",
         "investment_range": "$100K-$500K",
         "roi_estimate": "30% improvement in support efficiency",
+        "investment_value_usd": 250000,
+        "roi_estimate_pct": 30.0,
     }
 
 
@@ -192,3 +198,43 @@ class TestDetailOpportunities:
 
         with pytest.raises(FutureManagerError):
             step.execute()
+
+    def test_detail_response_with_null_numeric_axes(self):
+        """Phase 14 — the AI may emit ``null`` for either numeric axis
+        when context is too thin to defend a real estimate. The
+        pipeline must persist those ``None`` values straight through to
+        the ``Opportunity`` model so the matrix renderer can route the
+        record to its uncalibrated footer strip.
+        """
+        mock_factory = MagicMock()
+        mock_client = MagicMock()
+        mock_factory.get_client.return_value = mock_client
+        detail_response = MagicMock()
+        # Both numeric axes ``None`` — canonical uncalibrated shape.
+        detail_response.content = {
+            "implementation_steps": ["Step 1", "Step 2", "Step 3"],
+            "timeline": "Medium-term (3-9 months)",
+            "investment_range": "TBD pending partnership terms",
+            "roi_estimate": "Depends on negotiated commercial terms",
+            "investment_value_usd": None,
+            "roi_estimate_pct": None,
+        }
+        detail_response.metadata = {"tokens": 80}
+        mock_client.query_structured.return_value = detail_response
+
+        company = _make_company(ideation_count=1)
+        accessor = CompanyAccessor(company)
+        step = DetailOpportunities(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        result = accessor.company.opportunity_result
+        assert result is not None
+        assert len(result.opportunities) == 1
+        # ``None`` values survive the round-trip — the renderer needs
+        # to see ``None`` (not ``0``) to route the record to the
+        # uncalibrated footer strip.
+        assert result.opportunities[0].investment_value_usd is None
+        assert result.opportunities[0].roi_estimate_pct is None

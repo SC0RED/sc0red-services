@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 
+import HoverableOpportunityCard from '@/components/HoverableOpportunityCard'
 import ExpandableCard from '@/components/ui/ExpandableCard'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { Opportunity } from '@/lib/types/api'
@@ -40,11 +41,18 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
         .map((o) => o.strategic_category)
         .filter((cat, index, arr) => arr.indexOf(cat) === index)
     const oppCategories = ['All', ...uniqueCategories]
-    const filteredOpps = opportunities.filter((o) => {
-        if (activeOppCat !== 'All' && o.strategic_category !== activeOppCat) return false
-        if (activeLever !== 'All' && o.value_lever !== activeLever) return false
-        return true
-    })
+    // Pair each opportunity with its ORIGINAL index in the API array
+    // BEFORE filtering. The P5 hover-provider keys highlight state on
+    // original indices (the same indices ``linked_opportunity_indices``
+    // points at), so a filtered view that lost the mapping would
+    // silently fail to highlight matching cards.
+    const filteredOpps = opportunities
+        .map((opp, originalIndex) => ({ opp, originalIndex }))
+        .filter(({ opp }) => {
+            if (activeOppCat !== 'All' && opp.strategic_category !== activeOppCat) return false
+            if (activeLever !== 'All' && opp.value_lever !== activeLever) return false
+            return true
+        })
 
     return (
         <div className="analysis-section-spacing">
@@ -86,18 +94,19 @@ export default function OpportunitiesList({ opportunities, activeLever }: Opport
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                {filteredOpps.map((opp: Opportunity) => {
+                {filteredOpps.map(({ opp, originalIndex }) => {
                     const isOpen = expandedOpp === opp.title
                     return (
-                        <ExpandableCard
-                            key={opp.title}
-                            id={opp.title}
-                            isOpen={isOpen}
-                            onToggle={() => setExpandedOpp(isOpen ? null : opp.title)}
-                            header={<OpportunityHeader opp={opp} />}
-                        >
-                            <OpportunityBody opp={opp} />
-                        </ExpandableCard>
+                        <HoverableOpportunityCard key={opp.title} originalIndex={originalIndex}>
+                            <ExpandableCard
+                                id={opp.title}
+                                isOpen={isOpen}
+                                onToggle={() => setExpandedOpp(isOpen ? null : opp.title)}
+                                header={<OpportunityHeader opp={opp} />}
+                            >
+                                <OpportunityBody opp={opp} />
+                            </ExpandableCard>
+                        </HoverableOpportunityCard>
                     )
                 })}
             </div>

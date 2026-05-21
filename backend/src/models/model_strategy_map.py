@@ -110,6 +110,19 @@ class FinancialObjective(BaseModel):
     category: Literal["revenue_growth", "productivity"]
     confidence: ConfidenceMarker
     rationale_source: str | None = Field(default=None, max_length=400)
+    # ``linked_opportunity_indices`` — index pointers into the analysis's
+    # ``opportunities`` array (same idiom as ``EbitdaNode.linked_opportunity_indices``
+    # and ``ValueChainStep.opportunity_indices``). Surfaced by the frontend
+    # as coloured dots on the BSC table cell — see the
+    # ``redesign-analysis-visuals`` change (Phase 1a) and the
+    # ``analysis-opportunity-overlays`` capability spec.
+    #
+    # Phase 1a ships only the data shape: legacy persisted records (which
+    # never carried the field) deserialise to the empty-list default, and
+    # the AI output JSON schema is unchanged (so the AI does not yet emit
+    # the field — the pipeline does not populate it either). Phase 1b
+    # adds the AI population layer.
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 class CustomerObjective(BaseModel):
@@ -126,6 +139,9 @@ class CustomerObjective(BaseModel):
     panel: Literal["consumer", "channel", "partner"] = "consumer"
     confidence: ConfidenceMarker
     rationale_source: str | None = Field(default=None, max_length=400)
+    # See ``FinancialObjective.linked_opportunity_indices`` for the
+    # field's purpose and the Phase 1a/1b split.
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 class InternalProcessObjective(BaseModel):
@@ -147,6 +163,9 @@ class InternalProcessObjective(BaseModel):
     ]
     confidence: ConfidenceMarker
     rationale_source: str | None = Field(default=None, max_length=400)
+    # See ``FinancialObjective.linked_opportunity_indices`` for the
+    # field's purpose and the Phase 1a/1b split.
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 class InternalProcessTheme(BaseModel):
@@ -176,6 +195,9 @@ class CapacityObjective(BaseModel):
     definition: str = Field(min_length=50, max_length=1200)
     confidence: ConfidenceMarker
     rationale_source: str | None = Field(default=None, max_length=400)
+    # See ``FinancialObjective.linked_opportunity_indices`` for the
+    # field's purpose and the Phase 1a/1b split.
+    linked_opportunity_indices: list[int] = Field(default_factory=list[int])
 
 
 # ── Perspective containers ─────────────────────────────────────────────────
