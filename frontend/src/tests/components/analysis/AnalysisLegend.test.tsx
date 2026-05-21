@@ -28,6 +28,16 @@ describe('AnalysisLegend', () => {
         expect(screen.getByText(/AI opportunities targeting this value-chain step\./)).toBeInTheDocument()
     })
 
+    it('renders the quick-wins-matrix legend with matrix-specific copy (dot IS the opportunity)', () => {
+        // On the matrix, the dot is the opportunity itself — not a node
+        // an opportunity "targets". The legend copy flips accordingly.
+        render(<AnalysisLegend tool="quick-wins-matrix" />)
+        expect(screen.getByTestId('quick-wins-matrix-lever-legend')).toBeInTheDocument()
+        expect(
+            screen.getByText(/each dot is an AI opportunity, coloured by value lever\./i)
+        ).toBeInTheDocument()
+    })
+
     it('accepts a testId override', () => {
         // Some call sites (legacy EBITDA tests) want to keep their
         // existing testid wording — the prop lets them pin it.

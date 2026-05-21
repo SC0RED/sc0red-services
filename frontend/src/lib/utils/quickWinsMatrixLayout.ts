@@ -44,12 +44,24 @@ export const ROI_MAX_PCT = 300
 /** Jitter offset (± px) applied when two dots would otherwise collide
  *  within ``DOT_DIAMETER`` of each other. Keeps every dot
  *  individually clickable. Internal — only consumed by ``applyJitter``
- *  in this module. */
-const JITTER_RADIUS_PX = 4
+ *  in this module.
+ *
+ *  Sized against ``DOT_DIAMETER_PX`` so a single jitter step moves a
+ *  colliding dot clear of its neighbour without further attempts. */
+const JITTER_RADIUS_PX = 12
 
 /** Render the dot at this diameter; pairs of opportunities closer
- *  than this in screen space trigger jitter. Internal. */
-const DOT_DIAMETER_PX = 10
+ *  than this in screen space trigger jitter. Internal.
+ *
+ *  The screen ``ScatterDot`` renders a 20 px badge with a 1.5 px
+ *  stroke and a 30 px hover ring (radius 14 + 2 px stroke) wrapped
+ *  around it. Sizing the threshold to the hover ring — not the badge
+ *  — means a hovered dot's ring never overlaps a neighbour's ring,
+ *  even in a jittered cluster. Print dots are smaller but reuse the
+ *  same threshold so layout output stays identical across surfaces;
+ *  paper density is lower than screen density, so a conservative
+ *  threshold is fine. */
+const DOT_DIAMETER_PX = 30
 
 /** When a quadrant accumulates more than this many in-plot dots,
  *  collapse them into a "+N more" cluster pin. Spec D8. */

@@ -6,35 +6,41 @@ import { useOpportunityHover } from '@/lib/hooks/useOpportunityHover'
 import type { Opportunity } from '@/lib/types/api'
 import { LEVER_COLORS } from '@/lib/utils/leverColors'
 import type { InPlotDot } from '@/lib/utils/quickWinsMatrixLayout'
-import { truncate } from '@/lib/utils/stringUtils'
-
-/** Max characters in the inline dot label before truncation. Keeps
- *  labels short enough not to dominate the chart but long enough to
- *  recognise the opportunity ("Deploy AI churn pred…" stays meaningful). */
-const MAX_LABEL_CHARS = 22
 
 /**
  * Individual scatter-plot dot for one opportunity.
  *
  * Renders inside the matrix's SVG plot area at the dot's pre-projected
- * (x, y) coordinates. Hover/focus pulses the matching opportunity card
- * via the shared ``useOpportunityHover`` provider; click also scrolls
- * the card into view (separate code path so hover never scrolls — see
- * the P1b regression test for the rationale).
+ * (x, y) coordinates. Hover / focus pulses the matching opportunity
+ * card via the shared ``useOpportunityHover`` provider; click also
+ * scrolls the card into view (separate code path so hover never scrolls
+ * — see the P1b regression test for the rationale).
  *
- * Each dot also renders an inline title label to its right so the
- * chart is readable without hovering. Labels truncate at
- * ``MAX_LABEL_CHARS``; the full title is still available via the
- * SVG ``<title>`` tooltip + accessibility aria-label.
+ * Each dot is a coloured badge bearing its 1-based opportunity number
+ * (``#N``). The full title lives in the sidebar
+ * ``OpportunityLegendColumn`` so the chart itself stays uncluttered —
+ * inline title text (the previous design) collided whenever two dots
+ * landed in the same horizontal band, which happens frequently in
+ * Quick Wins because clusters are the whole point of the chart.
  *
  * ``clampedUp`` dots render a ``↑`` caret above the dot to flag that
  * the raw ROI value exceeded the visual cap.
+ *
+ * When the dot's opportunity is currently highlighted by the shared
+ * hover provider (because the user is hovering this dot, or hovering
+ * the matching card / legend entry below), a focus ring renders behind
+ * the badge so the user can identify the active dot inside dense
+ * clusters.
  */
 export default function ScatterDot({ dot, opportunity }: { dot: InPlotDot; opportunity: Opportunity }) {
-    const { highlightOpportunities, clearHighlight } = useOpportunityHover()
+    const { highlightOpportunities, clearHighlight, hoveredOpportunityIndices } = useOpportunityHover()
     const lever = opportunity.value_lever ?? 'Both'
     const color = LEVER_COLORS[lever] ?? 'var(--text-tertiary)'
-    const truncatedTitle = truncate(opportunity.title, MAX_LABEL_CHARS)
+    const isActive = hoveredOpportunityIndices.includes(dot.opportunityIndex)
+    // 1-based label matches what the sidebar legend prints, so a user
+    // who reads "#3 — Cut SaaS sprawl" in the legend can find the dot
+    // labelled "3" on the chart without an extra mental offset.
+    const number = dot.opportunityIndex + 1
 
     const onActivate = useCallback(() => {
         highlightOpportunities([dot.opportunityIndex])
@@ -51,7 +57,7 @@ export default function ScatterDot({ dot, opportunity }: { dot: InPlotDot; oppor
             data-testid={`quick-wins-dot-${dot.opportunityIndex}`}
             tabIndex={0}
             role="button"
-            aria-label={`Highlight opportunity: ${opportunity.title}`}
+            aria-label={`Highlight opportunity ${number}: ${opportunity.title}`}
             transform={`translate(${dot.x}, ${dot.y})`}
             onMouseEnter={onActivate}
             onMouseLeave={clearHighlight}
@@ -60,12 +66,43 @@ export default function ScatterDot({ dot, opportunity }: { dot: InPlotDot; oppor
             onClick={onClick}
             style={{ cursor: 'pointer' }}
         >
-            <title>{`${opportunity.title} (${lever})`}</title>
-            <circle r={5} fill={color} stroke="var(--bg-surface)" strokeWidth={1} />
+            <title>{`#${number} ${opportunity.title} (${lever})`}</title>
+            {/* Active-state focus ring. Renders behind the badge so the
+                badge's own fill remains the primary visual. Hidden when
+                the dot is not in the hovered set — the simple opacity
+                toggle avoids React conditional-mount churn so the SVG
+                tree stays stable across hover transitions.
+                ``data-active`` is the semantic signal tests assert on
+                so a future swap to ``visibility``/``display`` doesn't
+                break the contract. */}
+            <circle
+                data-testid={`quick-wins-dot-ring-${dot.opportunityIndex}`}
+                data-active={isActive ? 'true' : 'false'}
+                r={14}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                opacity={isActive ? 0.55 : 0}
+            />
+            <circle r={10} fill={color} stroke="var(--bg-surface)" strokeWidth={1.5} />
+            <text
+                data-testid={`quick-wins-dot-number-${dot.opportunityIndex}`}
+                textAnchor="middle"
+                dy={3}
+                aria-hidden="true"
+                style={{
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    fill: 'white',
+                    pointerEvents: 'none',
+                }}
+            >
+                {number}
+            </text>
             {dot.clampedUp ? (
                 <text
                     x={0}
-                    y={-9}
+                    y={-14}
                     textAnchor="middle"
                     style={{ fontSize: '10px', fill: 'var(--text-tertiary)' }}
                     aria-hidden="true"
@@ -73,23 +110,6 @@ export default function ScatterDot({ dot, opportunity }: { dot: InPlotDot; oppor
                     ↑
                 </text>
             ) : null}
-            <text
-                data-testid={`quick-wins-dot-label-${dot.opportunityIndex}`}
-                x={9}
-                y={4}
-                // ``aria-hidden`` because the parent ``<g>`` already
-                // announces the FULL (un-truncated) title via its
-                // aria-label. Without this, screen readers would
-                // announce the title twice — once full, once clipped.
-                aria-hidden="true"
-                style={{
-                    fontSize: '11px',
-                    fill: 'var(--text-secondary)',
-                    pointerEvents: 'none',
-                }}
-            >
-                {truncatedTitle}
-            </text>
         </g>
     )
 }
