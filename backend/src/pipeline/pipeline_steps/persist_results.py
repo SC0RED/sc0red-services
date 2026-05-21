@@ -97,24 +97,18 @@ class PersistResults(RequestStep):
                 ],
             )
 
-        # Persist opportunities in batch (only if we have a valid assessment)
+        # Persist opportunities in batch (only if we have a valid assessment).
+        # ``model_dump()`` carries every field defined on the Opportunity
+        # Pydantic model — so when the model grows new fields (Phase 14
+        # added ``investment_value_usd`` and ``roi_estimate_pct`` for the
+        # ROI x Investment matrix), they flow through automatically.
+        # Previously this was a hand-rolled dict literal that silently
+        # dropped any field not listed by name; that bug shipped the
+        # matrix as a blank chart until production telemetry caught it.
         if opportunity_result and risk_assessment:
             self._assessment_repo.batch_save_opportunities(
                 assessment_id,
-                [
-                    {
-                        "title": opp.title,
-                        "impact_rating": opp.impact_rating,
-                        "strategic_category": opp.strategic_category,
-                        "description": opp.description,
-                        "implementation_steps": opp.implementation_steps,
-                        "timeline": opp.timeline,
-                        "investment_range": opp.investment_range,
-                        "roi_estimate": opp.roi_estimate,
-                        "value_lever": opp.value_lever,
-                    }
-                    for opp in opportunity_result.opportunities
-                ],
+                [opp.model_dump() for opp in opportunity_result.opportunities],
             )
 
             # Save top actions as part of company metadata
