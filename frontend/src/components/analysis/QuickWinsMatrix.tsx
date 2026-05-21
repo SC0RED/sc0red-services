@@ -2,45 +2,69 @@
 
 import { type CSSProperties } from 'react'
 
-import ClusterPinMarker from '@/components/analysis/quick-wins-matrix/ClusterPinMarker'
-import ScatterDot from '@/components/analysis/quick-wins-matrix/ScatterDot'
+import AnalysisLegend from '@/components/analysis/AnalysisLegend'
+import OpportunityLegendColumn from '@/components/analysis/quick-wins-matrix/OpportunityLegendColumn'
+import ScatterPlot from '@/components/analysis/quick-wins-matrix/ScatterPlot'
 import UncalibratedStrip from '@/components/analysis/quick-wins-matrix/UncalibratedStrip'
 import type { Opportunity } from '@/lib/types/api'
-import {
-    INVESTMENT_MAX_USD,
-    INVESTMENT_MIN_USD,
-    QUADRANT_LABELS,
-    ROI_MAX_PCT,
-    ROI_MIN_PCT,
-    buildQuickWinsMatrixLayout,
-    formatInvestmentTick,
-    projectInvestmentTickX,
-    projectRoiTickY,
-    type Quadrant,
-} from '@/lib/utils/quickWinsMatrixLayout'
+import { buildQuickWinsMatrixLayout } from '@/lib/utils/quickWinsMatrixLayout'
 
 interface QuickWinsMatrixProps {
     opportunities: Opportunity[]
 }
 
 /**
- * ROI × Investment Matrix — true 2D scatter plot replacing the
- * pre-Phase-14 categorical 3×3. Plots every opportunity at its
- * (``investment_value_usd``, ``roi_estimate_pct``) coordinates,
- * routing rows with either axis ``null`` into a separate
- * "uncalibrated" strip below the chart.
+ * ROI × Investment Matrix — true 2D scatter plot of every opportunity
+ * the AI was able to size on both numeric axes. Opportunities with a
+ * missing axis route to a separate uncalibrated strip beneath the
+ * plot.
  *
- * Design D8 of ``redesign-analysis-visuals``. Diagnostic Tool
- * Feedback #6 read literally — Zack asked for ROI × Investment, and
- * P7's categorical Path-C substitute was the wrong call.
+ * Design D8 of ``redesign-analysis-visuals`` shipped the scatter plot;
+ * the follow-up ``fix/quick-wins-matrix-label-overlap`` change replaced
+ * the inline title text next to each dot — which collided as soon as
+ * two opportunities landed in the same horizontal band — with three
+ * compounding affordances:
+ *
+ *   1. Each dot carries a numbered badge (``#N``) instead of a 22-char
+ *      truncated title. Badge stays inside the dot, so two dots can
+ *      sit shoulder-to-shoulder without label overlap.
+ *   2. A sidebar ``OpportunityLegendColumn`` maps ``#N`` → full title,
+ *      grouped by quadrant. The full title is always visible without
+ *      truncation or hover.
+ *   3. The lever-colour vocabulary is taught via an ``AnalysisLegend``
+ *      directly above the chart so a reader landing here from the
+ *      executive summary doesn't have to scroll up to recall what
+ *      green / blue / mixed mean.
+ *
+ * Quadrant labels live in the outer chart margin (above the top edge
+ * for Quick Wins / Strategic Bets, below for Fill-Ins / Deprioritise)
+ * so they never collide with dots near the corners — which is exactly
+ * where the "Quick Wins" corner attracts them by design.
  *
  * Quadrant split lines are drawn at the MEDIAN investment + median
  * ROI of the in-plot subset (per-scan, not fixed thresholds), so the
  * quadrant labels stay meaningful regardless of the analysis's
- * absolute scale.
+ * absolute scale. A subtitle calls out the relative nature of the
+ * split so readers don't read "Quick Wins" as an absolute claim.
  *
- * Sub-components live in ``quick-wins-matrix/`` to keep this file
- * under the 360-line frontend cap.
+ * **Numbering convention.** Screen-variant ``#N`` is the 1-based badge
+ * label (array index + 1). The opportunity card below the chart uses
+ * the 0-based array index in its testid — so the badge ``#N`` on the
+ * chart corresponds to ``data-testid="opportunity-card-{N - 1}"``. The
+ * click handlers in ``ScatterDot`` and ``OpportunityLegendColumn`` keep
+ * track of the 0-based index internally and target the correct testid;
+ * the 1-based label is purely a display affordance because "#1" reads
+ * better than "#0" for the first opportunity.
+ *
+ * The print variant (``PrintQuickWinsMatrix``) instead uses the
+ * impact-sorted ``printedIndex`` because paper readers scan by impact,
+ * not array order. Screen ``#3`` and print ``#3`` can therefore refer
+ * to different opportunities for the same analysis — that is deliberate
+ * and documented in both component headers.
+ *
+ * The chart surface, sidebar legend, lever colour legend, and
+ * uncalibrated strip each live in their own sub-component under
+ * ``quick-wins-matrix/`` so this file stays a thin composition layer.
  */
 export default function QuickWinsMatrix({ opportunities }: QuickWinsMatrixProps) {
     // Fixed plot dimensions in viewBox coordinate space. The wrapping
@@ -58,183 +82,34 @@ export default function QuickWinsMatrix({ opportunities }: QuickWinsMatrixProps)
         <div data-testid="quick-wins-matrix" style={containerStyle}>
             <p style={leadStyle}>
                 Each opportunity is plotted by investment cost (horizontal, log scale) and ROI (vertical). The
-                top-left quadrant carries the highest-leverage near-term plays. Opportunities the AI
-                couldn&rsquo;t size land in the uncalibrated strip below.
+                top-left quadrant carries the highest-leverage near-term plays; bottom-right are low-impact,
+                slow-payoff — deprioritise unless context shifts. Opportunities the AI couldn&rsquo;t size
+                land in the uncalibrated strip below.
+            </p>
+            <p data-testid="quick-wins-matrix-median-caveat" style={caveatStyle}>
+                Quadrant split lines are drawn at the median investment and median ROI of this analysis, so
+                the four quadrants are relative to this set — not fixed industry thresholds.
             </p>
 
-            <ScatterPlot
-                plotWidth={PLOT_WIDTH}
-                plotHeight={PLOT_HEIGHT}
-                layout={layout}
-                opportunities={opportunities}
-            />
+            <AnalysisLegend tool="quick-wins-matrix" />
+
+            <div style={chartAndLegendStyle}>
+                <div style={chartColumnStyle}>
+                    <ScatterPlot
+                        plotWidth={PLOT_WIDTH}
+                        plotHeight={PLOT_HEIGHT}
+                        layout={layout}
+                        opportunities={opportunities}
+                    />
+                </div>
+                <OpportunityLegendColumn layout={layout} opportunities={opportunities} />
+            </div>
 
             <UncalibratedStrip
                 indices={layout.uncalibrated.map((u) => u.opportunityIndex)}
                 opportunities={opportunities}
             />
         </div>
-    )
-}
-
-// ── Scatter plot composition ──────────────────────────────────────
-
-interface ScatterPlotProps {
-    plotWidth: number
-    plotHeight: number
-    layout: ReturnType<typeof buildQuickWinsMatrixLayout>
-    opportunities: Opportunity[]
-}
-
-function ScatterPlot({ plotWidth, plotHeight, layout, opportunities }: ScatterPlotProps) {
-    // Axes margins — leave space outside the plot area for tick
-    // labels + axis titles. The plot area itself sits at (margin.left,
-    // margin.top) within the SVG viewBox; layout coordinates are
-    // relative to the plot area, so we translate them in the render.
-    const margin = { top: 16, right: 16, bottom: 56, left: 64 }
-    const svgWidth = plotWidth + margin.left + margin.right
-    const svgHeight = plotHeight + margin.top + margin.bottom
-
-    // Tick positions sourced from the shared axis constants so the
-    // screen + print + layout helper all move together if the visual
-    // cap ever changes.
-    const xTicks = [INVESTMENT_MIN_USD, 100_000, 1_000_000, INVESTMENT_MAX_USD]
-    const yTicks = [ROI_MIN_PCT, 100, 200, ROI_MAX_PCT]
-
-    return (
-        <svg
-            data-testid="quick-wins-matrix-svg"
-            role="img"
-            aria-label="ROI versus Investment scatter plot. Each dot is one opportunity; the four quadrants are labelled Quick Wins (top-left), Strategic Bets (top-right), Fill-Ins (bottom-left), Deprioritise (bottom-right)."
-            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-            preserveAspectRatio="xMidYMid meet"
-            style={svgStyle}
-        >
-            <g transform={`translate(${margin.left}, ${margin.top})`}>
-                <rect
-                    x={0}
-                    y={0}
-                    width={plotWidth}
-                    height={plotHeight}
-                    fill="var(--bg-surface-2)"
-                    stroke="var(--border-subtle)"
-                    strokeWidth={1}
-                />
-
-                {/* Quadrant split lines (median-based, dashed) */}
-                <line
-                    x1={layout.investmentSplitX}
-                    y1={0}
-                    x2={layout.investmentSplitX}
-                    y2={plotHeight}
-                    stroke="var(--border-subtle)"
-                    strokeWidth={1}
-                    strokeDasharray="4 3"
-                />
-                <line
-                    x1={0}
-                    y1={layout.roiSplitY}
-                    x2={plotWidth}
-                    y2={layout.roiSplitY}
-                    stroke="var(--border-subtle)"
-                    strokeWidth={1}
-                    strokeDasharray="4 3"
-                />
-
-                {/* Quadrant labels in corners */}
-                <QuadrantCornerLabel quadrant="quick-wins" x={8} y={20} textAnchor="start" />
-                <QuadrantCornerLabel quadrant="strategic-bets" x={plotWidth - 8} y={20} textAnchor="end" />
-                <QuadrantCornerLabel quadrant="fill-ins" x={8} y={plotHeight - 10} textAnchor="start" />
-                <QuadrantCornerLabel
-                    quadrant="deprioritise"
-                    x={plotWidth - 8}
-                    y={plotHeight - 10}
-                    textAnchor="end"
-                />
-
-                {/* Dots + cluster pins */}
-                {layout.inPlot.map((dot) => (
-                    <ScatterDot
-                        key={`dot-${dot.opportunityIndex}`}
-                        dot={dot}
-                        opportunity={opportunities[dot.opportunityIndex]}
-                    />
-                ))}
-                {layout.clusterPins.map((pin) => (
-                    <ClusterPinMarker
-                        key={`cluster-${pin.quadrant}`}
-                        pin={pin}
-                        opportunities={opportunities}
-                    />
-                ))}
-            </g>
-
-            {/* X axis tick labels + title */}
-            <g transform={`translate(${margin.left}, ${margin.top + plotHeight})`}>
-                {xTicks.map((tick) => {
-                    const x = projectInvestmentTickX(tick, plotWidth)
-                    return (
-                        <g key={`xtick-${tick}`} transform={`translate(${x}, 0)`}>
-                            <line y1={0} y2={4} stroke="var(--text-tertiary)" />
-                            <text y={18} textAnchor="middle" style={tickLabelStyle}>
-                                {formatInvestmentTick(tick)}
-                            </text>
-                        </g>
-                    )
-                })}
-                <text x={plotWidth / 2} y={42} textAnchor="middle" style={axisTitleStyle}>
-                    Investment (USD, log scale)
-                </text>
-            </g>
-
-            {/* Y axis tick labels + title */}
-            <g transform={`translate(${margin.left}, ${margin.top})`}>
-                {yTicks.map((tick) => {
-                    const y = projectRoiTickY(tick, plotHeight)
-                    return (
-                        <g key={`ytick-${tick}`} transform={`translate(0, ${y})`}>
-                            <line x1={-4} x2={0} stroke="var(--text-tertiary)" />
-                            <text x={-8} y={4} textAnchor="end" style={tickLabelStyle}>
-                                {tick}%
-                            </text>
-                        </g>
-                    )
-                })}
-                <text
-                    transform={`translate(${-48}, ${plotHeight / 2}) rotate(-90)`}
-                    textAnchor="middle"
-                    style={axisTitleStyle}
-                >
-                    ROI (%)
-                </text>
-            </g>
-        </svg>
-    )
-}
-
-// ── Quadrant label ────────────────────────────────────────────────
-
-function QuadrantCornerLabel({
-    quadrant,
-    x,
-    y,
-    textAnchor,
-}: {
-    quadrant: Quadrant
-    x: number
-    y: number
-    textAnchor: 'start' | 'end'
-}) {
-    return (
-        <text
-            data-testid={`quick-wins-quadrant-label-${quadrant}`}
-            x={x}
-            y={y}
-            textAnchor={textAnchor}
-            style={quadrantLabelStyle}
-        >
-            {QUADRANT_LABELS[quadrant].toUpperCase()}
-        </text>
     )
 }
 
@@ -253,26 +128,25 @@ const leadStyle: CSSProperties = {
     lineHeight: 1.6,
 }
 
-const svgStyle: CSSProperties = {
-    width: '100%',
-    height: 'auto',
-    maxWidth: '100%',
+const caveatStyle: CSSProperties = {
+    margin: 0,
+    fontSize: '0.75rem',
+    color: 'var(--text-tertiary)',
+    lineHeight: 1.5,
+    fontStyle: 'italic',
 }
 
-const quadrantLabelStyle: CSSProperties = {
-    fontSize: '11px',
-    fontWeight: 700,
-    fill: 'var(--text-tertiary)',
-    letterSpacing: '0.08em',
+/** Side-by-side grid for chart + sidebar legend on wide viewports. The
+ *  ``minmax(0, …fr)`` shorthands stop the chart column from blowing
+ *  out when the legend's longest title forces a wider intrinsic min,
+ *  and keep the legend's ``text-overflow: ellipsis`` working. */
+const chartAndLegendStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)',
+    gap: '20px',
+    alignItems: 'start',
 }
 
-const tickLabelStyle: CSSProperties = {
-    fontSize: '11px',
-    fill: 'var(--text-tertiary)',
-}
-
-const axisTitleStyle: CSSProperties = {
-    fontSize: '12px',
-    fontWeight: 600,
-    fill: 'var(--text-secondary)',
+const chartColumnStyle: CSSProperties = {
+    minWidth: 0,
 }

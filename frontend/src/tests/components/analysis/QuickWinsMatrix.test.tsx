@@ -13,17 +13,30 @@ import { CLUSTER_THRESHOLD } from '@/lib/utils/quickWinsMatrixLayout'
  * either numeric axis missing route to the separate uncalibrated
  * strip beneath the plot.
  *
+ * The label-overlap follow-up replaced inline title text on each dot
+ * with a numbered badge (``#N``) and a sidebar
+ * ``OpportunityLegendColumn`` mapping ``#N`` → full title. See
+ * ``QuickWinsMatrix.tsx`` for the design rationale.
+ *
  * Test ids exposed by the component:
  *
  *   quick-wins-matrix                   — outer container
  *   quick-wins-matrix-svg               — the SVG plot
+ *   quick-wins-matrix-median-caveat     — relative-split caveat copy
+ *   quick-wins-matrix-lever-legend      — lever color legend above the chart
  *   quick-wins-dot-{n}                  — individual in-plot dot
+ *   quick-wins-dot-number-{n}           — numbered badge text on the dot
+ *   quick-wins-dot-ring-{n}             — hover/focus highlight ring
  *   quick-wins-cluster-{quadrant}       — cluster pin (when > threshold)
  *   quick-wins-cluster-popover-{quad}   — cluster popover (when open)
  *   quick-wins-cluster-item-{q}-{n}     — popover entry
  *   quick-wins-uncalibrated-strip       — footer strip (when non-empty)
  *   quick-wins-uncalibrated-dot-{n}     — uncalibrated dot
- *   quick-wins-quadrant-label-{quad}    — corner quadrant label
+ *   quick-wins-quadrant-label-{quad}    — quadrant label (outer margin)
+ *   quick-wins-legend-column            — sidebar legend root
+ *   quick-wins-legend-group-{quadrant}  — per-quadrant legend section
+ *   quick-wins-legend-group-uncalibrated — legend section for uncalibrated entries
+ *   quick-wins-legend-entry-{n}         — sidebar legend button per opportunity
  */
 
 const make = (overrides: Partial<Opportunity>): Opportunity => ({
@@ -162,7 +175,11 @@ describe('QuickWinsMatrix — in-plot dot routing', () => {
         )
         const dot = screen.getByTestId('quick-wins-dot-0')
         expect(dot).toHaveAttribute('role', 'button')
-        expect(dot).toHaveAttribute('aria-label', 'Highlight opportunity: Cut SaaS sprawl')
+        // aria-label includes the badge number so screen-reader users
+        // can correlate the spoken label to the on-chart "#N" badge
+        // and to the matching legend-column entry (which uses the
+        // same "Highlight opportunity {N}: {title}" format).
+        expect(dot).toHaveAttribute('aria-label', 'Highlight opportunity 1: Cut SaaS sprawl')
     })
 
     it('renders a clamp caret when ROI exceeds the visual cap', () => {
@@ -176,7 +193,10 @@ describe('QuickWinsMatrix — in-plot dot routing', () => {
         expect(dot.textContent).toContain('↑')
     })
 
-    it('renders an inline title label next to the dot so the chart is readable without hover', () => {
+    it('renders a 1-based numbered badge inside the dot instead of an inline title label', () => {
+        // The badge replaces the previous inline title text. The full
+        // title moves to the sidebar legend so two dots in the same
+        // horizontal band can no longer collide on the chart.
         render(
             <QuickWinsMatrix
                 opportunities={[
@@ -185,16 +205,25 @@ describe('QuickWinsMatrix — in-plot dot routing', () => {
                         investment_value_usd: 100_000,
                         roi_estimate_pct: 150,
                     }),
+                    make({
+                        title: 'Sign warehouse lease',
+                        investment_value_usd: 200_000,
+                        roi_estimate_pct: 110,
+                    }),
                 ]}
             />
         )
-        const label = screen.getByTestId('quick-wins-dot-label-0')
-        expect(label).toHaveTextContent('Cut SaaS sprawl')
+        // The previous inline-title testid must no longer exist.
+        expect(screen.queryByTestId('quick-wins-dot-label-0')).toBeNull()
+        // 1-based numbering: index 0 → "1", index 1 → "2".
+        expect(screen.getByTestId('quick-wins-dot-number-0')).toHaveTextContent('1')
+        expect(screen.getByTestId('quick-wins-dot-number-1')).toHaveTextContent('2')
     })
 
-    it('truncates long titles in the inline dot label with an ellipsis', () => {
-        // 30-char title; the inline label budget is 22 chars, so we
-        // expect a "…" suffix and a shortened prefix.
+    it('keeps the full title in the SVG <title> tooltip + aria-label for screen readers and hover-tooltip users', () => {
+        // Long title — under the old design this got truncated to
+        // 22 chars; the new design dropped truncation entirely because
+        // the inline label is gone.
         render(
             <QuickWinsMatrix
                 opportunities={[
@@ -206,15 +235,17 @@ describe('QuickWinsMatrix — in-plot dot routing', () => {
                 ]}
             />
         )
-        const label = screen.getByTestId('quick-wins-dot-label-0')
-        // Truncation produces "Deploy AI churn predi…" (21 chars + ellipsis).
-        expect(label.textContent ?? '').toMatch(/…$/)
-        expect((label.textContent ?? '').length).toBeLessThanOrEqual(22)
-        // The full title still appears in the SVG <title> tooltip + aria-label,
-        // so screen readers and hover-tooltip users get the unabridged text.
         const dot = screen.getByTestId('quick-wins-dot-0')
-        expect(dot.querySelector('title')?.textContent).toContain(
-            'Deploy AI churn prediction model end-to-end'
+        // Title tooltip carries #N + full title + lever.
+        expect(dot.querySelector('title')?.textContent).toBe(
+            '#1 Deploy AI churn prediction model end-to-end (Revenue Side)'
+        )
+        // aria-label still uses the full unabridged title so screen
+        // readers announce the same content as sighted users see in
+        // the legend column.
+        expect(dot).toHaveAttribute(
+            'aria-label',
+            'Highlight opportunity 1: Deploy AI churn prediction model end-to-end'
         )
     })
 
@@ -563,5 +594,177 @@ describe('QuickWinsMatrix — cluster pin', () => {
         for (let i = 0; i < CLUSTER_THRESHOLD; i += 1) {
             expect(screen.getByTestId(`quick-wins-dot-${i}`)).toBeInTheDocument()
         }
+    })
+})
+
+// ── Lever color legend + median caveat ────────────────────────────
+
+describe('QuickWinsMatrix — lever colour legend + median caveat', () => {
+    it('renders the lever colour legend above the chart with matrix-specific copy', () => {
+        render(<QuickWinsMatrix opportunities={[]} />)
+        const legend = screen.getByTestId('quick-wins-matrix-lever-legend')
+        // The matrix sentence is distinct from the strategy-map /
+        // EBITDA / value-chain sentence: the dot IS the opportunity
+        // (not something that targets one), so the noun structure
+        // flips.
+        expect(legend).toHaveTextContent(/each dot is an AI opportunity, coloured by value lever\./i)
+        // All three lever labels appear in the legend.
+        expect(legend).toHaveTextContent('Revenue Side')
+        expect(legend).toHaveTextContent('Cost Side')
+        expect(legend).toHaveTextContent('Both')
+    })
+
+    it('shows a caveat clarifying that the quadrant split is relative to this analysis', () => {
+        render(<QuickWinsMatrix opportunities={[]} />)
+        const caveat = screen.getByTestId('quick-wins-matrix-median-caveat')
+        expect(caveat).toHaveTextContent(/median investment and median ROI of this analysis/i)
+        expect(caveat).toHaveTextContent(/not fixed industry thresholds/i)
+    })
+})
+
+// ── Sidebar legend column ─────────────────────────────────────────
+
+describe('QuickWinsMatrix — sidebar legend column', () => {
+    it('renders one legend entry per in-plot opportunity, grouped by quadrant', () => {
+        render(
+            <QuickWinsMatrix
+                opportunities={[
+                    // Lands in fill-ins after median-split (low ROI, low investment relative to set)
+                    make({ title: 'Patch invoicing', investment_value_usd: 15_000, roi_estimate_pct: 30 }),
+                    // Lands in strategic-bets (high investment, high ROI)
+                    make({
+                        title: 'Roll out platform',
+                        investment_value_usd: 5_000_000,
+                        roi_estimate_pct: 250,
+                    }),
+                ]}
+            />
+        )
+        expect(screen.getByTestId('quick-wins-legend-column')).toBeInTheDocument()
+        // One entry button per opportunity, identified by the same
+        // 1-based numbering scheme used on the dot badges.
+        const entry0 = screen.getByTestId('quick-wins-legend-entry-0')
+        const entry1 = screen.getByTestId('quick-wins-legend-entry-1')
+        expect(entry0).toHaveTextContent('Patch invoicing')
+        expect(entry1).toHaveTextContent('Roll out platform')
+        // 1-based number prefix on each entry.
+        expect(entry0).toHaveTextContent('1')
+        expect(entry1).toHaveTextContent('2')
+    })
+
+    it('routes uncalibrated opportunities into a dedicated legend section', () => {
+        render(
+            <QuickWinsMatrix
+                opportunities={[
+                    make({
+                        title: 'Mystery opp',
+                        investment_value_usd: null,
+                        roi_estimate_pct: null,
+                    }),
+                ]}
+            />
+        )
+        const group = screen.getByTestId('quick-wins-legend-group-uncalibrated')
+        expect(group).toHaveTextContent('Mystery opp')
+        expect(group).toHaveTextContent(/uncalibrated/i)
+    })
+
+    it('hovering a legend entry highlights the matching opportunity via the shared provider', () => {
+        render(
+            <OpportunityHoverProvider>
+                <QuickWinsMatrix
+                    opportunities={[
+                        make({
+                            title: 'Cut SaaS sprawl',
+                            investment_value_usd: 100_000,
+                            roi_estimate_pct: 150,
+                        }),
+                    ]}
+                />
+                <HoverProbe />
+            </OpportunityHoverProvider>
+        )
+        const entry = screen.getByTestId('quick-wins-legend-entry-0')
+        const probe = () => screen.getByTestId('hover-probe').getAttribute('data-indices')
+
+        expect(probe()).toBe('')
+        fireEvent.mouseEnter(entry)
+        expect(probe()).toBe('0')
+        fireEvent.mouseLeave(entry)
+        expect(probe()).toBe('')
+    })
+
+    it('clicking a legend entry scrolls the matching opportunity card into view', () => {
+        const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView')
+        render(
+            <>
+                <QuickWinsMatrix
+                    opportunities={[
+                        make({
+                            title: 'Cut SaaS sprawl',
+                            investment_value_usd: 100_000,
+                            roi_estimate_pct: 150,
+                        }),
+                    ]}
+                />
+                <div data-testid="opportunity-card-0">Card</div>
+            </>
+        )
+        scrollSpy.mockClear()
+
+        fireEvent.click(screen.getByTestId('quick-wins-legend-entry-0'))
+
+        expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' })
+        scrollSpy.mockRestore()
+    })
+
+    it('includes opportunities that landed inside a cluster pin in the legend column', () => {
+        // When a quadrant collapses into a cluster pin, the individual
+        // dot testids disappear from the chart — but the legend column
+        // must still list every collapsed opportunity so the reader
+        // never loses access to a title.
+        const count = CLUSTER_THRESHOLD + 1
+        const opps = Array.from({ length: count }, (_, i) =>
+            make({
+                title: `Cluster opp ${i}`,
+                investment_value_usd: 20_000,
+                roi_estimate_pct: 250,
+            })
+        )
+        render(<QuickWinsMatrix opportunities={opps} />)
+        for (let i = 0; i < count; i += 1) {
+            expect(screen.getByTestId(`quick-wins-legend-entry-${i}`)).toBeInTheDocument()
+        }
+    })
+})
+
+// ── Hover focus ring ──────────────────────────────────────────────
+
+describe('QuickWinsMatrix — hover focus ring', () => {
+    it('marks the focus ring inactive when no dot is hovered', () => {
+        render(
+            <QuickWinsMatrix
+                opportunities={[make({ investment_value_usd: 100_000, roi_estimate_pct: 150 })]}
+            />
+        )
+        // ``data-active`` is the semantic contract — assert on it
+        // (not on opacity / visibility / display) so the test survives
+        // future visual treatment changes.
+        const ring = screen.getByTestId('quick-wins-dot-ring-0')
+        expect(ring.getAttribute('data-active')).toBe('false')
+    })
+
+    it('marks the focus ring active when the dot is hovered (via the shared provider)', () => {
+        render(
+            <OpportunityHoverProvider>
+                <QuickWinsMatrix
+                    opportunities={[make({ investment_value_usd: 100_000, roi_estimate_pct: 150 })]}
+                />
+            </OpportunityHoverProvider>
+        )
+        const dot = screen.getByTestId('quick-wins-dot-0')
+        fireEvent.mouseEnter(dot)
+        const ring = screen.getByTestId('quick-wins-dot-ring-0')
+        expect(ring.getAttribute('data-active')).toBe('true')
     })
 })
