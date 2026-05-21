@@ -105,6 +105,18 @@ class DetailOpportunities(RequestStep):
         all_opportunities = []
         for i, (_label, _prompt, ideation) in enumerate(detail_prompts):
             detail_data, detail_elapsed = results[f"detail_{i}"]
+            # Phase-14 telemetry — dump the two numeric axes for the
+            # ROI x Investment matrix so we can see how often the AI
+            # emits null vs a real number. Lives behind the request-id
+            # filter in CloudWatch; remove once we have enough
+            # production signal to tune the prompt.
+            logger.info(
+                "[DetailOpportunities:detail_%d] numeric axes: "
+                "investment_value_usd=%s roi_estimate_pct=%s",
+                i,
+                detail_data.get("investment_value_usd"),
+                detail_data.get("roi_estimate_pct"),
+            )
             timer.record(f"ai_call_detail_{i}", detail_elapsed)
 
             merged = {

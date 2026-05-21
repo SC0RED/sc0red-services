@@ -47,7 +47,7 @@ describe('DeepDiveCTA', () => {
     // ── Analytics ────────────────────────────────────────────────────────────
     //
     // The strategy map is positioned as the headline conversion artifact for
-    // Vector Advisory. The CTA must produce funnel signal — without these
+    // sc0red Advisory. The CTA must produce funnel signal — without these
     // events, the new product's conversion path is unmeasurable.
 
     it('emits sc0red_cta_rendered_strategy_map on mount (headline)', () => {
@@ -104,5 +104,61 @@ describe('DeepDiveCTA', () => {
         // Same analysis — should not double-emit. (gap change is not a new
         // CTA impression; it's the same CTA in a different position.)
         expect(mockEmit).toHaveBeenCalledTimes(1)
+    })
+
+    // ── Placement-aware analytics (Phase 11) ─────────────────────────────────
+    //
+    // The DeepDiveCTA renders in two placements: ``strategy-map`` (mid-page)
+    // and ``analysis-end`` (bottom of the page). Each placement MUST fire
+    // distinct event names so the funnel attributes impressions and clicks
+    // to the correct surface — otherwise the bottom CTA double-counts the
+    // strategy-map funnel.
+
+    it('placement=analysis-end emits sc0red_cta_rendered_analysis_end on mount', () => {
+        render(<DeepDiveCTA analysisId="a-end-1" placement="analysis-end" />)
+        expect(mockEmit).toHaveBeenCalledWith('sc0red_cta_rendered_analysis_end', {
+            analysisId: 'a-end-1',
+            opportunityCount: 0,
+            activeLeverFilter: null,
+        })
+        // Strategy-map event MUST NOT fire when placement is analysis-end —
+        // that's the conflation bug we're fixing.
+        expect(mockEmit).not.toHaveBeenCalledWith('sc0red_cta_rendered_strategy_map', expect.anything())
+    })
+
+    it('placement=analysis-end emits sc0red_cta_clicked_analysis_end on click', () => {
+        render(<DeepDiveCTA analysisId="a-end-2" placement="analysis-end" />)
+        mockEmit.mockClear()
+        fireEvent.click(screen.getByRole('link'))
+        expect(mockEmit).toHaveBeenCalledWith('sc0red_cta_clicked_analysis_end', {
+            analysisId: 'a-end-2',
+            opportunityCount: 0,
+            activeLeverFilter: null,
+        })
+        expect(mockEmit).not.toHaveBeenCalledWith('sc0red_cta_clicked_strategy_map', expect.anything())
+    })
+
+    it('placement=analysis-end builds the contact URL with ?source=analysis-end', () => {
+        render(<DeepDiveCTA analysisId="a-end-3" placement="analysis-end" />)
+        const link = screen.getByRole('link')
+        expect(link.getAttribute('href')).toContain('source=analysis-end')
+        expect(link.getAttribute('href')).not.toContain('source=strategy-map')
+    })
+
+    it('placement=analysis-end uses a distinct testid so order tests can pin both placements', () => {
+        render(<DeepDiveCTA analysisId="a-end-4" placement="analysis-end" />)
+        expect(screen.getByTestId('analysis-end-cta')).toBeInTheDocument()
+        expect(screen.queryByTestId('strategy-map-cta')).toBeNull()
+    })
+
+    it('placement default ("strategy-map") preserves legacy behaviour for the single-placement call sites', () => {
+        // Call sites that don't pass placement (legacy + the mid-page slot)
+        // must continue to fire the _strategy_map events. The
+        // placement-aware split is additive.
+        render(<DeepDiveCTA analysisId="a-default" />)
+        expect(mockEmit).toHaveBeenCalledWith(
+            'sc0red_cta_rendered_strategy_map',
+            expect.objectContaining({ analysisId: 'a-default' })
+        )
     })
 })

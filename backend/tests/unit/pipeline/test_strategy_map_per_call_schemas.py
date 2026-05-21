@@ -44,11 +44,18 @@ from src.pipeline.pipeline_steps._strategy_map_corpus import load_per_call_schem
 # Each entry: (schema-name, model, excluded-fields).
 # - ``id`` is assigned by ``_strategy_map_assembly.py`` from title-list order.
 # - ``title`` is provided as INPUT to the Round-2 prompt, not re-emitted.
+# - ``linked_opportunity_indices`` IS present in both the schema and the
+#   Pydantic model (added by Phase 1b of ``redesign-analysis-visuals``).
+#   It's excluded here because this test's ``_json_types_for_annotation``
+#   helper covers string-shaped fields only — the array-of-int shape is
+#   pinned by a dedicated test below
+#   (``test_linked_opportunity_indices_shape_in_each_schema``).
+_OBJECTIVE_EXCLUDED = {"id", "title", "linked_opportunity_indices"}
 _DETAIL_SCHEMA_MAPPINGS: list[tuple[str, type[BaseModel], set[str]]] = [
-    ("financial_objective_detail", FinancialObjective, {"id", "title"}),
-    ("customer_objective_detail", CustomerObjective, {"id", "title"}),
-    ("internal_objective_detail", InternalProcessObjective, {"id", "title"}),
-    ("capacity_objective_detail", CapacityObjective, {"id", "title"}),
+    ("financial_objective_detail", FinancialObjective, _OBJECTIVE_EXCLUDED),
+    ("customer_objective_detail", CustomerObjective, _OBJECTIVE_EXCLUDED),
+    ("internal_objective_detail", InternalProcessObjective, _OBJECTIVE_EXCLUDED),
+    ("capacity_objective_detail", CapacityObjective, _OBJECTIVE_EXCLUDED),
 ]
 
 
@@ -130,12 +137,23 @@ class TestPerCallSchemaPydanticAlignment:
     def test_required_keys_match(
         self, name: str, model: type[BaseModel], excluded: set[str]
     ) -> None:
-        """Schema's ``required`` set MUST equal Pydantic field names minus excluded."""
+        """Schema's ``required`` set MUST equal Pydantic field names minus excluded.
+
+        ``excluded`` is applied to BOTH sides — on the Pydantic side it
+        drops fields whose shape isn't covered by the alignment helper
+        (``linked_opportunity_indices`` is an array of ints, not a
+        string); on the schema side it filters the same field out of
+        ``required`` so the comparison stays apples-to-apples. The
+        excluded-from-comparison fields are pinned by their own
+        dedicated tests (``id`` / ``title`` are assigned by assembly;
+        ``linked_opportunity_indices`` is pinned by
+        ``TestLinkedOpportunityIndicesShape`` below).
+        """
         schema = load_per_call_schema(name)
-        schema_required = set(schema.get("required", []))
+        schema_required = set(schema.get("required", [])) - excluded
         expected = _expected_pydantic_keys(model, excluded)
         assert schema_required == expected, (
-            f"{name}.json required={sorted(schema_required)} but "
+            f"{name}.json required (minus {sorted(excluded)})={sorted(schema_required)} but "
             f"{model.__name__} minus {sorted(excluded)} expects {sorted(expected)}. "
             "Update the schema or the model so they stay in lockstep."
         )
@@ -144,12 +162,16 @@ class TestPerCallSchemaPydanticAlignment:
     def test_property_keys_match(
         self, name: str, model: type[BaseModel], excluded: set[str]
     ) -> None:
-        """Schema's ``properties`` keys MUST equal Pydantic field names minus excluded."""
+        """Schema's ``properties`` keys MUST equal Pydantic field names minus excluded.
+
+        See ``test_required_keys_match`` for the rationale on filtering
+        ``excluded`` from both sides of the comparison.
+        """
         schema = load_per_call_schema(name)
-        schema_props = set(schema["properties"].keys())
+        schema_props = set(schema["properties"].keys()) - excluded
         expected = _expected_pydantic_keys(model, excluded)
         assert schema_props == expected, (
-            f"{name}.json properties={sorted(schema_props)} but "
+            f"{name}.json properties (minus {sorted(excluded)})={sorted(schema_props)} but "
             f"{model.__name__} minus {sorted(excluded)} expects {sorted(expected)}."
         )
 
@@ -205,3 +227,62 @@ class TestPerCallSchemaPydanticAlignment:
                     f"Pydantic Literal={sorted(literal_values)}"
                 )
         assert not violations, f"{name}.json enum mismatch:\n  " + "\n  ".join(violations)
+
+
+class TestLinkedOpportunityIndicesShape:
+    """Pin the array-of-non-negative-integers shape for
+    ``linked_opportunity_indices`` across all four per-call detail
+    schemas.
+
+    Added by Phase 1b of ``redesign-analysis-visuals``. The shape is
+    asserted here (rather than in the generic
+    ``_json_types_for_annotation`` helper above) because the helper
+    covers string-shaped fields only.
+    """
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "financial_objective_detail",
+            "customer_objective_detail",
+            "internal_objective_detail",
+            "capacity_objective_detail",
+        ],
+    )
+    def test_linked_opportunity_indices_required(self, name: str) -> None:
+        """The field MUST be in the ``required`` list so the AI always
+        emits it (empty array when nothing applies). Without this, AI
+        drift toward omitting the field would force Pydantic to fall
+        back to its empty-list default and the dot strip on the
+        strategy map cells would never light up.
+        """
+        schema = load_per_call_schema(name)
+        assert "linked_opportunity_indices" in schema["required"], (
+            f"{name}.json must list linked_opportunity_indices in `required` "
+            "so the AI is held to emitting the field on every objective."
+        )
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "financial_objective_detail",
+            "customer_objective_detail",
+            "internal_objective_detail",
+            "capacity_objective_detail",
+        ],
+    )
+    def test_linked_opportunity_indices_array_of_non_negative_ints(
+        self, name: str
+    ) -> None:
+        """Array of integers ≥ 0. Index pointers into the
+        ``opportunities`` array — negatives are nonsensical and would
+        silently render no dot.
+        """
+        schema = load_per_call_schema(name)
+        prop = schema["properties"]["linked_opportunity_indices"]
+        assert prop["type"] == "array", f"{name}: expected array type"
+        item = prop["items"]
+        assert item["type"] == "integer", f"{name}: items.type must be integer"
+        assert item.get("minimum") == 0, (
+            f"{name}: items.minimum must be 0 to reject negative indices"
+        )

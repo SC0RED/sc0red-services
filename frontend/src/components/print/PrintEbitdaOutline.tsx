@@ -184,16 +184,22 @@ function EbitdaNodeCard({ node, sortedOpportunities }: EbitdaNodeCardProps) {
             >
                 {node.value_range ? <span>{node.value_range}</span> : null}
                 {typeof node.percentage_of_parent === 'number' ? (
-                    <span>{Math.round(node.percentage_of_parent * 100)}% of parent</span>
+                    // ``percentage_of_parent`` is emitted by the backend as
+                    // an integer 0–100 (see
+                    // ``backend/src/pipeline/pipeline_steps/build_ebitda_tree.py:64``
+                    // ``_apply_percentage`` — the validator rejects any
+                    // value outside that range). Don't multiply by 100;
+                    // ``80`` already means "80% of parent". The web
+                    // component at ``EbitdaNodeComponent.tsx`` renders it
+                    // directly without multiplication; this print path was
+                    // out of sync (introduced in PR #327, surfaced by the
+                    // P2 architecture-reviewer pass).
+                    <span>{Math.round(node.percentage_of_parent)}% of parent</span>
                 ) : null}
-                {node.confidence_level ? (
-                    // Print-mode renders the confidence level inline as plain
-                    // text — print can't surface a hover tooltip for the
-                    // basis, so the chip glyph would be misleading there.
-                    // The full basis is omitted by default to keep PDFs
-                    // concise; readers can refer to the on-page legend.
-                    <span data-testid="ebitda-confidence-print">({node.confidence_level})</span>
-                ) : null}
+                {/* Confidence level dropped from print parity with the
+                    on-screen change (P2 of redesign-analysis-visuals).
+                    The data still flows on EbitdaNode for future surfaces
+                    but is no longer rendered here. */}
             </div>
             {node.description ? (
                 <p

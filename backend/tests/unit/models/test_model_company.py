@@ -1,5 +1,8 @@
 """Tests for Company domain models."""
 
+import pytest
+from pydantic import ValidationError
+
 from src.models.model_company import (
     Company,
     CompanyProfile,
@@ -97,6 +100,44 @@ class TestOpportunity:
         assert opportunity.title == "Deploy AI Churn Prediction"
         assert opportunity.impact_rating == "High"
         assert opportunity.implementation_steps == ["Step 1", "Step 2"]
+
+    def test_numeric_axes_default_none(self):
+        # Legacy persisted records (pre-Phase-14) re-hydrate cleanly
+        # with both numeric fields absent. Per design D8 the matrix
+        # routes these to the uncalibrated footer strip.
+        opp = Opportunity(title="Legacy opportunity")
+        assert opp.investment_value_usd is None
+        assert opp.roi_estimate_pct is None
+
+    def test_numeric_axes_accept_populated_values(self):
+        opp = Opportunity(
+            title="Sized opportunity",
+            investment_value_usd=120_000,
+            roi_estimate_pct=45.5,
+        )
+        assert opp.investment_value_usd == 120_000
+        assert opp.roi_estimate_pct == 45.5
+
+    def test_negative_investment_rejected(self):
+        # The matrix's log-scale X axis can't render negative cost.
+        # Reject loud rather than silently clamping at zero.
+        with pytest.raises(ValidationError):
+            Opportunity(title="Bad", investment_value_usd=-1)
+
+    def test_roi_estimate_pct_above_500_rejected(self):
+        # Schema cap is 500; the renderer clamps anything above 300%
+        # visually with a caret marker, but the model rejects anything
+        # above 500 as physically implausible — a 500% ROI is already
+        # an extreme outlier.
+        with pytest.raises(ValidationError):
+            Opportunity(title="Bad", roi_estimate_pct=600.0)
+
+    def test_roi_estimate_pct_below_zero_rejected(self):
+        # Negative ROI (a money-losing opportunity) doesn't belong in
+        # the matrix at all — reject loud rather than silently flip
+        # it positive.
+        with pytest.raises(ValidationError):
+            Opportunity(title="Bad", roi_estimate_pct=-5.0)
 
 
 class TestOpportunityResult:

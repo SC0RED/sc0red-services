@@ -55,7 +55,7 @@ def _pdf_event(**overrides: object) -> dict[str, object]:
 class TestAnalyticsEventStrategyMapEvents:
     """Strategy-map CTA event types — web-source, no lever filter.
 
-    These events back the conversion funnel for the Vector Advisory
+    These events back the conversion funnel for the sc0red Advisory
     strategy-map product (see PR #239 review feedback). Surface
     invariants: source='web', `active_lever_filter` MUST be null.
     """
@@ -99,6 +99,63 @@ class TestAnalyticsEventStrategyMapEvents:
             AnalyticsEvent(
                 **_web_event(
                     event_type="sc0red_cta_clicked_strategy_map",
+                    source="pdf",
+                    active_lever_filter=None,
+                )
+            )
+
+
+class TestAnalyticsEventAnalysisEndEvents:
+    """End-of-analysis CTA event types — same surface invariants as the
+    strategy-map CTA (web-source, no lever filter) but distinct event
+    names so the funnel can attribute impressions and clicks to the
+    correct placement.
+
+    Added in Phase 11 of ``redesign-analysis-visuals`` to fix the
+    analytics conflation bug: the bottom CTA was previously firing the
+    ``_strategy_map`` events regardless of placement, double-counting
+    the strategy-map funnel.
+    """
+
+    def test_rendered_analysis_end_event_parses(self) -> None:
+        event = AnalyticsEvent(
+            **_web_event(
+                event_type="sc0red_cta_rendered_analysis_end",
+                opportunity_count=0,
+                active_lever_filter=None,
+            )
+        )
+        assert event.event_type == "sc0red_cta_rendered_analysis_end"
+        assert event.source == "web"
+        assert event.active_lever_filter is None
+
+    def test_clicked_analysis_end_event_parses(self) -> None:
+        event = AnalyticsEvent(
+            **_web_event(
+                event_type="sc0red_cta_clicked_analysis_end",
+                opportunity_count=0,
+                active_lever_filter=None,
+            )
+        )
+        assert event.event_type == "sc0red_cta_clicked_analysis_end"
+
+    def test_analysis_end_event_with_lever_filter_rejected(self) -> None:
+        # The CTA has no lever-filter concept regardless of placement;
+        # non-null would corrupt cross-surface funnel queries that join
+        # on event_type.
+        with pytest.raises(ValidationError, match="must not carry active_lever_filter"):
+            AnalyticsEvent(
+                **_web_event(
+                    event_type="sc0red_cta_rendered_analysis_end",
+                    active_lever_filter="Revenue Side",
+                )
+            )
+
+    def test_analysis_end_event_with_pdf_source_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="requires source='web'"):
+            AnalyticsEvent(
+                **_web_event(
+                    event_type="sc0red_cta_clicked_analysis_end",
                     source="pdf",
                     active_lever_filter=None,
                 )

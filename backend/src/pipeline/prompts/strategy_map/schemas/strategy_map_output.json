@@ -171,9 +171,14 @@
             "type": "string",
             "enum": ["HIGH", "MEDIUM", "LOW"]
         },
+        "linkedOpportunityIndices": {
+            "type": "array",
+            "description": "0-based indices into the analysis's opportunities array of any opportunity that would directly advance this objective. Empty list when no opportunity applies. Added by Phase 1b of `redesign-analysis-visuals`.",
+            "items": { "type": "integer", "minimum": 0 }
+        },
         "financialObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "category", "confidence", "rationale_source"],
+            "required": ["id", "title", "definition", "category", "confidence", "rationale_source", "linked_opportunity_indices"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^F[123]$" },
@@ -181,12 +186,13 @@
                 "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
                 "category": { "type": "string", "enum": ["revenue_growth", "productivity"] },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 },
+                "linked_opportunity_indices": { "$ref": "#/definitions/linkedOpportunityIndices" }
             }
         },
         "customerObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "panel", "confidence", "rationale_source"],
+            "required": ["id", "title", "definition", "panel", "confidence", "rationale_source", "linked_opportunity_indices"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^C[1-4]$" },
@@ -194,12 +200,13 @@
                 "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
                 "panel": { "type": "string", "enum": ["consumer", "channel", "partner"] },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 },
+                "linked_opportunity_indices": { "$ref": "#/definitions/linkedOpportunityIndices" }
             }
         },
         "internalProcessObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "category", "confidence", "rationale_source"],
+            "required": ["id", "title", "definition", "category", "confidence", "rationale_source", "linked_opportunity_indices"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^I[1-3]\\.[1-9]$" },
@@ -210,19 +217,21 @@
                     "enum": ["innovation", "customer_management", "operational_excellence", "citizenship"]
                 },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 },
+                "linked_opportunity_indices": { "$ref": "#/definitions/linkedOpportunityIndices" }
             }
         },
         "capacityObjective": {
             "type": "object",
-            "required": ["id", "title", "definition", "confidence", "rationale_source"],
+            "required": ["id", "title", "definition", "confidence", "rationale_source", "linked_opportunity_indices"],
             "additionalProperties": false,
             "properties": {
                 "id": { "type": "string", "pattern": "^O\\.[PTC]$" },
                 "title": { "type": "string", "minLength": 8, "maxLength": 200 },
                 "definition": { "type": "string", "minLength": 50, "maxLength": 1200 },
                 "confidence": { "$ref": "#/definitions/confidence" },
-                "rationale_source": { "type": ["string", "null"], "maxLength": 400 }
+                "rationale_source": { "type": ["string", "null"], "maxLength": 400 },
+                "linked_opportunity_indices": { "$ref": "#/definitions/linkedOpportunityIndices" }
             }
         }
     }

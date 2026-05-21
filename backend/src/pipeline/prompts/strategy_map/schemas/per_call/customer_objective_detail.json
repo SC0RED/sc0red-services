@@ -1,9 +1,9 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "CustomerObjectiveDetail",
-    "description": "Per-call schema for the customer-perspective Round 2 elaboration. Customer objectives use `panel` (consumer/channel/partner), NOT `category`. The `id` and `title` are not requested — assigned by assembly + provided as call input respectively.",
+    "description": "Per-call schema for the customer-perspective Round 2 elaboration. Customer objectives use `panel` (consumer/channel/partner), NOT `category`. The `id` and `title` are not requested — assigned by assembly + provided as call input respectively. `linked_opportunity_indices` was added in Phase 1b of `redesign-analysis-visuals` so the AI annotates each objective with the opportunities that would advance it.",
     "type": "object",
-    "required": ["definition", "panel", "confidence", "rationale_source"],
+    "required": ["definition", "panel", "confidence", "rationale_source", "linked_opportunity_indices"],
     "additionalProperties": false,
     "properties": {
         "definition": {
@@ -22,6 +22,14 @@
         "rationale_source": {
             "type": ["string", "null"],
             "maxLength": 400
+        },
+        "linked_opportunity_indices": {
+            "type": "array",
+            "description": "0-based indices into the `opportunities` array shown in the prompt. List opportunities whose execution would directly advance THIS objective. Empty list when no opportunity in the list applies.",
+            "items": {
+                "type": "integer",
+                "minimum": 0
+            }
         }
     }
 }

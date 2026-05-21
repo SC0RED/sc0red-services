@@ -17,13 +17,26 @@
         "roi_estimate": {
             "type": "string",
             "description": "Specific ROI description tied to this company"
+        },
+        "investment_value_usd": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Total estimated USD cost to implement end-to-end over 12-24 months. Includes software licences, integration cost, dedicated headcount fraction × salary, opportunity cost of redirected effort. Pass null when you cannot ground the number in the provided context — null is preferred over a hallucinated guess."
+        },
+        "roi_estimate_pct": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 500,
+            "description": "Estimated ROI percentage in the range 0..500. Computed as (annualised_value_created - annualised_cost) / annualised_cost * 100. A 50%% ROI means the opportunity returns 1.5x its cost in year one. Pass null when you cannot ground the number in the provided context — null is preferred over a hallucinated guess."
         }
     },
     "required": [
         "implementation_steps",
         "timeline",
         "investment_range",
-        "roi_estimate"
+        "roi_estimate",
+        "investment_value_usd",
+        "roi_estimate_pct"
     ],
     "additionalProperties": false
 }

@@ -226,6 +226,33 @@ _MOCK_RESPONSES: dict[str, object] = {
         "timeline": "Quick Win (1-3 months)",
         "investment_range": "$50K-$100K",
         "roi_estimate": "2x ROI within 12 months through efficiency gains",
+        # Phase 14 (redesign-analysis-visuals): numeric ROI ×
+        # Investment fields for the matrix scatter plot. Mock emits
+        # populated values so dev/E2E exercise the in-plot rendering
+        # path — separate fixtures below cover the null path
+        # (uncalibrated strip).
+        "investment_value_usd": 75000,
+        "roi_estimate_pct": 200.0,
+    },
+    # Detail fixture variant — at least one mocked AI response with
+    # ``None`` on both numeric axes so the matrix's uncalibrated
+    # footer strip is exercised in dev/E2E. The opportunities-rotator
+    # in this file currently picks ``detail`` for every opportunity;
+    # the null variant is selected when the prompt mentions
+    # "partnership" or "negotiation" (the spec's canonical
+    # null-emit examples) — see the dispatcher logic in
+    # ``mock_ai_handler``.
+    "detail_uncalibrated": {
+        "implementation_steps": [
+            "Identify partnership candidates",
+            "Define commercial terms",
+            "Pilot integration with one partner",
+        ],
+        "timeline": "Medium-term (3-9 months)",
+        "investment_range": "$100K-$500K",
+        "roi_estimate": "ROI depends on negotiated commercial terms; not yet sizable.",
+        "investment_value_usd": None,
+        "roi_estimate_pct": None,
     },
     # GenerateStrategyMap — Step 1: Vision and Mission
     "strategy_map_step_1": {
@@ -533,7 +560,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                     " beyond direct outbound effort."
                 ),
                 "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would map the partner"
+                    "A sc0red Advisory deep-dive would map the partner"
                     " landscape and prioritise the channel motion most"
                     " likely to accelerate F1."
                 ),
@@ -548,7 +575,7 @@ _MOCK_RESPONSES: dict[str, object] = {
                     " defensible product moat."
                 ),
                 "deepDiveFraming": (
-                    "A Vector Advisory deep-dive would shape the data-asset"
+                    "A sc0red Advisory deep-dive would shape the data-asset"
                     " strategy that converts F3 from hypothesis into"
                     " operating plan."
                 ),
@@ -633,8 +660,15 @@ def _detect_step(body: dict) -> str:
                     return f"ideation_{category}"
             return "ideation_competitive_displacement"
 
-        # Detail: has implementation_steps but NOT title
+        # Detail: has implementation_steps but NOT title. The dispatcher
+        # routes prompts mentioning "partnership" or "negotiation" — the
+        # spec's canonical null-emit examples — to the uncalibrated
+        # fixture so dev/E2E exercise the matrix's uncalibrated footer
+        # strip. Same keyword-routing pattern as the ideation block.
         if "implementation_steps" in props and "title" not in props:
+            prompt_text = _extract_prompt_text(body)
+            if "partnership" in prompt_text or "negotiation" in prompt_text:
+                return "detail_uncalibrated"
             return "detail"
 
     return "unknown"

@@ -46,14 +46,23 @@
 
     /* Text */
     --text-primary: #eef2ff;
-    /* Body-text contrast bumped for dark-theme WCAG AA compliance per
-       ``tighten-analysis-page-readability``. ``--text-secondary``
-       lifted ~5.0:1 → ~7.5:1; ``--text-tertiary`` lifted ~1.9:1 → ~4.6:1
-       (was FAILING AA-normal). Light theme stays at its existing values
-       (already passing) — the parity is in the design intent, not the
+    /* Body-text contrast lifted twice on the dark theme:
+       1) ``tighten-analysis-page-readability`` brought
+          ``--text-secondary`` to ~7.5:1 and ``--text-tertiary`` to
+          ~4.6:1 — both WCAG-AA compliant.
+       2) This bump (Diagnostic Tool Feedback #3, Zack: "no gray font
+          on black background — hard to read") goes further:
+          ``--text-secondary`` lifted ~7.5:1 → ~11.5:1, and
+          ``--text-tertiary`` lifted ~4.6:1 → ~8.0:1. Both now clear
+          WCAG-AAA for body text (7:1). The visual delta from
+          ``--text-primary`` is preserved so hierarchy still reads
+          cleanly; the tokens are just less ``cool-gray`` and closer
+          to plain off-white.
+       Light theme stays at its existing values (already passing on a
+       white background); the parity is in the design intent, not the
        hex literals. */
-    --text-secondary: #a8b4d6;
-    --text-tertiary: #7c8aaf;
+    --text-secondary: #c8d2ec;
+    --text-tertiary: #9bafd2;
     --text-inverse: #060a12;
 
     /* Typography */
@@ -1452,6 +1461,61 @@ select {
     }
     100% {
         background-position: 0% 50%;
+    }
+}
+
+/* ── Opportunity hover-highlight (redesign-analysis-visuals P5) ──
+ *  When the user hovers an EBITDA leaf chip, a value-chain step,
+ *  or a strategy-map cell (P6), the matching opportunity cards in
+ *  ``OpportunitiesList`` apply ``.card-pulse`` — a one-shot 400 ms
+ *  outline glow that lands the user's eye on the linked card. The
+ *  effect is one-shot (no infinite loop) because the source-side
+ *  hover is intentional, and a continuously pulsing card while the
+ *  cursor sits still would be obnoxious. Re-entering the highlight
+ *  state re-triggers the animation by toggling the class. */
+@keyframes card-pulse {
+    0% {
+        box-shadow: 0 0 0 0 var(--accent-blue-glow);
+        outline-color: var(--accent-blue);
+    }
+    50% {
+        box-shadow: 0 0 0 6px var(--accent-blue-glow);
+        outline-color: var(--accent-blue);
+    }
+    100% {
+        box-shadow: 0 0 0 0 var(--accent-blue-glow);
+        outline-color: var(--accent-blue);
+    }
+}
+
+.card-pulse {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    animation: card-pulse 400ms ease-out;
+}
+
+/* ── Strategy-map Balanced Scorecard table (redesign-analysis-visuals P6) ──
+ *  The CSS-grid table (``StrategyMapTable.tsx``) lays out as
+ *  ``160px repeat(N, 1fr)`` at the default breakpoint — perspective
+ *  label column on the left, theme columns stretching to fill. On
+ *  narrow viewports (< 900 px) the fixed label column would crowd the
+ *  cells, and theme columns would shrink below readability. The
+ *  override converts each row to a single column flow: perspective
+ *  label stacks above its cells, cells span the full width, and the
+ *  theme-header row becomes a horizontal scroll target so the column
+ *  context remains visible.
+ *
+ *  Mitigation for "React Flow → CSS grid migration breaks responsive
+ *  layout below ~900 px viewport" risk noted in design.md. */
+@media (max-width: 900px) {
+    [data-testid='strategy-map-table'] > div {
+        grid-template-columns: 1fr !important;
+    }
+
+    [data-testid='strategy-map-table'] [data-testid^='strategy-map-row-'] > :first-child {
+        border-right: none;
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 8px;
     }
 }
 

@@ -7,6 +7,7 @@ import DocumentUpload from '@/components/DocumentUpload'
 import RiskBreakdown from '@/components/RiskBreakdown'
 import ValueLeverSummary from '@/components/ValueLeverSummary'
 import OpportunitiesList from '@/components/OpportunitiesList'
+import QuickWinsMatrix from '@/components/analysis/QuickWinsMatrix'
 import AnalysisExecutiveStrap from '@/components/analysis/AnalysisExecutiveStrap'
 import AnalysisHeader from '@/components/analysis/AnalysisHeader'
 import AnalysisOverviewCards from '@/components/analysis/AnalysisOverviewCards'
@@ -15,7 +16,10 @@ import EbitdaSection from '@/components/analysis/EbitdaSection'
 import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
+import DeepDiveCTA from '@/components/strategy-map/DeepDiveCTA'
+import StrategyMapDetailsSection from '@/components/strategy-map/StrategyMapDetailsSection'
 import HelpTooltip from '@/components/ui/HelpTooltip'
+import { OpportunityHoverProvider } from '@/lib/hooks/useOpportunityHover'
 import { LoadingSpinner } from '@/components/ui'
 import { useReanalyze } from '@/lib/hooks/useReanalyze'
 import { exportAnalysisDetailCsv } from '@/lib/utils/csvExport'
@@ -91,6 +95,15 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     // skip rendering entirely on missing data, rather than emitting an
     // empty `<AnalysisSection>` wrapper around a `null` body.
     const hasValueLevers = opportunities.some((o) => o.value_lever)
+    // Gate the relocated Value Proposition + Strategic Priorities
+    // ExpandableSection at the call site so the AnalysisSection wrapper
+    // doesn't render an empty heading when both fields are absent (the
+    // component's internal null-return would still leave an orphan
+    // wrapper otherwise). Matches the spec's "renders when the strategy
+    // map is present AND has at least one of VP or priorities" rule.
+    const hasStrategyDetails =
+        !!data.strategyMap &&
+        (!!data.strategyMap.valueProposition.primary || data.strategyMap.strategicPriorities.length > 0)
 
     // Failed analysis — show error + retry UI instead of the full analysis.
     if (data.error && !data.analyzedAt) {
@@ -114,7 +127,12 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     }
 
     return (
-        <>
+        // P5 (redesign-analysis-visuals): wrap the analysis body in the
+        // hover provider so EBITDA leaves, value-chain steps, the
+        // strategy-map cells (P6), and the Quick Wins matrix dots (P7)
+        // can all dispatch highlight events that the OpportunitiesList
+        // cards below subscribe to (and vice versa).
+        <OpportunityHoverProvider>
             {/* Beat 1 — IDENTITY.
                 Header / strap / overview render testid-only (no `title`
                 prop) by intentional design — none of these is a "section
@@ -164,7 +182,27 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 — legacy analyses produced before
                 ``redesign-strategy-map`` Phase 4 inlined map
                 generation into the scan. */}
-            <StrategyMapSlot analysisId={analysisId} strategyMap={data.strategyMap} />
+            <StrategyMapSlot
+                analysisId={analysisId}
+                strategyMap={data.strategyMap}
+                opportunities={opportunities}
+            />
+
+            {/* Value Proposition + Strategic Priorities — relocated
+                here from the strategy-map header by Phase 12 of
+                redesign-analysis-visuals (Diagnostic Tool Feedback #4:
+                "at the top here I would just have mission and vision").
+                Collapsed by default; the section renders nothing when
+                both fields are absent. Gating is internal to the
+                component to keep this call site simple. */}
+            {hasStrategyDetails && data.strategyMap ? (
+                <AnalysisSection id="value-proposition-priorities">
+                    <StrategyMapDetailsSection
+                        valueProposition={data.strategyMap.valueProposition}
+                        strategicPriorities={data.strategyMap.strategicPriorities}
+                    />
+                </AnalysisSection>
+            ) : null}
 
             {/* Beat 4 — FINANCIAL PICTURE (EBITDA + Value Chain are paired
                 lenses on the same question: where does value sit and how
@@ -216,6 +254,20 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                 <OpportunitiesList opportunities={opportunities} activeLever={activeLever} />
             </AnalysisSection>
 
+            {/* Quick Wins 2×2 matrix — Phase 7 of redesign-analysis-visuals.
+                Sits immediately after the OpportunitiesList so the reader
+                sees the same opportunities plotted by impact × timeline
+                right after they read the cards. Clicking a dot pulses +
+                scrolls the matching opportunity card into view via the
+                P5 hover provider. Gated on opportunities.length >= 1 to
+                match the "no orphan visualisations on sparse reports"
+                rule the other sections use. */}
+            {opportunities.length >= 1 && (
+                <AnalysisSection id="quick-wins-matrix" title="ROI × Investment Matrix">
+                    <QuickWinsMatrix opportunities={opportunities} />
+                </AnalysisSection>
+            )}
+
             {/* Beat 7 — IMPROVE THIS ANALYSIS. The reanalyze progress bar
                 and any reanalyze polling errors render INSIDE the
                 DocumentUpload widget rather than as orphan siblings on
@@ -239,6 +291,33 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     documentError={reanalyze.documentError}
                 />
             </AnalysisSection>
-        </>
+
+            {/*
+             * End-of-analysis Contact-us CTA — Diagnostic Tool Feedback #8.
+             * Zack: "at the end of this analysis I would duplicate the
+             * 'contact us' bar you have in the middle of the analysis as
+             * well, since ideally when they get to the end they'll want to
+             * get in touch."
+             *
+             * Renders on EVERY successful analysis page (Phase 11 of
+             * ``redesign-analysis-visuals`` removed the prior
+             * ``opportunities.length > 0`` gate). The CTA's purpose is
+             * "the user reached the end of the page; offer them the next
+             * step" — that purpose holds whether or not the AI surfaced
+             * specific opportunities. Gating on opportunity count would
+             * leave sparse reports without a contact path, the opposite of
+             * what we want.
+             *
+             * The ``placement="analysis-end"`` prop switches the analytics
+             * event name to ``sc0red_cta_rendered_analysis_end`` and the
+             * outbound URL's ``?source=analysis-end``. Funnel queries can
+             * now attribute impressions and clicks to the right surface
+             * (the prior implementation double-counted the strategy-map
+             * funnel by firing the ``_strategy_map`` events here).
+             */}
+            <AnalysisSection id="deep-dive-cta-end">
+                <DeepDiveCTA analysisId={analysisId} placement="analysis-end" />
+            </AnalysisSection>
+        </OpportunityHoverProvider>
     )
 }

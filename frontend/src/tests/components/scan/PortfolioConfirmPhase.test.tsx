@@ -119,7 +119,33 @@ describe('PortfolioConfirmPhase', () => {
             })
             fireEvent.click(screen.getByText('Add'))
 
-            expect(onAddCompany).toHaveBeenCalledWith('New Corp', 'https://newcorp.com')
+            // ``normalizeUserUrl`` (Diagnostic Tool Feedback #1) parses
+            // ``https://newcorp.com`` through the URL constructor, which
+            // canonicalises it by appending a trailing slash on the
+            // bare-host form. We accept the canonical form here — the
+            // backend treats the trailing slash as equivalent.
+            expect(onAddCompany).toHaveBeenCalledWith('New Corp', 'https://newcorp.com/')
+        })
+
+        it('accepts bare hostnames and auto-prepends https://', () => {
+            // Diagnostic Tool Feedback #1: a user typing ``newcorp.com``
+            // (no scheme) used to be rejected with the unhelpful
+            // ``URL must start with http:// or https://`` error.
+            // ``normalizeUserUrl`` now accepts bare hostnames and
+            // normalises them to ``https://...`` before handing off.
+            const onAddCompany = vi.fn()
+            render(<PortfolioConfirmPhase {...defaultProps} onAddCompany={onAddCompany} />)
+
+            fireEvent.click(screen.getByText('+ Add Company Manually'))
+            fireEvent.change(screen.getByLabelText('Company Name'), {
+                target: { value: 'Bare Co' },
+            })
+            fireEvent.change(screen.getByLabelText('Company URL'), {
+                target: { value: 'bareco.com' },
+            })
+            fireEvent.click(screen.getByText('Add'))
+
+            expect(onAddCompany).toHaveBeenCalledWith('Bare Co', 'https://bareco.com/')
         })
 
         it('shows error when name is empty', () => {
@@ -145,18 +171,28 @@ describe('PortfolioConfirmPhase', () => {
             expect(screen.getByText('Both name and URL are required.')).toBeInTheDocument()
         })
 
-        it('shows error when URL does not start with http', () => {
+        it('shows the friendly URL error for malformed input', () => {
+            // ``normalizeUserUrl`` (Diagnostic Tool Feedback #1) replaced
+            // the previous "URL must start with http:// or https://"
+            // rejection with a single sentence-case error covering all
+            // shape failures. ``ftp://`` parses as a valid URL, so the
+            // shape check that triggers here is the "no dot in hostname"
+            // soft guard — fed a single bare word.
             render(<PortfolioConfirmPhase {...defaultProps} />)
             fireEvent.click(screen.getByText('+ Add Company Manually'))
             fireEvent.change(screen.getByLabelText('Company Name'), {
                 target: { value: 'New Corp' },
             })
             fireEvent.change(screen.getByLabelText('Company URL'), {
-                target: { value: 'ftp://newcorp.com' },
+                target: { value: 'notarealurl' },
             })
             fireEvent.click(screen.getByText('Add'))
 
-            expect(screen.getByText('URL must start with http:// or https://')).toBeInTheDocument()
+            expect(
+                screen.getByText(
+                    "Enter a website URL — we'll add https:// for you. e.g. stripe.com or www.stripe.com"
+                )
+            ).toBeInTheDocument()
         })
 
         it('clears form and collapses after successful add', () => {

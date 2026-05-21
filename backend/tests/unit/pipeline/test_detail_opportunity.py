@@ -9,12 +9,31 @@ from src.pipeline.pipeline_steps.detail_opportunity import (
 
 class TestDetailSchema:
     def test_required_fields(self):
+        # Phase 14 of redesign-analysis-visuals added the two numeric
+        # ROI x Investment fields. Both are nullable in the schema
+        # (``type: [integer, null]`` / ``type: [number, null]``) but
+        # the AI MUST emit them on every call — null is acceptable,
+        # omission is not.
         assert set(DETAIL_SCHEMA["required"]) == {
             "implementation_steps",
             "timeline",
             "investment_range",
             "roi_estimate",
+            "investment_value_usd",
+            "roi_estimate_pct",
         }
+
+    def test_numeric_axes_are_nullable_with_range_constraints(self):
+        # The matrix scatter plot needs honest ``null`` for opportunities
+        # the AI can't size — better than hallucinated coordinates.
+        # Range constraints match the spec: investment >= 0, ROI 0..500.
+        investment = DETAIL_SCHEMA["properties"]["investment_value_usd"]
+        assert investment["type"] == ["integer", "null"]
+        assert investment["minimum"] == 0
+        roi = DETAIL_SCHEMA["properties"]["roi_estimate_pct"]
+        assert roi["type"] == ["number", "null"]
+        assert roi["minimum"] == 0
+        assert roi["maximum"] == 500
 
     def test_no_extra_fields(self):
         assert DETAIL_SCHEMA["additionalProperties"] is False
@@ -99,9 +118,15 @@ class TestBuildDetailPrompt:
         )
         assert "TestCo" in prompt
 
-    def test_prompt_is_compact(self):
+    def test_prompt_is_compact_enough(self):
+        # Phase 14 expanded the prompt with explicit per-field
+        # instructions for ``investment_value_usd`` + ``roi_estimate_pct``
+        # (including the null-preferred-over-guess rule). The compact
+        # baseline was 500 chars; the new floor is ~2000 chars, which
+        # is still well under any token budget — the AI's per-call
+        # cost is dominated by the company context, not this template.
         prompt = build_detail_prompt(
             self._make_profile(),
             "Title", "Desc",
         )
-        assert len(prompt) < 500
+        assert len(prompt) < 3000

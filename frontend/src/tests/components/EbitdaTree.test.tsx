@@ -134,8 +134,20 @@ const FULL_TREE: EbitdaNode[] = [
     },
 ]
 
-const OPPS: Array<{ title: string; value_lever?: string }> = [
-    { title: 'Upsell premium tier', value_lever: 'Revenue Side' },
+// EbitdaTree now takes the full ``Opportunity[]`` shape (widened in
+// the ``redesign-analysis-visuals`` P2 migration so the shared
+// ``OpportunityDotStrip`` has the field set it needs).
+import type { Opportunity } from '@/lib/types/api'
+
+const OPPS: Opportunity[] = [
+    {
+        title: 'Upsell premium tier',
+        description: 'Convert mid-tier users to premium with usage-based incentives.',
+        impact_rating: 'High',
+        timeline: 'Quick Win (1-3 months)',
+        strategic_category: 'Operational Efficiency',
+        value_lever: 'Revenue Side',
+    },
 ]
 
 // ── Spec requirement: vertical waterfall layout ─────────────────────────────
@@ -382,7 +394,27 @@ describe('EbitdaTree — responsive layout (spec requirement 3, mobile branch)',
 // ── Spec requirement: confidence + opportunity-link preserved ───────────────
 
 describe('EbitdaTree — preserved leaf-card affordances (spec requirement 5)', () => {
-    it('renders a confidence chip on a leaf that carries a level', () => {
+    it('renders an opportunity-link affordance on a leaf with linked_opportunity_indices', () => {
+        // The leaf "subscriptions" has linked_opportunity_indices: [0]; OPPS
+        // has one entry. The card surfaces the link via the shared
+        // ``OpportunityDotStrip`` (testid preserved for compat with the
+        // pre-extraction tests).
+        render(<EbitdaTree treeData={FULL_TREE} opportunities={OPPS} />)
+        const dotRow = screen.getByTestId('ebitda-linked-opportunity-dots')
+        // The strip renders dots as aria-hidden <span> children of the
+        // strip's outer wrapper; assert via that selector rather than
+        // ``.children`` to avoid coupling to the strip's internal markup.
+        const dots = dotRow.querySelectorAll('span[aria-hidden="true"]')
+        expect(dots).toHaveLength(1)
+        expect(dots[0].getAttribute('title')).toContain('Upsell premium tier')
+    })
+
+    it('does NOT render the legacy confidence chip on any leaf', () => {
+        // Anti-regression for ``redesign-analysis-visuals`` P2: the
+        // confidence chip was removed because Zack flagged it as
+        // competing with the more decision-relevant opportunity dots.
+        // ``confidence_level`` / ``confidence_basis`` data still flows
+        // on every ``EbitdaNode`` but no chip should render.
         const tree: EbitdaNode[] = [
             {
                 ...FULL_TREE[0],
@@ -400,18 +432,10 @@ describe('EbitdaTree — preserved leaf-card affordances (spec requirement 5)', 
             FULL_TREE[4],
         ]
         render(<EbitdaTree treeData={tree} opportunities={OPPS} />)
-        expect(screen.getByLabelText('Confidence: Medium')).toBeInTheDocument()
-    })
-
-    it('renders an opportunity-link affordance on a leaf with linked_opportunity_indices', () => {
-        // The leaf "subscriptions" has linked_opportunity_indices: [0]; OPPS
-        // has one entry. The card surfaces the link via the indicator-dot
-        // row.
-        render(<EbitdaTree treeData={FULL_TREE} opportunities={OPPS} />)
-        // The leaf row's article exposes ``ebitda-linked-opportunity-dots``.
-        const dotRow = screen.getByTestId('ebitda-linked-opportunity-dots')
-        expect(dotRow.children).toHaveLength(1)
-        expect(dotRow.firstElementChild?.getAttribute('title')).toContain('Upsell premium tier')
+        expect(screen.queryByTestId('ebitda-confidence-chip')).toBeNull()
+        // Also assert no ``Confidence: Medium`` accessible label is
+        // present (would be the ConfidenceIndicator's aria-label).
+        expect(screen.queryByLabelText('Confidence: Medium')).toBeNull()
     })
 })
 

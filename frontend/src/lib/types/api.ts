@@ -14,6 +14,15 @@ export interface Opportunity {
     investment_range?: string
     roi_estimate?: string
     value_lever?: 'Revenue Side' | 'Cost Side' | 'Both'
+    // Numeric ROI × Investment axes for the Quick Wins matrix scatter
+    // plot (Phase 14 of redesign-analysis-visuals, design D8).
+    // ``null`` / undefined → opportunity routes to the matrix's
+    // "uncalibrated" footer strip rather than the main scatter.
+    // Range constraints (enforced server-side):
+    //   - ``investment_value_usd``: integer >= 0 (USD).
+    //   - ``roi_estimate_pct``: number 0..500 (renderer clamps at 300%).
+    investment_value_usd?: number | null
+    roi_estimate_pct?: number | null
 }
 
 export interface EbitdaNode {
@@ -76,7 +85,7 @@ export interface AnalysisData {
     topActions?: string[]
     ebitdaTree?: EbitdaTree
     valueChain?: ValueChain
-    /** AI-generated Balanced Scorecard strategy map (Vector Advisory).
+    /** AI-generated Balanced Scorecard strategy map (sc0red Advisory).
      * Optional because legacy analyses pre-date this field. */
     strategyMap?: StrategyMap
     documents?: DocumentInfo[]
@@ -143,6 +152,17 @@ export interface FinancialObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** Index pointers into the analysis's `opportunities` array — same
+     *  idiom as `ValueChainStep.opportunity_indices` and
+     *  `EbitdaNode.linked_opportunity_indices`. Renders as coloured
+     *  opportunity dots on the BSC strategy-map cell.
+     *
+     *  Phase 1a of the `redesign-analysis-visuals` change ships only the
+     *  data shape: persisted records produced before this change carry
+     *  no value (deserialise to `undefined`); the AI does not yet
+     *  populate it (Phase 1b). Renderers MUST treat `undefined`,
+     *  missing, and empty-array as semantically identical "no links". */
+    linked_opportunity_indices?: number[]
 }
 
 export interface CustomerObjective {
@@ -157,6 +177,8 @@ export interface CustomerObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** See `FinancialObjective.linked_opportunity_indices`. */
+    linked_opportunity_indices?: number[]
 }
 
 export interface InternalProcessObjective {
@@ -169,6 +191,8 @@ export interface InternalProcessObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** See `FinancialObjective.linked_opportunity_indices`. */
+    linked_opportunity_indices?: number[]
 }
 
 export interface InternalProcessTheme {
@@ -186,6 +210,8 @@ export interface CapacityObjective {
      *  when the AI didn't supply one — OpenAI strict mode requires the
      *  field to be present, so use `?? ''` when rendering. */
     rationale_source?: string | null
+    /** See `FinancialObjective.linked_opportunity_indices`. */
+    linked_opportunity_indices?: number[]
 }
 
 export interface OrganizationalCapacityPerspective {

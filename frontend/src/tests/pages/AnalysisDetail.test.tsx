@@ -40,6 +40,17 @@ vi.mock('@/components/DocumentUpload', () => ({
     ),
 }))
 
+// Silence the CTA analytics emit so Reanalysis-polling tests' tightly
+// queued `fetchMock.mockResolvedValueOnce` sequences aren't intercepted
+// by the analytics POST that fires when `DeepDiveCTA` mounts. The end-
+// of-analysis CTA (Diagnostic Tool Feedback #8) mounts on every render
+// of `AnalysisDetail` with opportunities present, so without this mock
+// the analytics fetch would consume the first queued response intended
+// for the reanalyze POST.
+vi.mock('@/lib/analytics/emitEvent', () => ({
+    emit: vi.fn(),
+}))
+
 const mockRealtimeStart = vi.fn().mockResolvedValue(false)
 const mockRealtimeStop = vi.fn()
 
@@ -142,22 +153,25 @@ describe('AnalysisDetail — Value Lever', () => {
         const data = buildAnalysisData()
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.getByText('Automate Support')).toBeInTheDocument()
-        expect(screen.getByText('AI Platform')).toBeInTheDocument()
+        // The ROI × Investment matrix (Phase 14) renders each opportunity
+        // title inline next to its dot, so global ``getByText`` would
+        // find each title twice — once in the opportunities list, once
+        // in the matrix. Scope to the opportunities section to assert
+        // the FILTER changes the list (the matrix renders the full set
+        // unfiltered by design).
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).getByText('Automate Support')).toBeInTheDocument()
+        expect(within(oppSection).getByText('AI Platform')).toBeInTheDocument()
 
-        // Click the "Revenue Side" summary card (the one inside the Value Impact section).
-        // Pre-`extract-definition-popover` this used `.parentElement!` from
-        // the heading text — that walked into `.section-header-row`, which
-        // no longer contains the lever cards. The testid wrapper is the
-        // stable handle.
+        // Click the "Revenue Side" summary card inside the Value Impact section.
         const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
         const revenueSideCard = within(valueImpactSection).getAllByText('Revenue Side')[0]
         fireEvent.click(revenueSideCard.closest('[class*="card"]')!)
 
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
-        expect(screen.queryByText('AI Platform')).not.toBeInTheDocument()
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).queryByText('Automate Support')).not.toBeInTheDocument()
+        expect(within(oppSection).queryByText('AI Platform')).not.toBeInTheDocument()
     })
 
     it('clicking active lever card resets filter to All', () => {
@@ -168,16 +182,19 @@ describe('AnalysisDetail — Value Lever', () => {
         const costSideCard = within(valueImpactSection)
             .getAllByText('Cost Side')[0]
             .closest('[class*="card"]')!
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
 
         fireEvent.click(costSideCard)
-        expect(screen.queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
-        expect(screen.getByText('Automate Support')).toBeInTheDocument()
+        // Scope to the opportunities section — the matrix renders titles
+        // for the full unfiltered set.
+        expect(within(oppSection).queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
+        expect(within(oppSection).getByText('Automate Support')).toBeInTheDocument()
 
         // Click again to deselect
         fireEvent.click(costSideCard)
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.getByText('Automate Support')).toBeInTheDocument()
-        expect(screen.getByText('AI Platform')).toBeInTheDocument()
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).getByText('Automate Support')).toBeInTheDocument()
+        expect(within(oppSection).getByText('AI Platform')).toBeInTheDocument()
     })
 
     it('hides value lever section when no opportunities have value_lever', () => {
@@ -196,7 +213,9 @@ describe('AnalysisDetail — Value Lever', () => {
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
         expect(screen.queryByText('Value Impact')).not.toBeInTheDocument()
-        expect(screen.getByText('Old Opportunity')).toBeInTheDocument()
+        // Scope to opportunities — the title also appears in the matrix chip.
+        const oppSection = screen.getByTestId('analysis-section-opportunities')
+        expect(within(oppSection).getByText('Old Opportunity')).toBeInTheDocument()
     })
 
     it('combined category and lever filter produces correct intersection', () => {
@@ -208,8 +227,8 @@ describe('AnalysisDetail — Value Lever', () => {
         const competitiveMoatButton = within(oppSection).getAllByText('Competitive Moat')[0]
         fireEvent.click(competitiveMoatButton)
 
-        expect(screen.getByText('Deploy AI Chatbot')).toBeInTheDocument()
-        expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
+        expect(within(oppSection).getByText('Deploy AI Chatbot')).toBeInTheDocument()
+        expect(within(oppSection).queryByText('Automate Support')).not.toBeInTheDocument()
 
         // Now also filter by "Cost Side" lever — intersection should be empty
         const valueImpactSection = screen.getByTestId('analysis-section-value-lever')
@@ -218,8 +237,8 @@ describe('AnalysisDetail — Value Lever', () => {
             .closest('[class*="card"]')!
         fireEvent.click(costSideCard)
 
-        expect(screen.queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
-        expect(screen.queryByText('Automate Support')).not.toBeInTheDocument()
+        expect(within(oppSection).queryByText('Deploy AI Chatbot')).not.toBeInTheDocument()
+        expect(within(oppSection).queryByText('Automate Support')).not.toBeInTheDocument()
     })
 
     it('displays value lever badge on opportunity cards', () => {
@@ -660,26 +679,54 @@ describe('AnalysisDetail — DeepDiveCTA placement (redesign-analysis-detail-nar
 
         render(<AnalysisDetail data={data} analysisId="test-id" />)
 
-        const cta = screen.getByTestId('strategy-map-cta')
+        // Diagnostic Tool Feedback #8 added a second ``DeepDiveCTA`` at
+        // the very end of the analysis (id ``deep-dive-cta-end``). Both
+        // CTAs use the same ``strategy-map-cta`` testid because they
+        // share the underlying component. We scope this assertion to the
+        // FIRST CTA — the one rendered alongside the strategy map — to
+        // preserve the original ``redesign-analysis-detail-narrative``
+        // intent of this test: confirm the mid-page CTA sits after the
+        // map. The end-page CTA's placement is asserted via the section-
+        // ordering test in the other describe block.
+        const ctas = screen.getAllByTestId('strategy-map-cta')
+        expect(ctas.length).toBeGreaterThanOrEqual(1)
+        const midPageCta = ctas[0]
         const map = screen.getByTestId('strategy-map-view')
 
         // The CTA must appear AFTER the strategy map in document order
         // (i.e. it's later in the DOM tree). compareDocumentPosition
         // returns DOCUMENT_POSITION_PRECEDING (2) when the argument
         // precedes the receiver — i.e. `map` comes before `cta`.
-        const relationship = cta.compareDocumentPosition(map)
+        const relationship = midPageCta.compareDocumentPosition(map)
         expect(relationship & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
     })
 
-    it('does NOT render the deep-dive CTA when the analysis has no strategy map', () => {
+    it('omits the mid-page deep-dive CTA when the analysis has no strategy map (end-CTA still renders)', () => {
         const data = buildAnalysisData()
         // No ``strategyMap`` on the data → ``StrategyMapSlot`` returns
-        // ``null`` (per ``redesign-strategy-map`` Phase 4). Both the
-        // strategy-map section wrapper AND the deep-dive CTA wrapper
-        // are absent from the DOM.
+        // ``null`` (per ``redesign-strategy-map`` Phase 4). The mid-page
+        // strategy-map section wrapper AND its companion deep-dive CTA
+        // wrapper are absent from the DOM.
+        //
+        // The end-of-analysis CTA (``deep-dive-cta-end``, added by
+        // Diagnostic Tool Feedback #8) is independent of the strategy
+        // map and renders on every successful analysis.
         render(<AnalysisDetail data={data} analysisId="test-id" />)
         expect(screen.queryByTestId('analysis-section-strategy-map')).toBeNull()
         expect(screen.queryByTestId('analysis-section-deep-dive-cta')).toBeNull()
+        expect(screen.queryByTestId('analysis-section-deep-dive-cta-end')).toBeInTheDocument()
+    })
+
+    it('renders the end-of-analysis CTA even when the analysis has no opportunities', () => {
+        // Phase 11 of ``redesign-analysis-visuals`` removed the prior
+        // ``opportunities.length > 0`` gate on the bottom CTA. The CTA's
+        // purpose is "the user reached the end of the page; offer them
+        // the next step" — that purpose holds whether or not the AI
+        // surfaced specific opportunities. Gating would leave sparse
+        // reports without a contact path, the opposite of what we want.
+        const data = buildAnalysisData({ opportunities: [] })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+        expect(screen.queryByTestId('analysis-section-deep-dive-cta-end')).toBeInTheDocument()
     })
 })
 
@@ -747,6 +794,12 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         //   - The strategy-map slot moved up to Beat 3 (immediately
         //     after the Top-3 immediate actions). With a populated
         //     map the slot renders <StrategyMapView/> + <DeepDiveCTA/>.
+        // Per Diagnostic Tool Feedback #8 (Zack: "duplicate the
+        // 'contact us' bar at the end of this analysis"), a second
+        // ``DeepDiveCTA`` now renders after ``document-upload`` on every
+        // successful analysis page. Phase 11 of redesign-analysis-visuals
+        // removed the prior ``opportunities.length > 0`` gate so sparse
+        // reports keep their contact path.
         const expectedOrder = [
             'header',
             'strap',
@@ -754,12 +807,22 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'top-actions',
             'strategy-map',
             'deep-dive-cta',
+            // Phase 12 of redesign-analysis-visuals relocated VP +
+            // Strategic Priorities here, OUT of the strategy-map
+            // header (Diagnostic Tool Feedback #4). Renders when the
+            // strategy map carries either field.
+            'value-proposition-priorities',
             'ebitda',
             'value-chain',
             'risk-breakdown',
             'value-lever',
             'opportunities',
+            // Quick Wins matrix (P7 of redesign-analysis-visuals) sits
+            // between ``opportunities`` and ``document-upload`` when
+            // ``opportunities.length >= 1``.
+            'quick-wins-matrix',
             'document-upload',
+            'deep-dive-cta-end',
         ]
         expect(getRenderedSectionIds()).toEqual(expectedOrder)
     })
@@ -779,7 +842,11 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
         expect(ids).not.toContain('deep-dive-cta')
         // Sc0redCTABanner deleted in Phase 5 — no ``sc0red-cta`` slot.
         expect(ids).not.toContain('sc0red-cta')
-        // Remaining sections still in the same relative order.
+        // Remaining sections still in the same relative order. The
+        // bottom ``deep-dive-cta-end`` is present because Phase 11 of
+        // redesign-analysis-visuals removed the prior opportunity-count
+        // gate — the end-CTA now renders on every successful analysis
+        // page, independent of strategy map AND opportunity count.
         expect(ids).toEqual([
             'header',
             'strap',
@@ -788,7 +855,11 @@ describe('AnalysisDetail — section ordering (redesign-analysis-detail-narrativ
             'risk-breakdown',
             'value-lever',
             'opportunities',
+            // Quick Wins matrix (P7) renders here too — gated on
+            // opportunities.length, not on strategy-map presence.
+            'quick-wins-matrix',
             'document-upload',
+            'deep-dive-cta-end',
         ])
     })
 

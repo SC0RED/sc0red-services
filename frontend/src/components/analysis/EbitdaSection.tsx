@@ -1,32 +1,12 @@
 'use client'
 
+import AnalysisLegend from '@/components/analysis/AnalysisLegend'
 import EbitdaTree from '@/components/EbitdaTree'
 import type { EbitdaNode, EbitdaTree as EbitdaTreeData, Opportunity } from '@/lib/types/api'
-import { LEVER_COLORS } from '@/lib/utils/leverColors'
 
 interface EbitdaSectionProps {
     ebitdaTree: EbitdaTreeData
     opportunities: Opportunity[]
-}
-
-/** Whether any leaf node in the tree carries a confidence level. We only
- *  surface the legend when at least one chip will actually render — older
- *  analyses (re-analyse or pre-this-feature) have no chips, so the legend
- *  would just confuse readers. */
-function treeHasConfidence(nodes: EbitdaNode[]): boolean {
-    for (const node of nodes) {
-        if (
-            node.confidence_level === 'high' ||
-            node.confidence_level === 'medium' ||
-            node.confidence_level === 'low'
-        ) {
-            return true
-        }
-        if (node.children && treeHasConfidence(node.children)) {
-            return true
-        }
-    }
-    return false
 }
 
 /** Whether any leaf in the tree carries a non-empty
@@ -47,8 +27,21 @@ function treeHasLinkedOpportunities(nodes: EbitdaNode[]): boolean {
     return false
 }
 
+/**
+ * EBITDA Impact Model section wrapper.
+ *
+ * P2 of ``redesign-analysis-visuals`` removed the confidence chip from
+ * leaf chips and the matching ``ebitda-confidence-legend`` caption that
+ * sat above the tree — the chip competed with the more decision-
+ * relevant opportunity-link dots. ``confidence_level`` /
+ * ``confidence_basis`` data still flows on the API response for any
+ * future surface (audit panel, debug overlay).
+ *
+ * The remaining legend is the shared ``AnalysisLegend`` component
+ * (``tool="ebitda"``) — same copy + colour swatches the strategy map
+ * and value chain use, ensuring cross-tool consistency.
+ */
 export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSectionProps) {
-    const showConfidenceLegend = treeHasConfidence(ebitdaTree.treeData)
     const showOpportunityLinkLegend = treeHasLinkedOpportunities(ebitdaTree.treeData)
     return (
         <div className="analysis-section-spacing">
@@ -83,66 +76,11 @@ export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSecti
                 </p>
             )}
 
-            {showConfidenceLegend && (
-                <div data-testid="ebitda-confidence-legend" style={legendStyle}>
-                    <strong style={legendStrongStyle}>Confidence:</strong> derivation provenance, not
-                    subjective quality. <strong style={legendStrongStyle}>High</strong> = both business model
-                    and company size matched known templates.{' '}
-                    <strong style={legendStrongStyle}>Medium</strong> = one input matched; the other
-                    defaulted. <strong style={legendStrongStyle}>Low</strong> = both defaulted; figure is a
-                    generic mid-market estimate.
-                </div>
-            )}
-
-            {showOpportunityLinkLegend && (
-                <div data-testid="ebitda-opportunity-link-legend" style={legendStyle}>
-                    <strong style={legendStrongStyle}>Opportunity links:</strong>{' '}
-                    <span aria-hidden="true" style={dotStyle(LEVER_COLORS['Revenue Side'])} />
-                    <strong style={legendStrongStyle}>Revenue Side</strong> ·{' '}
-                    <span aria-hidden="true" style={dotStyle(LEVER_COLORS['Cost Side'])} />
-                    <strong style={legendStrongStyle}>Cost Side</strong> ·{' '}
-                    <span aria-hidden="true" style={dotStyle(LEVER_COLORS.Both)} />
-                    <strong style={legendStrongStyle}>Both</strong> — AI Opportunities targeting this P&amp;L
-                    line.
-                </div>
-            )}
+            {showOpportunityLinkLegend && <AnalysisLegend tool="ebitda" />}
 
             <div className="card card--rich">
                 <EbitdaTree treeData={ebitdaTree.treeData} opportunities={opportunities} />
             </div>
         </div>
     )
-}
-
-// ── legend styles ───────────────────────────────────────────────────────────
-
-/** Shared by both the confidence legend and the opportunity-link
- *  legend — caption-step font, tertiary text color, low vertical
- *  rhythm. Each legend stacks as a separate row inside the section's
- *  header region. Co-managed so future styling changes hit both. */
-const legendStyle: React.CSSProperties = {
-    fontSize: '0.875rem',
-    color: 'var(--text-tertiary)',
-    marginBottom: '0.75rem',
-    lineHeight: 1.6,
-}
-
-const legendStrongStyle: React.CSSProperties = {
-    color: 'var(--text-secondary)',
-}
-
-/** Each legend dot is a 10 × 10 px inline-block circle filled with the
- *  matching ``--lever-*`` theme token. Slightly larger than the in-chip
- *  8 × 8 px dots so they read cleanly at legend typography scale —
- *  same trick the strategy-map ``ConfidenceLegend`` uses. */
-function dotStyle(background: string): React.CSSProperties {
-    return {
-        display: 'inline-block',
-        width: '10px',
-        height: '10px',
-        borderRadius: '50%',
-        background,
-        verticalAlign: 'middle',
-        marginRight: '4px',
-    }
 }

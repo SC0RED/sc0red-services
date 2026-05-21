@@ -3,7 +3,7 @@
 import type { CSSProperties } from 'react'
 
 import EbitdaNodeComponent, { type EbitdaCardProps } from '@/components/EbitdaNodeComponent'
-import type { EbitdaNode } from '@/lib/types/api'
+import type { EbitdaNode, Opportunity } from '@/lib/types/api'
 
 /**
  * Static vertical-waterfall renderer for the EBITDA Impact Model.
@@ -42,7 +42,12 @@ const WATERFALL_HEADING_ID = 'ebitda-waterfall-heading'
 
 interface EbitdaTreeProps {
     treeData: EbitdaNode[]
-    opportunities: Array<{ title: string; value_lever?: string }>
+    /** Full opportunities array — pass the same value the analysis page
+     *  hands to the rest of the analysis sections. The shared
+     *  ``OpportunityDotStrip`` resolves index pointers from each leaf
+     *  node's ``linked_opportunity_indices`` against this array at
+     *  render time. */
+    opportunities: Opportunity[]
 }
 
 export default function EbitdaTree({ treeData, opportunities }: EbitdaTreeProps) {
@@ -129,7 +134,10 @@ function resolveConnectorBelow(index: number, length: number): 'minus' | 'equals
 }
 
 /** Map an ``EbitdaNode`` (backend shape with snake_case fields) to the
- *  ``EbitdaCardProps`` (camelCase) the card component consumes. */
+ *  ``EbitdaCardProps`` (camelCase) the card component consumes. The
+ *  card delegates dot-strip rendering to the shared
+ *  ``OpportunityDotStrip``, so we just pass through the raw index
+ *  pointers + the full opportunities array — no pre-mapping. */
 function nodeToCardProps(node: EbitdaNode, opportunities: EbitdaTreeProps['opportunities']): EbitdaCardProps {
     return {
         label: node.label,
@@ -143,16 +151,10 @@ function nodeToCardProps(node: EbitdaNode, opportunities: EbitdaTreeProps['oppor
         description: node.description,
         // ``linked_opportunity_indices`` is required on ``EbitdaNode``
         // but legacy records persisted before the field was added carry
-        // ``undefined``. Keep the ``?? []`` as forward-compat for those
-        // records — without it the next ``.filter`` would throw.
-        linkedOpportunities: (node.linked_opportunity_indices ?? [])
-            .filter((i) => i >= 0 && i < opportunities.length)
-            .map((i) => ({
-                title: opportunities[i].title,
-                valueLever: opportunities[i].value_lever ?? '',
-            })),
-        confidenceLevel: node.confidence_level,
-        confidenceBasis: node.confidence_basis,
+        // ``undefined``. Default to ``[]`` so the dot strip renders
+        // nothing for legacy records instead of throwing.
+        linkedIndices: node.linked_opportunity_indices ?? [],
+        opportunities,
     }
 }
 

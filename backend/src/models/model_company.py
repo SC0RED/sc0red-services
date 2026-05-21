@@ -86,7 +86,23 @@ class RiskAssessment(BaseModel):
 
 
 class Opportunity(BaseModel):
-    """AI opportunity recommendation."""
+    """AI opportunity recommendation.
+
+    The two numeric ``investment_value_usd`` + ``roi_estimate_pct``
+    fields were added by Phase 14 of ``redesign-analysis-visuals``
+    (design D8) so the analysis page can render a true ROI x Investment
+    2x2 scatter plot. Both are nullable because the AI may not always
+    have enough signal to estimate them — ``None`` is preferred over a
+    hallucinated guess. Renderers route opportunities with either field
+    ``None`` to the matrix's "uncalibrated" footer strip rather than
+    plotting them with bogus coordinates.
+
+    The pre-existing ``investment_range`` and ``roi_estimate`` (string)
+    fields are kept for the per-opportunity card display — the bucketed
+    string ranges read better in narrative copy than a single integer
+    point estimate, and the per-card UI predates the matrix axis flip.
+    Backend persistence carries both representations.
+    """
 
     title: str
     impact_rating: str = ""  # High | Medium | Low
@@ -97,6 +113,15 @@ class Opportunity(BaseModel):
     investment_range: str = ""
     roi_estimate: str = ""
     value_lever: Literal["Revenue Side", "Cost Side", "Both"] | None = None
+    # Numeric ROI x Investment axes for the Quick Wins matrix scatter
+    # plot (Phase 14). ``None`` when the AI cannot ground the number in
+    # the provided context — the matrix renderer routes ``None`` rows
+    # to its uncalibrated footer strip. Range constraints match
+    # ``quick-wins-matrix`` spec:
+    #   - ``investment_value_usd``: non-negative integer (USD).
+    #   - ``roi_estimate_pct``: 0..500 (clamps render at 300%).
+    investment_value_usd: int | None = Field(default=None, ge=0)
+    roi_estimate_pct: float | None = Field(default=None, ge=0, le=500)
 
 
 class OpportunityResult(BaseModel):

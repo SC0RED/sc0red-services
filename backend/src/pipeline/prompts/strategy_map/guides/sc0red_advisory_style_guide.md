@@ -1,6 +1,6 @@
-# Vector Advisory Strategy-Map House Style
+# sc0red Advisory Strategy-Map House Style
 
-This guide defines the distinctive house style for Vector Advisory
+This guide defines the distinctive house style for sc0red Advisory
 strategy maps, derived from a 2011 client engagement deck (Wawa). The
 style sits ATOP the Kaplan & Norton framework defined in
 `kaplan_norton_framework.md`. Every generated map MUST follow these

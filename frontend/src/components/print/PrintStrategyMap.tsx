@@ -1,4 +1,5 @@
 import ProvenanceMarker from '@/components/analysis/ProvenanceMarker'
+import type { OpportunityWithIndex } from '@/lib/pdf/sortOpportunities'
 import type { StrategyMap } from '@/lib/types/api'
 import { formatValueProposition } from '@/lib/utils/strategyMapUtils'
 
@@ -12,6 +13,11 @@ import {
 
 interface PrintStrategyMapProps {
     strategyMap: StrategyMap
+    /** Same sorted-with-original-index list used elsewhere in the PDF.
+     *  Required so each objective's ``linked_opportunity_indices`` can
+     *  resolve to a printed-index reference (``#N (title)``). Print
+     *  parity for the screen ``OpportunityDotStrip``. */
+    sortedOpportunities: OpportunityWithIndex[]
 }
 
 /**
@@ -31,7 +37,7 @@ interface PrintStrategyMapProps {
  * `PrintStrategyMapObjectives.tsx`; this file is the composition root
  * plus the shared header / connector / values / gaps blocks.
  */
-export default function PrintStrategyMap({ strategyMap }: PrintStrategyMapProps) {
+export default function PrintStrategyMap({ strategyMap, sortedOpportunities }: PrintStrategyMapProps) {
     return (
         <section className="print-section print-section--break-before print-strategy-map">
             <h2>Strategy Map</h2>
@@ -41,7 +47,11 @@ export default function PrintStrategyMap({ strategyMap }: PrintStrategyMapProps)
             <PrintPerspective label="Financial" tagline="Returns we generate">
                 <ObjectivesGrid columns={strategyMap.financial.objectives.length}>
                     {strategyMap.financial.objectives.map((objective) => (
-                        <PrintFinancialObjective key={objective.id} objective={objective} />
+                        <PrintFinancialObjective
+                            key={objective.id}
+                            objective={objective}
+                            sortedOpportunities={sortedOpportunities}
+                        />
                     ))}
                 </ObjectivesGrid>
             </PrintPerspective>
@@ -53,7 +63,11 @@ export default function PrintStrategyMap({ strategyMap }: PrintStrategyMapProps)
             >
                 <ObjectivesGrid columns={Math.min(strategyMap.customer.objectives.length, 4)}>
                     {strategyMap.customer.objectives.map((objective) => (
-                        <PrintCustomerObjective key={objective.id} objective={objective} />
+                        <PrintCustomerObjective
+                            key={objective.id}
+                            objective={objective}
+                            sortedOpportunities={sortedOpportunities}
+                        />
                     ))}
                 </ObjectivesGrid>
             </PrintPerspective>
@@ -64,7 +78,11 @@ export default function PrintStrategyMap({ strategyMap }: PrintStrategyMapProps)
                 connectorAbove="Enables us to deliver"
             >
                 {strategyMap.internalProcesses.themes.map((theme) => (
-                    <PrintInternalProcessTheme key={theme.name} theme={theme} />
+                    <PrintInternalProcessTheme
+                        key={theme.name}
+                        theme={theme}
+                        sortedOpportunities={sortedOpportunities}
+                    />
                 ))}
             </PrintPerspective>
 
@@ -77,14 +95,17 @@ export default function PrintStrategyMap({ strategyMap }: PrintStrategyMapProps)
                     <PrintCapacityObjective
                         bucket="People"
                         objective={strategyMap.organizationalCapacity.people}
+                        sortedOpportunities={sortedOpportunities}
                     />
                     <PrintCapacityObjective
                         bucket="Technology"
                         objective={strategyMap.organizationalCapacity.technology}
+                        sortedOpportunities={sortedOpportunities}
                     />
                     <PrintCapacityObjective
                         bucket="Culture"
                         objective={strategyMap.organizationalCapacity.culture}
+                        sortedOpportunities={sortedOpportunities}
                     />
                 </ObjectivesGrid>
             </PrintPerspective>
@@ -93,14 +114,30 @@ export default function PrintStrategyMap({ strategyMap }: PrintStrategyMapProps)
                 values={strategyMap.coreValues.values}
                 synthesised={strategyMap.coreValues.synthesised}
             />
+
+            {/* Value Proposition + Strategic Priorities — relocated
+                from the header to AFTER the table by Phase 12 of
+                redesign-analysis-visuals (Diagnostic Tool Feedback #4).
+                Print mirrors the screen ordering: header now carries
+                Mission + Vision only; VP + priorities sit below the
+                Balanced Scorecard. Paper has no expand/collapse, so
+                the section is always-visible here. */}
+            <PrintStrategyDetailsBlock strategyMap={strategyMap} />
         </section>
     )
 }
 
 // ── Header ───────────────────────────────────────────────────────────────
 
+/**
+ * Print header — Mission + Vision only. Phase 12 of
+ * ``redesign-analysis-visuals`` (Diagnostic Tool Feedback #4) trimmed
+ * the printed header to match the screen header. VP + Strategic
+ * Priorities relocate to ``PrintStrategyDetailsBlock`` below the
+ * table.
+ */
 function PrintHeader({ strategyMap }: { strategyMap: StrategyMap }) {
-    const { vision, mission, valueProposition, strategicPriorities } = strategyMap
+    const { vision, mission } = strategyMap
     return (
         <div style={{ marginBottom: '20px' }}>
             <p style={{ fontSize: '0.95rem', fontStyle: 'italic', margin: '0 0 6px' }}>
@@ -119,12 +156,38 @@ function PrintHeader({ strategyMap }: { strategyMap: StrategyMap }) {
                     </span>
                 ) : null}
             </p>
-            <p style={{ fontSize: '0.85rem', margin: '0 0 10px', color: 'var(--text-secondary)' }}>
-                <strong>Value Proposition:</strong>{' '}
-                {formatValueProposition(valueProposition.primary, valueProposition.secondary)} —{' '}
-                <em>{valueProposition.rationale}</em>
-            </p>
-            {strategicPriorities.length > 0 ? (
+        </div>
+    )
+}
+
+/**
+ * VP + Strategic Priorities — relocated below the table in Phase 12.
+ * Paper has no expand/collapse so the block is always-visible. Renders
+ * nothing when both inputs are empty so a sparse strategy map doesn't
+ * produce a label-only block.
+ */
+function PrintStrategyDetailsBlock({ strategyMap }: { strategyMap: StrategyMap }) {
+    const { valueProposition, strategicPriorities } = strategyMap
+    const hasValueProp = Boolean(valueProposition.primary)
+    const hasPriorities = strategicPriorities.length > 0
+    if (!hasValueProp && !hasPriorities) return null
+
+    return (
+        <div style={{ marginTop: '14px' }}>
+            {hasValueProp ? (
+                <p
+                    style={{
+                        fontSize: '0.85rem',
+                        margin: '0 0 10px',
+                        color: 'var(--text-secondary)',
+                    }}
+                >
+                    <strong>Value Proposition:</strong>{' '}
+                    {formatValueProposition(valueProposition.primary, valueProposition.secondary)} —{' '}
+                    <em>{valueProposition.rationale}</em>
+                </p>
+            ) : null}
+            {hasPriorities ? (
                 <div
                     style={{
                         display: 'grid',

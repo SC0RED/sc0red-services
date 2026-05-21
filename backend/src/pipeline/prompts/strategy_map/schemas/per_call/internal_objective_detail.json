@@ -1,9 +1,9 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "InternalProcessObjectiveDetail",
-    "description": "Per-call schema for internal-processes Round 3 (per-objective elaboration). The `id` (I{theme_idx}.{obj_idx}) and `title` are NOT requested — both are determined by upstream context (theme position, title-list position).",
+    "description": "Per-call schema for internal-processes Round 3 (per-objective elaboration). The `id` (I{theme_idx}.{obj_idx}) and `title` are NOT requested — both are determined by upstream context (theme position, title-list position). `linked_opportunity_indices` was added in Phase 1b of `redesign-analysis-visuals` so the AI annotates each objective with the opportunities that would advance it.",
     "type": "object",
-    "required": ["definition", "category", "confidence", "rationale_source"],
+    "required": ["definition", "category", "confidence", "rationale_source", "linked_opportunity_indices"],
     "additionalProperties": false,
     "properties": {
         "definition": {
@@ -22,6 +22,14 @@
         "rationale_source": {
             "type": ["string", "null"],
             "maxLength": 400
+        },
+        "linked_opportunity_indices": {
+            "type": "array",
+            "description": "0-based indices into the `opportunities` array shown in the prompt. List opportunities whose execution would directly advance THIS objective. Empty list when no opportunity in the list applies.",
+            "items": {
+                "type": "integer",
+                "minimum": 0
+            }
         }
     }
 }
