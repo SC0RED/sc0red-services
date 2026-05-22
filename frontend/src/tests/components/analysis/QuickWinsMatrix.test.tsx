@@ -684,6 +684,35 @@ describe('QuickWinsMatrix — sidebar legend column', () => {
         expect(entry1).toHaveTextContent('2')
     })
 
+    it('renders the legend-entry number badge as a donut matching the matrix dot', () => {
+        // The sidebar badge and the matrix ScatterDot are the SAME
+        // visual vocabulary: a lever-coloured ring around a neutral
+        // interior with a lever-coloured number. A reader who scans
+        // legend → chart should not have to translate between dot
+        // shapes. Half-applying the donut to the chart but leaving the
+        // sidebar solid was the original UX bug this test guards.
+        render(
+            <QuickWinsMatrix
+                opportunities={[
+                    make({
+                        value_lever: 'Revenue Side',
+                        investment_value_usd: 100_000,
+                        roi_estimate_pct: 150,
+                    }),
+                ]}
+            />
+        )
+        const entry = screen.getByTestId('quick-wins-legend-entry-0')
+        const badge = entry.querySelector('span[aria-hidden="true"]') as HTMLElement | null
+        expect(badge).not.toBeNull()
+        const style = badge?.getAttribute('style') ?? ''
+        // Neutral interior + lever-coloured inset ring + lever-coloured number.
+        expect(style).toContain('background: var(--bg-surface-3)')
+        expect(style).toContain('box-shadow')
+        expect(style).toContain('var(--lever-revenue)')
+        expect(style).toContain('color: var(--lever-revenue)')
+    })
+
     it('routes uncalibrated opportunities into a dedicated legend section', () => {
         render(
             <QuickWinsMatrix

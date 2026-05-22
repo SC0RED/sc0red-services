@@ -203,7 +203,14 @@ function LegendEntry({
                     aria-hidden="true"
                     style={{
                         ...entryNumberStyle,
-                        background: color,
+                        // Donut treatment matches the matrix
+                        // ``ScatterDot``: lever-coloured ring + neutral
+                        // interior + lever-coloured number. The 3 px
+                        // inset ring scales the matrix dot's 4 px ring
+                        // (24 px outer) down to this badge's 20 px
+                        // outer while keeping the ring/interior ratio.
+                        boxShadow: `inset 0 0 0 3px ${color}`,
+                        color,
                     }}
                 >
                     {number}
@@ -286,10 +293,12 @@ const entryNumberStyle: CSSProperties = {
     width: '20px',
     height: '20px',
     borderRadius: '50%',
-    color: 'white',
+    background: 'var(--bg-surface-3)',
     fontSize: '0.75rem',
     fontWeight: 700,
     lineHeight: 1,
+    // ``color`` + ``boxShadow`` (ring) applied per-entry inline so
+    // they pick up the per-opportunity lever colour.
 }
 
 const entryTitleStyle: CSSProperties = {
