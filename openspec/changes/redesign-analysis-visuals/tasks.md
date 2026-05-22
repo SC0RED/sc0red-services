@@ -87,7 +87,7 @@
 ## 10. Follow-ups (out of scope, captured)
 
 - [x] 10.1 ~~Path B (numeric matrix axes) — separate change~~ **MOVED IN-SCOPE: see section 14 below.** Post-P7 design review (Diagnostic Tool Feedback PDF re-read) made it clear Zack asked for ROI × Investment literally; path C was the wrong call. Schema work + scatter rewrite is now part of this change.
-- [ ] 10.2 Strategy-map "story view" — if PE readers ask for the cause-and-effect arrows back, build a separate toggleable view that renders arrows on top of the BSC table. Out of scope for v1.
+- [~] 10.2 Strategy-map "story view" — **closed 2026-05-22**, not required. The BSC table reads cleanly without the cause-and-effect arrows; PE readers have not asked for them in feedback. If the need surfaces later, open a fresh OpenSpec change rather than reopening this one.
 - [ ] 10.3 ConfidenceIndicator component cleanup — once Phase 5 of this change ships and no consumer of `ConfidenceIndicator` remains, delete the component file + its tests.
 
 ## 11. Post-deploy bug-fix wave (PR A)
