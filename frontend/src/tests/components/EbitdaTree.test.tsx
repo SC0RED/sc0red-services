@@ -434,7 +434,8 @@ describe('EbitdaTree — preserved leaf-card affordances (spec requirement 5)', 
         render(<EbitdaTree treeData={tree} opportunities={OPPS} />)
         expect(screen.queryByTestId('ebitda-confidence-chip')).toBeNull()
         // Also assert no ``Confidence: Medium`` accessible label is
-        // present (would be the ConfidenceIndicator's aria-label).
+        // present (legacy from the removed confidence-indicator visual
+        // — guard against accidental regressions reintroducing it).
         expect(screen.queryByLabelText('Confidence: Medium')).toBeNull()
     })
 })
