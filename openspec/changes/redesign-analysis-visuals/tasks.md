@@ -183,7 +183,18 @@ Diagnostic Tool Feedback #6 read literally: replace the categorical 3×3 with a 
 - [x] 15.2 Verify the lever-color × `--bg-surface-3` contrast in both themes. Dark mode (lever brights on `#1a2538`) should clear ~5–7 : 1 across green / cyan / purple. Light mode (`#16a34a`, `#7c3aed`, `#0891b2` on `#e2e8f0`) lands ~3.5–5.4 : 1 — acceptable but watch the green and cyan. If a specific lever reads poorly in practice, escalate the light-mode interior to `var(--text-primary)` (or a fixed dark neutral) via the existing theme-CSS-variable mechanism rather than a JS luminance helper.
 - [x] 15.3 Grow the active-state hover ring at `ScatterDot.tsx:78-86` from `r={14}` to `r={16}` to preserve the ~2 px visual gap around the now-larger outer dot. Keep `strokeWidth={2}` and `opacity={isActive ? 0.55 : 0}` as today.
 - [x] 15.4 Update `frontend/src/tests/components/analysis/QuickWinsMatrix.test.tsx` (or whichever file asserts the dot's structure): assertions that today check `fill="white"` on the number now check it equals the lever color; assertions on the dot's main-circle count change from 1 to 2 (excluding the active-state ring). Add a new test that the inner circle uses `var(--bg-surface-3)`.
-- [ ] 15.5 Visual verification: run `cd frontend && npm run dev`, open an analysis with ≥ 3 opportunities spanning at least two levers, confirm numbers read clearly on each lever color in both dark and light mode.
+- [x] 15.5 Visual verification: run `cd frontend && npm run dev`, open an analysis with ≥ 3 opportunities spanning at least two levers, confirm numbers read clearly on each lever color in both dark and light mode. **Verified post-deploy 2026-05-22.**
 - [x] 15.6 Frontend gates: `npm run lint`, `npx tsc --noEmit`, `npm test` (all tests pass — required by CLAUDE.md before commit).
 - [~] 15.7 Architecture-reviewer pass — **skipped** by mutual agreement; only 2 source files modified (`ScatterDot.tsx` + its test), below CLAUDE.md's 3+-source-files threshold.
-- [x] 15.8 Conventional commit + PR.
+- [x] 15.8 Conventional commit + PR. **Shipped as `78e7355` (direct to development, before the new branch+PR workflow rule landed).**
+
+## 16. Quick Wins matrix — legend + sidebar donut parity (follow-up to D9)
+
+Section 15 shipped the donut treatment on the matrix `ScatterDot` but not on the two indicators that *reference* the dot — the lever-color legend swatches above the matrix and the numbered sidebar badges to the right. Both stayed as solid-fill circles, so a reader scanning legend → chart → sidebar saw three different dialects for the same dot. PR #373 fixed the gap.
+
+- [x] 16.1 `frontend/src/components/analysis/AnalysisLegend.tsx`: when `tool === 'quick-wins-matrix'`, swatches become donuts (12 px, `--bg-surface-3` interior, 2 px inset lever-coloured ring). Strip-using tools (strategy-map / ebitda / value-chain) keep solid 8 px swatches — their canvas dots (`OpportunityDotStrip`) are still solid, so the per-tool dialect is intentional.
+- [x] 16.2 `frontend/src/components/analysis/quick-wins-matrix/OpportunityLegendColumn.tsx`: numbered legend-entry badge becomes a donut (20 px outer, 3 px inset lever-coloured ring, `--bg-surface-3` interior, lever-coloured number — same vocabulary as `ScatterDot`, one ring-thickness step down for the smaller diameter).
+- [x] 16.3 Tests added: `AnalysisLegend.test.tsx` solid-vs-donut-by-tool; `QuickWinsMatrix.test.tsx` sidebar badge donut contract.
+- [x] 16.4 Frontend gates: lint, `tsc --noEmit`, 1148 / 1148 Vitest tests.
+- [x] 16.5 Branch + PR + squash-merge: PR #373 → commit `1865c77`.
+- [x] 16.6 Post-deploy visual verification: legend → chart → sidebar share one consistent dot vocabulary. **Verified 2026-05-22.**
