@@ -297,6 +297,16 @@ The donut puts the number on a neutral interior where contrast against the lever
 
 **Cluster pins out of scope:** `ClusterPinMarker` already renders a different visual (a `+N` badge) whose contrast is acceptable. No change.
 
+**Scope clarification (added 2026-05-22 after post-deploy review of `78e7355`):** The donut treatment applies to **every screen indicator that participates in the matrix's dot vocabulary**, not just `ScatterDot` itself:
+
+- `ScatterDot` (the in-plot dot) — donut at 24 px outer / 16 px inner / 4 px ring (`78e7355`).
+- `AnalysisLegend` swatches above the chart, but **only** when `tool === 'quick-wins-matrix'` — donut at 12 px / 8 px / 2 px ring. The other three tools (strategy-map / ebitda / value-chain) keep solid 8 px swatches because their canvas dots (`OpportunityDotStrip`) are still solid; per-tool dialect is intentional.
+- `OpportunityLegendColumn` numbered sidebar badge — donut at 20 px / 14 px / 3 px ring, lever-coloured number on the interior.
+
+All three diameters scale the same ring-to-diameter ratio (≈1/6 to 1/7) so the donut reads as one visual family across the three sizes. Both follow-ups landed in PR #373 (`1865c77`).
+
+Lesson captured in feedback memory: when changing the visual treatment of a primary indicator, audit every legend, sidebar, tooltip, and print mirror that *references* the same visual signal — they need to move together or the visual vocabulary fractures.
+
 ## Open Questions
 
 - **OQ1** — Should the matrix `Avoid` quadrant be labeled differently? "Avoid" reads judgmental on the AI's own output. Alternative: "Deprioritise" or "Low ROI". Lean toward "Deprioritise" for the v1 demo. **RESOLVED: Deprioritise.**
