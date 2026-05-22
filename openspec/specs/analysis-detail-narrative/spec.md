@@ -135,32 +135,6 @@ The three states are mutually exclusive. The frontend SHALL NOT render the CTA w
 - **AND** a "Generation failed — try again" message renders above the CTA button
 - **AND** the failure message clears when the user clicks the CTA again
 
-### Requirement: Sc0redCTABanner is repositioned to Beat 4 with reframed copy
-
-The `Sc0redCTABanner` component SHALL render at Beat 4 of the analysis page (after `AnalysisOverviewCards`, before `TopActionsCallout`) — not after `OpportunitiesList`. There SHALL be exactly one banner instance per page.
-
-The collapsed-state headline SHALL be analysis-centric (not opportunity-centric) — final wording is leadership's call but the framing direction is "dig deeper" / advisor support / human eye on the analysis as a whole. The expanded-state body SHALL describe sc0red's PE-experienced advisor offering without referencing "these opportunities" (which haven't been shown yet at this position).
-
-The banner's existing analytics events (`sc0red_cta_banner_expanded`, `sc0red_cta_banner_collapsed`, `sc0red_cta_clicked`) SHALL continue to fire identically. The `analyticsContext` payload (`analysisId`, `opportunityCount`, `activeLeverFilter`) SHALL still populate from the loaded analysis data — at the new top position the values represent state from later in the page, but the events are about banner interaction, not opportunity context.
-
-#### Scenario: Banner appears at Beat 4 regardless of analysis state
-
-- **WHEN** any analysis loads (CTA / generating / present strategy-map state, with or without opportunities)
-- **THEN** the Sc0redCTABanner is rendered between AnalysisOverviewCards and TopActionsCallout
-- **AND** it is NOT rendered at the post-OpportunitiesList position
-
-#### Scenario: Banner copy is analysis-centric, not opportunity-centric
-
-- **WHEN** the banner is in collapsed state
-- **THEN** the headline copy does NOT contain the literal phrase "these opportunities" (which forward-references content not yet shown)
-- **AND** the headline frames sc0red as advisor / deeper-dive support for the analysis as a whole
-
-#### Scenario: Analytics events fire unchanged
-
-- **WHEN** the user expands, collapses, or clicks through the banner at the new position
-- **THEN** the same `sc0red_cta_banner_expanded` / `_collapsed` / `sc0red_cta_clicked` events fire with the existing `analyticsContext` payload
-- **AND** the `keepalive: true` semantics on the click event are preserved
-
 ### Requirement: Executive strap renders a one-line summary above the overview cards
 
 The page SHALL render an `AnalysisExecutiveStrap` element between `AnalysisHeader` and `AnalysisOverviewCards` for every successful analysis. The strap SHALL be a single visual element that compresses the analysis into a transcribable one-line summary.

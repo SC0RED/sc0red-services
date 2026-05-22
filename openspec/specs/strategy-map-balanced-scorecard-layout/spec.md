@@ -130,3 +130,22 @@ The strategy-map table SHALL maintain readable layout below 900 px viewport by w
 - **WHEN** the viewport is < 900 px wide
 - **THEN** the table renders each perspective as a section block stacked vertically
 - **AND** within each section, theme columns wrap into a two-column grid (with one column on viewports < 600 px)
+
+### Requirement: Print export mirrors the Balanced Scorecard table layout
+
+The PDF print export's strategy-map rendering (`PrintStrategyMap.tsx` + `PrintStrategyMapObjectives.tsx`) SHALL mirror the screen Balanced Scorecard table layout — four perspective rows (Financial, Customer, Internal Processes, Organizational Capacity) × N theme columns reflecting the `internalProcesses.themes[]` ordering. Each printed objective cell SHALL show the same title + first-sentence definition truncation as the screen cell. Linked opportunities SHALL be surfaced as a printed `#N (title)` list below the cell content (paper has no hover, so the dot strip's at-a-glance signal needs a printable textual companion).
+
+The previous "verbose vertical layout" used before the `redesign-analysis-visuals` change SHALL NOT be used.
+
+#### Scenario: PDF export renders the Balanced Scorecard table
+
+- **WHEN** a user exports an analysis to PDF
+- **THEN** the strategy-map page in the PDF renders as a four-row Balanced Scorecard table in canonical perspective order (Financial → Customer → Internal Processes → Organizational Capacity)
+- **AND** the theme columns reflect the `internalProcesses.themes[]` ordering
+- **AND** no element styled as a React Flow canvas is present
+
+#### Scenario: Printed objective cell carries opportunity titles inline
+
+- **WHEN** the print export renders an objective with `linked_opportunity_indices: [0, 3]` and the opportunities at those indices carry printed indices `#2` and `#7` (per the existing PDF sort)
+- **THEN** the cell content includes a list rendering "#2 (title of opportunity 0)" and "#7 (title of opportunity 3)" below the title + definition
+- **AND** the list uses the existing printed-index numbering, NOT the underlying `linked_opportunity_indices` values

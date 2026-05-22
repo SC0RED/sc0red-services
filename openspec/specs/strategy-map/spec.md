@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Screen rendering of the AI-generated strategy map as a Balanced Scorecard table (four perspective rows × N theme columns), with each cell carrying an objective's title, first-sentence definition, and opportunity-dot strip. The previous React-Flow free-form canvas (chips + directed cause-and-effect arrows) was replaced by the `redesign-analysis-visuals` change — the Balanced Scorecard table format matches the Kaplan-Norton convention PE readers expect and is the layout the AI exemplars (wawa, mobil) actually use. Cell hover publishes a highlight signal via the shared `OpportunityHoverProvider` (defined in `analysis-opportunity-overlays`); the header + responsive layout are defined in `strategy-map-balanced-scorecard-layout`.
+Screen rendering of the AI-generated strategy map as a Balanced Scorecard table (four perspective rows × N theme columns), with each cell carrying an objective's title, first-sentence definition, and opportunity-dot strip. The previous React-Flow free-form canvas (chips + directed cause-and-effect arrows) was replaced by the `redesign-analysis-visuals` change — the Balanced Scorecard table format matches the Kaplan-Norton convention PE readers expect and is the layout the AI exemplars (wawa, mobil) actually use. Cell hover publishes a highlight signal via the shared `OpportunityHoverProvider` (defined in `analysis-opportunity-overlays`); the header, responsive layout, and print parity are defined in `strategy-map-balanced-scorecard-layout`; CTA placement + analytics are defined in `analysis-detail-narrative` (under the *DeepDiveCTA distinguishes placement in analytics* requirement).
 
 ## Requirements
 
@@ -89,54 +89,3 @@ This algorithm is referred to as "α′ layout" in the design document. It is de
 - **WHEN** objective C2 has no outbound arrow to any Financial objective and no inbound arrow from any Internal Process objective
 - **THEN** C2 renders in the centre "shared" lane
 
-### Requirement: DeepDiveCTA headline variant renders at the top of analysis page
-
-The headline `DeepDiveCTA` (the "Want a deeper analysis?" call to action) SHALL render at the top of `AnalysisDetail`, immediately under the analysis action buttons (export PDF, delete). It SHALL NOT render below the strategy map's `WhatsMissingPanel`.
-
-This relocates the conversion affordance to a position visible above the fold for every analysis page load, regardless of how much the user scrolls.
-
-Note: placement-aware analytics for both DeepDiveCTA placements (strategy-map slot + analysis-end slot) are owned by the `DeepDiveCTA distinguishes placement in analytics` requirement in the `analysis-detail-narrative` capability spec.
-
-#### Scenario: CTA visible without scrolling on analysis page load
-
-- **WHEN** the user lands on an analysis page that has a populated `strategyMap`
-- **THEN** the headline `DeepDiveCTA` is rendered above the strategy map within the visible viewport
-
-#### Scenario: CTA does not render below the gaps panel
-
-- **WHEN** the user scrolls past the strategy map and the `What's Missing?` panel
-- **THEN** there is no headline `DeepDiveCTA` rendered between the gaps panel and the next page section
-
-### Requirement: Strategy-map CTA emits rendered and clicked analytics events
-
-The headline `DeepDiveCTA` SHALL emit `sc0red_cta_rendered_strategy_map` once per mount (via `useEffect`) and SHALL emit `sc0red_cta_clicked_strategy_map` on the contact link's `onClick`. Both events MUST carry `source: "web"` and MUST carry `active_lever_filter: null` (the strategy-map surface has no lever-filter concept; backend validation rejects non-null filters on these event types).
-
-The `_rendered` event semantic in v1 is "the analysis page that contains a strategy map has loaded", not "the user scrolled the strategy map into view". This is a known relaxation introduced by relocating the CTA to the top of the page; if funnel analysis later requires viewport-based impression accounting, a separate `IntersectionObserver`-driven event can be added without redefining the existing one.
-
-Note: this requirement describes the strategy-map slot's CTA only. The bottom-of-page CTA fires distinct `_analysis_end` events per the `DeepDiveCTA distinguishes placement in analytics` requirement in `analysis-detail-narrative`.
-
-#### Scenario: Mount fires the rendered event once
-
-- **WHEN** an analysis page with a populated `strategyMap` first loads
-- **THEN** exactly one `sc0red_cta_rendered_strategy_map` event posts to `/api/analytics/events` with `analytics_context = { analysisId, opportunityCount: 0, activeLeverFilter: null }`
-
-#### Scenario: Click fires the clicked event before navigation
-
-- **WHEN** the user clicks the CTA's contact link
-- **THEN** a `sc0red_cta_clicked_strategy_map` event fires (fire and forget; `keepalive: true` ensures delivery survives the new-tab navigation)
-
-#### Scenario: Rerender with same analysisId does not re-fire the rendered event
-
-- **WHEN** the component rerenders with an unchanged `analysisId` (e.g. parent re-renders for unrelated reasons)
-- **THEN** the `sc0red_cta_rendered_strategy_map` event does not fire a second time
-
-### Requirement: Print PDF view is unchanged
-
-The PDF export's strategy-map rendering (`PrintStrategyMap.tsx` and `PrintStrategyMapObjectives.tsx`) SHALL continue to use the existing verbose vertical layout. None of the screen-redesign behaviours specified above (graphical canvas, hover tooltips, disclosure, click-to-expand gaps) apply to the print surface.
-
-Paper has no scroll constraint; the verbose layout remains the right artefact for print.
-
-#### Scenario: PDF export preserves verbose layout
-
-- **WHEN** a user exports an analysis to PDF
-- **THEN** the strategy-map page in the PDF renders all objectives as fully-expanded cards in a vertical stack, matching the layout that shipped in PR #239
