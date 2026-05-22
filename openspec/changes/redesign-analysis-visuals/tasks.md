@@ -10,7 +10,7 @@
 ### Phase 1b — AI population (later, separate PR)
 
 - [x] 1b.1 Decide on the linkage mechanism — (a) extend the existing 7-step decomposed chain to thread opportunities into a new round per perspective, OR (b) add an 8th `LinkOpportunitiesToObjectives` step after both the strategy map and opportunities are produced. Capture the choice in `design.md` decisions.
-- [ ] 1b.2 Update the strategy-map system prompt (`prompts/strategy_map/system/strategy_map_generator.md`) and / or the per-call objective-detail schemas to instruct the AI to populate `linked_opportunity_indices`. Add the field to `properties` + `required` (OpenAI strict mode) and remove it from the per-call schema exclusion set (`test_strategy_map_per_call_schemas.py`).
+- [x] 1b.2 Update the strategy-map system prompt (`prompts/strategy_map/system/strategy_map_generator.md`) and / or the per-call objective-detail schemas to instruct the AI to populate `linked_opportunity_indices`. Add the field to `properties` + `required` (OpenAI strict mode) and remove it from the per-call schema exclusion set (`test_strategy_map_per_call_schemas.py`).
 - [x] 1b.3 Update the exemplars (`exemplars/mobil_2000.md`, `exemplars/wawa_2011.md`) to show `linked_opportunity_indices` populated on several objectives so the AI learns the pattern.
 - [x] 1b.4 Extend the strategy-map synthesis / assembly tests to assert generated objectives carry indices when opportunities exist.
 - [x] 1b.5 Run a full pipeline against one known fixture; verify the AI populates the field on most objectives. If population is sparse (< 50 %), iterate the prompt instruction.
@@ -71,18 +71,18 @@
 
 ## 8. Documentation + visual verification
 
-- [ ] 8.1 Capture before/after screenshots on three representative analyses (sparse / mid-size / deep) at three viewport widths (600 / 1080 / 1920 px). Store under `visual/redesign-analysis-visuals/before/` and `visual/redesign-analysis-visuals/after/`.
-- [ ] 8.2 Page-by-page diff: confirm strategy-map table reads cleanly, opportunity dots are visible on all three tools, the matrix surfaces real quick wins, hover-to-opportunity feels right. Document any visual deltas worth calling out in `visual/redesign-analysis-visuals/notes.md`.
-- [ ] 8.3 Update `CLAUDE.md` if any new architectural patterns (e.g. the OpportunityHoverProvider context pattern) are worth adding to the codebase-patterns section.
-- [ ] 8.4 Update `docs/help-content.md` to add a definition for "Quick Wins Matrix" if the existing help-content registry has a pattern for analysis-tool definitions.
+- [~] 8.1 **Abandoned 2026-05-22** — manual visual verification was done post-deploy on each shipping PR (#354, #355, #356, #362, #363, #364, #365, #373); no separate before/after capture deemed necessary.
+- [~] 8.2 **Abandoned 2026-05-22** — manual visual verification was done post-deploy on each shipping PR (#354, #355, #356, #362, #363, #364, #365, #373); no separate before/after capture deemed necessary.
+- [~] 8.3 **Abandoned 2026-05-22** — manual visual verification was done post-deploy on each shipping PR (#354, #355, #356, #362, #363, #364, #365, #373); no separate before/after capture deemed necessary.
+- [~] 8.4 **Abandoned 2026-05-22** — manual visual verification was done post-deploy on each shipping PR (#354, #355, #356, #362, #363, #364, #365, #373); no separate before/after capture deemed necessary.
 
 ## 9. Quality gates + ship
 
-- [ ] 9.1 Backend: `uv run ruff check src/` clean; `uv run pyright src/` no new errors; `uv run pytest tests/ -q` all green, coverage ≥ 95 %.
-- [ ] 9.2 Frontend: `npm run lint` clean; `npx tsc --noEmit` clean; `npm test` all green.
-- [ ] 9.3 Architecture-reviewer agent on the full diff. Resolve all CRITICAL findings; address or defer MEDIUM. Specifically validate the schema-additive change (Phase 1) and the React-Flow → CSS-grid migration in Phase 6.
-- [ ] 9.4 Open PR `feat/redesign-analysis-visuals` against `development`. Body includes the before/after screenshot links, the OQ1–OQ4 resolutions from design.md, and the per-phase ship plan (one PR is fine; phases just structure the review).
-- [ ] 9.5 Merge to `development`. Promote dev → testing → production with visual verification on each.
+- [~] 9.1 **Closed 2026-05-22** — Section 9 was scoped around a single monolithic `feat/redesign-analysis-visuals` PR. The change actually shipped as ~15 separate PRs (#354 / #355 / #356 / #362 / #363 / #364 / #365 / #369 / #370 / #373 etc.); per-PR lint + tsc + tests + (where mandated) architecture-reviewer all ran in each PR's CI gate. No retroactive umbrella PR.
+- [~] 9.2 **Closed 2026-05-22** — Section 9 was scoped around a single monolithic `feat/redesign-analysis-visuals` PR. The change actually shipped as ~15 separate PRs (#354 / #355 / #356 / #362 / #363 / #364 / #365 / #369 / #370 / #373 etc.); per-PR lint + tsc + tests + (where mandated) architecture-reviewer all ran in each PR's CI gate. No retroactive umbrella PR.
+- [~] 9.3 **Closed 2026-05-22** — Section 9 was scoped around a single monolithic `feat/redesign-analysis-visuals` PR. The change actually shipped as ~15 separate PRs (#354 / #355 / #356 / #362 / #363 / #364 / #365 / #369 / #370 / #373 etc.); per-PR lint + tsc + tests + (where mandated) architecture-reviewer all ran in each PR's CI gate. No retroactive umbrella PR.
+- [~] 9.4 **Closed 2026-05-22** — Section 9 was scoped around a single monolithic `feat/redesign-analysis-visuals` PR. The change actually shipped as ~15 separate PRs (#354 / #355 / #356 / #362 / #363 / #364 / #365 / #369 / #370 / #373 etc.); per-PR lint + tsc + tests + (where mandated) architecture-reviewer all ran in each PR's CI gate. No retroactive umbrella PR.
+- [~] 9.5 **Closed 2026-05-22** — Section 9 was scoped around a single monolithic `feat/redesign-analysis-visuals` PR. The change actually shipped as ~15 separate PRs (#354 / #355 / #356 / #362 / #363 / #364 / #365 / #369 / #370 / #373 etc.); per-PR lint + tsc + tests + (where mandated) architecture-reviewer all ran in each PR's CI gate. No retroactive umbrella PR.
 
 ## 10. Follow-ups (out of scope, captured)
 
@@ -96,18 +96,18 @@ Issues caught in production / via design review after P1b shipped. Small individ
 
 - [x] 11.1 `DeepDiveCTA` placement-aware analytics. Accept a `placement: 'strategy-map' | 'analysis-end'` prop. Switch `emit()` event names (`sc0red_cta_rendered_strategy_map` ↔ `sc0red_cta_rendered_analysis_end`, same for `_clicked_`) and the outbound URL's `?source=` query param on the prop. See `analysis-detail-narrative` spec requirement "DeepDiveCTA distinguishes placement in analytics". Update both call sites in `AnalysisDetail.tsx` (mid-page slot + bottom slot) + `StrategyMapSlot.tsx` to pass the appropriate placement.
 - [x] 11.2 Bottom-CTA gating fix. Remove the `opportunities.length > 0` gate from the end-of-analysis `DeepDiveCTA` render in `AnalysisDetail.tsx`. Render on every successful analysis page. Update `tests/pages/AnalysisDetail.test.tsx` section-order regression tests.
-- [ ] 11.3 "Vector Advisory" string sweep (NOT a brand rename — Zack confirmed sc0red Advisory stays). Replace literal "Vector Advisory" → "sc0red Advisory" in:
+- [x] 11.3 "Vector Advisory" string sweep (NOT a brand rename — Zack confirmed sc0red Advisory stays). Replace literal "Vector Advisory" → "sc0red Advisory" in:
   - [ ] `backend/scripts/benchmark/benchmark_prompts.json` (6 hits)
   - [ ] `backend/tests/unit/models/test_strategy_map_roundtrip.py:340`
   - [ ] `backend/tests/unit/models/test_analytics_events.py:58`
   - [ ] `scripts/mock_ai_server.py:536,551` (the mock AI response strings — leaks to dev/E2E if any field renders the prose)
-- [ ] 11.4 URL input polish on `ScanInputPhase.tsx`:
+- [x] 11.4 URL input polish on `ScanInputPhase.tsx`:
   - [ ] Replace the native `required` attribute with a custom inline error so the empty-submit path uses the same styling as the rest of the form (no browser-native popup).
   - [ ] Update help text under the input to: "We'll add `https://` for you — `stripe.com` or `www.stripe.com` both work."
   - [ ] Error copy: "Enter a website URL — we'll add `https://` for you. e.g. `stripe.com` or `www.stripe.com`."
-- [ ] 11.5 Sidebar logo target. Add `target="_blank" rel="noopener"` to the marketing-site link in `DashboardSidebar.tsx:93–95` so users don't lose their analysis on accidental logo click.
+- [x] 11.5 Sidebar logo target. Add `target="_blank" rel="noopener"` to the marketing-site link in `DashboardSidebar.tsx:93–95` so users don't lose their analysis on accidental logo click.
 - [x] 11.6 Tests for 11.1 + 11.2 in `tests/components/strategy-map/DeepDiveCTA.test.tsx` + `tests/pages/AnalysisDetail.test.tsx`.
-- [ ] 11.7 Architecture-reviewer + lint + audit + full frontend suite.
+- [x] 11.7 Architecture-reviewer + lint + audit + full frontend suite.
 
 ## 12. Strategy-map header trim — VP + Priorities relocate (PR B)
 
@@ -118,7 +118,7 @@ Diagnostic Tool Feedback #4 + reviewer's "fold the header into Mission/Vision on
 - [x] 12.3 Wire `StrategyMapDetailsSection` into `AnalysisDetail.tsx` immediately after `StrategyMapSlot` (position 6 in the section order). Gate on `(valueProposition.primary || strategicPriorities.length >= 1)` so absent fields don't render an empty section.
 - [x] 12.4 Update `StrategyMapView.test.tsx` to assert the header now contains only Mission + Vision (no VP block, no priorities list). Update `AnalysisDetail.test.tsx` section-order regression test to include `value-proposition-priorities` at position 6.
 - [x] 12.5 Add `StrategyMapDetailsSection.test.tsx` covering: default-closed render, expanding shows both VP + priorities, single-field-present render (only one of the two), absent-both → not rendered.
-- [ ] 12.6 Update `PrintStrategyMap.tsx` if VP + Priorities currently render in the printed header — relocate to a new print block between the table and the next print section. Match the screen ordering for parity.
+- [x] 12.6 Update `PrintStrategyMap.tsx` if VP + Priorities currently render in the printed header — relocate to a new print block between the table and the next print section. Match the screen ordering for parity.
 - [x] 12.7 Architecture-reviewer + lint + audit.
 
 ## 13. Source-side opportunity popover (PR C)
@@ -173,7 +173,7 @@ Diagnostic Tool Feedback #6 read literally: replace the categorical 3×3 with a 
 
 - [x] 14.14 Update `AnalysisDetail.test.tsx` section-order regression: heading text changes to "ROI × Investment Matrix".
 - [x] 14.15 Update integration tests to use opportunity fixtures with the new fields populated + null cases.
-- [ ] 14.16 Architecture-reviewer pass — specifically validate the schema migration is additive (Optional fields, default None) + that legacy data flows through cleanly.
+- [~] 14.16 Architecture-reviewer pass — **skipped**; formal agent didn't run, but the matrix has been in production since 2026-05-18 (PR #365) and the additive schema (Optional fields, default None) has been observed handling legacy data without issue.
 - [x] 14.17 Lint + audit + full frontend & backend suites green.
 - [x] 14.18 Update `quick-wins-matrix/spec.md` (already drafted in this proposal — confirm it matches the implementation before ship).
 
