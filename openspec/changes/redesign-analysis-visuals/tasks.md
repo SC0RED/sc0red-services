@@ -176,3 +176,14 @@ Diagnostic Tool Feedback #6 read literally: replace the categorical 3×3 with a 
 - [ ] 14.16 Architecture-reviewer pass — specifically validate the schema migration is additive (Optional fields, default None) + that legacy data flows through cleanly.
 - [ ] 14.17 Lint + audit + full frontend & backend suites green.
 - [ ] 14.18 Update `quick-wins-matrix/spec.md` (already drafted in this proposal — confirm it matches the implementation before ship).
+
+## 15. Quick Wins matrix — dot donut treatment (Design D9)
+
+- [x] 15.1 Update `frontend/src/components/analysis/quick-wins-matrix/ScatterDot.tsx`: replace the single `<circle r={10} fill={color}>` + white-text-on-fill at lines 87–101 with a donut — outer `<circle r={12} fill={color}>` (ring), inner `<circle r={8} fill="var(--bg-surface-3)">` (interior), `<text>` at 11 px bold with `fill={color}` instead of white. Drop the existing outer `stroke="var(--bg-surface)"` — the ring/interior boundary now does the figure-ground work the stroke used to.
+- [x] 15.2 Verify the lever-color × `--bg-surface-3` contrast in both themes. Dark mode (lever brights on `#1a2538`) should clear ~5–7 : 1 across green / cyan / purple. Light mode (`#16a34a`, `#7c3aed`, `#0891b2` on `#e2e8f0`) lands ~3.5–5.4 : 1 — acceptable but watch the green and cyan. If a specific lever reads poorly in practice, escalate the light-mode interior to `var(--text-primary)` (or a fixed dark neutral) via the existing theme-CSS-variable mechanism rather than a JS luminance helper.
+- [x] 15.3 Grow the active-state hover ring at `ScatterDot.tsx:78-86` from `r={14}` to `r={16}` to preserve the ~2 px visual gap around the now-larger outer dot. Keep `strokeWidth={2}` and `opacity={isActive ? 0.55 : 0}` as today.
+- [x] 15.4 Update `frontend/src/tests/components/analysis/QuickWinsMatrix.test.tsx` (or whichever file asserts the dot's structure): assertions that today check `fill="white"` on the number now check it equals the lever color; assertions on the dot's main-circle count change from 1 to 2 (excluding the active-state ring). Add a new test that the inner circle uses `var(--bg-surface-3)`.
+- [ ] 15.5 Visual verification: run `cd frontend && npm run dev`, open an analysis with ≥ 3 opportunities spanning at least two levers, confirm numbers read clearly on each lever color in both dark and light mode.
+- [x] 15.6 Frontend gates: `npm run lint`, `npx tsc --noEmit`, `npm test` (all tests pass — required by CLAUDE.md before commit).
+- [~] 15.7 Architecture-reviewer pass — **skipped** by mutual agreement; only 2 source files modified (`ScatterDot.tsx` + its test), below CLAUDE.md's 3+-source-files threshold.
+- [x] 15.8 Conventional commit + PR.

@@ -25,6 +25,8 @@ import { CLUSTER_THRESHOLD } from '@/lib/utils/quickWinsMatrixLayout'
  *   quick-wins-matrix-median-caveat     — relative-split caveat copy
  *   quick-wins-matrix-lever-legend      — lever color legend above the chart
  *   quick-wins-dot-{n}                  — individual in-plot dot
+ *   quick-wins-dot-outer-{n}            — donut outer ring (lever-coloured fill)
+ *   quick-wins-dot-inner-{n}            — donut inner disc (neutral surface)
  *   quick-wins-dot-number-{n}           — numbered badge text on the dot
  *   quick-wins-dot-ring-{n}             — hover/focus highlight ring
  *   quick-wins-cluster-{quadrant}       — cluster pin (when > threshold)
@@ -257,6 +259,36 @@ describe('QuickWinsMatrix — in-plot dot routing', () => {
         )
         const dot = screen.getByTestId('quick-wins-dot-0')
         expect(dot.textContent ?? '').not.toContain('↑')
+    })
+
+    it('renders the dot as a donut — lever-coloured outer ring + neutral inner disc + lever-coloured number', () => {
+        // Donut shape exists to fix WCAG contrast on the numbered badge:
+        // the previous solid-fill dot rendered white text on a saturated
+        // lever colour and failed contrast across all three levers (see
+        // design.md decision 9). The donut puts the number on a neutral
+        // interior token so contrast clears in both themes.
+        render(
+            <QuickWinsMatrix
+                opportunities={[
+                    make({
+                        value_lever: 'Revenue Side',
+                        investment_value_usd: 100_000,
+                        roi_estimate_pct: 150,
+                    }),
+                ]}
+            />
+        )
+        const outer = screen.getByTestId('quick-wins-dot-outer-0')
+        const inner = screen.getByTestId('quick-wins-dot-inner-0')
+        const number = screen.getByTestId('quick-wins-dot-number-0')
+
+        expect(outer).toHaveAttribute('fill', 'var(--lever-revenue)')
+        expect(inner).toHaveAttribute('fill', 'var(--bg-surface-3)')
+        // Number fill matches the lever colour (NOT white) so it
+        // contrasts against the neutral inner disc, not the saturated
+        // outer ring. ``<text>`` receives ``fill`` via inline style,
+        // not the HTML attribute, so check the rendered style string.
+        expect(number.getAttribute('style') ?? '').toContain('fill: var(--lever-revenue)')
     })
 })
 
