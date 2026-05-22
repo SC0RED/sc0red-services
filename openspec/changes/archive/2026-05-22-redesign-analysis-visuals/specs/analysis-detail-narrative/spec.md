@@ -60,9 +60,11 @@ This requirement supersedes the prior section ordering. Specifically:
 - **THEN** each dot is keyboard-focusable and exposes its opportunity index
 - **AND** clicking or activating a dot publishes a `highlightOpportunities([index])` call via the `OpportunityHoverProvider` (defined in the `analysis-opportunity-overlays` capability spec)
 
+## ADDED Requirements
+
 ### Requirement: DeepDiveCTA distinguishes placement in analytics
 
-The `DeepDiveCTA` component renders in TWO distinct placements on the analysis page:
+The `DeepDiveCTA` component SHALL distinguish its two render placements (`strategy-map` and `analysis-end`) in every analytics signal it emits, so the conversion funnel attributes impressions and clicks to the correct surface. The two placements are:
 
 - **strategy-map placement** (position 5 in the section order) — under the strategy-map table when the map is present.
 - **analysis-end placement** (position 14) — at the bottom of the page on every successful analysis.
