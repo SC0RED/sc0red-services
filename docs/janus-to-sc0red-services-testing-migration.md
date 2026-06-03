@@ -244,18 +244,36 @@ The old `janus-testing` stack/table/pool/bucket are untouched throughout — the
 
 ---
 
-## Production prep (when ready)
+## Production — already migrated (verified 2026-06-03)
 
-Production's custom domain `services.sc0red.ai` is **already mapped** (confirmed in Amplify) — so step 4 is likely a no-op for prod. The remaining prod work mirrors steps 1–3:
+**Production did NOT need a migration.** A pre-flight check (read-only) on 2026-06-03 found it was fully migrated during the original cutover (`Sc0redServices-production` stack last updated 2026-05-21) and has been **live, serving real customers**, ever since.
 
-| Step | Production specifics to confirm first |
-|---|---|
-| Region | Production is also **us-east-2** (same as testing). |
-| Stack | `Sc0redServices-production`. |
-| DynamoDB | `janus-production` → `sc0red-services-production`. **Confirm item counts + whether new table is empty** before copying. PITR is enabled on prod — snapshot first regardless. |
-| S3 | Confirm prod documents bucket names (CDK hash suffix differs per env). Prod likely **has** real uploaded documents — the S3 sync is NOT a no-op here. |
-| Cognito | `janus-users-production` → `sc0red-services-users-production`. **List the real prod users** — there may be many more than 3, and they're real customers, so the temp-password email blast needs coordination (notify users first, per the staging runbook's Phase 0). |
-| Domain | Already mapped — verify with `dig`/`curl` rather than re-creating. |
-| Config parity | Same dev-parity check — production should match the working pattern. |
+> ⚠️ **Critical lesson — always run the DynamoDB count check before any copy.** The testing playbook's step 1 (`migrate_dynamodb.py janus-X → sc0red-services-X`) is a blind `Scan` + `BatchWriteItem` overwrite. For production the *new* table already had **more** items than the *old* one (2034 vs 1970 — it's the live table with post-cutover writes). Running the copy would have **overwritten ~64 newer live customer records with stale backup data** — a data-loss incident. Pre-flight verification (Phase P0) is mandatory for any environment that might already be live.
 
-**Production carries real customer data and real users** — treat it with the full Phase 0 notification + DynamoDB snapshot discipline from `docs/janus-to-sc0red-services-aws-migration.md`, not the lighter touch testing allowed.
+### Verified production state (us-east-2, production account)
+
+| Aspect | Finding | Action |
+|---|---|---|
+| CFN stack | `Sc0redServices-production` — `UPDATE_COMPLETE`, last updated 2026-05-21 | none |
+| DynamoDB | `sc0red-services-production` is **live**: 2034 items vs old `janus-production` 1970 (new has +64 post-cutover writes) | **DO NOT COPY** — the new table is the source of truth |
+| S3 documents | both `…documents…` buckets empty (0 objects) | none |
+| Domain | `services.sc0red.ai` → new app `d3bhonqxtgzqm8`, `production` branch, `AVAILABLE`. Old app `d33liguumhvbzt` has **no** domain associations. | none |
+| API config | `FRONTEND_DOMAIN=null`, `FRONTEND_BASE_URL=…production.…amplifyapp.com` — identical to the working dev pattern | none (no redeploy) |
+| Cognito — customers | New pool `sc0red-services-users-production` (`us-east-2_jwlYvrWQ3`) holds **2 real external customers** — `william.bert@gmail.com`, `bjarne@bluejam.io` — both with complete custom attrs (`org_id`/`role`/`legacy_user_id`). Fully functional. | none |
+| Cognito — internal | Old pool `janus-users-production` (`us-east-2_mRcaKKPFs`) holds 4 internal `@sc0red.com` users (chris.creel, srilakshmi, vedratna, zack). **None are in the new pool.** | see decision below |
+
+### Open decision: internal-user production access
+
+The 4 internal `@sc0red.com` users exist only in the OLD pool. Production is the customer environment; the internal team works in dev/testing. Whether the internal users need to *log into production* (e.g. for support/admin) is a product decision:
+
+- **If not needed** → production is complete as-is.
+- **If needed** → recreate only the named internal users in the new pool using Step 3's recipe (admin-create-user with custom attrs at create time + `repair_cognito_attrs.py` for the `cognito_sub` backfill), scoped to those users. Because the new pool is **live**, coordinate the temp-password emails (Phase 0 notification) rather than firing them ad hoc.
+
+**Status as of 2026-06-03:** decision pending. Production functioning normally for its 2 customers regardless.
+
+### If a future environment genuinely needs a fresh migration
+
+For any environment where the new table is confirmed empty (like testing was), follow steps 1–4 above with that env's region/account/resource names. Always:
+1. Run the Phase P0 read-only pre-flight first (counts, user lists, domain, config).
+2. Snapshot the source table before any write: `aws dynamodb create-backup --table-name <src> --backup-name pre-rename-<env>-<ts> --region <region>`.
+3. Treat any environment with existing users as carrying real data — notify before the temp-password blast.
