@@ -1,3 +1,151 @@
+# ⏸ ON HOLD — paused 2026-06-03
+
+This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Apr 14, 2026); a Phase A tactical scout on the deployed staging Lambda (Jun 3, 2026) uncovered a blocking architectural bug. PR 2.5 (new, below) is the next required step before any further customer-facing work can ship.
+
+## Where we left off
+
+- ✅ PR 1 (OAuth Provider + Infrastructure) — shipped
+- ✅ PR 2 (Read Tools, 12 tools) — shipped
+- ✅ Phase A tactical scout — complete. Findings captured in `design.md` Decision 8 + the bug table below.
+- 🛑 **PR 2.5 (Runtime infrastructure fix, Mangum → LWA)** — identified, not started. Blocks everything downstream.
+- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — blocked on PR 2.5.
+- 🛑 Original PR 3–7 — blocked on PR 2.5 + PR 2.6.
+
+## State of staging environment (live, in AWS)
+
+- **Account:** the sc0red-services AWS account (NOT 148256362911 — that's a different project's dev account).
+- **Region:** `us-east-1`.
+- **Lambda:** `sc0red-services-mcp-staging`. Active, last modified ~mid-May 2026 (rename-driven redeploy).
+- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — **DO NOT SHARE** with anyone. It serves exactly 1 request per cold-started container, then 502s, per Decision 8.
+- **Signing-key secret:** `sc0red-services-mcp-signing-key-staging` was populated 2026-06-03 with a freshly-generated RSA-2048 keypair via `aws secretsmanager put-secret-value`. The CDK construct still creates it empty — see Bug X.
+- **Status overall:** broken at runtime, do not promote to production until PR 2.5 ships.
+
+## Bugs uncovered during Phase A — by status
+
+| # | Bug | Status | Where |
+|---|---|---|---|
+| A | Signing-key secret empty → import-time `KeyError: 'private_key'` | ✅ Fixed operationally in staging (2026-06-03) | `backend/src/mcp/mcp_handler.py:38` |
+| B | Mangum + `StreamableHTTPSessionManager` incompatibility — lifespan startup re-fires per invocation, run-once guard trips | 🛑 Blocking — see `design.md` Decision 8 | `backend/src/mcp/mcp_handler.py:102` |
+| C | Default `MCP_ISSUER_URL` points at non-existent DNS `mcp.{stage}.sc0red-services.sc0red.com` | ⚠ Latent — fix in PR 2.5 or 2.6 | `backend/src/mcp/mcp_handler.py:50` |
+| D | `CONSENT_BASE_URL` env var on staging Lambda points at the *development* Amplify URL | ⚠ Latent — fix in PR 2.6 | Lambda env var configuration |
+| E | Read-tool formatters miss new Opportunity / EBITDA / value-chain fields shipped by `redesign-analysis-visuals` | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
+| F | No `get_strategy_map` tool exists; strategy map invisible to AI assistant users | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
+| X | `MCPConstruct` creates the signing-key secret empty; deploy succeeds but Lambda crashes silently at first invocation. Fail-late pattern, violates CLAUDE.md fail-fast standard. | 🛠 Systemic — fix during PR 2.5 | `infrastructure/stacks/mcp_construct.py` |
+
+## To re-establish context when resuming
+
+```bash
+# 1. Make sure AWS CLI points at the sc0red-services account:
+export AWS_PROFILE=<your sc0red-services profile>
+aws sts get-caller-identity   # confirm right account
+
+# 2. Verify staging Lambda is still in the broken-but-deployed state described above:
+aws logs tail /aws/lambda/sc0red-services-mcp-staging --region us-east-1 \
+  --since 1h --format short 2>&1 | tail -50
+# Expect: LifespanFailure / "run() can only be called once" stack traces.
+# If you see "KeyError: 'private_key'", someone rotated the secret without
+# repopulating — re-run the secret-population steps from the chat transcript
+# (or below).
+
+# 3. Re-read the discovery + decision:
+#    openspec/changes/janus-mcp-server/design.md   → Decision 8
+#    openspec/changes/janus-mcp-server/tasks.md    → this section + PR 2.5
+
+# 4. Re-populate the signing-key secret if it's been rotated to empty
+#    (only needed if Step 2 shows KeyError again):
+cd /tmp
+openssl genrsa -out mcp_staging_private.pem 2048
+openssl rsa -in mcp_staging_private.pem -pubout -out mcp_staging_public.pem
+python3 << 'PY'
+import json
+priv = open('/tmp/mcp_staging_private.pem').read()
+pub  = open('/tmp/mcp_staging_public.pem').read()
+with open('/tmp/mcp_secret.json', 'w') as f:
+    json.dump({'private_key': priv, 'public_key': pub}, f)
+PY
+aws secretsmanager put-secret-value \
+  --secret-id sc0red-services-mcp-signing-key-staging \
+  --secret-string file:///tmp/mcp_secret.json --region us-east-1
+rm -f /tmp/mcp_staging_*.pem /tmp/mcp_secret.json
+```
+
+## Resume here — the next three PRs in order
+
+```
+PR 2.5  (NEW, blocking)  — Runtime infrastructure fix: Mangum → AWS Lambda Web Adapter
+                            Per design.md Decision 8. Also fixes Bug X (empty secret).
+PR 2.6  (NEW, blocked)   — Quick wins polish: drift fix + get_strategy_map + rebrand
+                            + minimal Connected Apps UI. Ships v1 read-only MCP.
+PR 3–7                   — Original plan resumes. Write tools → destructive tools
+                            → resources → prompts → full Connected Apps UI + launch.
+```
+
+---
+
+## PR 2.5: Runtime infrastructure fix — Mangum → Lambda Web Adapter (NEW)
+
+Source of truth: `design.md` Decision 8.
+
+### Spike + design validation
+- [ ] 2.5.1 Spike: stand up FastMCP + AWS Lambda Web Adapter locally in a Docker container. Validate the streamable-HTTP transport works end-to-end (OAuth metadata, DCR, PKCE, tool invocation) **across two sequential requests** without hitting the run-once guard. Time-box to 4 hrs; if it doesn't work, escalate to Decision-8 Option B (move off Lambda to ECS Fargate).
+- [ ] 2.5.2 If spike succeeds, update `design.md` Decision 8 with the validated LWA configuration: LWA layer version, port, env vars, Dockerfile shape, IAM patterns.
+
+### Infrastructure
+- [ ] 2.5.3 Rewrite `infrastructure/stacks/mcp_construct.py` to use Docker-based Lambda (`DockerImageFunction` or `PythonFunction` with container image). Attach the official AWS LWA layer.
+- [ ] 2.5.4 Add `backend/Dockerfile.mcp` that bundles `src/mcp` + dependencies + LWA at the right paths.
+- [ ] 2.5.5 Set the LWA env-var contract (`AWS_LWA_PORT`, `AWS_LWA_READINESS_CHECK_PATH=/health`, etc.).
+
+### Application layer
+- [ ] 2.5.6 Replace `backend/src/mcp/mcp_handler.py`'s Mangum `handle_event` with a uvicorn boot block (`uvicorn.run(_app, host="0.0.0.0", port=int(os.environ["AWS_LWA_PORT"]))`). Keep the rest of the file (signing-key load, FastMCP setup, OAuth provider, tool registrations) unchanged.
+- [ ] 2.5.7 Add a `/health` route to the FastMCP app for LWA's readiness probe.
+
+### Bug X — fail-fast on empty signing key
+- [ ] 2.5.8 Update `MCPConstruct` to either (a) generate the RSA key pair via a custom resource at CDK synth and populate the secret, or (b) fail synth if the secret is empty for non-development environments. Matches the CLAUDE.md fail-fast contract.
+
+### Bug C / D — issuer + consent URL hardening
+- [ ] 2.5.9 Add `MCP_ISSUER_URL` to the Lambda env-var contract; default to the Function URL when no custom domain is configured. (Custom domain itself is out of scope here — defer to v1.1.)
+- [ ] 2.5.10 Per-environment `CONSENT_BASE_URL` wiring in CDK — staging Lambda points at staging frontend, not the dev Amplify URL.
+
+### Tests + verification
+- [ ] 2.5.11 Add the integration test that would have caught Bug B: call the OAuth metadata endpoint **twice in succession** against a locally-running container; both must return 200.
+- [ ] 2.5.12 Add a CDK unit test that the signing-key secret is non-empty after synth (Bug X regression guard).
+- [ ] 2.5.13 Deploy to staging, repeat the Phase A scout — cold-start curl, warm-invoke curl, then a full OAuth + tool round-trip via `npx @modelcontextprotocol/inspector`. All must pass; warm-invoke 200 is the critical one.
+
+### Quality gates + ship
+- [ ] 2.5.14 `uv run ruff check src/`, `uv run pyright src/`, `uv run pytest tests/mcp/ -q` — all green.
+- [ ] 2.5.15 Architecture-reviewer agent on the diff. Special focus: CDK construct change blast radius, new Dockerfile, IAM permissions for LWA.
+- [ ] 2.5.16 Conventional commit + PR. Body must reference `design.md` Decision 8 + this section.
+
+## PR 2.6: Quick wins polish — drift fix + missing tool + rebrand + minimal UI (NEW)
+
+Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invokes.
+
+### Read-tool drift fix (Bug E)
+- [ ] 2.6.1 Update `get_opportunities` formatter in `tools_read.py` to surface `investment_value_usd`, `roi_estimate_pct`, `timeline`, `strategic_category`.
+- [ ] 2.6.2 Update `get_ebitda_tree` formatter to surface `confidence_level`, `confidence_basis`, `linked_opportunity_indices`.
+- [ ] 2.6.3 Update `get_value_chain` formatter to surface `opportunity_indices` (or resolve them to opportunity titles inline for paper-readable output).
+
+### Missing tools (Bug F + proposal gap)
+- [ ] 2.6.4 Add `get_strategy_map(analysis_id: str)` tool in `tools_read.py`. Render the BSC table as Markdown (four perspective rows, theme columns, per-objective title + first-sentence definition + linked opportunity titles).
+- [ ] 2.6.5 Add `list_scans` tool — proposal listed 13 read tools; only 12 are registered today.
+
+### Rebrand for customer visibility
+- [ ] 2.6.6 Decide naming convention per `design.md` Decision 9 (placeholder). Capture the decision before any rename sweep.
+- [ ] 2.6.7 Apply the chosen convention across all tool registrations + planned prompt names. Update tests.
+
+### Minimal Connected Apps UI (PR 7 subset)
+- [ ] 2.6.8 Build a minimal "Connected Apps" settings page that lists registered OAuth clients + lets the user revoke. Defer the full PR 7 polish (audit log surfacing, fancy empty states) to PR 7.
+- [ ] 2.6.9 Short "Connect to AI assistants" doc: Function URL (or custom domain when added) + the OAuth flow.
+
+### Tests + ship
+- [ ] 2.6.10 Unit tests for the new formatters + the new tools (`get_strategy_map`, `list_scans`).
+- [ ] 2.6.11 Frontend gates: `npm run lint`, `npx tsc --noEmit`, `npm test`.
+- [ ] 2.6.12 Architecture-reviewer pass.
+- [ ] 2.6.13 Conventional commit + PR.
+- [ ] 2.6.14 Ship to staging, eyeball end-to-end via mcp-inspector against staging URL, then promote to production. **v1 launch.**
+
+---
+
 ## PR 1: OAuth Provider + Infrastructure
 
 ### Research & spike
