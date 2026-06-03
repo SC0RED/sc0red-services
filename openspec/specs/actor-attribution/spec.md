@@ -1,21 +1,18 @@
 # actor-attribution Specification
 
 ## Purpose
-TBD - created by archiving change fix-actor-attribution. Update Purpose after archive.
+
+Every authenticated request enters the system carrying a JWT with a Cognito `sub` (and sometimes a legacy `custom:legacy_user_id` claim from the pre-Cognito user store). The actor-attribution capability is the single boundary where those external identifiers get resolved into the **internal `user["id"]`** that flows through the rest of the system: handlers, repositories, audit fields (`created_by`, `updated_by`, `deleted_by`), the activity feed, and the admin UI all see only internal user ids — never Cognito subs, never legacy ids.
+
+This avoids the class of bug where two different identifier shapes (`auth0|abc`, `12345`, `cognito-uuid`) flow side-by-side through the same code paths and silently mismatch on equality checks. Resolution happens once at the auth-middleware layer; downstream code receives a canonical form.
 
 ## Requirements
 
 ### Requirement: AuthContext.user_id is always the internal user id
 
-`auth_middleware._resolve_user_id` (called from `validate_token` /
-`require_authentication`) SHALL populate `AuthContext.user_id` with
-the internal `user["id"]` from the user record, regardless of whether
-the JWT carries the `custom:legacy_user_id` claim. Resolution
-priority is: `custom:legacy_user_id` from the token →
-`user_repository.find_by_cognito_sub(token.sub)` →
-`user_repository.find_by_email(token.email)`. If all three fail,
-`validate_token` SHALL raise `ValueError` with the same "Token
-missing user identifier" semantics that exist today.
+The auth middleware SHALL populate `AuthContext.user_id` with the internal `user["id"]` from the user record on every authenticated request — never the Cognito `sub`, never the `custom:legacy_user_id` claim. Resolution priority is: `custom:legacy_user_id` from the token → `user_repository.find_by_cognito_sub(token.sub)` → `user_repository.find_by_email(token.email)`. If all three lookups fail, `validate_token` SHALL raise `ValueError` with the same "Token missing user identifier" semantics that exist today.
+
+After this resolution at the middleware boundary, downstream handlers MUST NOT need to translate `authentication.user_id` to an internal id — the translation has already happened.
 
 After this change, downstream handlers MUST NOT need to translate
 `authentication.user_id` to an internal id — the translation has

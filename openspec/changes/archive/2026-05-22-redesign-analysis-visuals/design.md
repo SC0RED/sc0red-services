@@ -261,6 +261,52 @@ Opportunities with either field `None` render in a grey "uncalibrated" footer st
 
 **Dot-overlap handling:** Opportunities that land on the same (x, y) pixel get a small jitter (±4 px) to remain individually clickable. If a single quadrant has > 10 dots after jitter, the renderer collapses them into a "+N more" cluster pin that opens a popover listing all opportunities in that quadrant (same UI primitive as Decision 7).
 
+### 9. Quick Wins matrix dot — donut treatment for badge legibility
+
+**Decision:** Replace the solid-fill numbered dot in `ScatterDot.tsx` with a donut/pin layout:
+
+- Outer ring: lever color (`var(--lever-*)`), preserves the at-a-glance lever identity the chart legend promises.
+- Inner disc: `var(--bg-surface-3)` — one elevation step above the plot floor (`ScatterPlot.tsx:102` fills the plot rect with `var(--bg-surface-2)`), so the donut interior reads as a pin sitting *above* the chart surface rather than a hole punched into it.
+- Number: lever color (matching the ring), 11 px, weight 700.
+- Outer dot radius grows from 10 → 12 to give the donut room without changing perceived dot size dramatically.
+
+**Why:** The shipped solid-fill design renders 9 px white text on saturated lever fills. Measured contrast:
+
+- white on `#22c55e` (revenue, dark mode) → ~1.95 : 1
+- white on `#06c8d9` (both, dark mode) → ~2.01 : 1
+- white on `#a78bfa` (cost, dark mode) → ~2.49 : 1
+
+All three fail WCAG AA for non-text UI (≥ 3 : 1) — meaning the number on the dot is effectively invisible at chart-page zoom. UX review #2 (`Janus-Analysis-Page-Review-2-UX.pdf`) flagged this.
+
+The donut puts the number on a neutral interior where contrast against the lever color clears ~5–7 : 1 in dark mode (bright lever colors on `#1a2538`). The outer ring preserves the lever encoding so users still read color before number.
+
+**Light-mode caveat:** Light-mode lever colors are darker (`#16a34a`, `#7c3aed`, `#0891b2`) and the interior token `--bg-surface-3` resolves to `#e2e8f0` — contrast lands ~3.5–5.4 : 1 across the three levers. That passes WCAG AA for large text (≥ 3 : 1) but the 11 px bold number doesn't quite hit the WCAG large-text size threshold. Acceptable for the visual quality bar; task 15.2 verifies and only escalates (e.g., to a `--text-primary` interior in light mode) if a specific lever reads poorly in practice.
+
+**Alternatives considered:**
+
+| Alternative | Why rejected |
+|---|---|
+| Keep fill, bump font to 12 px + dot to r=13 | Doesn't fix contrast; just makes the unreadable text bigger. Also pushes the cluster-pin threshold. |
+| Drop numbers from dots; numbers only in sidebar | Loses the legend → chart back-reference; in clusters users would have to hover every dot to find a specific opportunity. |
+| White fill, colored stroke + colored number | Max number legibility but the chart visibly de-saturates — color identity is the chart's strongest signal. |
+| Auto-pick text color from fill luminance (`getReadableTextColor`) | Solves contrast but adds a runtime helper that has to work identically in print SVG export and screen. Donut is simpler and theme-agnostic. |
+
+**Active-state ring:** The existing `r={14}` hover/focus ring at `ScatterDot.tsx:78-86` grows to `r={16}` to preserve the same ~2 px visual gap around the now-larger outer dot (r=12).
+
+**Print:** No change. `PrintScatterPlot.tsx` already separates the number from the dot — it renders a small (r=4) colored dot with a `#N` label *adjacent* to the dot in `var(--text-secondary)` on the page background, so the white-on-saturated contrast problem never existed in print. Donut treatment is a screen-only fix.
+
+**Cluster pins out of scope:** `ClusterPinMarker` already renders a different visual (a `+N` badge) whose contrast is acceptable. No change.
+
+**Scope clarification (added 2026-05-22 after post-deploy review of `78e7355`):** The donut treatment applies to **every screen indicator that participates in the matrix's dot vocabulary**, not just `ScatterDot` itself:
+
+- `ScatterDot` (the in-plot dot) — donut at 24 px outer / 16 px inner / 4 px ring (`78e7355`).
+- `AnalysisLegend` swatches above the chart, but **only** when `tool === 'quick-wins-matrix'` — donut at 12 px / 8 px / 2 px ring. The other three tools (strategy-map / ebitda / value-chain) keep solid 8 px swatches because their canvas dots (`OpportunityDotStrip`) are still solid; per-tool dialect is intentional.
+- `OpportunityLegendColumn` numbered sidebar badge — donut at 20 px / 14 px / 3 px ring, lever-coloured number on the interior.
+
+All three diameters scale the same ring-to-diameter ratio (≈1/6 to 1/7) so the donut reads as one visual family across the three sizes. Both follow-ups landed in PR #373 (`1865c77`).
+
+Lesson captured in feedback memory: when changing the visual treatment of a primary indicator, audit every legend, sidebar, tooltip, and print mirror that *references* the same visual signal — they need to move together or the visual vocabulary fractures.
+
 ## Open Questions
 
 - **OQ1** — Should the matrix `Avoid` quadrant be labeled differently? "Avoid" reads judgmental on the AI's own output. Alternative: "Deprioritise" or "Low ROI". Lean toward "Deprioritise" for the v1 demo. **RESOLVED: Deprioritise.**
