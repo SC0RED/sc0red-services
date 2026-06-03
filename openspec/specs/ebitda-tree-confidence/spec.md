@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Per-node derivation provenance on the EBITDA tree — a confidence level (high/medium/low) plus a 1–2 sentence basis rationale. Surfaced as a chip on each leaf node with a hover/focus tooltip and an on-page legend; rendered inline in the printed export.
+Per-node derivation provenance on the EBITDA tree — a confidence level (high/medium/low) plus a 1–2 sentence basis rationale. The level is deterministic and auditable: it reflects how cleanly the build inputs (`business_model` against `_MODEL_KEYWORDS`, `company_size` against `_SIZE_TO_EMPLOYEES`) resolved against the static template data. Both matched → high; one matched → medium; both defaulted → low. This is provenance, not AI self-rating — same inputs always produce the same label.
 
-The level is deterministic and auditable: it reflects how cleanly the build inputs (`business_model` against `_MODEL_KEYWORDS`, `company_size` against `_SIZE_TO_EMPLOYEES`) resolved against the static template data. Both matched → high; one matched → medium; both defaulted → low. This is provenance, not AI self-rating — same inputs always produce the same label.
+The fields are persisted, included in API responses, and available to the print export and any future audit / debug surface. The on-screen chip, hover tooltip, on-page legend, and print-inline marker were removed by the `redesign-analysis-visuals` change (Diagnostic Tool Feedback #5b) — the visuals competed with the more decision-relevant opportunity-link dots without adding signal a PE reader uses. The data layer is intentionally unchanged so any future surface (audit panel, debug overlay, programmatic export) can pull the fields without a pipeline change.
 
 ## Requirements
 
@@ -16,6 +16,8 @@ Each leaf `EbitdaNode` produced by `build_programmatic_ebitda_tree` SHALL carry 
 - `confidence_basis: str | None` — a 1–2 sentence human-readable explanation of how the node's `value_range` was derived.
 
 Both fields default to `None` for nodes that do not have a deterministic provenance signal (e.g., rollup/subtotal nodes that aggregate children, or nodes produced by a code path that predates this change).
+
+The frontend visual does NOT render these fields as of the `redesign-analysis-visuals` change — the chip + legend + print-inline marker were removed in that change. The fields remain in the data pipeline + API responses for future surfaces.
 
 #### Scenario: Both inputs resolved cleanly tagged high
 
@@ -42,6 +44,12 @@ Both fields default to `None` for nodes that do not have a deterministic provena
 - **WHEN** `build_programmatic_ebitda_tree` produces a `subtotal` or `margin` node whose value is computed from its children
 - **THEN** the node's `confidence_level` is `None` and `confidence_basis` is `None` (the children carry the signal individually; rollups inherit visually via their children's chips)
 
+#### Scenario: API response continues to include the fields
+
+- **WHEN** an analysis API response is returned for an analysis whose tree carries `confidence_level` on any leaf
+- **THEN** the fields are present in the response payload exactly as they were before the visual was removed
+- **AND** the analysis pipeline emits no migration deprecation warning for the fields
+
 ### Requirement: EbitdaTreeResult schema is additive and backward-compatible
 
 The `EbitdaTreeResult` JSON schema SHALL accept records without the new fields and SHALL surface them as `None` when read back. Existing analyses stored in DynamoDB SHALL deserialize without error.
@@ -50,69 +58,3 @@ The `EbitdaTreeResult` JSON schema SHALL accept records without the new fields a
 
 - **WHEN** an `EbitdaTreeResult` record stored before this change is fetched from DynamoDB and parsed
 - **THEN** every node's `confidence_level` and `confidence_basis` are `None`; no `ValidationError` is raised
-
-### Requirement: Frontend renders a confidence chip on each leaf node
-
-`EbitdaNodeComponent` SHALL render a chip next to the node's `value_range` when `confidenceLevel` is non-null. The chip SHALL use the existing `ConfidenceIndicator` 3-dot scale: `high → 3 dots`, `medium → 2 dots`, `low → 1 dot`. When `confidenceLevel` is `null`, the chip SHALL NOT render — no fallback "unknown" badge.
-
-#### Scenario: High-confidence node renders 3-dot chip
-
-- **WHEN** an `EbitdaNode` is rendered with `confidenceLevel: "high"` and `value_range: "$10M-$15M"`
-- **THEN** the rendered DOM contains a `ConfidenceIndicator` with 3 filled dots adjacent to the value range
-
-#### Scenario: Null confidence suppresses chip
-
-- **WHEN** an `EbitdaNode` is rendered with `confidenceLevel: null`
-- **THEN** no `ConfidenceIndicator` is present for that node; no "unknown" / "—" / question-mark badge appears
-
-#### Scenario: Subtotal nodes render no chip
-
-- **WHEN** an `EbitdaNode` of `type: "subtotal"` or `type: "margin"` is rendered
-- **THEN** no `ConfidenceIndicator` is present for that node (rollups carry no own confidence per the backend contract)
-
-### Requirement: Hover or focus on the chip reveals the basis
-
-The confidence chip SHALL expose `confidenceBasis` via a native HTML `title` attribute on the chip wrapper. The wrapper SHALL be keyboard-focusable (`tabIndex={0}`); screen-reader users receive the level via the existing `aria-label` on `ConfidenceIndicator`. Native `title` is used in preference to a portaled tooltip primitive because the chip lives inside a React-Flow node and a portaled element would be clipped by the flow container.
-
-#### Scenario: Keyboard user reaches the chip and reveals the basis
-
-- **WHEN** the user Tabs to a confidence chip
-- **THEN** the chip wrapper receives focus (`tabIndex={0}`) and the browser surfaces the `title` content as a tooltip per OS-native focus behaviour
-
-#### Scenario: Pointer hover reveals the basis
-
-- **WHEN** the user hovers a confidence chip with a pointer device
-- **THEN** the browser renders the `title` content as a tooltip after the OS-native delay
-
-#### Scenario: Touch tap reveals the basis
-
-- **WHEN** a touch-device user long-presses a confidence chip
-- **THEN** the OS-native tooltip surfaces the `title` content (touch behaviour is delegated to the platform; the chip wrapper does not implement its own toggle)
-
-### Requirement: EBITDA tree legend documents confidence levels
-
-`EbitdaSection` SHALL render a small legend above the tree, visible whenever at least one node in the tree carries a confidence level. The legend SHALL state plainly that the levels reflect *derivation provenance*, not subjective quality.
-
-#### Scenario: Legend is present when any node has a level
-
-- **WHEN** an analysis renders an EBITDA tree where at least one leaf carries a non-null `confidence_level`
-- **THEN** the legend is visible above the tree and contains explanations roughly matching: "Confidence: derivation provenance, not subjective quality. High = both business model and company size matched known templates. Medium = one input matched; the other defaulted. Low = both defaulted; figure is a generic mid-market estimate."
-
-#### Scenario: Legend is absent when no node has a level
-
-- **WHEN** an analysis renders an EBITDA tree where every leaf has `confidence_level: null` (e.g., a legacy analysis from before the field shipped)
-- **THEN** no legend is rendered (the tree shows no chips, so a legend would have nothing to explain)
-
-### Requirement: Print export includes confidence inline
-
-`PrintEbitdaOutline` SHALL render the confidence level inline as plain text (e.g., `(high)`, `(medium)`, `(low)`) appended to each leaf node's value range when `confidenceLevel` is non-null. When `confidenceLevel` is `null`, no marker SHALL render — silence over an "unknown" placeholder.
-
-#### Scenario: PDF print of high-confidence node
-
-- **WHEN** a node with `confidenceLevel: "high"` and `value_range: "$10M-$15M"` is rendered by `PrintEbitdaOutline`
-- **THEN** the rendered text contains the value range and the marker `(high)` (or visually equivalent format) in a single readable line
-
-#### Scenario: PDF print of null-confidence node
-
-- **WHEN** a node with `confidenceLevel: null` is rendered by `PrintEbitdaOutline`
-- **THEN** the rendered text contains the value range with no confidence marker

@@ -336,6 +336,67 @@ Rationale: OAuth tokens need custom claims (client_id, scope) and different life
 
 Rationale: Read operations are cheap (DynamoDB queries). Write operations (scans) incur AI API costs ($0.10-0.50 per scan). Rate limits prevent runaway AI agents from burning through credits. Limits enforced in tool handlers before forwarding to backend.
 
+### 8. MCP transport — switch from Mangum to AWS Lambda Web Adapter (supersedes Decision 2)
+
+**Status:** Decision captured 2026-06-03 during Phase A tactical scout. Implementation deferred — see `tasks.md` "Resume here" section.
+
+**Decision:** Replace the Mangum-based Lambda integration with AWS Lambda Web Adapter (LWA). LWA proxies HTTP between the Lambda Function URL and a real uvicorn server running inside the Lambda container. Mangum (chosen in Decision 2) is architecturally incompatible with the MCP SDK's streamable-HTTP transport when run on Lambda.
+
+**Why (the discovery chain):**
+
+Phase A scout against the deployed staging Lambda (`sc0red-services-mcp-staging`, us-east-1) uncovered two bugs in sequence:
+
+1. **Bug A — cold-start crash.** Lambda failed at module import with `KeyError: 'private_key'` because the Secrets Manager secret (`sc0red-services-mcp-signing-key-staging`) was created empty by `MCPConstruct` but never populated. Fixed operationally by generating an RSA-2048 key pair locally and pushing it via `aws secretsmanager put-secret-value`. **The CDK construct still creates an empty secret** — see Bug X.
+
+2. **Bug B — lifespan-vs-request mismatch (the architectural one).** Once Bug A was fixed, the first request to each cold-started container returned 200. Every subsequent request to the same warm container returned 502 with:
+
+   ```
+   RuntimeError: StreamableHTTPSessionManager .run() can only be called once
+   per instance. Create a new instance if you need to run again.
+   ```
+
+   The MCP SDK's `StreamableHTTPSessionManager` is designed for long-lived ASGI servers where lifespan startup runs once at server boot. Mangum, by contrast, calls lifespan startup on **every** Lambda invocation. The session manager's run-once guard fires on every invocation past the first.
+
+   Effective production behaviour: each Lambda container serves **exactly one** request before becoming a 502 machine. Not viable.
+
+**Why the original Decision 2 spike missed it:** Task 1.1 ("verify FastMCP `streamable_http_app()` + Mangum works on Lambda") was marked complete, but the spike was a hello-world cold-start test. Warm-invoke behaviour was never exercised. Unit tests for OAuth + tools_read mock the storage layer and never go through the Mangum lifespan path either — the bug was structurally invisible to both spike and CI. **Lesson for future spikes: any "X works on Lambda" verification must include at minimum two sequential requests to confirm warm-invoke survives.**
+
+**Alternatives considered:**
+
+| Option | Effort | Risk | Verdict |
+|---|---|---|---|
+| **A. AWS Lambda Web Adapter (LWA)** — run uvicorn inside the Lambda container, LWA proxies HTTP. Lifespan runs once per cold start, like a real ASGI server. | medium (~1 day, Docker-based Lambda + CDK rewrite) | low — AWS-blessed pattern for ASGI-on-Lambda | **CHOSEN** |
+| B. Move MCP off Lambda to ECS Fargate / App Runner | large (~2-3 days, new infra + deploy pipeline) | medium — net-new ops surface | Right answer if sustained traffic is anticipated; over-spec for the read-only v1 launch |
+| C. Custom Mangum subclass that resets session-manager state per request | small (~2-3 hrs) but ongoing maintenance | high — depends on MCP SDK internals, breaks on every SDK bump | Rejected as a maintenance burden |
+| D. Provisioned concurrency = 1 + accept ~1-RPS limit | trivial | n/a | Doesn't fix anything — each container still serves exactly 1 request before becoming broken |
+
+**Bug X (systemic, separate from Bug B):** `MCPConstruct` creates an empty signing-key secret without populating it. Lambda deploys "successfully" then crashes silently at first invocation. This is a fail-late pattern that contradicts CLAUDE.md's fail-fast standards. Fix during PR 2.5: either generate the key pair at CDK synth via a custom resource and populate the secret, or fail synth if the secret is empty for non-development environments.
+
+**Migration scope:**
+- Update `infrastructure/stacks/mcp_construct.py` to use Docker-based Lambda + LWA layer.
+- Replace `backend/src/mcp/mcp_handler.py` Lambda entry point with a uvicorn boot script (`uvicorn.run(_app, host="0.0.0.0", port=...)`). Keep the FastMCP setup, OAuth provider wiring, and tool registrations unchanged.
+- Add `backend/Dockerfile.mcp`.
+- Add an integration test that calls the OAuth metadata endpoint **twice in succession** against a locally-running container — this is the test that would have caught Bug B in the first place.
+
+**Latent bugs uncovered during Phase A but not addressed by this decision (carried to PR 2.6):**
+- **Bug C** — Default `MCP_ISSUER_URL` is `https://mcp.{stage}.sc0red-services.sc0red.com`. That DNS doesn't exist. OAuth clients receive metadata pointing at a phantom domain.
+- **Bug D** — `CONSENT_BASE_URL` env var on staging Lambda points at the **development** Amplify URL. Real customers using staging MCP would be sent to the dev consent screen.
+- **Bug E** — Read-tool formatters were written 49 days ago and predate the Phase-14 schema additions. `get_opportunities` misses `investment_value_usd` and `roi_estimate_pct` (the matrix axes); `get_ebitda_tree` misses `confidence_*` + `linked_opportunity_indices`; `get_value_chain` misses `opportunity_indices`.
+- **Bug F** — No `get_strategy_map` tool exists. Strategy map is invisible to AI assistant users.
+
+### 9. MCP tool naming convention (placeholder — to decide during PR 2.6)
+
+**Status:** Open question, deferred to PR 2.6.
+
+**Question:** Should MCP tool names use a brand prefix (`sc0red_list_analyses`), stay bare (`list_analyses`), or keep the internal codename (`janus_list_analyses`)?
+
+**Context:**
+- Tool names appear in the AI assistant UI when users invoke them — they are customer-visible per CLAUDE.md's naming rule.
+- Self-namespacing (prefix) is safer once users connect multiple MCP servers (`list_analyses` collides across servers).
+- The brand we want users to recognise in Claude Desktop is "sc0red Services", not "janus".
+
+**Lean (not yet decided):** `sc0red_` prefix across all tools + prompts. Read tools today are bare; prompts in the proposal say `janus_*`. The convention should be picked and applied once, before any external launch.
+
 ## Risks / Trade-offs
 
 - **MCP SDK maturity**: The Python SDK is evolving. `OAuthAuthorizationServerProvider` interface may change. → Mitigation: Pin SDK version, test thoroughly, update incrementally.

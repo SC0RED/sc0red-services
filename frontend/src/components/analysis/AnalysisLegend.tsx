@@ -69,28 +69,54 @@ const TOOL_TESTID_DEFAULT: Record<AnalysisLegendProps['tool'], string> = {
 export default function AnalysisLegend({ tool, testId }: AnalysisLegendProps) {
     const effectiveTestId = testId ?? TOOL_TESTID_DEFAULT[tool]
 
+    // Donut treatment is matrix-only — the matrix dots are donuts
+    // (ScatterDot) so the legend swatches must match. The other three
+    // tools' canvas dots are solid (OpportunityDotStrip) so their
+    // legend swatches stay solid.
+    const donut = tool === 'quick-wins-matrix'
+
     return (
         <div data-testid={effectiveTestId} style={legendStyle}>
-            <Swatch lever="Revenue Side" />
+            <Swatch lever="Revenue Side" donut={donut} />
             <strong>Revenue Side</strong>
             <span aria-hidden="true"> · </span>
-            <Swatch lever="Cost Side" />
+            <Swatch lever="Cost Side" donut={donut} />
             <strong>Cost Side</strong>
             <span aria-hidden="true"> · </span>
-            <Swatch lever="Both" />
+            <Swatch lever="Both" donut={donut} />
             <strong>Both</strong>
             <span>{TOOL_LEGEND_COPY[tool]}</span>
         </div>
     )
 }
 
-function Swatch({ lever }: { lever: 'Revenue Side' | 'Cost Side' | 'Both' }) {
+function Swatch({ lever, donut }: { lever: 'Revenue Side' | 'Cost Side' | 'Both'; donut: boolean }) {
+    const color = LEVER_COLORS[lever]
+    if (donut) {
+        // Larger size (12 px) + 2 px inset ring → mirrors the matrix
+        // ScatterDot's donut at a scale where the ring/interior split
+        // is actually visible. 8 px is too small to read as a donut.
+        return (
+            <span
+                aria-hidden="true"
+                style={{
+                    ...swatchBaseStyle,
+                    width: '12px',
+                    height: '12px',
+                    background: 'var(--bg-surface-3)',
+                    boxShadow: `inset 0 0 0 2px ${color}`,
+                }}
+            />
+        )
+    }
     return (
         <span
             aria-hidden="true"
             style={{
-                ...swatchStyle,
-                background: LEVER_COLORS[lever],
+                ...swatchBaseStyle,
+                width: '8px',
+                height: '8px',
+                background: color,
             }}
         />
     )
@@ -107,9 +133,7 @@ const legendStyle: CSSProperties = {
     marginBottom: '8px',
 }
 
-const swatchStyle: CSSProperties = {
+const swatchBaseStyle: CSSProperties = {
     display: 'inline-block',
-    width: '8px',
-    height: '8px',
     borderRadius: '50%',
 }

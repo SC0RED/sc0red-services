@@ -78,22 +78,27 @@ export default function ScatterDot({ dot, opportunity }: { dot: InPlotDot; oppor
             <circle
                 data-testid={`quick-wins-dot-ring-${dot.opportunityIndex}`}
                 data-active={isActive ? 'true' : 'false'}
-                r={14}
+                r={16}
                 fill="none"
                 stroke={color}
                 strokeWidth={2}
                 opacity={isActive ? 0.55 : 0}
             />
-            <circle r={10} fill={color} stroke="var(--bg-surface)" strokeWidth={1.5} />
+            <circle data-testid={`quick-wins-dot-outer-${dot.opportunityIndex}`} r={12} fill={color} />
+            <circle
+                data-testid={`quick-wins-dot-inner-${dot.opportunityIndex}`}
+                r={8}
+                fill="var(--bg-surface-3)"
+            />
             <text
                 data-testid={`quick-wins-dot-number-${dot.opportunityIndex}`}
                 textAnchor="middle"
                 dy={3}
                 aria-hidden="true"
                 style={{
-                    fontSize: '9px',
+                    fontSize: '11px',
                     fontWeight: 700,
-                    fill: 'white',
+                    fill: color,
                     pointerEvents: 'none',
                 }}
             >
