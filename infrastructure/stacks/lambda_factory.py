@@ -30,11 +30,18 @@ _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
 
 
 def build_bundling_options() -> cdk.BundlingOptions:
-    """Build the Docker bundling config shared by both Lambdas.
+    """Build the Docker bundling config shared by the API, worker, and MCP Lambdas.
 
     Reads ``DEPLOY_KEY_B64`` from the deploy environment and, when set,
     wires git-over-SSH so ``pip install`` can resolve the private
     ``signalfield-core`` dependency.
+
+    NOTE (temporary coupling — see janus-mcp-server tasks.md 2.5.13): the final
+    step copies the MCP Lambda's ``run_mcp.sh`` LWA startup script into the
+    asset output. It is inert for the API/worker packages. This MCP-specific
+    step lives here only until the LWA-via-layer approach is validated on
+    staging; once confirmed, it should move to an MCP-specific bundling variant
+    so this shared builder stops carrying MCP knowledge.
     """
     deploy_key_b64 = os.environ.get("DEPLOY_KEY_B64", "")
 
@@ -58,6 +65,13 @@ def build_bundling_options() -> cdk.BundlingOptions:
                     " fi"
                 ),
                 "pip install --no-cache-dir . -t /asset-output -q",
+                # The MCP Lambda runs under the AWS Lambda Web Adapter with
+                # ``handler=run_mcp.sh`` (see mcp_construct.py). ``pip install .``
+                # only packages the Python distribution, not loose top-level
+                # files, so copy the LWA startup script to the package root and
+                # mark it executable. Inert for the API/worker Lambdas — they
+                # never reference it.
+                "cp run_mcp.sh /asset-output/run_mcp.sh && chmod +x /asset-output/run_mcp.sh",
             ]),
         ],
     )
