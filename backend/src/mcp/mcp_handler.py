@@ -136,7 +136,7 @@ register_search_tools(mcp, _storage)
 # ``AWS_LWA_READINESS_CHECK_PATH=/health`` (set in mcp_construct.py). Registered
 # before ``streamable_http_app()`` so the route is included in the built app.
 @mcp.custom_route("/health", methods=["GET"])
-async def health(_request: Request) -> PlainTextResponse:
+async def check_health(_request: Request) -> PlainTextResponse:
     """Liveness/readiness probe for the Lambda Web Adapter."""
     return PlainTextResponse("ok")
 
