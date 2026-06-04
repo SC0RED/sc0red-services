@@ -82,39 +82,38 @@ PR 3–7                   — Original plan resumes. Write tools → destructiv
 
 ---
 
-## PR 2.5: Runtime infrastructure fix — Mangum → Lambda Web Adapter (NEW)
+## PR 2.5: Fix the run-once crash — cheap stateless config first, LWA only if needed (NEW)
 
-Source of truth: `design.md` Decision 8.
+Source of truth: `design.md` Decision 8 (revised 2026-06-03 — cheap config fix before any rewrite).
 
-### Spike + design validation
-- [ ] 2.5.1 Spike: stand up FastMCP + AWS Lambda Web Adapter locally in a Docker container. Validate the streamable-HTTP transport works end-to-end (OAuth metadata, DCR, PKCE, tool invocation) **across two sequential requests** without hitting the run-once guard. Time-box to 4 hrs; if it doesn't work, escalate to Decision-8 Option B (move off Lambda to ECS Fargate).
-- [ ] 2.5.2 If spike succeeds, update `design.md` Decision 8 with the validated LWA configuration: LWA layer version, port, env vars, Dockerfile shape, IAM patterns.
+### Step 1 — cheap config fix (try this first; ~3-line change, no infra rewrite)
+- [ ] 2.5.1 `backend/src/mcp/mcp_handler.py` — add `stateless_http=True, json_response=True` to the `FastMCP(...)` constructor. Keep Mangum. Isolated single-concern change so the staging test result is unambiguous. (Both kwargs confirmed valid in the installed SDK — `Settings.model_fields` includes them.)
+- [ ] 2.5.2 Lint + typecheck: `uv run ruff check src/mcp/`, `uv run pyright src/mcp/mcp_handler.py`.
+- [ ] 2.5.3 Deploy the branch to staging (driven by whoever has the sc0red-services account; `mcp_handler.py` is under `backend/**` so a backend deploy is triggered). Then run the Phase A scout again:
+  - cold-start: `curl …/.well-known/oauth-authorization-server` → expect 200
+  - **warm-invoke (the critical test): hit the same URL a SECOND time within a few seconds → expect 200, NOT 502.**
+  - if 200/200 → tail logs to confirm no `run() can only be called once` traces.
+- [ ] 2.5.4 Full round-trip via `npx @modelcontextprotocol/inspector` against the staging Function URL — OAuth (DCR + PKCE) + one read-tool call returns data.
+- [ ] 2.5.5 **Decision gate:** if Step 1 survives warm invokes → PR 2.5 is DONE; mark Step 2 (LWA) tasks as not-needed (`[~]`), update Decision 8 to record the cheap resolution, and proceed to PR 2.6. If it still 502s on the 2nd request → proceed to Step 2.
 
-### Infrastructure
-- [ ] 2.5.3 Rewrite `infrastructure/stacks/mcp_construct.py` to use Docker-based Lambda (`DockerImageFunction` or `PythonFunction` with container image). Attach the official AWS LWA layer.
-- [ ] 2.5.4 Add `backend/Dockerfile.mcp` that bundles `src/mcp` + dependencies + LWA at the right paths.
-- [ ] 2.5.5 Set the LWA env-var contract (`AWS_LWA_PORT`, `AWS_LWA_READINESS_CHECK_PATH=/health`, etc.).
+### Step 1 — ship
+- [ ] 2.5.6 Conventional commit + PR (branch off development). Body references `design.md` Decision 8. **Do not merge until staging validates** (per branch+PR rule + the fact that the validation IS a staging deploy of this branch).
 
-### Application layer
-- [ ] 2.5.6 Replace `backend/src/mcp/mcp_handler.py`'s Mangum `handle_event` with a uvicorn boot block (`uvicorn.run(_app, host="0.0.0.0", port=int(os.environ["AWS_LWA_PORT"]))`). Keep the rest of the file (signing-key load, FastMCP setup, OAuth provider, tool registrations) unchanged.
-- [ ] 2.5.7 Add a `/health` route to the FastMCP app for LWA's readiness probe.
+---
 
-### Bug X — fail-fast on empty signing key
-- [ ] 2.5.8 Update `MCPConstruct` to either (a) generate the RSA key pair via a custom resource at CDK synth and populate the secret, or (b) fail synth if the secret is empty for non-development environments. Matches the CLAUDE.md fail-fast contract.
+### Step 2 — LWA rewrite (FALLBACK — only if Step 1 fails the warm-invoke test)
+- [ ] 2.5.7 Spike: FastMCP + LWA locally in Docker; validate two sequential requests survive. Time-box 4 hrs; if even LWA struggles, escalate to Decision-8 Option B (ECS Fargate).
+- [ ] 2.5.8 Rewrite `infrastructure/stacks/mcp_construct.py` to a Docker-based Lambda (`DockerImageFunction`) with the official AWS LWA layer.
+- [ ] 2.5.9 Add `backend/Dockerfile.mcp` bundling `src/mcp` + deps + LWA; set the LWA env contract (`AWS_LWA_PORT`, `AWS_LWA_READINESS_CHECK_PATH=/health`).
+- [ ] 2.5.10 Replace Mangum `handle_event` with a uvicorn boot block; add a `/health` route for LWA's readiness probe.
+- [ ] 2.5.11 Integration test: OAuth metadata endpoint twice in succession against a local container, both 200.
+- [ ] 2.5.12 Deploy to staging, repeat the scout (cold + warm + inspector round-trip).
+- [ ] 2.5.13 Architecture-reviewer on the diff (CDK blast radius, Dockerfile, LWA IAM).
 
-### Bug C / D — issuer + consent URL hardening
-- [ ] 2.5.9 Add `MCP_ISSUER_URL` to the Lambda env-var contract; default to the Function URL when no custom domain is configured. (Custom domain itself is out of scope here — defer to v1.1.)
-- [ ] 2.5.10 Per-environment `CONSENT_BASE_URL` wiring in CDK — staging Lambda points at staging frontend, not the dev Amplify URL.
-
-### Tests + verification
-- [ ] 2.5.11 Add the integration test that would have caught Bug B: call the OAuth metadata endpoint **twice in succession** against a locally-running container; both must return 200.
-- [ ] 2.5.12 Add a CDK unit test that the signing-key secret is non-empty after synth (Bug X regression guard).
-- [ ] 2.5.13 Deploy to staging, repeat the Phase A scout — cold-start curl, warm-invoke curl, then a full OAuth + tool round-trip via `npx @modelcontextprotocol/inspector`. All must pass; warm-invoke 200 is the critical one.
-
-### Quality gates + ship
-- [ ] 2.5.14 `uv run ruff check src/`, `uv run pyright src/`, `uv run pytest tests/mcp/ -q` — all green.
-- [ ] 2.5.15 Architecture-reviewer agent on the diff. Special focus: CDK construct change blast radius, new Dockerfile, IAM permissions for LWA.
-- [ ] 2.5.16 Conventional commit + PR. Body must reference `design.md` Decision 8 + this section.
+### Deferred to follow-up (orthogonal to the run-once fix — do NOT bundle into the Step-1 experiment)
+- [ ] 2.5.14 Bug X — `MCPConstruct` creates an empty signing-key secret. Fix: generate the RSA pair via a CDK custom resource + populate, OR fail synth if empty for non-dev. (Already operationally handled in staging; this is deploy-time UX.)
+- [ ] 2.5.15 Bug C — `MCP_ISSUER_URL` default points at non-existent DNS. Add the env var, default to the Function URL when no custom domain is set.
+- [ ] 2.5.16 Bug D — per-environment `CONSENT_BASE_URL` wiring in CDK (staging Lambda currently points at the dev Amplify URL).
 
 ## PR 2.6: Quick wins polish — drift fix + missing tool + rebrand + minimal UI (NEW)
 

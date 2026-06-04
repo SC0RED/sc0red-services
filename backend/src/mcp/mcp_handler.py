@@ -82,6 +82,16 @@ mcp = FastMCP(
     ),
     auth_server_provider=_oauth_provider,
     auth=_authentication_settings,
+    # ── Lambda statelessness (see design.md Decision 8) ──────────────────────
+    # Default stateful mode keeps a long-lived ``StreamableHTTPSessionManager``
+    # whose ``run()`` lives in the ASGI lifespan. Mangum re-invokes the lifespan
+    # on every Lambda invocation, so the manager's run-once guard trips on the
+    # second warm request → HTTP 502 (Bug B). Stateless mode drops the
+    # persistent-session lifecycle so each invocation is self-contained;
+    # ``json_response`` returns plain JSON instead of SSE, which Lambda's
+    # buffered response model carries without response-streaming infrastructure.
+    stateless_http=True,
+    json_response=True,
 )
 
 
