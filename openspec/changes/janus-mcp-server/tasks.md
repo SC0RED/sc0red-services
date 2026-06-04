@@ -86,32 +86,30 @@ PR 3–7                   — Original plan resumes. Write tools → destructiv
 
 Source of truth: `design.md` Decision 8 (revised 2026-06-03 — cheap config fix before any rewrite).
 
-### Step 1 — cheap config fix (try this first; ~3-line change, no infra rewrite)
-- [ ] 2.5.1 `backend/src/mcp/mcp_handler.py` — add `stateless_http=True, json_response=True` to the `FastMCP(...)` constructor. Keep Mangum. Isolated single-concern change so the staging test result is unambiguous. (Both kwargs confirmed valid in the installed SDK — `Settings.model_fields` includes them.)
-- [ ] 2.5.2 Lint + typecheck: `uv run ruff check src/mcp/`, `uv run pyright src/mcp/mcp_handler.py`.
-- [ ] 2.5.3 Deploy the branch to staging (driven by whoever has the sc0red-services account; `mcp_handler.py` is under `backend/**` so a backend deploy is triggered). Then run the Phase A scout again:
-  - cold-start: `curl …/.well-known/oauth-authorization-server` → expect 200
-  - **warm-invoke (the critical test): hit the same URL a SECOND time within a few seconds → expect 200, NOT 502.**
-  - if 200/200 → tail logs to confirm no `run() can only be called once` traces.
-- [ ] 2.5.4 Full round-trip via `npx @modelcontextprotocol/inspector` against the staging Function URL — OAuth (DCR + PKCE) + one read-tool call returns data.
-- [ ] 2.5.5 **Decision gate:** if Step 1 survives warm invokes → PR 2.5 is DONE; mark Step 2 (LWA) tasks as not-needed (`[~]`), update Decision 8 to record the cheap resolution, and proceed to PR 2.6. If it still 502s on the 2nd request → proceed to Step 2.
+### Step 1 — cheap config fix (ATTEMPTED — FAILED on staging 2026-06-04)
+- [x] 2.5.1 `backend/src/mcp/mcp_handler.py` — added `stateless_http=True, json_response=True`. (PR #378, merged.)
+- [x] 2.5.2 Lint + typecheck passed.
+- [x] 2.5.3 Deployed to staging via the development backend-deploy workflow. **RESULT: FAILED.** 1st request 200, 2nd + 3rd request **502** with the same `StreamableHTTPSessionManager .run() can only be called once` trace (via `mangum/adapter.py` lifespan). `stateless_http` changes session *handling* but `.run()` still lives in the ASGI lifespan that Mangum re-invokes per request → guard still trips.
+- [~] 2.5.4 Inspector round-trip — n/a, server still 502s on warm invokes.
+- [x] 2.5.5 **Decision gate: Step 1 failed → proceed to Step 2 (LWA).**
 
 ### Step 1 — ship
-- [ ] 2.5.6 Conventional commit + PR (branch off development). Body references `design.md` Decision 8. **Do not merge until staging validates** (per branch+PR rule + the fact that the validation IS a staging deploy of this branch).
+- [x] 2.5.6 Shipped as PR #378 (merged to development; the merge is what deployed it to staging for the test). The stateless flags are KEPT — still correct posture under LWA, just insufficient alone.
 
 ---
 
-### Step 2 — LWA rewrite (FALLBACK — only if Step 1 fails the warm-invoke test)
-- [ ] 2.5.7 Spike: FastMCP + LWA locally in Docker; validate two sequential requests survive. Time-box 4 hrs; if even LWA struggles, escalate to Decision-8 Option B (ECS Fargate).
-- [ ] 2.5.8 Rewrite `infrastructure/stacks/mcp_construct.py` to a Docker-based Lambda (`DockerImageFunction`) with the official AWS LWA layer.
-- [ ] 2.5.9 Add `backend/Dockerfile.mcp` bundling `src/mcp` + deps + LWA; set the LWA env contract (`AWS_LWA_PORT`, `AWS_LWA_READINESS_CHECK_PATH=/health`).
-- [ ] 2.5.10 Replace Mangum `handle_event` with a uvicorn boot block; add a `/health` route for LWA's readiness probe.
-- [ ] 2.5.11 Integration test: OAuth metadata endpoint twice in succession against a local container, both 200.
-- [ ] 2.5.12 Deploy to staging, repeat the scout (cold + warm + inspector round-trip).
-- [ ] 2.5.13 Architecture-reviewer on the diff (CDK blast radius, Dockerfile, LWA IAM).
+### Step 2 — LWA via Lambda layer (IN PROGRESS — branch `fix/mcp-lambda-web-adapter`)
+Chosen the **LWA-layer-on-zip** approach (Option 2a), not the full Docker `DockerImageFunction` rewrite — lighter, keeps the existing `pip install . -t /asset-output` bundling.
+- [~] 2.5.7 Local Docker spike — skipped (can't iterate Docker/AWS from the dev sandbox; validation is the staging deploy). Will pivot to Docker (2b) only if the layer approach fails on staging.
+- [x] 2.5.8 `infrastructure/stacks/mcp_construct.py` — added the architecture-aware LWA layer (`LambdaAdapterLayerX86`/`Arm64` v28), `handler="run_mcp.sh"`, env vars `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap`, `AWS_LWA_PORT=8080`, `AWS_LWA_READINESS_CHECK_PATH=/health`. (Layer approach — no `DockerImageFunction`.)
+- [x] 2.5.9 `backend/run_mcp.sh` (new, +x) execs `uvicorn src.mcp.mcp_handler:app`. `infrastructure/stacks/lambda_factory.py` bundling copies it to the package root + chmods it (`pip install .` doesn't include loose files).
+- [x] 2.5.10 `mcp_handler.py` — removed Mangum `handle_event`, exposed `app = mcp.streamable_http_app()`, added a `/health` `custom_route` for the LWA readiness probe.
+- [~] 2.5.11 Local twice-in-succession test — NOT added: the bug only manifests under Mangum's per-invocation lifespan re-run; a local ASGI test (TestClient/uvicorn) runs lifespan once and can't reproduce it. The meaningful test is the staging warm-invoke (2.5.12).
+- [ ] 2.5.12 Deploy to staging, repeat the scout: cold curl + **warm curl ×2 (the critical 200/200/200)** + inspector round-trip.
+- [x] 2.5.13 Architecture-reviewer on the diff — 0 CRITICAL, safe to commit. Addressed before PR: removed dead `mangum` dep (pyproject + uv.lock), fixed the stale "via Mangum" docstring in `mcp_construct.py`. **Deferred (with note):** the shared-bundling separation-of-concerns — `build_bundling_options()` copies `run_mcp.sh` into all 3 Lambda packages. Kept as a documented temporary coupling until staging validates the LWA-via-layer approach; if validated, move the copy to an MCP-specific bundling variant before merge; if it fails and we pivot to Docker (2b), the bundling is reworked anyway.
 
-### Deferred to follow-up (orthogonal to the run-once fix — do NOT bundle into the Step-1 experiment)
-- [ ] 2.5.14 Bug X — `MCPConstruct` creates an empty signing-key secret. Fix: generate the RSA pair via a CDK custom resource + populate, OR fail synth if empty for non-dev. (Already operationally handled in staging; this is deploy-time UX.)
+### Deferred to follow-up (orthogonal to the run-once fix)
+- [~] 2.5.14 Bug X — **partial fix in this branch:** added an actionable fail-fast error in `_load_signing_keys` when the secret is empty (instead of an opaque KeyError). **Full fix still deferred:** auto-generate the RSA pair via a CDK custom resource so deploy populates the secret.
 - [ ] 2.5.15 Bug C — `MCP_ISSUER_URL` default points at non-existent DNS. Add the env var, default to the Function URL when no custom domain is set.
 - [ ] 2.5.16 Bug D — per-environment `CONSENT_BASE_URL` wiring in CDK (staging Lambda currently points at the dev Amplify URL).
 

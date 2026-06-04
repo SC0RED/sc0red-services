@@ -1,7 +1,12 @@
 """sc0red Services MCP server — Lambda entry point.
 
-Uses FastMCP with Streamable HTTP transport, wrapped by Mangum for Lambda.
-OAuth handled by the MCP SDK via Sc0redServicesOAuthProvider.
+Serves the FastMCP Streamable HTTP app via uvicorn behind the AWS Lambda Web
+Adapter (LWA). LWA runs this as a real ASGI server inside the Lambda container,
+so the ASGI lifespan (which starts ``StreamableHTTPSessionManager``) runs once
+per cold start — unlike Mangum, which re-ran the lifespan per invocation and
+tripped the manager's run-once guard on the second warm request (see
+``openspec/changes/janus-mcp-server/design.md`` Decision 8). OAuth handled by
+the MCP SDK via Sc0redServicesOAuthProvider.
 """
 
 from __future__ import annotations
@@ -9,14 +14,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import TYPE_CHECKING
 
 import boto3
-from mangum import Mangum
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
+from starlette.responses import PlainTextResponse
 
 from src.mcp.oauth_provider import Sc0redServicesOAuthProvider
 from src.mcp.oauth_repository import OAuthRepository
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +44,19 @@ def _load_signing_keys() -> tuple[str, str]:
             SecretId=OAUTH_SIGNING_KEY_SECRET_ARN,
         )
         secret: dict[str, str] = json.loads(response["SecretString"])  # type: ignore[arg-type]
+        # The CDK construct currently creates this secret with a placeholder
+        # body and never populates the RSA keypair (Bug X — full auto-generation
+        # fix tracked as a follow-up). A missing key here means the secret was
+        # never populated post-deploy; fail with an actionable message instead
+        # of an opaque KeyError so the operator knows exactly what to run.
+        if "private_key" not in secret or "public_key" not in secret:
+            raise RuntimeError(
+                f"OAuth signing-key secret {OAUTH_SIGNING_KEY_SECRET_ARN} is missing "
+                "'private_key'/'public_key' — the CDK construct creates it empty "
+                "and it was never populated. Populate it with an RSA keypair "
+                "(private_key + public_key PEM); see design.md Decision 8 / the "
+                "migration doc for the exact put-secret-value command."
+            )
         return secret["private_key"], secret["public_key"]
 
     from src.mcp.token_utils import generate_rsa_key_pair
@@ -83,13 +105,14 @@ mcp = FastMCP(
     auth_server_provider=_oauth_provider,
     auth=_authentication_settings,
     # ── Lambda statelessness (see design.md Decision 8) ──────────────────────
-    # Default stateful mode keeps a long-lived ``StreamableHTTPSessionManager``
-    # whose ``run()`` lives in the ASGI lifespan. Mangum re-invokes the lifespan
-    # on every Lambda invocation, so the manager's run-once guard trips on the
-    # second warm request → HTTP 502 (Bug B). Stateless mode drops the
-    # persistent-session lifecycle so each invocation is self-contained;
-    # ``json_response`` returns plain JSON instead of SSE, which Lambda's
-    # buffered response model carries without response-streaming infrastructure.
+    # Under LWA the ASGI lifespan runs once per cold start, so the run-once
+    # guard on ``StreamableHTTPSessionManager.run()`` is no longer tripped (that
+    # was the Mangum failure mode — Bug B). These flags remain because they are
+    # still the right posture for a serverless deployment: ``stateless_http``
+    # drops the persistent ``Mcp-Session-Id`` session lifecycle so each request
+    # is self-contained across scaled-out containers, and ``json_response``
+    # returns plain JSON instead of SSE, which keeps responses simple and
+    # avoids needing response-streaming wiring for the read-tool workload.
     stateless_http=True,
     json_response=True,
 )
@@ -106,7 +129,20 @@ register_read_tools(mcp, _storage)
 register_search_tools(mcp, _storage)
 
 
-# ── Lambda handler ───────────────────────────────────────────────────────────
+# ── Health check ──────────────────────────────────────────────────────────────
+# LWA performs a readiness probe before routing traffic. The MCP endpoint mounts
+# at ``/mcp`` (and requires POST + auth), so it is unsuitable as a probe target.
+# Expose a dedicated unauthenticated ``/health`` and point LWA at it via
+# ``AWS_LWA_READINESS_CHECK_PATH=/health`` (set in mcp_construct.py). Registered
+# before ``streamable_http_app()`` so the route is included in the built app.
+@mcp.custom_route("/health", methods=["GET"])
+async def check_health(_request: Request) -> PlainTextResponse:
+    """Liveness/readiness probe for the Lambda Web Adapter."""
+    return PlainTextResponse("ok")
 
-_app = mcp.streamable_http_app()
-handle_event = Mangum(_app)
+
+# ── ASGI app ──────────────────────────────────────────────────────────────────
+# Served by uvicorn under the AWS Lambda Web Adapter (see module docstring +
+# design.md Decision 8). ``run_mcp.sh`` is the Lambda handler; it execs
+# ``uvicorn src.mcp.mcp_handler:app``.
+app = mcp.streamable_http_app()

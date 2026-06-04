@@ -2,7 +2,8 @@
 
 Creates:
 - RSA signing key in Secrets Manager (for OAuth JWT tokens)
-- Lambda function running the FastMCP server via Mangum
+- Lambda function running the FastMCP ASGI app via uvicorn behind the AWS
+  Lambda Web Adapter (LWA) — see design.md Decision 8
 - Lambda Function URL for Streamable HTTP transport
 - CfnOutput for the MCP server URL
 """
@@ -122,14 +123,33 @@ class MCPConstruct(Construct):
 
         region = cdk.Stack.of(self).region or os.environ.get("AWS_REGION", "us-east-1")
 
+        # AWS Lambda Web Adapter (LWA) layer. LWA runs the FastMCP ASGI app as a
+        # real uvicorn server inside the Lambda container, so the ASGI lifespan
+        # runs once per cold start (fixing the Mangum run-once 502 — design.md
+        # Decision 8). The layer name is architecture-specific.
+        lwa_layer_name = (
+            "LambdaAdapterLayerArm64"
+            if architecture == lambda_.Architecture.ARM_64
+            else "LambdaAdapterLayerX86"
+        )
+        lwa_layer = lambda_.LayerVersion.from_layer_version_arn(
+            self,
+            "LambdaWebAdapter",
+            f"arn:aws:lambda:{region}:753240598075:layer:{lwa_layer_name}:28",
+        )
+
         return lambda_.Function(
             self,
             "MCPHandler",
             function_name=function_name,
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=architecture,
-            handler="src.mcp.mcp_handler.handle_event",
+            # LWA managed-runtime contract: the handler is the startup script
+            # (``run_mcp.sh`` execs uvicorn), invoked because
+            # ``AWS_LAMBDA_EXEC_WRAPPER`` points at LWA's ``/opt/bootstrap``.
+            handler="run_mcp.sh",
             code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            layers=[lwa_layer],
             timeout=Duration.seconds(900),
             memory_size=512,
             log_group=log_group,
@@ -142,5 +162,11 @@ class MCPConstruct(Construct):
                 "COGNITO_REGION": region,
                 "STAGE": self._environment,
                 "CONSENT_BASE_URL": self._frontend_domain or "http://localhost:3000",
+                # ── AWS Lambda Web Adapter wiring ────────────────────────────
+                "AWS_LAMBDA_EXEC_WRAPPER": "/opt/bootstrap",
+                "AWS_LWA_PORT": "8080",
+                # The MCP endpoint mounts at /mcp (POST + auth), so point LWA's
+                # readiness probe at the dedicated /health route instead.
+                "AWS_LWA_READINESS_CHECK_PATH": "/health",
             },
         )
