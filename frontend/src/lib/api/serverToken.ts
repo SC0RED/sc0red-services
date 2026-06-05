@@ -28,7 +28,13 @@ export async function getBackendToken(): Promise<string | null> {
         secret: process.env.NEXTAUTH_SECRET,
     })
 
-    return token?.idToken as string | null
+    // If the jwt callback couldn't refresh the idToken (refresh token expired or
+    // revoked), treat the session as unauthenticated so backendFetch throws 401
+    // and the app's error boundary forces a clean re-login — rather than sending
+    // a stale/expired idToken that the API would reject anyway.
+    if (token?.error === 'RefreshAccessTokenError') return null
+
+    return (token?.idToken as string | null) ?? null
 }
 
 /**
