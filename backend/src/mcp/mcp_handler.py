@@ -21,6 +21,7 @@ from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, Re
 from mcp.server.fastmcp import FastMCP
 from starlette.responses import PlainTextResponse
 
+from src.mcp.cors import add_cors_middleware
 from src.mcp.oauth_provider import Sc0redServicesOAuthProvider
 from src.mcp.oauth_repository import OAuthRepository
 
@@ -176,3 +177,10 @@ async def check_health(_request: Request) -> PlainTextResponse:
 # design.md Decision 8). ``run_mcp.sh`` is the Lambda handler; it execs
 # ``uvicorn src.mcp.mcp_handler:app``.
 app = mcp.streamable_http_app()
+
+# Browser MCP clients (e.g. MCP Inspector) connect to the authenticated ``/mcp``
+# transport with an ``Authorization`` header, which the SDK leaves un-CORS'd —
+# the unauthenticated preflight 401s with no ACAO and the browser reports
+# "Failed to fetch". Add an outermost CORS layer so the preflight is answered
+# before auth runs. See ``src/mcp/cors.py``.
+add_cors_middleware(app)
