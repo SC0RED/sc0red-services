@@ -11,15 +11,17 @@ This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Ap
   - Bug B (run-once 502) → fixed via AWS Lambda Web Adapter (#379). Warm-invoke verified: 3 consecutive 200s (was 200→502→502).
   - Bug C (OAuth issuer = dead DNS) → fixed via SSM indirection (#382, after #380's circular-dep attempt was reverted in #381). Verified: metadata issuer = the real Function URL.
   - DCR (`POST /register` 201) + `GET /authorize` 302 → working. Server boots, survives warm invokes, serves OAuth metadata.
-- 🔴 **End-to-end OAuth blocked by a FRONTEND-AUTH bug (not MCP).** The mcp-inspector OAuth dance gets through discovery → DCR → authorize → consent page renders → but **"Allow Access" fails**: the frontend `/api/oauth/approve` route calls the API backend with the user's Cognito idToken, and the API auth middleware rejects it `401 → {"error":"Token expired"}` (surfaced as a 500). **Reproduces even immediately after re-login.** Root cause = Bug G below (NextAuth doesn't refresh the Cognito idToken; the server-read `getToken().idToken` is stale). This blocks ANY authenticated frontend→backend call once the 1h idToken lapses — broader than OAuth consent.
-- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — blocked on the consent flow working (Bug G) for the inspector round-trip; the read-tool drift fixes themselves are independent and could proceed.
+- ✅ **Bug G FIXED (#383)** — NextAuth now refreshes the Cognito idToken (refresh-token rotation in the jwt callback; tracked in change `fix-cognito-token-refresh`). The "Allow Access → Token expired/500" failure is gone.
+- ✅ **Bug I FIXED (#384)** — once the token passed through, "Allow Access" hit a 502: the frontend `/api/oauth/approve` route double-encoded the body (`JSON.stringify` on top of `backendFetch`'s own stringify), so the backend's `json.loads(event["body"])` got a string and `handle_oauth_approve` threw `AttributeError: 'str' object has no attribute 'get'`. Fixed by passing the object. Inspector now gets through consent → callback → token exchange.
+- 🔴 **Bug J — `/mcp` transport has no CORS (current blocker).** After a successful token exchange the inspector (browser, `http://localhost:6274`) POSTs to `/mcp` with `Authorization: Bearer`, firing a CORS preflight. The MCP SDK only CORS-wraps the OAuth routes; `/mcp`'s `RequireAuthMiddleware` 401s the unauthenticated `OPTIONS` with **no `Access-Control-Allow-Origin`** → browser blocks it → `TypeError: Failed to fetch`. Verified against the live Function URL: `OPTIONS /mcp` → 401/no-ACAO; `OPTIONS /token` → 200/ACAO. **Fix in progress** (`fix/mcp-transport-cors`): outermost `CORSMiddleware` (`src/mcp/cors.py`) answers the preflight before auth runs and allows `Authorization` + the `mcp-*` headers.
+- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — the read-tool drift fixes are independent and could proceed.
 - 🛑 Original PR 3–7 — downstream.
 
 ## Resume here — next session
 
-The MCP runtime is healthy. The remaining blocker to a client-usable v1 is **Bug G** (frontend NextAuth idToken refresh) — a frontend-auth issue independent of the MCP Lambda. Tackle in this order:
-1. **Bug G** — fix NextAuth Cognito idToken refresh (frontend), OR confirm whether re-login actually rotates `getToken().idToken`. Then re-run the inspector OAuth round-trip → close PR 2.5's end-to-end validation.
-2. **PR 2.6** — read-tool drift (Bug E), `get_strategy_map`/`list_scans` (Bug F), tool-name rebrand, minimal Connected Apps UI, RFC 9728 metadata (Bug H). The drift fixes don't depend on Bug G.
+The MCP runtime is healthy and the OAuth dance now reaches the token exchange (Bugs G + I fixed). The remaining blocker to a client-usable v1 is **Bug J** (no CORS on the `/mcp` transport for browser clients). Tackle in this order:
+1. **Bug J** — ship `fix/mcp-transport-cors` (outermost CORS layer). **Requires an MCP Lambda redeploy** (CDK), not just an Amplify rebuild. Then re-run the inspector round-trip → close PR 2.5's end-to-end validation.
+2. **PR 2.6** — read-tool drift (Bug E), `get_strategy_map`/`list_scans` (Bug F), tool-name rebrand, minimal Connected Apps UI, RFC 9728 metadata (Bug H). The drift fixes don't depend on Bug J.
 
 ## State of staging environment (live, in AWS)
 
