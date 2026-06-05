@@ -2,23 +2,34 @@
 
 This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Apr 14, 2026); a Phase A tactical scout on the deployed staging Lambda (Jun 3, 2026) uncovered a blocking architectural bug. PR 2.5 (new, below) is the next required step before any further customer-facing work can ship.
 
-## Where we left off
+## Where we left off (updated 2026-06-05)
 
 - ✅ PR 1 (OAuth Provider + Infrastructure) — shipped
 - ✅ PR 2 (Read Tools, 12 tools) — shipped
-- ✅ Phase A tactical scout — complete. Findings captured in `design.md` Decision 8 + the bug table below.
-- 🛑 **PR 2.5 (Runtime infrastructure fix, Mangum → LWA)** — identified, not started. Blocks everything downstream.
-- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — blocked on PR 2.5.
-- 🛑 Original PR 3–7 — blocked on PR 2.5 + PR 2.6.
+- ✅ Phase A tactical scout — complete.
+- ✅ **PR 2.5 (runtime fix) — CORE DONE + VALIDATED on staging.** The hard bug is fixed:
+  - Bug B (run-once 502) → fixed via AWS Lambda Web Adapter (#379). Warm-invoke verified: 3 consecutive 200s (was 200→502→502).
+  - Bug C (OAuth issuer = dead DNS) → fixed via SSM indirection (#382, after #380's circular-dep attempt was reverted in #381). Verified: metadata issuer = the real Function URL.
+  - DCR (`POST /register` 201) + `GET /authorize` 302 → working. Server boots, survives warm invokes, serves OAuth metadata.
+- 🔴 **End-to-end OAuth blocked by a FRONTEND-AUTH bug (not MCP).** The mcp-inspector OAuth dance gets through discovery → DCR → authorize → consent page renders → but **"Allow Access" fails**: the frontend `/api/oauth/approve` route calls the API backend with the user's Cognito idToken, and the API auth middleware rejects it `401 → {"error":"Token expired"}` (surfaced as a 500). **Reproduces even immediately after re-login.** Root cause = Bug G below (NextAuth doesn't refresh the Cognito idToken; the server-read `getToken().idToken` is stale). This blocks ANY authenticated frontend→backend call once the 1h idToken lapses — broader than OAuth consent.
+- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — blocked on the consent flow working (Bug G) for the inspector round-trip; the read-tool drift fixes themselves are independent and could proceed.
+- 🛑 Original PR 3–7 — downstream.
+
+## Resume here — next session
+
+The MCP runtime is healthy. The remaining blocker to a client-usable v1 is **Bug G** (frontend NextAuth idToken refresh) — a frontend-auth issue independent of the MCP Lambda. Tackle in this order:
+1. **Bug G** — fix NextAuth Cognito idToken refresh (frontend), OR confirm whether re-login actually rotates `getToken().idToken`. Then re-run the inspector OAuth round-trip → close PR 2.5's end-to-end validation.
+2. **PR 2.6** — read-tool drift (Bug E), `get_strategy_map`/`list_scans` (Bug F), tool-name rebrand, minimal Connected Apps UI, RFC 9728 metadata (Bug H). The drift fixes don't depend on Bug G.
 
 ## State of staging environment (live, in AWS)
 
 - **Account:** the sc0red-services AWS account (NOT 148256362911 — that's a different project's dev account).
 - **Region:** `us-east-1`.
 - **Lambda:** `sc0red-services-mcp-staging`. Active, last modified ~mid-May 2026 (rename-driven redeploy).
-- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — **DO NOT SHARE** with anyone. It serves exactly 1 request per cold-started container, then 502s, per Decision 8.
-- **Signing-key secret:** `sc0red-services-mcp-signing-key-staging` was populated 2026-06-03 with a freshly-generated RSA-2048 keypair via `aws secretsmanager put-secret-value`. The CDK construct still creates it empty — see Bug X.
-- **Status overall:** broken at runtime, do not promote to production until PR 2.5 ships.
+- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — internal only. As of #382 it survives warm invocations (3× 200) and serves OAuth metadata with issuer = the Function URL.
+- **Signing-key secret:** `sc0red-services-mcp-signing-key-staging` populated 2026-06-03 with an RSA-2048 keypair. The CDK construct still creates it empty (Bug X — partial fix shipped, full auto-gen deferred).
+- **Issuer URL:** resolved at cold start from SSM param `/sc0red-services/mcp/staging/issuer-url` (= the Function URL). #382.
+- **Status overall:** MCP runtime HEALTHY (run-once + issuer fixed). End-to-end OAuth still blocked by Bug G (frontend idToken refresh). Not yet promoted beyond staging.
 
 ## Bugs uncovered during Phase A — by status
 
@@ -30,7 +41,11 @@ This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Ap
 | D | `CONSENT_BASE_URL` env var on staging Lambda points at the *development* Amplify URL | ⚠ Latent — fix in PR 2.6 | Lambda env var configuration |
 | E | Read-tool formatters miss new Opportunity / EBITDA / value-chain fields shipped by `redesign-analysis-visuals` | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
 | F | No `get_strategy_map` tool exists; strategy map invisible to AI assistant users | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
-| X | `MCPConstruct` creates the signing-key secret empty; deploy succeeds but Lambda crashes silently at first invocation. Fail-late pattern, violates CLAUDE.md fail-fast standard. | 🛠 Systemic — fix during PR 2.5 | `infrastructure/stacks/mcp_construct.py` |
+| X | `MCPConstruct` creates the signing-key secret empty; deploy succeeds but Lambda crashes silently at first invocation. | ~ Partial: fail-fast error message added (#379). Full auto-gen via CDK custom resource still deferred. | `infrastructure/stacks/mcp_construct.py` |
+| G | **NextAuth does not refresh the Cognito idToken.** The server-read `getToken().idToken` goes stale after the 1h Cognito idToken expiry, so `backendFetch` (incl. the OAuth consent `/api/oauth/approve`) sends an expired token → API auth middleware returns `401 {"error":"Token expired"}`. **Reproduces right after re-login** (re-login may not rotate the JWT-stored idToken). Blocks the mcp-inspector OAuth round-trip AND any long-lived authenticated frontend session. | 🔴 BLOCKS end-to-end OAuth — frontend-auth bug, NOT MCP. Verified 2026-06-05. | `frontend/src/lib/api/serverToken.ts` (getBackendToken / idToken) + `frontend/src/lib/auth/authOptions.ts` (no refresh callback) |
+| H | MCP server doesn't serve RFC 9728 Protected Resource Metadata — `GET /.well-known/oauth-protected-resource/mcp → 404`. mcp-inspector fell back fine, but stricter clients may require it. | ⚠ Minor — PR 2.6 | MCP server routes |
+
+**Bugs B + C: FIXED + validated. A: partially fixed. D: re-assessed as non-bug (consent URL already points at the correct env frontend). E/F/H: PR 2.6. G: the active blocker for end-to-end OAuth — frontend, not MCP.**
 
 ## To re-establish context when resuming
 
