@@ -66,6 +66,16 @@ class MCPConstruct(Construct):
             auth_type=lambda_.FunctionUrlAuthType.NONE,
         )
 
+        # Bug C fix (design.md Decision 8): advertise the real Function URL as
+        # the OAuth issuer. The handler otherwise falls back to a placeholder
+        # ``mcp.{stage}.sc0red-services.sc0red.com`` host that does not resolve,
+        # so OAuth discovery metadata would point clients (Claude Desktop,
+        # mcp-inspector) at a dead DNS name and the auth flow could never start.
+        # Set here — not in ``_create_lambda`` — because the URL is derived from
+        # the function and only exists after ``add_function_url``. No custom
+        # domain is configured for the MCP server yet; revisit if one is added.
+        mcp_lambda.add_environment("MCP_ISSUER_URL", function_url.url)
+
         self._function_url = function_url.url
         self._lambda = mcp_lambda
 

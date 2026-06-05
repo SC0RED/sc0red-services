@@ -69,10 +69,15 @@ def _load_signing_keys() -> tuple[str, str]:
 
 _private_key, _public_key = _load_signing_keys()
 
-_issuer_url = os.environ.get("MCP_ISSUER_URL", f"https://mcp.{STAGE}.sc0red-services.sc0red.com")
-_consent_base_url = os.environ.get(
-    "CONSENT_BASE_URL", f"https://{STAGE}.sc0red-services.sc0red.com"
-)
+# Deployed environments always have both env vars set by ``MCPConstruct``
+# (``MCP_ISSUER_URL`` → the Lambda Function URL; ``CONSENT_BASE_URL`` → the
+# environment's frontend). The defaults below are the LOCAL-DEV fallbacks only.
+# (They previously defaulted to ``mcp.{stage}.sc0red-services.sc0red.com`` /
+# ``{stage}.sc0red-services.sc0red.com`` — hosts that never existed, which made
+# a missing env var fail confusingly instead of obviously. Localhost is the
+# honest local default.)
+_issuer_url = os.environ.get("MCP_ISSUER_URL", "http://localhost:8080")
+_consent_base_url = os.environ.get("CONSENT_BASE_URL", "http://localhost:3000")
 
 _repository = OAuthRepository(DYNAMODB_TABLE)
 _oauth_provider = Sc0redServicesOAuthProvider(
