@@ -1,4 +1,4 @@
-.PHONY: help install lint lint-quick test check format security naming setup-db dev backend frontend clean docker-up docker-down e2e
+.PHONY: help install lint lint-quick test check format security security-deps naming setup-db dev backend frontend clean docker-up docker-down e2e
 
 # Colors for output
 BLUE := \033[0;34m
@@ -6,6 +6,14 @@ YELLOW := \033[0;33m
 RED := \033[0;31m
 GREEN := \033[0;32m
 NC := \033[0m # No Color
+
+# Backend Python interpreter. Prefer the local venv (where the dev tools are
+# installed) when present, else fall back to PATH — CI installs deps globally
+# via `pip install -e ".[dev]"`, so no venv exists there. Security tools are
+# invoked as `$(BACKEND_PYTHON) -m <tool>` rather than via their console
+# scripts so a stale entry-point shebang (e.g. left behind after a repo
+# rename) can't break them.
+BACKEND_PYTHON := $(shell [ -x backend/.venv/bin/python ] && echo .venv/bin/python || echo python)
 
 # =============================================================================
 # SETUP
@@ -42,8 +50,15 @@ test: ## Run backend tests with 95% coverage requirement
 # =============================================================================
 
 security: ## Run security checks (bandit + pip-audit)
-	cd backend && bandit -r src/
-	# Ignored CVEs (each with its reason):
+	cd backend && $(BACKEND_PYTHON) -m bandit -r src/
+	$(MAKE) security-deps
+
+# Dependency vulnerability audit. This is the SINGLE SOURCE OF TRUTH for the
+# pip-audit ignore list — the pre-commit `pip-audit` hook (pre-push) calls this
+# same target, so the two can never drift. Do NOT copy these --ignore-vuln
+# flags anywhere else; add new ignores here only, each with a documented reason.
+security-deps: ## Audit dependencies for known vulnerabilities (pip-audit)
+	# Ignored advisories (each with its reason):
 	#   CVE-2026-4539     — pygments; not exploitable in our usage path
 	#   CVE-2026-3219     — pip itself; runner-image issue
 	#   CVE-2026-6357     — pip itself; fix in pip 26.1, GH runner ships 26.0.1
@@ -58,7 +73,7 @@ security: ## Run security checks (bandit + pip-audit)
 	#                       weak-HMAC failure mode the advisory describes does
 	#                       not apply. No fix released; remove once an upstream
 	#                       fix ships and we can bump.
-	cd backend && pip-audit \
+	cd backend && $(BACKEND_PYTHON) -m pip_audit \
 		--ignore-vuln CVE-2026-4539 \
 		--ignore-vuln CVE-2026-3219 \
 		--ignore-vuln CVE-2026-6357 \
