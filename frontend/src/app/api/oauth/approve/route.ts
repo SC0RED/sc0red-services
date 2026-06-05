@@ -13,9 +13,15 @@ export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
 
+        // Pass the parsed object — `backendFetch` JSON-stringifies the body
+        // itself. Passing `JSON.stringify(body)` here double-encodes it, so the
+        // backend's `json.loads(event["body"])` yields a string (not a dict) and
+        // `handle_oauth_approve` throws `AttributeError: 'str' object has no
+        // attribute 'get'` → 502. Match the convention used by every other
+        // backendFetch POST caller (e.g. /api/org/invite).
         const data = await backendFetch<{ redirect_url: string }>('/api/oauth/approve', {
             method: 'POST',
-            body: JSON.stringify(body),
+            body,
         })
 
         return NextResponse.json(data)

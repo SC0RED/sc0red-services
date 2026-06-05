@@ -27,12 +27,12 @@
 ## 6. Quality gates + ship
 
 - [x] 6.1 `cd frontend && npm run lint` clean; `npx tsc --noEmit` clean; `npm test` all green.
-- [ ] 6.2 Conventional commit + PR (branch off development, base development). Wait for CI + user merge approval.
+- [x] 6.2 Conventional commit + PR (branch off development, base development). Wait for CI + user merge approval. → PR #383, merged 2026-06-05.
 
 ## 7. Staging validation (the end-to-end gate)
 
 - [ ] 7.1 After deploy, log into `dev.services.sc0red.ai`, leave the session idle past the idToken's 1h expiry (or temporarily shorten it), then load an authenticated page → confirm NO forced logout (refresh happened transparently).
-- [ ] 7.2 **Decisive:** re-run the `mcp-inspector` OAuth round-trip against the staging MCP Function URL — consent "Allow Access" → `/api/oauth/approve` succeeds → code → token → `list_analyses` returns. This closes `janus-mcp-server`'s end-to-end OAuth gate.
+- [ ] 7.2 **Decisive:** re-run the `mcp-inspector` OAuth round-trip against the staging MCP Function URL — consent "Allow Access" → `/api/oauth/approve` succeeds → code → token → `list_analyses` returns. This closes `janus-mcp-server`'s end-to-end OAuth gate. **Blocked on PR #384** (Bug I — approve route double-encoded the consent body → backend 502; surfaced once #383 made the token pass through). Re-run after #384 merges + Amplify rebuild.
 - [ ] 7.3 Mark `janus-mcp-server` Bug G resolved in that change's tasks.md + bug table.
 
 ## Out of scope (tracked in janus-mcp-server)
