@@ -2,31 +2,31 @@
 
 ## 1. Refresh helper (cognitoClient)
 
-- [ ] 1.1 Add `refreshCognitoSession(refreshToken: string): Promise<{ idToken: string; accessToken: string }>` to `frontend/src/lib/auth/cognitoClient.ts` using Cognito `InitiateAuth` with `AuthFlow=REFRESH_TOKEN_AUTH`, `AuthParameters={ REFRESH_TOKEN: refreshToken }`, and the public `ClientId`. Server-safe (no browser storage). Use `@aws-sdk/client-cognito-identity-provider` if already a dep, else a plain `fetch` POST to `https://cognito-idp.{NEXT_PUBLIC_COGNITO_REGION}.amazonaws.com/` with `X-Amz-Target: AWSCognitoIdentityProviderService.InitiateAuth`. Throw on failure.
+- [x] 1.1 Add `refreshCognitoSession(refreshToken: string): Promise<{ idToken: string; accessToken: string }>` to `frontend/src/lib/auth/cognitoClient.ts` using Cognito `InitiateAuth` with `AuthFlow=REFRESH_TOKEN_AUTH`, `AuthParameters={ REFRESH_TOKEN: refreshToken }`, and the public `ClientId`. Server-safe (no browser storage). Use `@aws-sdk/client-cognito-identity-provider` if already a dep, else a plain `fetch` POST to `https://cognito-idp.{NEXT_PUBLIC_COGNITO_REGION}.amazonaws.com/` with `X-Amz-Target: AWSCognitoIdentityProviderService.InitiateAuth`. Throw on failure.
 
 ## 2. Capture refresh token + expiry at login
 
-- [ ] 2.1 `authOptions.authorize()` — include `refreshToken: result.refreshToken` and `idTokenExpiresAt` (from `decodeIdTokenPayload(result.idToken).exp`) on the returned user object.
-- [ ] 2.2 `frontend/src/types/next-auth.d.ts` — extend the JWT (and `User`) types with `refreshToken?: string`, `idTokenExpiresAt?: number`, `error?: string`.
+- [x] 2.1 `authOptions.authorize()` — include `refreshToken: result.refreshToken` and `idTokenExpiresAt` (from `decodeIdTokenPayload(result.idToken).exp`) on the returned user object.
+- [x] 2.2 `frontend/src/types/next-auth.d.ts` — extend the JWT (and `User`) types with `refreshToken?: string`, `idTokenExpiresAt?: number`, `error?: string`.
 
 ## 3. Refresh in the jwt callback
 
-- [ ] 3.1 `authOptions.callbacks.jwt` — on login (`user` present) store `idToken`, `refreshToken`, `idTokenExpiresAt`. On subsequent calls, if `Date.now()/1000 >= idTokenExpiresAt - 60`, call `refreshCognitoSession(token.refreshToken)`, update `idToken` + `idTokenExpiresAt`, clear `error`. On refresh failure, set `token.error = "RefreshAccessTokenError"` and return the token unchanged.
-- [ ] 3.2 Keep the idToken server-side only (do NOT expose on `session` via the `session` callback) — unchanged from today.
+- [x] 3.1 `authOptions.callbacks.jwt` — on login (`user` present) store `idToken`, `refreshToken`, `idTokenExpiresAt`. On subsequent calls, if `Date.now()/1000 >= idTokenExpiresAt - 60`, call `refreshCognitoSession(token.refreshToken)`, update `idToken` + `idTokenExpiresAt`, clear `error`. On refresh failure, set `token.error = "RefreshAccessTokenError"` and return the token unchanged.
+- [x] 3.2 Keep the idToken server-side only (do NOT expose on `session` via the `session` callback) — unchanged from today.
 
 ## 4. getBackendToken fallback
 
-- [ ] 4.1 `frontend/src/lib/api/serverToken.ts` — `getBackendToken()` returns `null` when `token.error === "RefreshAccessTokenError"` (so `backendFetch` throws 401 → existing `error.tsx` re-login path). Otherwise unchanged.
+- [x] 4.1 `frontend/src/lib/api/serverToken.ts` — `getBackendToken()` returns `null` when `token.error === "RefreshAccessTokenError"` (so `backendFetch` throws 401 → existing `error.tsx` re-login path). Otherwise unchanged.
 
 ## 5. Tests
 
-- [ ] 5.1 Unit: jwt callback — (a) fresh token passes through untouched, (b) expired token triggers refresh + updates idToken/expiry, (c) refresh failure sets `error`. Mock `refreshCognitoSession`.
-- [ ] 5.2 Unit: `getBackendToken()` returns null when `error` set; returns the (refreshed) idToken otherwise.
-- [ ] 5.3 Unit: `refreshCognitoSession` — success maps the Cognito response to `{ idToken, accessToken }`; failure throws.
+- [x] 5.1 Unit: jwt callback — (a) fresh token passes through untouched, (b) expired token triggers refresh + updates idToken/expiry, (c) refresh failure sets `error`. Mock `refreshCognitoSession`.
+- [x] 5.2 Unit: `getBackendToken()` returns null when `error` set; returns the (refreshed) idToken otherwise.
+- [x] 5.3 Unit: `refreshCognitoSession` — success maps the Cognito response to `{ idToken, accessToken }`; failure throws.
 
 ## 6. Quality gates + ship
 
-- [ ] 6.1 `cd frontend && npm run lint` clean; `npx tsc --noEmit` clean; `npm test` all green.
+- [x] 6.1 `cd frontend && npm run lint` clean; `npx tsc --noEmit` clean; `npm test` all green.
 - [ ] 6.2 Conventional commit + PR (branch off development, base development). Wait for CI + user merge approval.
 
 ## 7. Staging validation (the end-to-end gate)
