@@ -47,6 +47,9 @@ security: ## Run security checks (bandit + pip-audit)
 	#   CVE-2026-4539     — pygments; not exploitable in our usage path
 	#   CVE-2026-3219     — pip itself; runner-image issue
 	#   CVE-2026-6357     — pip itself; fix in pip 26.1, GH runner ships 26.0.1
+	#   PYSEC-2026-196    — pip itself; fix in pip 26.1.2, GH runner ships 26.1.1.
+	#                       Same runner-image lag as CVE-2026-6357; remove once
+	#                       the runner ships pip >= 26.1.2.
 	#   PYSEC-2025-183    — pyjwt "weak encryption". Disputed by supplier
 	#                       (https://github.com/jpadilla/pyjwt) — the key length
 	#                       is chosen by the application, not the library.
@@ -59,6 +62,7 @@ security: ## Run security checks (bandit + pip-audit)
 		--ignore-vuln CVE-2026-4539 \
 		--ignore-vuln CVE-2026-3219 \
 		--ignore-vuln CVE-2026-6357 \
+		--ignore-vuln PYSEC-2026-196 \
 		--ignore-vuln PYSEC-2025-183
 
 naming: ## Check naming conventions, abbreviations, imports, and skip comments
