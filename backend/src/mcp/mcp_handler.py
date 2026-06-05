@@ -69,12 +69,13 @@ def _load_signing_keys() -> tuple[str, str]:
 
 _private_key, _public_key = _load_signing_keys()
 
+
 def _resolve_issuer_url() -> str:
     """Resolve the OAuth issuer URL — must be the host clients actually reach.
 
     Resolution order:
       1. ``MCP_ISSUER_URL`` env var, if set explicitly (e.g. a custom domain).
-      2. ``MCP_ISSUER_URL_SSM_PARAM`` — the SSM parameter holding the Lambda's
+      2. ``MCP_ISSUER_URL_SSM_PARAMETER`` — the SSM parameter holding the Lambda's
          own Function URL. ``MCPConstruct`` can't inject the Function URL into
          the Lambda's env directly (CloudFormation circular dependency), so it
          stashes it in SSM and passes only the static parameter NAME. We read it
@@ -88,10 +89,10 @@ def _resolve_issuer_url() -> str:
     explicit = os.environ.get("MCP_ISSUER_URL")
     if explicit:
         return explicit.rstrip("/")
-    ssm_param_name = os.environ.get("MCP_ISSUER_URL_SSM_PARAM")
-    if ssm_param_name:
+    ssm_parameter_name = os.environ.get("MCP_ISSUER_URL_SSM_PARAMETER")
+    if ssm_parameter_name:
         ssm_client = boto3.client("ssm")  # type: ignore[reportUnknownMemberType]
-        response = ssm_client.get_parameter(Name=ssm_param_name)  # type: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        response = ssm_client.get_parameter(Name=ssm_parameter_name)  # type: ignore[reportUnknownMemberType,reportUnknownVariableType]
         issuer = str(response["Parameter"]["Value"])  # type: ignore[reportUnknownArgumentType]
         return issuer.rstrip("/")
     return "http://localhost:8080"

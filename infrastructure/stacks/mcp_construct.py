@@ -81,21 +81,21 @@ class MCPConstruct(Construct):
         # ``param.grant_read`` so the Lambda's execution role doesn't reference
         # the SSM parameter resource either — that reference would re-introduce
         # the cycle (role → param → FunctionUrl → Lambda).
-        issuer_param_name = f"/sc0red-services/mcp/{self._environment}/issuer-url"
+        issuer_parameter_name = f"/sc0red-services/mcp/{self._environment}/issuer-url"
         ssm.StringParameter(
             self,
-            "MCPIssuerUrlParam",
-            parameter_name=issuer_param_name,
+            "MCPIssuerUrlParameter",
+            parameter_name=issuer_parameter_name,
             string_value=function_url.url,
             description=f"MCP OAuth issuer URL (Function URL) — {self._environment}",
         )
-        mcp_lambda.add_environment("MCP_ISSUER_URL_SSM_PARAM", issuer_param_name)
+        mcp_lambda.add_environment("MCP_ISSUER_URL_SSM_PARAMETER", issuer_parameter_name)
         stack = cdk.Stack.of(self)
         mcp_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["ssm:GetParameter"],
                 resources=[
-                    f"arn:aws:ssm:{stack.region}:{stack.account}:parameter{issuer_param_name}"
+                    f"arn:aws:ssm:{stack.region}:{stack.account}:parameter{issuer_parameter_name}"
                 ],
             )
         )
