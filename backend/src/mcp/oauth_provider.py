@@ -32,7 +32,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class StoredAuthorizationCode:
-    """Authorization code stored in DynamoDB."""
+    """Authorization code stored in DynamoDB.
+
+    ``expires_at`` (epoch seconds) is REQUIRED by the MCP SDK token handler,
+    which does ``if auth_code.expires_at < time.time()`` with no None guard
+    (``mcp/server/auth/handlers/token.py``). Omitting it raises
+    ``AttributeError`` → HTTP 500 on every token exchange.
+    """
 
     code: str
     client_id: str
@@ -44,11 +50,17 @@ class StoredAuthorizationCode:
     redirect_uri: str
     redirect_uri_provided_explicitly: bool
     scopes: list[str]
+    expires_at: float
 
 
 @dataclass
 class StoredRefreshToken:
-    """Refresh token stored in DynamoDB."""
+    """Refresh token stored in DynamoDB.
+
+    ``expires_at`` mirrors the SDK ``RefreshToken`` model — the token handler
+    reads ``refresh_token.expires_at`` (guarded by truthiness, so ``None`` is
+    accepted, but the attribute must exist).
+    """
 
     token_hash: str
     user_id: str
@@ -57,17 +69,24 @@ class StoredRefreshToken:
     role: str
     client_id: str
     scopes: list[str]
+    expires_at: int | None = None
 
 
 @dataclass
 class StoredAccessToken:
-    """Access token stored in DynamoDB."""
+    """Access token stored in DynamoDB.
+
+    ``expires_at`` mirrors the SDK ``AccessToken`` model — the bearer-auth
+    backend reads ``access_token.expires_at`` on every authenticated ``/mcp``
+    request (``mcp/server/auth/middleware/bearer_auth.py``).
+    """
 
     token_hash: str
     user_id: str
     org_id: str
     client_id: str
     scopes: list[str]
+    expires_at: int | None = None
 
 
 class Sc0redServicesOAuthProvider:
@@ -177,6 +196,8 @@ class Sc0redServicesOAuthProvider:
             redirect_uri=record["redirect_uri"],
             redirect_uri_provided_explicitly=True,
             scopes=record.get("scopes", ["read", "write"]),
+            # The stored ``ttl`` IS the code's expiry (set in save_authorization_code).
+            expires_at=int(record["ttl"]),
         )
 
     async def exchange_authorization_code(
@@ -249,6 +270,7 @@ class Sc0redServicesOAuthProvider:
             role=record["role"],
             client_id=record["client_id"],
             scopes=record.get("scopes", ["read", "write"]),
+            expires_at=int(record["ttl"]),
         )
 
     async def exchange_refresh_token(
@@ -337,6 +359,8 @@ class Sc0redServicesOAuthProvider:
             org_id=payload["org_id"],
             client_id=payload.get("client_id", ""),
             scopes=payload.get("scope", "").split(),
+            # ``exp`` is guaranteed present — verify_access_token requires it.
+            expires_at=payload["exp"],
         )
 
     async def revoke_token(
