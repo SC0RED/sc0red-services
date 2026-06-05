@@ -52,6 +52,17 @@ describe('authOptions jwt callback — Cognito idToken refresh', () => {
         expect(mockRefresh).not.toHaveBeenCalled()
     })
 
+    it('passes through (no refresh, no error) when expiry is unknown', async () => {
+        // Sessions minted before this change shipped, and e2e mock sessions,
+        // carry idToken but no idTokenExpiresAt/refreshToken. They must pass
+        // through untouched — NOT get flagged as a refresh error (which would
+        // bounce every authenticated request to /login).
+        const token = await jwt({ token: { idToken: 'legacy' } })
+        expect(token.idToken).toBe('legacy')
+        expect(token.error).toBeUndefined()
+        expect(mockRefresh).not.toHaveBeenCalled()
+    })
+
     it('refreshes an expired token and updates idToken + expiry', async () => {
         const newExp = nowSec() + 3600
         mockRefresh.mockResolvedValue({ idToken: makeIdToken(newExp), accessToken: 'a2' })

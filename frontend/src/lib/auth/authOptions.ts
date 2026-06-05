@@ -80,8 +80,17 @@ export const authOptions: NextAuthOptions = {
             // idToken only lasts 1h. Refresh it before expiry so server-side
             // `backendFetch` never sends an expired token (which the API rejects
             // with 401 "Token expired"). See cognito-token-refresh design D1/D3.
-            const expiresAt = token.idTokenExpiresAt ?? 0
+            const expiresAt = token.idTokenExpiresAt
             const nowSeconds = Math.floor(Date.now() / 1000)
+            // No known expiry → we can't schedule a proactive refresh. This
+            // covers sessions minted before this change shipped (their JWT lacks
+            // idTokenExpiresAt/refreshToken) and the e2e mock session. Pass the
+            // token through and let the backend remain the arbiter of an expired
+            // idToken (401 → error boundary → re-login) — i.e. exactly the
+            // behaviour from before this change, no false-positive logouts.
+            if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt)) {
+                return token
+            }
             if (nowSeconds < expiresAt - REFRESH_SKEW_SECONDS) {
                 return token // still fresh — no refresh needed
             }
