@@ -15,9 +15,11 @@ from typing import TYPE_CHECKING
 
 import aws_cdk as cdk
 from aws_cdk import CfnOutput, Duration
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_secretsmanager as secretsmanager
+from aws_cdk import aws_ssm as ssm
 from constructs import Construct
 
 if TYPE_CHECKING:
@@ -66,16 +68,37 @@ class MCPConstruct(Construct):
             auth_type=lambda_.FunctionUrlAuthType.NONE,
         )
 
-        # NOTE (Bug C — OAuth issuer): the handler needs to advertise this
-        # Function URL as the OAuth issuer, but ``add_environment("MCP_ISSUER_URL",
-        # function_url.url)`` here creates a CloudFormation CIRCULAR DEPENDENCY
-        # (Lambda env → FunctionUrl → Lambda). A manual CLI env var isn't durable
-        # (CFN resets the Lambda env on the next deploy). The durable fix is SSM
-        # indirection (Lambda reads its own URL from an SSM parameter at cold
-        # start, so its env only carries the static parameter NAME — no cycle) or
-        # a custom domain (issuer known at synth). Tracked as a follow-up; until
-        # then the handler falls back to its localhost default, which is correct
-        # for local dev and harmless on staging (run-once fix from #379 stands).
+        # Bug C fix — advertise the real Function URL as the OAuth issuer, via
+        # SSM indirection to avoid the CloudFormation circular dependency that a
+        # direct ``add_environment("MCP_ISSUER_URL", function_url.url)`` causes
+        # (Lambda env → FunctionUrl → Lambda). Instead:
+        #   • an SSM parameter holds the Function URL (param → FunctionUrl, one-way)
+        #   • the Lambda's env carries only the static parameter NAME (a literal
+        #     string — no reference to any resource, so no dependency back to the
+        #     FunctionUrl)
+        #   • the handler reads the parameter at cold start (see mcp_handler.py)
+        # The IAM grant uses a CONSTRUCTED string ARN rather than
+        # ``param.grant_read`` so the Lambda's execution role doesn't reference
+        # the SSM parameter resource either — that reference would re-introduce
+        # the cycle (role → param → FunctionUrl → Lambda).
+        issuer_param_name = f"/sc0red-services/mcp/{self._environment}/issuer-url"
+        ssm.StringParameter(
+            self,
+            "MCPIssuerUrlParam",
+            parameter_name=issuer_param_name,
+            string_value=function_url.url,
+            description=f"MCP OAuth issuer URL (Function URL) — {self._environment}",
+        )
+        mcp_lambda.add_environment("MCP_ISSUER_URL_SSM_PARAM", issuer_param_name)
+        stack = cdk.Stack.of(self)
+        mcp_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["ssm:GetParameter"],
+                resources=[
+                    f"arn:aws:ssm:{stack.region}:{stack.account}:parameter{issuer_param_name}"
+                ],
+            )
+        )
 
         self._function_url = function_url.url
         self._lambda = mcp_lambda

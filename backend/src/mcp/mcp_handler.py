@@ -69,14 +69,38 @@ def _load_signing_keys() -> tuple[str, str]:
 
 _private_key, _public_key = _load_signing_keys()
 
-# Deployed environments always have both env vars set by ``MCPConstruct``
-# (``MCP_ISSUER_URL`` → the Lambda Function URL; ``CONSENT_BASE_URL`` → the
-# environment's frontend). The defaults below are the LOCAL-DEV fallbacks only.
-# (They previously defaulted to ``mcp.{stage}.sc0red-services.sc0red.com`` /
-# ``{stage}.sc0red-services.sc0red.com`` — hosts that never existed, which made
-# a missing env var fail confusingly instead of obviously. Localhost is the
-# honest local default.)
-_issuer_url = os.environ.get("MCP_ISSUER_URL", "http://localhost:8080")
+def _resolve_issuer_url() -> str:
+    """Resolve the OAuth issuer URL — must be the host clients actually reach.
+
+    Resolution order:
+      1. ``MCP_ISSUER_URL`` env var, if set explicitly (e.g. a custom domain).
+      2. ``MCP_ISSUER_URL_SSM_PARAM`` — the SSM parameter holding the Lambda's
+         own Function URL. ``MCPConstruct`` can't inject the Function URL into
+         the Lambda's env directly (CloudFormation circular dependency), so it
+         stashes it in SSM and passes only the static parameter NAME. We read it
+         here at cold start. See mcp_construct.py for the dependency rationale.
+      3. ``http://localhost:8080`` — local-dev fallback.
+    """
+    # Trailing slash is stripped from every resolved value: Lambda Function URLs
+    # always end in "/", but the OAuth issuer is used verbatim as the JWT ``iss``
+    # claim, and strict clients (mcp-inspector) compare ``iss`` against a
+    # slash-stripped issuer (RFC 8414). Keep it slash-free everywhere.
+    explicit = os.environ.get("MCP_ISSUER_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    ssm_param_name = os.environ.get("MCP_ISSUER_URL_SSM_PARAM")
+    if ssm_param_name:
+        ssm_client = boto3.client("ssm")  # type: ignore[reportUnknownMemberType]
+        response = ssm_client.get_parameter(Name=ssm_param_name)  # type: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        issuer = str(response["Parameter"]["Value"])  # type: ignore[reportUnknownArgumentType]
+        return issuer.rstrip("/")
+    return "http://localhost:8080"
+
+
+# Deployed environments resolve the issuer to the Lambda Function URL (via SSM);
+# ``CONSENT_BASE_URL`` is set by ``MCPConstruct`` to the environment's frontend.
+# The localhost defaults are the LOCAL-DEV fallbacks only.
+_issuer_url = _resolve_issuer_url()
 _consent_base_url = os.environ.get("CONSENT_BASE_URL", "http://localhost:3000")
 
 _repository = OAuthRepository(DYNAMODB_TABLE)
