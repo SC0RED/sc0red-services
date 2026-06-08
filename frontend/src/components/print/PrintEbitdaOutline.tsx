@@ -91,8 +91,32 @@ export default function PrintEbitdaOutline({ ebitdaTree, sortedOpportunities }: 
                 ) : null}
             </div>
 
+            {renderProvenanceLine(ebitdaTree.treeData.find((node) => node.type === 'revenue'))}
+
             <OutlineRender treeData={ebitdaTree.treeData} sortedOpportunities={sortedOpportunities} />
         </section>
+    )
+}
+
+// ── Provenance line (the "show your work" labelling for the PDF) ──────
+
+const _TIER_LABEL: Record<string, string> = {
+    disclosed: 'Reported',
+    industry_typical: 'Industry estimate',
+    derived_estimate: 'Estimated',
+}
+
+function renderProvenanceLine(revenueNode: EbitdaNode | undefined) {
+    if (!revenueNode || (!revenueNode.provenance && !revenueNode.confidence_basis)) return null
+    const tier = revenueNode.provenance ? _TIER_LABEL[revenueNode.provenance] : null
+    const citation = (revenueNode.citations ?? [])[0]
+    return (
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+            {tier ? <strong>{tier}</strong> : null}
+            {revenueNode.confidence_level ? <span> · {revenueNode.confidence_level} confidence</span> : null}
+            {revenueNode.confidence_basis ? <span> — {revenueNode.confidence_basis}</span> : null}
+            {citation ? <span> · Source: {citation.title || citation.url}</span> : null}
+        </p>
     )
 }
 

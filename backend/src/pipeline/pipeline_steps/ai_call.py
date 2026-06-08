@@ -15,6 +15,7 @@ import jsonschema
 from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
 
 if TYPE_CHECKING:
+    from signalfield_core.models.ai_response import WebSearchSource
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,85 @@ def run_structured_ai_call(
         len(user_prompt),
         getattr(client, "model", "unknown"),
     )
+    content, elapsed, token_counts, _web_sources = _execute_structured(
+        client, user_prompt=user_prompt, schema=schema, label=label, step_name=step_name
+    )
+    return label, content, elapsed, token_counts
+
+
+# ---------------------------------------------------------------------------
+# Web-search-grounded variant + shared core
+# ---------------------------------------------------------------------------
+
+# Provider-native web-search tool config (OpenAI Responses ``web_search``).
+# Attached at client construction; the SDK extracts the resulting sources.
+_WEB_SEARCH_TOOL: list[dict[str, str]] = [{"type": "web_search"}]
+
+
+def run_grounded_ai_call(
+    *,
+    ai_client_factory: AIClientFactory,
+    user_prompt: str,
+    schema: dict[str, Any],
+    system_prompt: str,
+    label: str,
+    step_name: str,
+    precision: Precision = Precision.STANDARD,
+    allowed_domains: list[str] | None = None,
+) -> tuple[str, dict[str, Any], float, TokenCounts, list[WebSearchSource]]:
+    """Structured AI call with the provider's native ``web_search`` tool enabled.
+
+    Identical to ``run_structured_ai_call`` except it (a) attaches the
+    ``web_search`` tool so the model can ground quantitative facts against the
+    live web and (b) returns the resulting ``web_sources`` (url/title/snippet)
+    as a fifth element, so callers can attach citations and set ``DISCLOSED``
+    provenance. ``allowed_domains`` optionally restricts search to an allow-list.
+
+    Used by the financial-research steps for the few questions whose answer
+    lives in the world rather than the model's training knowledge (see the
+    web-search-grounding capability). Existing callers that don't need grounding
+    keep using ``run_structured_ai_call`` and its unchanged 4-tuple — both route
+    through the same ``_execute_structured`` core.
+    """
+    client = ai_client_factory.get_client(
+        verbosity=Verbosity.MEDIUM,
+        reasoning_effort=ReasoningEffort.LOW,
+        precision=precision,
+        instructions=system_prompt,
+        tools=_WEB_SEARCH_TOOL,
+        allowed_domains=allowed_domains,
+    )
+    logger.info(
+        "[%s:%s] sending grounded AI request (web_search): prompt_len=%d, model=%s",
+        step_name,
+        label,
+        len(user_prompt),
+        getattr(client, "model", "unknown"),
+    )
+    content, elapsed, token_counts, web_sources = _execute_structured(
+        client, user_prompt=user_prompt, schema=schema, label=label, step_name=step_name
+    )
+    logger.info(
+        "[%s:%s] grounded call returned %d web source(s)", step_name, label, len(web_sources)
+    )
+    return label, content, elapsed, token_counts, web_sources
+
+
+def _execute_structured(
+    client: Any,
+    *,
+    user_prompt: str,
+    schema: dict[str, Any],
+    label: str,
+    step_name: str,
+) -> tuple[dict[str, Any], float, TokenCounts, list[WebSearchSource]]:
+    """Shared core: query the client, log, validate, extract tokens + web sources.
+
+    Both ``run_structured_ai_call`` and ``run_grounded_ai_call`` route through
+    here so the query / schema-validation / telemetry contract stays
+    single-sourced; they differ only in whether the client carries the
+    ``web_search`` tool and whether the caller is handed the ``web_sources``.
+    """
     start = time.monotonic()
     try:
         response = client.query_structured(input_text=user_prompt, json_schema=schema)
@@ -131,4 +211,8 @@ def run_structured_ai_call(
         output_tokens=response.output_tokens,
         cached_input_tokens=response.cached_input_tokens,
     )
-    return label, response.content, elapsed, token_counts
+    # Defensive: only a genuine list counts (real SDK responses always carry a
+    # ``web_sources`` list; test doubles / older responses may not).
+    raw_sources = getattr(response, "web_sources", None)
+    web_sources = list(raw_sources) if isinstance(raw_sources, list) else []
+    return response.content, elapsed, token_counts, web_sources

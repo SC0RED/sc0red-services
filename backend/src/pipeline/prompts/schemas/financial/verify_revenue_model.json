@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "plausible": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "plausible",
+    "reason"
+  ],
+  "additionalProperties": false
+}

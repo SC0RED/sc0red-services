@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "company_type": {
+      "type": "string"
+    },
+    "basis": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "company_type",
+    "basis"
+  ],
+  "additionalProperties": false
+}

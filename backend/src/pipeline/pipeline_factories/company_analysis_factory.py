@@ -1,9 +1,14 @@
 """Company analysis pipeline factory.
 
-Wires the 7-step single-company analysis pipeline:
+Wires the 6-step single-company analysis pipeline:
 ScrapeAndResolveURL → ParallelProfileRiskAndIdeation →
-DetailOpportunities → ComputeEbitdaTree → ComputeValueChain →
+DetailOpportunities → ResearchFinancials →
 GenerateStrategyMap → PersistResults
+
+``ResearchFinancials`` (ai-researched-financials change) replaced the
+deterministic ``ComputeEbitdaTree`` + ``ComputeValueChain`` template steps: it
+runs a decomposed AI-research DAG and assembles the EBITDA tree + value chain
+from researched, provenance-labelled facts.
 
 ``GenerateStrategyMap`` was previously isolated in a dedicated on-demand
 SQS worker, triggered by a "Generate strategy map" button on the
@@ -19,12 +24,11 @@ from typing import TYPE_CHECKING
 
 from signalfield_core.pipeline.factory import PipelineFactory
 
-from src.pipeline.pipeline_steps.compute_ebitda_tree import ComputeEbitdaTree
-from src.pipeline.pipeline_steps.compute_value_chain import ComputeValueChain
 from src.pipeline.pipeline_steps.detail_opportunities import DetailOpportunities
 from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
+from src.pipeline.pipeline_steps.research_financials import ResearchFinancials
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
 from src.pipeline.request_executor import Sc0redServicesRequestExecutor
 
@@ -70,8 +74,9 @@ class CompanyAnalysisFactory(PipelineFactory):
             DetailOpportunities(
                 ai_client_factory=self._ai_client_factory,
             ),
-            ComputeEbitdaTree(),
-            ComputeValueChain(),
+            ResearchFinancials(
+                ai_client_factory=self._ai_client_factory,
+            ),
             GenerateStrategyMap(
                 ai_client_factory=self._ai_client_factory,
             ),
