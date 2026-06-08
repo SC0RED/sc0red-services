@@ -178,6 +178,8 @@ class TestAssessmentRepository:
                 "revenue_estimate": "$10M-$50M",
                 "ebitda_estimate": "$2M-$8M",
                 "business_model_summary": "SaaS model overview",
+                "grounded": True,
+                "insufficient_data_reason": None,
             },
         )
 
@@ -188,6 +190,52 @@ class TestAssessmentRepository:
         assert result["businessModelSummary"] == "SaaS model overview"
         assert len(result["treeData"]) == 1
         assert result["treeData"][0]["id"] == "revenue"
+        assert result["grounded"] is True
+        assert result["insufficientDataReason"] is None
+
+    @mock_aws
+    def test_save_and_get_ungrounded_ebitda_tree(self, dynamodb_table):
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-ebitda-ungrounded", "company_id": "comp-1"})
+        repo.save_ebitda_tree(
+            "assess-ebitda-ungrounded",
+            {
+                "tree_data": [],
+                "revenue_estimate": "",
+                "ebitda_estimate": "",
+                "business_model_summary": "",
+                "grounded": False,
+                "insufficient_data_reason": "Could not establish a revenue model.",
+            },
+        )
+        result = repo.get_ebitda_tree("assess-ebitda-ungrounded")
+        assert result is not None
+        assert result["grounded"] is False
+        assert result["insufficientDataReason"] == "Could not establish a revenue model."
+        assert result["treeData"] == []
+
+    @mock_aws
+    def test_get_ebitda_tree_legacy_record_defaults_to_grounded(self, dynamodb_table):
+        """A record stored before the grounding fields existed reads as grounded."""
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-legacy-ebitda", "company_id": "comp-1"})
+        # Write a record directly without the grounded/insufficient_data_reason keys.
+        dynamodb_table.put_item(
+            {
+                "pk": "ASSESSMENT#assess-legacy-ebitda",
+                "sk": "EBITDA_TREE",
+                "entity_type": "ebitda_tree",
+                "assessment_id": "assess-legacy-ebitda",
+                "tree_data": "[]",
+                "revenue_estimate": "$1M",
+                "ebitda_estimate": "$100K",
+                "business_model_summary": "Legacy",
+            }
+        )
+        result = repo.get_ebitda_tree("assess-legacy-ebitda")
+        assert result is not None
+        assert result["grounded"] is True
+        assert result["insufficientDataReason"] is None
 
     @mock_aws
     def test_get_ebitda_tree_not_found(self, dynamodb_table):
@@ -206,6 +254,8 @@ class TestAssessmentRepository:
                 "revenue_estimate": "$1M",
                 "ebitda_estimate": "$100K",
                 "business_model_summary": "Test",
+                "grounded": True,
+                "insufficient_data_reason": None,
             },
         )
 
@@ -299,6 +349,8 @@ class TestAssessmentRepository:
                 "revenue_estimate": "$1M",
                 "ebitda_estimate": "$100K",
                 "business_model_summary": "Test",
+                "grounded": True,
+                "insufficient_data_reason": None,
             },
         )
         repo.save_document(

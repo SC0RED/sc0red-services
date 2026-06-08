@@ -211,3 +211,31 @@ describe('PrintEbitdaOutline', () => {
         expect(queryAllByTestId('ebitda-confidence-print')).toHaveLength(0)
     })
 })
+
+describe('PrintEbitdaOutline — insufficient-data placeholder', () => {
+    it('renders the placeholder (not a tree) when grounded is false', () => {
+        const tree: EbitdaTree = {
+            treeData: [],
+            grounded: false,
+            insufficientDataReason: 'Could not establish a revenue model.',
+        }
+        const { container } = render(
+            <PrintEbitdaOutline ebitdaTree={tree} sortedOpportunities={sortedOpportunities} />
+        )
+        expect(screen.getByText('Could not establish a revenue model.')).toBeInTheDocument()
+        expect(container.querySelector('[data-render-mode="placeholder"]')).not.toBeNull()
+        expect(container.querySelector('[data-render-mode="outline"]')).toBeNull()
+    })
+
+    it('renders the outline when grounded', () => {
+        const tree: EbitdaTree = {
+            treeData: [node({ id: 'rev', label: 'Revenue', type: 'revenue' })],
+            revenueEstimate: '$10M-$20M',
+            grounded: true,
+        }
+        const { container } = render(
+            <PrintEbitdaOutline ebitdaTree={tree} sortedOpportunities={sortedOpportunities} />
+        )
+        expect(container.querySelector('[data-render-mode="outline"]')).not.toBeNull()
+    })
+})

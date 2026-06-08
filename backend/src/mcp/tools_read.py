@@ -269,6 +269,18 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         if not data["ebitda_tree"]:
             return f"No EBITDA tree found for analysis {analysis_id}."
         tree = data["ebitda_tree"]
+        # Fact-vs-forecast data contract (report-data-integrity spec): when the
+        # financials could not be grounded, surface the honest reason rather than
+        # rendering empty "N/A" figures that read like a fabricated/missing model.
+        if tree.get("grounded") is False:
+            reason = tree.get("insufficientDataReason") or (
+                "The business model could not be grounded in public information, so no "
+                "financial model is shown."
+            )
+            return (
+                f"## EBITDA Impact Model — {company.get('company_name', 'Unknown')}\n"
+                f"Not available: {reason}"
+            )
         lines = [
             f"## EBITDA Impact Model — {company.get('company_name', 'Unknown')}",
             f"Revenue Estimate: {tree.get('revenueEstimate', 'N/A')}",
@@ -298,6 +310,15 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         if not data["value_chain"]:
             return f"No value chain found for analysis {analysis_id}."
         chain = data["value_chain"]
+        if chain.get("grounded") is False:
+            reason = chain.get("insufficientDataReason") or (
+                "The business model could not be grounded in public information, so no "
+                "operating model is shown."
+            )
+            return (
+                f"## Value Chain — {company.get('company_name', 'Unknown')}\n"
+                f"Not available: {reason}"
+            )
         lines = [f"## Value Chain — {company.get('company_name', 'Unknown')}"]
         if chain.get("summary"):
             lines.append(chain["summary"])

@@ -2,8 +2,10 @@
 
 Owns the deterministic inputs that ``build_ebitda_tree.build_programmatic_ebitda_tree``
 reads at request time: the company-size → employee-count map, the per-business-model
-P&L templates (``_Template``), the keyword fuzzy match for free-text business model
-strings, and the default fallbacks.
+P&L templates (``_Template``), and the keyword fuzzy match for free-text business
+model strings. There is deliberately no default business-model template — an
+unmatched model is reported as ungrounded by the builder (which renders the
+"insufficient public data" placeholder) rather than silently fabricated as SaaS.
 
 Lives in its own module because the data block is large (~150 lines on its own) and
 splitting it out keeps the main builder file under the 400-line limit.
@@ -180,23 +182,23 @@ _MODEL_KEYWORDS: list[tuple[list[str], str]] = [
     (["financial", "fintech", "banking", "insurance", "asset management"], "financial_services"),
 ]
 
-_DEFAULT_TEMPLATE_KEY = "saas"
 
-
-def _resolve_template(business_model: str) -> tuple[_Template, bool]:
+def _resolve_template(business_model: str) -> _Template | None:
     """Match a free-text business_model string to the closest template.
 
-    Returns a tuple of (template, matched) where ``matched`` is True if a keyword
-    in ``_MODEL_KEYWORDS`` fired and False if we fell back to ``_DEFAULT_TEMPLATE_KEY``.
-    The flag drives the confidence label per the ebitda-tree-confidence spec —
-    callers MUST NOT discard it.
+    Returns the matched ``_Template`` or ``None`` when no keyword in
+    ``_MODEL_KEYWORDS`` fires. There is deliberately NO default template: a
+    business model we cannot place is reported as ungrounded by the builder
+    (which renders the "insufficient public data" placeholder) rather than
+    silently fabricated as SaaS. See the report-data-integrity and
+    ebitda-tree-confidence specs.
     """
     lower = business_model.lower()
     for keywords, key in _MODEL_KEYWORDS:
         for keyword in keywords:
             if keyword in lower:
-                return _TEMPLATES[key], True
-    return _TEMPLATES[_DEFAULT_TEMPLATE_KEY], False
+                return _TEMPLATES[key]
+    return None
 
 
 def _estimate_revenue(
@@ -209,10 +211,20 @@ def _estimate_revenue(
     is True when ``company_size`` is a known key in ``_SIZE_TO_EMPLOYEES`` and
     False when ``_DEFAULT_EMPLOYEES`` was used as the fallback. The flag drives
     the confidence label.
+
+    The range is driven by a single uncertainty band, not two multiplied
+    together: a representative (midpoint) employee count is multiplied by the low
+    and high ends of revenue-per-employee. The previous formula multiplied the
+    bottom of the employee band by the bottom of the rev-per-employee band and
+    the two tops together, compounding two independent uncertainties into a
+    ~13x-wide range presented as fact. With the midpoint the emitted high/low
+    ratio equals the rev-per-employee band's ratio and never exceeds the larger
+    of the two input bands' ratios — see the ebitda-tree-confidence spec.
     """
     size_matched = company_size in _SIZE_TO_EMPLOYEES
     employee_low, employee_high = _SIZE_TO_EMPLOYEES.get(company_size, _DEFAULT_EMPLOYEES)
+    employee_mid = (employee_low + employee_high) // 2
     rev_per_emp_low, rev_per_emp_high = template.revenue_per_employee
-    low = employee_low * rev_per_emp_low * 1000
-    high = employee_high * rev_per_emp_high * 1000
+    low = employee_mid * rev_per_emp_low * 1000
+    high = employee_mid * rev_per_emp_high * 1000
     return low, high, size_matched

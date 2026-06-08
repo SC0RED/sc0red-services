@@ -155,12 +155,22 @@ class EbitdaNode(BaseModel):
 
 
 class EbitdaTreeResult(BaseModel):
-    """EBITDA decomposition tree mapping AI opportunities to P&L line items."""
+    """EBITDA decomposition tree mapping AI opportunities to P&L line items.
+
+    ``grounded`` is ``False`` when the company's ``business_model`` matched no
+    industry template and the tree could not be built from evidence — in that
+    state ``nodes`` is empty and ``insufficient_data_reason`` explains why, so the
+    report renders an honest placeholder rather than a fabricated P&L. See the
+    ``report-data-integrity`` and ``ebitda-tree-confidence`` specs. Records stored
+    before this field existed deserialize as grounded (they carry nodes).
+    """
 
     summary: str = ""
     revenue_estimate: str = ""
     ebitda_estimate: str = ""
     nodes: list[EbitdaNode] = Field(default_factory=list)
+    grounded: bool = True
+    insufficient_data_reason: str | None = None
 
 
 class ValueChainStep(BaseModel):
@@ -175,10 +185,22 @@ class ValueChainStep(BaseModel):
 
 
 class ValueChainResult(BaseModel):
-    """Value chain analysis mapping risks and opportunities to operational steps."""
+    """Value chain analysis mapping risks and opportunities to operational steps.
+
+    ``grounded`` is ``False`` when ``business_model`` matched no template and the
+    operating model could not be derived from evidence — ``steps`` is then empty
+    and ``insufficient_data_reason`` explains why, so the report renders a
+    placeholder rather than a fabricated SaaS value chain. ``provenance_basis``
+    records which matched template a grounded chain was built from, mirroring the
+    EBITDA tree's ``confidence_basis`` data-layer parity. See the
+    ``value-chain-grounding`` and ``report-data-integrity`` specs.
+    """
 
     steps: list[ValueChainStep] = Field(default_factory=list)
     summary: str = ""
+    grounded: bool = True
+    insufficient_data_reason: str | None = None
+    provenance_basis: str | None = None
 
 
 class Company(BaseModel):

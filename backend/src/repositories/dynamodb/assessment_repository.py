@@ -278,6 +278,8 @@ class DynamoDBAssessmentRepository:
             "revenue_estimate": data["revenue_estimate"],
             "ebitda_estimate": data["ebitda_estimate"],
             "business_model_summary": data["business_model_summary"],
+            "grounded": data["grounded"],
+            "insufficient_data_reason": data["insufficient_data_reason"],
         }
         self._table.put_item(item)
 
@@ -299,6 +301,10 @@ class DynamoDBAssessmentRepository:
             "revenueEstimate": item["revenue_estimate"],
             "ebitdaEstimate": item["ebitda_estimate"],
             "businessModelSummary": item["business_model_summary"],
+            # Records stored before the grounding contract default to grounded
+            # (they carry real tree_data). insufficient_data_reason is null then.
+            "grounded": item.get("grounded", True),
+            "insufficientDataReason": item.get("insufficient_data_reason"),
         }
 
     # ── Value Chain operations (delegates to `_assessment_subrecord_ops.py`) ──

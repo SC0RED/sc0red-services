@@ -107,25 +107,50 @@ def _build_child_nodes(
 # ---------------------------------------------------------------------------
 
 
+def _insufficient_data_result(business_model: str) -> EbitdaTreeResult:
+    """Build the ungrounded placeholder result for an unmatchable business model.
+
+    Returned when ``business_model`` matches no template (including the ``unknown``
+    sentinel). Carries no fabricated figures — the report renders an honest
+    "insufficient public data" placeholder per the report-data-integrity spec.
+    """
+    shown = business_model.strip() or "unknown"
+    reason = (
+        f"Could not establish a revenue model from public information "
+        f"(business model: {shown!r}). Financials are shown only when they can "
+        f"be grounded in evidence."
+    )
+    return EbitdaTreeResult(grounded=False, insufficient_data_reason=reason)
+
+
 def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
     """Build a complete EBITDA tree from the company profile using industry templates.
 
     Uses business_model to select a P&L template and company_size to estimate
     revenue ranges. All values are deterministic — no AI call required.
+
+    When ``business_model`` matches no template, returns an ungrounded placeholder
+    result instead of fabricating a default SaaS P&L (report-data-integrity spec).
     """
-    template, template_matched = _resolve_template(profile.business_model)
+    template = _resolve_template(profile.business_model)
+    if template is None:
+        logger.info(
+            "EBITDA tree ungrounded: business_model=%r matched no template — "
+            "returning insufficient-data placeholder",
+            profile.business_model,
+        )
+        return _insufficient_data_result(profile.business_model)
+
     revenue_low, revenue_high, size_matched = _estimate_revenue(template, profile.company_size)
 
     revenue_confidence_level, revenue_confidence_basis = _compute_confidence(
         template=template,
-        template_matched=template_matched,
         company_size=profile.company_size,
         size_matched=size_matched,
         node_kind="revenue",
     )
     cost_confidence_level, cost_confidence_basis = _compute_confidence(
         template=template,
-        template_matched=template_matched,
         company_size=profile.company_size,
         size_matched=size_matched,
         node_kind="cost",
@@ -133,12 +158,11 @@ def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
 
     logger.info(
         "Building programmatic EBITDA tree: business_model=%s template=%s "
-        "revenue=%s confidence=%s (template_matched=%s size_matched=%s)",
+        "revenue=%s confidence=%s (size_matched=%s)",
         profile.business_model,
         template.label,
         _format_range(revenue_low, revenue_high),
         revenue_confidence_level,
-        template_matched,
         size_matched,
     )
 

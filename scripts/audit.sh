@@ -196,6 +196,34 @@ else
     pass "No duplicate tierColors definitions"
 fi
 
+# ── Data integrity: no silent default template on fact-bearing builders ──────
+section "Data integrity: fact-bearing builders render a placeholder, not a default"
+
+# Fact-bearing report sections (EBITDA tree, value chain) must NOT fall back to a
+# default industry template when business_model matches nothing — that silently
+# fabricates an existing fact (the customer-reported SaaS-default bug). This is a
+# FORWARD invariant rather than an anti-pattern grep: every `build_programmatic_*`
+# builder MUST carry an explicit insufficient-data branch (grounded=False) so an
+# unmatched input renders the placeholder, not a fabricated default. Stating the
+# rule as a required-branch check (instead of "fail if DEFAULT_*TEMPLATE_KEY")
+# can't be bypassed by renaming the default constant.
+# See openspec specs: report-data-integrity, value-chain-grounding, ebitda-tree-confidence.
+MISSING_GROUNDED_BRANCH=""
+while IFS= read -r f; do
+    grep -q "def build_programmatic" "$f" 2>/dev/null || continue
+    if ! grep -Eq "grounded[[:space:]]*=[[:space:]]*False|insufficient_data" "$f" 2>/dev/null; then
+        MISSING_GROUNDED_BRANCH="$MISSING_GROUNDED_BRANCH $f"
+    fi
+done < <(find backend/src/pipeline/pipeline_steps -name '*.py' -not -name 'test_*' 2>/dev/null)
+
+if [ -n "$MISSING_GROUNDED_BRANCH" ]; then
+    for f in $MISSING_GROUNDED_BRANCH; do
+        fail "$f has a build_programmatic_* builder with no insufficient-data (grounded=False) branch — fact-bearing sections must render a placeholder on no-match, not fabricate a default"
+    done
+else
+    pass "All fact-bearing builders have an insufficient-data placeholder branch"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 if [ "$ERRORS" -gt 0 ]; then

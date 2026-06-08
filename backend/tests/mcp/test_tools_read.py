@@ -279,6 +279,28 @@ class TestGetEbitdaTree:
         assert "No EBITDA tree" in text
 
     @pytest.mark.asyncio
+    async def test_ungrounded_surfaces_reason_not_na(self):
+        """Fact-vs-forecast: an ungrounded tree returns the honest reason, not
+        empty 'N/A' figures that read like a fabricated/missing model."""
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_ebitda_tree={
+                "treeData": [],
+                "revenueEstimate": "",
+                "ebitdaEstimate": "",
+                "grounded": False,
+                "insufficientDataReason": "Could not establish a revenue model.",
+            },
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
+        assert "Not available" in text
+        assert "Could not establish a revenue model." in text
+        assert "N/A" not in text
+
+    @pytest.mark.asyncio
     async def test_tree_with_confidence_fields_does_not_break_tool(self):
         """Smoke test for the ebitda-tree-confidence capability: nodes carrying
         the additive confidence_level / confidence_basis fields must not break
@@ -338,6 +360,26 @@ class TestGetValueChain:
         server = _make_server(storage)
         text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
         assert "Ops" in text
+
+    @pytest.mark.asyncio
+    async def test_ungrounded_surfaces_reason(self):
+        """Fact-vs-forecast: an ungrounded value chain returns the honest reason
+        rather than an empty (or fabricated) operating model."""
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_value_chain={
+                "steps": [],
+                "summary": "",
+                "grounded": False,
+                "insufficientDataReason": "Could not determine how this business operates.",
+            },
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
+        assert "Not available" in text
+        assert "Could not determine how this business operates." in text
 
 
 class TestGetScan:
