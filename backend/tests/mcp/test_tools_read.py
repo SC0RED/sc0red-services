@@ -140,6 +140,23 @@ class TestGetAnalysis:
         assert "Value Chain" in text
 
     @pytest.mark.asyncio
+    async def test_ungrounded_ebitda_shows_reason_not_empty_header(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_ebitda_tree={
+                "treeData": [],
+                "grounded": False,
+                "insufficientDataReason": "Could not establish a revenue model.",
+            },
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_analysis", {"analysis_id": "c1"}))[0][0].text
+        assert "EBITDA Impact Model" in text
+        assert "Could not establish a revenue model." in text
+
+    @pytest.mark.asyncio
     async def test_not_found(self):
         storage, *_ = _make_storage()
         server = _make_server(storage)
