@@ -241,6 +241,18 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
             f"Revenue Estimate: {tree.get('revenueEstimate', 'N/A')}",
             f"EBITDA Estimate: {tree.get('ebitdaEstimate', 'N/A')}",
         ]
+        # Surface the headline figure's provenance (fact-provenance-labeling) so
+        # an AI client sees whether the number is reported vs estimated.
+        revenue_node = next(
+            (n for n in tree.get("treeData", []) if n.get("type") == "revenue"), None
+        )
+        if revenue_node and revenue_node.get("provenance"):
+            basis = revenue_node.get("confidence_basis") or ""
+            confidence = revenue_node.get("confidence_level", "?")
+            line = f"Provenance: {revenue_node['provenance']} ({confidence} confidence)"
+            if basis:
+                line += f" — {basis}"
+            lines.append(line)
         tree_data = tree.get("treeData", [])
         if tree_data:
             lines.append(f"\n### Tree Nodes ({len(tree_data)})")

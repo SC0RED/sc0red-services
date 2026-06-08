@@ -37,17 +37,17 @@
 
 ## 6. Persistence + payload
 
-- [ ] 6.1 Thread provenance/basis/citations through `persist_results.py`
-- [ ] 6.2 Persist + read them in `assessment_repository.py` and `_assessment_subrecord_ops.py` (legacy default-safe)
-- [ ] 6.3 Surface them in `analysis_payload.py` (camelCase) + MCP read tools (`tools_read.py`)
-- [ ] 6.4 Repository + payload tests including legacy-record round-trip
+- [x] 6.1 Thread provenance/basis/citations through `persist_results.py`
+- [x] 6.2 Persist + read them in `assessment_repository.py` and `_assessment_subrecord_ops.py` (legacy default-safe)
+- [x] 6.3 Surface them in `analysis_payload.py` (camelCase) + MCP read tools (`tools_read.py`)
+- [x] 6.4 Repository + payload tests including legacy-record round-trip
 
 ## 7. Frontend + PDF rendering
 
-- [ ] 7.1 Render per-fact provenance tier + confidence + one-line basis on the EBITDA + value-chain web surfaces; show citations when DISCLOSED
-- [ ] 7.2 Mirror on the PDF (`PrintEbitdaOutline`, value-chain print)
-- [ ] 7.3 Frontend types (`api.ts`) gain the additive fields
-- [ ] 7.4 Vitest/RTL tests: estimate "shows its work"; disclosed shows citation; legacy data renders
+- [x] 7.1 Render per-fact provenance tier + confidence + one-line basis on the EBITDA + value-chain web surfaces; show citations when DISCLOSED
+- [x] 7.2 Mirror on the PDF (`PrintEbitdaOutline`, value-chain print)
+- [x] 7.3 Frontend types (`api.ts`) gain the additive fields
+- [x] 7.4 Vitest/RTL tests: estimate "shows its work"; disclosed shows citation; legacy data renders
 
 ## 8. Audit rule update
 

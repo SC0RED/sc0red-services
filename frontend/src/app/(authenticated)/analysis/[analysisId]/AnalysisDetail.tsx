@@ -15,6 +15,7 @@ import AnalysisSection from '@/components/analysis/AnalysisSection'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
 import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
 import InsufficientDataPlaceholder from '@/components/analysis/InsufficientDataPlaceholder'
+import ProvenanceCaption from '@/components/analysis/ProvenanceCaption'
 import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import DeepDiveCTA from '@/components/strategy-map/DeepDiveCTA'
@@ -261,6 +262,12 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                             steps={data.valueChain.steps}
                             opportunities={opportunities}
                             summary={data.valueChain.summary}
+                        />
+                        <ProvenanceCaption
+                            testId="value-chain-provenance"
+                            provenance={data.valueChain.steps[0]?.provenance}
+                            confidenceLevel={data.valueChain.steps[0]?.confidence_level}
+                            basis={data.valueChain.provenanceBasis}
                         />
                     </AnalysisSection>
                 ) : null)}

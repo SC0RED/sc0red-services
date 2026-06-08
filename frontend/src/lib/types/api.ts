@@ -25,6 +25,15 @@ export interface Opportunity {
     roi_estimate_pct?: number | null
 }
 
+/** Provenance tier for a researched FACT (fact-provenance-labeling spec). */
+export type ProvenanceTier = 'disclosed' | 'industry_typical' | 'derived_estimate'
+
+/** A source backing a `disclosed` fact (web-search result / site / document). */
+export interface Citation {
+    url: string
+    title?: string
+}
+
 export interface EbitdaNode {
     id: string
     label: string
@@ -35,12 +44,14 @@ export interface EbitdaNode {
     linked_opportunity_indices: number[]
     parent_id?: string | null
     children?: EbitdaNode[]
-    /** Per-node derivation provenance — see `ebitda-tree-confidence`
-     *  capability spec. `null` / undefined for rollup (subtotal/margin) nodes
-     *  and for any record stored before the confidence fields were added; the
-     *  frontend suppresses the chip in those cases (no "unknown" badge). */
+    /** Deterministic confidence + 1-line basis for the node's value (the
+     *  "show your work" labelling). `null`/undefined for rollups and legacy
+     *  records. See `fact-provenance-labeling` + `ebitda-tree-confidence`. */
     confidence_level?: 'high' | 'medium' | 'low' | null
     confidence_basis?: string | null
+    /** Provenance tier + citations for the node's value. */
+    provenance?: ProvenanceTier | null
+    citations?: Citation[]
 }
 
 export interface EbitdaTree {
@@ -64,6 +75,12 @@ export interface ValueChainStep {
     category: 'primary' | 'support'
     risk_categories: string[]
     opportunity_indices: number[]
+    /** Researched-step provenance + deterministic confidence (fact-provenance
+     *  -labeling). `null`/undefined for legacy template-built steps. */
+    confidence_level?: 'high' | 'medium' | 'low' | null
+    confidence_basis?: string | null
+    provenance?: ProvenanceTier | null
+    citations?: Citation[]
 }
 
 export interface ValueChain {

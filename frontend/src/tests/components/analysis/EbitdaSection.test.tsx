@@ -236,3 +236,48 @@ describe('EbitdaSection', () => {
         expect(dotBackgrounds.some((bg) => bg.includes('--lever-both'))).toBe(true)
     })
 })
+
+describe('EbitdaSection — provenance caption', () => {
+    it('shows the revenue figure provenance/confidence/basis', () => {
+        const tree: EbitdaTree = {
+            treeData: [
+                {
+                    id: 'revenue',
+                    label: 'Total Revenue',
+                    type: 'revenue',
+                    value_range: '$60M-$120M',
+                    parent_id: null,
+                    description: 'Total revenue',
+                    linked_opportunity_indices: [],
+                    provenance: 'derived_estimate',
+                    confidence_level: 'low',
+                    confidence_basis: '~265 staff x debt-settlement revenue per head',
+                },
+            ],
+            revenueEstimate: '$60M-$120M',
+        }
+        render(<EbitdaSection ebitdaTree={tree} opportunities={[]} />)
+        const caption = screen.getByTestId('ebitda-provenance')
+        expect(caption).toHaveTextContent('Estimated')
+        expect(caption).toHaveTextContent('low confidence')
+        expect(caption).toHaveTextContent('265 staff')
+    })
+
+    it('renders no caption for a legacy node without provenance', () => {
+        const tree: EbitdaTree = {
+            treeData: [
+                {
+                    id: 'revenue',
+                    label: 'Total Revenue',
+                    type: 'revenue',
+                    value_range: '$10M',
+                    parent_id: null,
+                    description: 'Total revenue',
+                    linked_opportunity_indices: [],
+                },
+            ],
+        }
+        render(<EbitdaSection ebitdaTree={tree} opportunities={[]} />)
+        expect(screen.queryByTestId('ebitda-provenance')).not.toBeInTheDocument()
+    })
+})

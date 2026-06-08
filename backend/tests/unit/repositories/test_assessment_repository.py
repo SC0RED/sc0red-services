@@ -157,6 +157,38 @@ class TestAssessmentRepository:
         assert result["id"] == "custom-id-123"
 
     @mock_aws
+    def test_node_provenance_and_citations_round_trip(self, dynamodb_table):
+        """Researched per-node provenance/citations survive the JSON round-trip."""
+        repo = DynamoDBAssessmentRepository(dynamodb_table)
+        repo.save({"id": "assess-prov", "company_id": "comp-1"})
+        repo.save_ebitda_tree(
+            "assess-prov",
+            {
+                "tree_data": [
+                    {
+                        "id": "revenue",
+                        "label": "Total Revenue",
+                        "type": "revenue",
+                        "value_range": "~$90M",
+                        "provenance": "disclosed",
+                        "confidence_level": "high",
+                        "citations": [{"url": "https://example.com/pr", "title": "2024 PR"}],
+                        "children": [],
+                    }
+                ],
+                "revenue_estimate": "~$90M",
+                "ebitda_estimate": "$20M",
+                "business_model_summary": "summary",
+                "grounded": True,
+                "insufficient_data_reason": None,
+            },
+        )
+        result = repo.get_ebitda_tree("assess-prov")
+        assert result is not None
+        node = result["treeData"][0]
+        assert node["provenance"] == "disclosed"
+        assert node["citations"][0]["url"] == "https://example.com/pr"
+
     def test_save_and_get_ebitda_tree(self, dynamodb_table):
         repo = DynamoDBAssessmentRepository(dynamodb_table)
         repo.save({"id": "assess-ebitda", "company_id": "comp-1"})
