@@ -47,3 +47,15 @@ The company's primary industry, classified during the initial scan. Used for ben
 ### `impact_rating` — Impact Rating
 
 A qualitative estimate (Low / Medium / High) of how much an opportunity could move the company's value if executed. Combined with effort to prioritise the playbook.
+
+### `scan` — Scan
+
+A scan is the job that crawls one source — a single company (Standalone) or a PE firm's portfolio page (Portfolio) — and produces a risk analysis for each company it finds. Its status shows crawl progress until complete.
+
+### `analysis` — Analysis
+
+An analysis is the finished risk report for one company, produced by a scan. Recent Analyses lists the per-company results; open one for its full risk-score breakdown.
+
+### `scan_type` — Standalone vs. Portfolio
+
+Standalone scans assess a single company; Portfolio scans crawl a PE firm's holdings and produce one analysis per portfolio company. The Source/Type badge shows which kind produced a row.

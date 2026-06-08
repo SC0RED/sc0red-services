@@ -9,6 +9,7 @@ import type { DashboardData } from '@/lib/types/api'
 import { TIER_COLORS, TIER_BG_COLORS } from '@/lib/utils/riskUtils'
 import DeleteScanButton from '@/components/DeleteScanButton'
 import { EmptyState } from '@/components/ui'
+import HelpTooltip from '@/components/ui/HelpTooltip'
 import RelativeTime from '@/components/ui/RelativeTime'
 import { canDeleteScan, displayedCompanyCount } from '@/lib/utils/scanStatus'
 
@@ -128,7 +129,10 @@ export default async function DashboardPage() {
                                 marginBottom: '1rem',
                             }}
                         >
-                            <h2 style={{ fontWeight: 700, fontSize: '1.125rem' }}>Recent Analyses</h2>
+                            <h2 style={{ fontWeight: 700, fontSize: '1.125rem' }}>
+                                Recent Analyses
+                                <HelpTooltip term="analysis" />
+                            </h2>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                 <Link href="/analyses" className="btn btn-ghost btn-sm">
                                     View All
@@ -156,6 +160,7 @@ export default async function DashboardPage() {
                                                 }}
                                             >
                                                 {h}
+                                                {h === 'Source' && <HelpTooltip term="scan_type" />}
                                             </th>
                                         ))}
                                     </tr>
@@ -268,7 +273,10 @@ export default async function DashboardPage() {
                                 marginBottom: '1rem',
                             }}
                         >
-                            <h2 style={{ fontWeight: 700, fontSize: '1.125rem' }}>Recent Scans</h2>
+                            <h2 style={{ fontWeight: 700, fontSize: '1.125rem' }}>
+                                Recent Scans
+                                <HelpTooltip term="scan" />
+                            </h2>
                         </div>
                         <div className="card" style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
