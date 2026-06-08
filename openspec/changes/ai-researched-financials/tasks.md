@@ -1,15 +1,15 @@
 ## 1. AI-call wrapper — web search + sources
 
-- [ ] 1.1 Extend `run_structured_ai_call` (`ai_call.py`) to accept an optional `tools` argument (default `None`; existing callers unchanged) and pass it to `query_structured`
-- [ ] 1.2 Capture and return `web_sources` from the `StructuredResponse` (additive to the return shape); record web-search count in telemetry
-- [ ] 1.3 Add a small helper to build the provider `web_search` tool config
-- [ ] 1.4 Unit tests: no-tools call unchanged; tools call forwards tools + returns `web_sources`; search failure fails soft
+- [x] 1.1 Extend `run_structured_ai_call` (`ai_call.py`) to accept an optional `tools` argument (default `None`; existing callers unchanged) and pass it to `query_structured`
+- [x] 1.2 Capture and return `web_sources` from the `StructuredResponse` (additive to the return shape); record web-search count in telemetry
+- [x] 1.3 Add a small helper to build the provider `web_search` tool config
+- [x] 1.4 Unit tests: no-tools call unchanged; tools call forwards tools + returns `web_sources`; search failure fails soft
 
 ## 2. Models — provenance + citations
 
-- [ ] 2.1 Add `provenance` (DISCLOSED|INDUSTRY_TYPICAL|DERIVED_ESTIMATE), `basis`, and `citations` (list of `{url,title}`) to `EbitdaNode`/`EbitdaTreeResult` and `ValueChainStep`/`ValueChainResult` — additive, optional, safe defaults (legacy records deserialize)
-- [ ] 2.2 Add a deterministic `confidence_from_provenance(tier, verdict)` helper
-- [ ] 2.3 Unit tests for defaults + the confidence mapping
+- [x] 2.1 Add `provenance` (DISCLOSED|INDUSTRY_TYPICAL|DERIVED_ESTIMATE), `basis`, and `citations` (list of `{url,title}`) to `EbitdaNode`/`EbitdaTreeResult` and `ValueChainStep`/`ValueChainResult` — additive, optional, safe defaults (legacy records deserialize)
+- [x] 2.2 Add a deterministic `confidence_from_provenance(tier, verdict)` helper
+- [x] 2.3 Unit tests for defaults + the confidence mapping
 
 ## 3. Research prompts + schemas
 

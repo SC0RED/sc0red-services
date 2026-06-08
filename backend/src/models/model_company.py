@@ -11,6 +11,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from src.models.model_literals import (
+    ProvenanceTier,  # noqa: TC001  pydantic field annotation needs runtime resolution
+)
 from src.models.model_strategy_map import (
     StrategyMap,  # noqa: TC001  pydantic field annotation needs runtime resolution
 )
@@ -131,15 +134,28 @@ class OpportunityResult(BaseModel):
     top_three_immediate_actions: list[str] = Field(default_factory=list)
 
 
+class Citation(BaseModel):
+    """A source backing a DISCLOSED fact (web-search result, site, or document).
+
+    Produced by the financial-research pipeline — see the
+    ``web-search-grounding`` and ``fact-provenance-labeling`` capabilities.
+    """
+
+    url: str
+    title: str = ""
+
+
 class EbitdaNode(BaseModel):
     """Single node in the EBITDA decomposition tree.
 
-    The optional ``confidence_level`` and ``confidence_basis`` fields surface the
-    derivation provenance of leaf nodes — see
-    ``src.pipeline.pipeline_steps.build_ebitda_tree`` and the
-    ``ebitda-tree-confidence`` capability spec for the rules that produce them.
-    Both are ``None`` for rollup/subtotal nodes (which inherit visually via their
-    children's chips) and for any record stored before this field was introduced.
+    ``confidence_level`` + ``confidence_basis`` surface the node's derivation
+    provenance. With the ``ai-researched-financials`` change the tree is derived
+    by decomposed AI research, so a node also carries a ``provenance`` tier
+    (``disclosed`` / ``industry_typical`` / ``derived_estimate``) and any
+    ``citations`` backing a disclosed value; ``confidence_level`` is a
+    deterministic function of that tier (see ``ebitda-tree-confidence`` +
+    ``fact-provenance-labeling``). All provenance fields are ``None``/empty for
+    rollup/subtotal nodes and for records stored before they were introduced.
     """
 
     id: str
@@ -152,6 +168,8 @@ class EbitdaNode(BaseModel):
     children: list[EbitdaNode] = Field(default_factory=list)
     confidence_level: Literal["high", "medium", "low"] | None = None
     confidence_basis: str | None = None
+    provenance: ProvenanceTier | None = None
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class EbitdaTreeResult(BaseModel):
@@ -174,7 +192,14 @@ class EbitdaTreeResult(BaseModel):
 
 
 class ValueChainStep(BaseModel):
-    """Single step in a company's value chain."""
+    """Single step in a company's value chain.
+
+    With the ``ai-researched-financials`` change the operating-model steps are
+    AI-researched, so each step carries provenance fields parallel to
+    ``EbitdaNode`` (see ``fact-provenance-labeling`` / ``value-chain-grounding``).
+    All provenance fields default to empty/``None`` so records stored before they
+    existed deserialize unchanged.
+    """
 
     id: str
     label: str
@@ -182,6 +207,10 @@ class ValueChainStep(BaseModel):
     category: Literal["primary", "support"] = "primary"
     risk_categories: list[str] = Field(default_factory=list)
     opportunity_indices: list[int] = Field(default_factory=list)
+    confidence_level: Literal["high", "medium", "low"] | None = None
+    confidence_basis: str | None = None
+    provenance: ProvenanceTier | None = None
+    citations: list[Citation] = Field(default_factory=list)
 
 
 class ValueChainResult(BaseModel):
