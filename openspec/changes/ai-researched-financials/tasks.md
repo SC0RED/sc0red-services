@@ -56,13 +56,13 @@
 
 ## 9. Validation & verification
 
-- [ ] 9.1 `ruff check` + `ruff format` + naming validator clean on changed files
-- [ ] 9.2 `pyright src/` introduces no new error category
-- [ ] 9.3 `pytest tests/ -q` passes with coverage ≥ 95%
-- [ ] 9.4 Frontend `tsc --noEmit` + lint + `vitest run` pass
-- [ ] 9.5 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
-- [ ] 9.6 Reproduce the Century debt-settlement case end-to-end → success-fee revenue model, provenance-labelled figures, citations where found, no template artifacts
-- [ ] 9.7 Run the E2E suite per CLAUDE.md before opening the PR (verify the mock-AI path still produces a grounded tree; adjust the mock to exercise the researched path if needed)
+- [x] 9.1 `ruff check` + `ruff format` + naming validator clean on changed files
+- [x] 9.2 `pyright src/` introduces no new error category
+- [x] 9.3 `pytest tests/ -q` passes with coverage ≥ 95%
+- [x] 9.4 Frontend `tsc --noEmit` + lint + `vitest run` pass
+- [x] 9.5 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
+- [x] 9.6 Reproduce the Century debt-settlement case end-to-end → success-fee revenue model, provenance-labelled figures, citations where found, no template artifacts
+- [x] 9.7 Run the E2E suite per CLAUDE.md before opening the PR (verify the mock-AI path still produces a grounded tree; adjust the mock to exercise the researched path if needed)
 
 ## 10. Documented next step (do NOT implement here)
 
