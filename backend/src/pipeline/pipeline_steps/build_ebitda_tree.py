@@ -133,18 +133,24 @@ def assemble_ebitda_tree(  # noqa: NAMING001  "assemble" is a verb; validator li
             "financials are shown only when they can be grounded in evidence."
         )
 
+    # ``revenue_model_plausible`` is always True here — the ResearchFinancials
+    # step renders the placeholder before assembling when it is False. The
+    # ``plausible`` arg is kept as a defensive belt for direct callers.
     plausible = facts.revenue_model_plausible
     revenue_citations = _to_citations(facts.citations.get("revenue_range", []))
+    # ``provenance`` is a schema-required field validated upstream by
+    # run_structured_ai_call — access directly (fail-fast). A missing key here is
+    # a contract violation that surfaces as KeyError → the step's placeholder.
     revenue_prov: ProvenanceTier = reconcile_provenance(
-        revenue_range.get("provenance", "derived_estimate"),
+        revenue_range["provenance"],
         has_citation=bool(revenue_citations),
     )
     revenue_conf = confidence_from_provenance(revenue_prov, plausible=plausible)
     revenue_basis = str(revenue_range.get("basis", ""))
 
-    mix_prov: ProvenanceTier = facts.revenue_mix.get("provenance", "industry_typical")
+    mix_prov: ProvenanceTier = facts.revenue_mix["provenance"]
     mix_conf = confidence_from_provenance(mix_prov, plausible=plausible)
-    cost_prov: ProvenanceTier = facts.cost_drivers.get("provenance", "industry_typical")
+    cost_prov: ProvenanceTier = facts.cost_drivers["provenance"]
     cost_conf = confidence_from_provenance(cost_prov, plausible=plausible)
 
     margins = facts.margins

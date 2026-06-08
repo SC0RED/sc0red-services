@@ -1,6 +1,6 @@
 """Company analysis pipeline factory.
 
-Wires the 7-step single-company analysis pipeline:
+Wires the 6-step single-company analysis pipeline:
 ScrapeAndResolveURL → ParallelProfileRiskAndIdeation →
 DetailOpportunities → ResearchFinancials →
 GenerateStrategyMap → PersistResults

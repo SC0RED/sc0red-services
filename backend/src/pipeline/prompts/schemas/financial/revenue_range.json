@@ -17,17 +17,13 @@
     },
     "basis": {
       "type": "string"
-    },
-    "source_url": {
-      "type": "string"
     }
   },
   "required": [
     "revenue_low_usd",
     "revenue_high_usd",
     "provenance",
-    "basis",
-    "source_url"
+    "basis"
   ],
   "additionalProperties": false
 }

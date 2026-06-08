@@ -79,7 +79,8 @@ def assemble_value_chain(  # noqa: NAMING001  "assemble" is a verb; validator li
             ),
         )
 
-    provenance: ProvenanceTier = operating.get("provenance", "industry_typical")
+    # ``provenance`` is schema-required (validated upstream) — direct access.
+    provenance: ProvenanceTier = operating["provenance"]
     basis = str(operating.get("basis", ""))
     confidence = confidence_from_provenance(provenance, plausible=facts.revenue_model_plausible)
 

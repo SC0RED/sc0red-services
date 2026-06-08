@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from signalfield_core.exceptions.base import EngineError
 
 from src.models.model_company import Opportunity
@@ -89,9 +90,5 @@ class TestResearchFinancials:
     def test_missing_profile_raises(self):
         step, accessor = _make_step()
         accessor.company.profile = None
-        try:
+        with pytest.raises(ValueError, match="profile missing"):
             step.execute()
-        except ValueError as error:
-            assert "profile missing" in str(error)
-        else:
-            raise AssertionError("expected ValueError when profile is missing")
