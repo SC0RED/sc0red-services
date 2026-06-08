@@ -51,8 +51,8 @@
 
 ## 8. Audit rule update
 
-- [ ] 8.1 Update the data-integrity audit check: fact-bearing surfaces must carry provenance OR render the placeholder (replaces the "no silent default template" check, since templates are gone)
-- [ ] 8.2 Update the audit-rule test
+- [x] 8.1 Update the data-integrity audit check: fact-bearing surfaces must carry provenance OR render the placeholder (replaces the "no silent default template" check, since templates are gone)
+- [x] 8.2 Update the audit-rule test
 
 ## 9. Validation & verification
 
@@ -66,4 +66,4 @@
 
 ## 10. Documented next step (do NOT implement here)
 
-- [ ] 10.1 Record the deferred UX/latency optimization (stream financials after the headline; skeletons; per-domain research caching) in this change's design.md "next step" (already noted) — confirm it carries forward; do not build it in this change
+- [x] 10.1 Record the deferred UX/latency optimization (stream financials after the headline; skeletons; per-domain research caching) in this change's design.md "next step" (already noted) — confirm it carries forward; do not build it in this change
