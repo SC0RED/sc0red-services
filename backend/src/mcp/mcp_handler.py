@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 import boto3
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.responses import PlainTextResponse
 
 from src.mcp.cors import add_cors_middleware
@@ -146,6 +147,20 @@ mcp = FastMCP(
     # avoids needing response-streaming wiring for the read-tool workload.
     stateless_http=True,
     json_response=True,
+    # ── DNS-rebinding / Host validation (see design.md) ──────────────────────
+    # FastMCP's default bind host is 127.0.0.1, so when ``transport_security``
+    # is left unset it AUTO-ENABLES DNS-rebinding protection with
+    # ``allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"]``. Under the
+    # Lambda Web Adapter the request reaches uvicorn with the Function URL as
+    # the Host header (e.g. ``…lambda-url.us-east-1.on.aws``), which is not in
+    # that localhost allow-list → the transport returns HTTP 421 "Invalid Host
+    # header" on every authenticated POST /mcp (Bug L). DNS-rebinding protection
+    # guards *localhost-bound* dev servers from browser-driven rebinding; it does
+    # not apply to this deployment, which is a public, TLS-terminated endpoint
+    # gated by an OAuth bearer token (RequireAuthMiddleware runs before the
+    # transport, so unauthenticated requests never reach a tool). Disable it —
+    # this is exactly the posture the SDK uses when no settings are passed.
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
 
