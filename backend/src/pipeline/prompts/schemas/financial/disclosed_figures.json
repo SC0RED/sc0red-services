@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "found": {
+      "type": "boolean"
+    },
+    "figures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric",
+          "value",
+          "source_url"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "found",
+    "figures"
+  ],
+  "additionalProperties": false
+}

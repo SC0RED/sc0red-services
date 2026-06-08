@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "properties": {
+    "gross_margin_low": {
+      "type": "integer"
+    },
+    "gross_margin_high": {
+      "type": "integer"
+    },
+    "ebitda_margin_low": {
+      "type": "integer"
+    },
+    "ebitda_margin_high": {
+      "type": "integer"
+    },
+    "provenance": {
+      "type": "string",
+      "enum": [
+        "disclosed",
+        "industry_typical",
+        "derived_estimate"
+      ]
+    },
+    "basis": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "gross_margin_low",
+    "gross_margin_high",
+    "ebitda_margin_low",
+    "ebitda_margin_high",
+    "provenance",
+    "basis"
+  ],
+  "additionalProperties": false
+}

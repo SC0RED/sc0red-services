@@ -13,18 +13,18 @@
 
 ## 3. Research prompts + schemas
 
-- [ ] 3.1 Author per-question prompt templates under `src/pipeline/prompts/` (company_type, revenue_model, disclosed_figures, scale_signals, revenue_mix, margin_band, revenue_range, cost_drivers, operating_model_steps)
-- [ ] 3.2 Author short per-question output schemas (one-liner/structured short answers; each asks the model to self-declare provenance + basis)
-- [ ] 3.3 Author the adversarial plausibility-check prompt + yes/no schema (strategy-map pattern)
+- [x] 3.1 Author per-question prompt templates under `src/pipeline/prompts/` (company_type, revenue_model, disclosed_figures, scale_signals, revenue_mix, margin_band, revenue_range, cost_drivers, operating_model_steps)
+- [x] 3.2 Author short per-question output schemas (one-liner/structured short answers; each asks the model to self-declare provenance + basis)
+- [x] 3.3 Author the adversarial plausibility-check prompt + yes/no schema (strategy-map pattern)
 
 ## 4. Research orchestrator (the DAG)
 
-- [ ] 4.1 New module(s) under `pipeline_steps/` for the round runners (parallel within round via `FutureManager`, sequential across rounds) — mirror `_strategy_map_perspective_rounds.py`; keep each file < 400 lines
-- [ ] 4.2 Round 1 (parallel): company_type, revenue_model, disclosed_figures (search on), scale_signals
-- [ ] 4.3 Round 2 (depends on R1, parallel): revenue_mix, margin_band, revenue_range (search on), cost_drivers, operating_model_steps
-- [ ] 4.4 Round 3: adversarial verification calls (parallel); apply downgrade/reject rules
-- [ ] 4.5 Reconcile self-declared provenance against actual citations (downgrade unsourced "disclosed")
-- [ ] 4.6 Unit tests for each round runner with mocked `run_structured_ai_call`
+- [x] 4.1 New module(s) under `pipeline_steps/` for the round runners (parallel within round via `FutureManager`, sequential across rounds) — mirror `_strategy_map_perspective_rounds.py`; keep each file < 400 lines
+- [x] 4.2 Round 1 (parallel): company_type, revenue_model, disclosed_figures (search on), scale_signals
+- [x] 4.3 Round 2 (depends on R1, parallel): revenue_mix, margin_band, revenue_range (search on), cost_drivers, operating_model_steps
+- [x] 4.4 Round 3: adversarial verification calls (parallel); apply downgrade/reject rules
+- [x] 4.5 Reconcile self-declared provenance against actual citations (downgrade unsourced "disclosed")
+- [x] 4.6 Unit tests for each round runner with mocked `run_structured_ai_call`
 
 ## 5. Assemblers replace templates
 
