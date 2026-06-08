@@ -149,7 +149,7 @@ def run_financial_research(
 
 
 @dataclass(frozen=True)
-class _Q:
+class _Q:  # noqa: NAMING001  module-private dataclass (validator regex rejects leading underscore)
     """A single research question to execute in a round."""
 
     name: str
@@ -158,7 +158,7 @@ class _Q:
 
 
 @dataclass
-class _Answer:
+class _Answer:  # noqa: NAMING001  module-private dataclass (validator regex rejects leading underscore)
     """A question's validated content plus any web-search sources."""
 
     content: dict[str, Any]

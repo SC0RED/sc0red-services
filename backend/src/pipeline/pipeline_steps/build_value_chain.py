@@ -1,140 +1,109 @@
-"""Programmatic value chain builder — maps risks and opportunities to operational steps.
+"""Value chain assembler — builds the operating model from researched facts.
 
-Builds a value chain from the company profile using business-model-specific templates.
-Each step is linked to relevant risk categories and opportunities. No AI call needed.
+Replaces the old business-model-template builder: the value-chain steps now come
+from the decomposed research DAG's ``operating_steps`` answer (real activities for
+this specific business — e.g. lead-gen → enrollment → negotiation → settlement →
+servicing for a debt-settlement firm), not a generic SaaS/Professional-Services
+template. Each step carries a provenance tier + deterministic confidence. See the
+``value-chain-grounding`` + ``fact-provenance-labeling`` capabilities.
 
-Templates are defined in value_chain_templates.py (split for file size limit).
+When the research can't support a grounded operating model, the report falls to
+the "insufficient public data" placeholder per ``report-data-integrity``.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+import re
+from typing import TYPE_CHECKING, Any, Literal
 
 from src.models.model_company import ValueChainResult, ValueChainStep
-from src.pipeline.pipeline_steps.value_chain_templates import (
-    MODEL_KEYWORDS,
-    TEMPLATES,
-)
+from src.pipeline.pipeline_steps._provenance import confidence_from_provenance
 
 if TYPE_CHECKING:
-    from src.models.model_company import CompanyProfile, Opportunity
-    from src.pipeline.pipeline_steps.value_chain_templates import StepTemplate
+    from src.models.model_literals import ProvenanceTier
+    from src.pipeline.pipeline_steps._financial_research import FinancialResearchFacts
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_template(business_model: str) -> tuple[str, list[StepTemplate]] | None:
-    """Match a free-text business_model string to the closest template.
-
-    Returns ``(template_key, steps)`` for a match, or ``None`` when no keyword in
-    ``MODEL_KEYWORDS`` fires. There is deliberately NO default template — an
-    unmatched model is reported as ungrounded by the builder, not fabricated as
-    SaaS. See the value-chain-grounding spec.
-    """
-    lower = business_model.lower()
-    for keywords, key in MODEL_KEYWORDS:
-        for keyword in keywords:
-            if keyword in lower:
-                return key, TEMPLATES[key]
-    return None
+def _slug(label: str, fallback: str) -> str:
+    """Derive a stable step id from a free-text label."""
+    slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+    return slug or fallback
 
 
-# ---------------------------------------------------------------------------
-# Opportunity linking
-# ---------------------------------------------------------------------------
+def _steps(
+    items: list[dict[str, Any]],
+    category: Literal["primary", "support"],
+    provenance: ProvenanceTier,
+    confidence: Literal["high", "medium", "low"],
+    basis: str,
+) -> list[ValueChainStep]:
+    """Build ValueChainStep objects from researched {label, description} items."""
+    steps: list[ValueChainStep] = []
+    for index, item in enumerate(items):
+        label = str(item.get("label", "Activity"))
+        steps.append(
+            ValueChainStep(
+                id=_slug(label, f"{category}_{index}"),
+                label=label,
+                description=str(item.get("description", "")),
+                category=category,
+                confidence_level=confidence,
+                confidence_basis=basis,
+                provenance=provenance,
+            )
+        )
+    return steps
 
 
-def _link_opportunities(
-    steps: list[ValueChainStep],
-    template_steps: list[StepTemplate],
-    opportunities: list[Opportunity],
-) -> None:
-    """Link opportunities to value chain steps by strategic_category + value_lever."""
-    template_by_id = {t.id: t for t in template_steps}
-
-    for step in steps:
-        template = template_by_id.get(step.id)
-        if not template:
-            continue
-
-        for opp_index, opportunity in enumerate(opportunities):
-            if opportunity.strategic_category not in template.strategic_categories:
-                continue
-            if step.category == "support" and opportunity.value_lever == "Revenue Side":
-                continue
-            step.opportunity_indices.append(opp_index)
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-def build_programmatic_value_chain(
-    profile: CompanyProfile,
-    opportunities: list[Opportunity] | None = None,
+def assemble_value_chain(  # noqa: NAMING001  "assemble" is a verb; validator list is partial
+    facts: FinancialResearchFacts, company_name: str
 ) -> ValueChainResult:
-    """Build a value chain from the company profile using business model templates.
+    """Assemble the value chain from the researched operating-model steps.
 
-    Each step is linked to relevant risk categories (static mapping) and
-    opportunities (matched by strategic_category + value_lever).
-
-    When ``business_model`` matches no template, returns an ungrounded placeholder
-    result instead of fabricating a default SaaS value chain (value-chain-grounding
-    spec).
+    Returns the insufficient-data placeholder when the research produced no
+    operating steps. Confidence is deterministic from the operating-model
+    provenance tier (downgraded if the revenue model was judged implausible).
     """
-    resolved = _resolve_template(profile.business_model)
-    if resolved is None:
-        shown = profile.business_model.strip() or "unknown"
-        reason = (
-            f"Could not determine how this business operates from available public "
-            f"sources (business model: {shown!r}). The operating model is mapped only "
-            f"when it can be grounded in evidence."
+    operating = facts.operating_steps
+    primary_items = operating.get("primary_steps", [])
+    support_items = operating.get("support_steps", [])
+    if not primary_items and not support_items:
+        return ValueChainResult(
+            grounded=False,
+            insufficient_data_reason=(
+                "Could not determine how this business operates from available public "
+                "sources; the operating model is shown only when it can be grounded."
+            ),
         )
-        logger.info(
-            "Value chain ungrounded: business_model=%r matched no template — "
-            "returning insufficient-data placeholder",
-            profile.business_model,
-        )
-        return ValueChainResult(grounded=False, insufficient_data_reason=reason)
 
-    template_key, template_steps = resolved
-
-    logger.info(
-        "Building value chain: business_model=%s template=%s steps=%d",
-        profile.business_model,
-        template_key,
-        len(template_steps),
-    )
+    provenance: ProvenanceTier = operating.get("provenance", "industry_typical")
+    basis = str(operating.get("basis", ""))
+    confidence = confidence_from_provenance(provenance, plausible=facts.revenue_model_plausible)
 
     steps = [
-        ValueChainStep(
-            id=step.id,
-            label=step.label,
-            description=step.description,
-            category=step.category,
-            risk_categories=list(step.risk_categories),
-        )
-        for step in template_steps
+        *_steps(primary_items, "primary", provenance, confidence, basis),
+        *_steps(support_items, "support", provenance, confidence, basis),
     ]
-
-    if opportunities:
-        _link_opportunities(steps, template_steps, opportunities)
-
-    primary_count = sum(1 for s in steps if s.category == "primary")
-    support_count = sum(1 for s in steps if s.category == "support")
-
+    primary_count = sum(1 for step in steps if step.category == "primary")
+    support_count = len(steps) - primary_count
     summary = (
-        f"{profile.company_name} value chain: {primary_count} primary activities "
-        f"and {support_count} support activities based on {template_key} model"
+        f"{company_name} value chain: {primary_count} primary activities and "
+        f"{support_count} support activities for a {facts.company_type}."
     )
-
-    provenance_basis = (
-        f"Operating model derived from a {template_key} template "
-        f"(matched on business model {profile.business_model!r})."
+    provenance_basis = basis or f"Operating model researched for a {facts.company_type}."
+    logger.info(
+        "Assembled value chain: company_type=%s primary=%d support=%d provenance=%s",
+        facts.company_type,
+        primary_count,
+        support_count,
+        provenance,
     )
-
     return ValueChainResult(
         steps=steps,
         summary=summary,
+        grounded=True,
         provenance_basis=provenance_basis,
     )

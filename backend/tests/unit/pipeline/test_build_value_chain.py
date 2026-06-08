@@ -1,122 +1,106 @@
-"""Tests for the programmatic value chain builder."""
+"""Tests for the value chain assembler (assemble_value_chain over researched facts)."""
 
-from src.models.model_company import CompanyProfile, Opportunity, ValueChainResult
-from src.pipeline.pipeline_steps.build_value_chain import build_programmatic_value_chain
+from __future__ import annotations
 
+from typing import Any
 
-def _make_profile(business_model: str = "SaaS") -> CompanyProfile:
-    return CompanyProfile(
-        company_name="Test Corp",
-        industry="Technology",
-        business_model=business_model,
-    )
+from src.models.model_company import ValueChainResult
+from src.pipeline.pipeline_steps._financial_research import FinancialResearchFacts
+from src.pipeline.pipeline_steps.build_value_chain import assemble_value_chain
 
 
-def _make_opportunities() -> list[Opportunity]:
-    return [
-        Opportunity(
-            title="AI Chatbot",
-            strategic_category="Competitive Moat",
-            value_lever="Revenue Side",
-        ),
-        Opportunity(
-            title="Automate Support",
-            strategic_category="Operational Efficiency",
-            value_lever="Cost Side",
-        ),
-    ]
+def _facts(**over: Any) -> FinancialResearchFacts:
+    base: dict[str, Any] = {
+        "company_type": "consumer debt-settlement firm",
+        "revenue_model": {
+            "revenue_model": "Success fee",
+            "fee_structure": "15-25%",
+            "provenance": "industry_typical",
+            "basis": "x",
+        },
+        "disclosed_figures": {"found": False, "figures": []},
+        "scale_signals": {"signals": [], "employee_estimate": "~265", "basis": "x"},
+        "revenue_mix": {"streams": [], "provenance": "industry_typical", "basis": "x"},
+        "margins": {
+            "gross_margin_low": 40,
+            "gross_margin_high": 60,
+            "ebitda_margin_low": 15,
+            "ebitda_margin_high": 30,
+            "provenance": "industry_typical",
+            "basis": "x",
+        },
+        "revenue_range": {
+            "revenue_low_usd": 60_000_000,
+            "revenue_high_usd": 120_000_000,
+            "provenance": "derived_estimate",
+            "basis": "x",
+            "source_url": "",
+        },
+        "cost_drivers": {
+            "cogs_items": [],
+            "opex_items": [],
+            "provenance": "industry_typical",
+            "basis": "x",
+        },
+        "operating_steps": {
+            "primary_steps": [
+                {"label": "Lead generation", "description": "Attract debtors"},
+                {"label": "Enrollment", "description": "Sign up clients"},
+                {"label": "Creditor negotiation", "description": "Negotiate settlements"},
+                {"label": "Settlement", "description": "Execute settlements"},
+            ],
+            "support_steps": [{"label": "Compliance", "description": "Regulatory"}],
+            "provenance": "industry_typical",
+            "basis": "debt-settlement operating model",
+        },
+        "revenue_model_plausible": True,
+        "citations": {},
+    }
+    base.update(over)
+    return FinancialResearchFacts(**base)
 
 
-class TestBuildProgrammaticValueChain:
-    def test_returns_value_chain_result(self):
-        result = build_programmatic_value_chain(_make_profile())
-        assert isinstance(result, ValueChainResult)
+class TestAssembleValueChain:
+    def test_uses_researched_operating_steps(self):
+        result = assemble_value_chain(_facts(), "Century")
+        assert result.grounded is True
+        labels = [s.label for s in result.steps]
+        assert "Creditor negotiation" in labels
+        # Not the generic SaaS / Professional-Services template steps.
+        assert "Renewal & Expansion" not in labels
+        assert "Proposal & Scoping" not in labels
 
-    def test_saas_has_primary_and_support_steps(self):
-        result = build_programmatic_value_chain(_make_profile("SaaS"))
+    def test_primary_and_support_categories(self):
+        result = assemble_value_chain(_facts(), "Century")
         primary = [s for s in result.steps if s.category == "primary"]
         support = [s for s in result.steps if s.category == "support"]
-        assert len(primary) == 6
-        assert len(support) == 2
+        assert len(primary) == 4
+        assert len(support) == 1
 
-    def test_services_template(self):
-        result = build_programmatic_value_chain(_make_profile("Professional Services"))
-        labels = [s.label for s in result.steps]
-        assert "Project Delivery" in labels
-        assert "Knowledge Management" in labels
+    def test_steps_carry_provenance_and_confidence(self):
+        result = assemble_value_chain(_facts(), "Century")
+        step = result.steps[0]
+        assert step.provenance == "industry_typical"
+        assert step.confidence_level == "medium"
+        assert result.provenance_basis
 
-    def test_ecommerce_template(self):
-        result = build_programmatic_value_chain(_make_profile("E-commerce"))
-        labels = [s.label for s in result.steps]
-        assert "Order Fulfillment" in labels
-
-    def test_manufacturing_template(self):
-        result = build_programmatic_value_chain(_make_profile("Manufacturing"))
-        labels = [s.label for s in result.steps]
-        assert "Production / Assembly" in labels
-        assert "Raw Material Procurement" in labels
-
-    def test_financial_services_template(self):
-        result = build_programmatic_value_chain(_make_profile("Fintech"))
-        labels = [s.label for s in result.steps]
-        assert "Onboarding & KYC" in labels
-
-    def test_unknown_model_renders_placeholder_not_saas(self):
-        result = build_programmatic_value_chain(_make_profile("Unknown Model"))
-        assert result.grounded is False
-        assert result.insufficient_data_reason is not None
-        assert result.steps == []
-
-    def test_debt_settlement_renders_placeholder(self):
-        # The customer-reported case: a debt-settlement firm must not be mapped
-        # as a SaaS value chain.
-        result = build_programmatic_value_chain(_make_profile("debt settlement"))
+    def test_no_operating_steps_renders_placeholder(self):
+        facts = _facts(
+            operating_steps={
+                "primary_steps": [],
+                "support_steps": [],
+                "provenance": "industry_typical",
+                "basis": "",
+            }
+        )
+        result = assemble_value_chain(facts, "Century")
         assert result.grounded is False
         assert result.steps == []
-        labels = [s.label for s in result.steps]
-        assert "Renewal & Expansion" not in labels
+        assert result.insufficient_data_reason
 
-    def test_unknown_sentinel_renders_placeholder(self):
-        result = build_programmatic_value_chain(_make_profile("unknown"))
-        assert result.grounded is False
-        assert result.steps == []
 
-    def test_matched_model_is_grounded_with_provenance(self):
-        result = build_programmatic_value_chain(_make_profile("SaaS"))
+class TestValueChainBackwardCompat:
+    def test_legacy_payload_deserializes(self):
+        result = ValueChainResult.model_validate({"steps": [], "summary": "x"})
         assert result.grounded is True
-        assert result.insufficient_data_reason is None
-        assert result.provenance_basis is not None
-        assert "saas" in result.provenance_basis
-
-    def test_steps_have_risk_categories(self):
-        result = build_programmatic_value_chain(_make_profile())
-        for step in result.steps:
-            assert len(step.risk_categories) > 0
-
-    def test_opportunities_linked_to_steps(self):
-        opportunities = _make_opportunities()
-        result = build_programmatic_value_chain(_make_profile(), opportunities=opportunities)
-        # At least one step should have linked opportunities
-        all_indices = []
-        for step in result.steps:
-            all_indices.extend(step.opportunity_indices)
-        assert len(all_indices) > 0
-
-    def test_summary_contains_company_name(self):
-        result = build_programmatic_value_chain(_make_profile())
-        assert "Test Corp" in result.summary
-
-    def test_summary_contains_template_name(self):
-        result = build_programmatic_value_chain(_make_profile())
-        assert "saas" in result.summary
-
-    def test_no_opportunities_produces_empty_indices(self):
-        result = build_programmatic_value_chain(_make_profile())
-        for step in result.steps:
-            assert step.opportunity_indices == []
-
-    def test_all_templates_produce_valid_chains(self):
-        for model in ["SaaS", "Consulting", "E-commerce", "Manufacturing", "Fintech"]:
-            result = build_programmatic_value_chain(_make_profile(model))
-            assert len(result.steps) >= 5
-            assert result.summary
+        assert result.provenance_basis is None

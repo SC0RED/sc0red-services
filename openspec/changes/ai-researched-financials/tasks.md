@@ -28,12 +28,12 @@
 
 ## 5. Assemblers replace templates
 
-- [ ] 5.1 Rewrite `build_ebitda_tree.py` as an assembler over researched facts (revenue mix + margins + range + cost drivers → node tree with provenance/confidence/citations)
-- [ ] 5.2 Rewrite `build_value_chain.py` as an assembler over the researched operating-model steps (with per-step provenance)
-- [ ] 5.3 Delete `_ebitda_templates.py` and `value_chain_templates.py` and all keyword-template logic
-- [ ] 5.4 Keep the insufficient-data placeholder as the floor (model undeterminable / verification rejects the revenue model)
-- [ ] 5.5 Wire the research orchestrator + assemblers as `RequestStep`s through `CompanyAnalysisFactory` (replace `ComputeEbitdaTree`/`ComputeValueChain` wiring)
-- [ ] 5.6 Update/replace the existing build-ebitda / build-value-chain tests for the researched path (debt-settlement fixture → success-fee model, no template artifacts)
+- [x] 5.1 Rewrite `build_ebitda_tree.py` as an assembler over researched facts (revenue mix + margins + range + cost drivers → node tree with provenance/confidence/citations)
+- [x] 5.2 Rewrite `build_value_chain.py` as an assembler over the researched operating-model steps (with per-step provenance)
+- [x] 5.3 Delete `_ebitda_templates.py` and `value_chain_templates.py` and all keyword-template logic
+- [x] 5.4 Keep the insufficient-data placeholder as the floor (model undeterminable / verification rejects the revenue model)
+- [x] 5.5 Wire the research orchestrator + assemblers as `RequestStep`s through `CompanyAnalysisFactory` (replace `ComputeEbitdaTree`/`ComputeValueChain` wiring)
+- [x] 5.6 Update/replace the existing build-ebitda / build-value-chain tests for the researched path (debt-settlement fixture → success-fee model, no template artifacts)
 
 ## 6. Persistence + payload
 

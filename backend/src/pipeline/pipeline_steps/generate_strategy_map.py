@@ -1,6 +1,6 @@
 r"""Pipeline step: generate the AI-augmented Balanced Scorecard strategy map.
 
-Inserted between `ComputeValueChain` and `PersistResults` in the
+Inserted between `ResearchFinancials` and `PersistResults` in the
 single-company analysis pipeline. Consumes existing pipeline output
 (scraped content, profile, risk assessment, opportunities, EBITDA
 tree, value chain) plus any user-uploaded document text, and produces
