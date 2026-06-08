@@ -3,67 +3,20 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from src.mcp._tools_read_helpers import (
+    _format_analysis_summary,
+    _get_assessment_data,
+    _ungrounded_message,
+    _verify_org_access,
+)
 from src.mcp.auth_context import get_authenticated_user
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
-    from src.mcp.auth_context import AuthenticatedUser
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
-
-
-def _verify_org_access(
-    record: dict[str, Any] | None, user: AuthenticatedUser, label: str, record_id: str
-) -> str | None:
-    """Verify the record belongs to the authenticated user's org.
-
-    Returns an error message if access denied, or None if OK.
-    """
-    if not record:
-        return f"{label} {record_id} not found."
-    if record.get("org_id") != user.org_id:
-        return f"{label} {record_id} not found."
-    return None
-
-
-def _format_analysis_summary(company: dict[str, Any]) -> str:
-    """Format a single company/analysis as concise text for LLM consumption."""
-    return "\n".join(
-        [
-            f"**{company.get('company_name', 'Unknown')}**",
-            f"URL: {company.get('company_url', 'N/A')}",
-            f"Industry: {company.get('industry', 'N/A')}",
-            f"Risk Score: {company.get('overall_risk_score', 'N/A')}/10",
-            f"Risk Tier: {company.get('risk_tier', 'N/A')}",
-            f"Analyzed: {company.get('analyzed_at', 'N/A')}",
-        ]
-    )
-
-
-def _get_assessment_data(assessment_repo: Any, company_id: str) -> dict[str, Any]:
-    """Load latest assessment data for a company. Mirrors handle_get_analysis."""
-    assessments = assessment_repo.find_by_company(company_id)
-    if not assessments:
-        return {
-            "risk_scores": [],
-            "opportunities": [],
-            "ebitda_tree": None,
-            "value_chain": None,
-            "documents": [],
-        }
-
-    assessments.sort(key=lambda a: a.get("created_at", ""), reverse=True)
-    aid = assessments[0]["id"]
-
-    return {
-        "risk_scores": assessment_repo.get_risk_scores(aid),
-        "opportunities": assessment_repo.get_opportunities(aid),
-        "ebitda_tree": assessment_repo.get_ebitda_tree(aid),
-        "value_chain": assessment_repo.get_value_chain(aid),
-        "documents": assessment_repo.get_documents(aid),
-    }
 
 
 def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
@@ -189,10 +142,16 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
                 lines.append(f"- [{lever}] {opp.get('title', '?')} (Impact: {impact})")
         if ebitda_tree:
             lines.append("\n### EBITDA Impact Model")
-            if ebitda_tree.get("revenueEstimate"):
-                lines.append(f"Revenue Estimate: {ebitda_tree['revenueEstimate']}")
-            if ebitda_tree.get("ebitdaEstimate"):
-                lines.append(f"EBITDA Estimate: {ebitda_tree['ebitdaEstimate']}")
+            if ebitda_tree.get("grounded") is False:
+                lines.append(
+                    ebitda_tree.get("insufficientDataReason")
+                    or "Not available — the business model could not be grounded."
+                )
+            else:
+                if ebitda_tree.get("revenueEstimate"):
+                    lines.append(f"Revenue Estimate: {ebitda_tree['revenueEstimate']}")
+                if ebitda_tree.get("ebitdaEstimate"):
+                    lines.append(f"EBITDA Estimate: {ebitda_tree['ebitdaEstimate']}")
         if value_chain and value_chain.get("steps"):
             lines.append(f"\n### Value Chain ({len(value_chain['steps'])} activities)")
             if value_chain.get("summary"):
@@ -269,8 +228,16 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         if not data["ebitda_tree"]:
             return f"No EBITDA tree found for analysis {analysis_id}."
         tree = data["ebitda_tree"]
+        heading = f"EBITDA Impact Model — {company.get('company_name', 'Unknown')}"
+        if placeholder := _ungrounded_message(
+            tree,
+            heading,
+            "The business model could not be grounded in public information, "
+            "so no financial model is shown.",
+        ):
+            return placeholder
         lines = [
-            f"## EBITDA Impact Model — {company.get('company_name', 'Unknown')}",
+            f"## {heading}",
             f"Revenue Estimate: {tree.get('revenueEstimate', 'N/A')}",
             f"EBITDA Estimate: {tree.get('ebitdaEstimate', 'N/A')}",
         ]
@@ -298,7 +265,15 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         if not data["value_chain"]:
             return f"No value chain found for analysis {analysis_id}."
         chain = data["value_chain"]
-        lines = [f"## Value Chain — {company.get('company_name', 'Unknown')}"]
+        heading = f"Value Chain — {company.get('company_name', 'Unknown')}"
+        if placeholder := _ungrounded_message(
+            chain,
+            heading,
+            "The business model could not be grounded in public information, "
+            "so no operating model is shown.",
+        ):
+            return placeholder
+        lines = [f"## {heading}"]
         if chain.get("summary"):
             lines.append(chain["summary"])
         for step in chain.get("steps", []):

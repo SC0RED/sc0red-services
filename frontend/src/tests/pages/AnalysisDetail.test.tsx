@@ -1233,3 +1233,103 @@ function makeFullStrategyMap(): NonNullable<AnalysisData['strategyMap']> {
         },
     }
 }
+
+describe('AnalysisDetail — fact-vs-forecast insufficient-data placeholders', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockSession = { user: { name: 'Test', email: 'test@test.com' } }
+        // jsdom does not implement scrollIntoView — the placeholder CTA calls it.
+        Element.prototype.scrollIntoView = vi.fn()
+    })
+
+    it('renders the EBITDA placeholder (not the tree) when financials are ungrounded', () => {
+        const data = buildAnalysisData({
+            ebitdaTree: {
+                treeData: [],
+                grounded: false,
+                insufficientDataReason: 'Could not establish a revenue model.',
+            },
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.getByTestId('ebitda-insufficient-data')).toBeInTheDocument()
+        expect(screen.getByText('Financial model not shown')).toBeInTheDocument()
+        expect(screen.getByText('Could not establish a revenue model.')).toBeInTheDocument()
+        // The fabricated tree must NOT render.
+        expect(screen.queryByTestId('ebitda-tree')).not.toBeInTheDocument()
+    })
+
+    it('renders the value-chain placeholder when the operating model is ungrounded', () => {
+        const data = buildAnalysisData({
+            valueChain: {
+                steps: [],
+                summary: '',
+                grounded: false,
+                insufficientDataReason: 'Could not determine how this business operates.',
+            },
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.getByTestId('value-chain-insufficient-data')).toBeInTheDocument()
+        expect(screen.getByText('Operating model not shown')).toBeInTheDocument()
+        // The fabricated SaaS chain must NOT render alongside the placeholder.
+        expect(screen.queryByText('Renewal & Expansion')).not.toBeInTheDocument()
+    })
+
+    it('CTA click scrolls to the document-upload widget (upload + re-analyse path)', () => {
+        const data = buildAnalysisData({
+            ebitdaTree: { treeData: [], grounded: false, insufficientDataReason: 'x' },
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        const cta = within(screen.getByTestId('ebitda-insufficient-data')).getByTestId(
+            'insufficient-data-cta'
+        )
+        fireEvent.click(cta)
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    })
+
+    it('renders the real EBITDA tree when financials are grounded', () => {
+        const data = buildAnalysisData({
+            ebitdaTree: {
+                treeData: [
+                    {
+                        id: 'rev',
+                        label: 'Revenue',
+                        type: 'revenue',
+                        description: 'Total',
+                        linked_opportunity_indices: [],
+                    },
+                ],
+                revenueEstimate: '$10M-$20M',
+                grounded: true,
+            },
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.getByTestId('ebitda-tree')).toBeInTheDocument()
+        expect(screen.queryByTestId('ebitda-insufficient-data')).not.toBeInTheDocument()
+    })
+
+    it('treats legacy data without a grounded flag as grounded', () => {
+        const data = buildAnalysisData({
+            valueChain: {
+                steps: [
+                    {
+                        id: 's1',
+                        label: 'Sourcing',
+                        description: 'Buy',
+                        category: 'primary',
+                        risk_categories: [],
+                        opportunity_indices: [],
+                    },
+                ],
+                summary: 'Legacy chain',
+            },
+        })
+        render(<AnalysisDetail data={data} analysisId="test-id" />)
+
+        expect(screen.queryByTestId('value-chain-insufficient-data')).not.toBeInTheDocument()
+        expect(screen.getByText('Value Chain Analysis')).toBeInTheDocument()
+    })
+})

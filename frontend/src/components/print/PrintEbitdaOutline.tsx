@@ -37,6 +37,24 @@ interface PrintEbitdaOutlineProps {
  */
 
 export default function PrintEbitdaOutline({ ebitdaTree, sortedOpportunities }: PrintEbitdaOutlineProps) {
+    // Fact-vs-forecast data contract (report-data-integrity spec): when the
+    // financials could not be grounded, print an honest placeholder rather than
+    // an empty heading or a fabricated tree.
+    if (ebitdaTree.grounded === false) {
+        return (
+            <section
+                className="print-section print-section--break-before print-ebitda"
+                data-render-mode="placeholder"
+            >
+                <h2>EBITDA Impact Model</h2>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+                    {ebitdaTree.insufficientDataReason ??
+                        "We couldn't establish this company's revenue model from public information, so the financial breakdown is omitted. sc0red Services only presents financials it can ground in evidence."}
+                </p>
+            </section>
+        )
+    }
+
     return (
         <section
             className="print-section print-section--break-before print-ebitda"

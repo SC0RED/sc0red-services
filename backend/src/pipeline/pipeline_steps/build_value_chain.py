@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 
 from src.models.model_company import ValueChainResult, ValueChainStep
 from src.pipeline.pipeline_steps.value_chain_templates import (
-    DEFAULT_TEMPLATE_KEY,
     MODEL_KEYWORDS,
     TEMPLATES,
 )
@@ -25,14 +24,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _resolve_template(business_model: str) -> tuple[str, list[StepTemplate]]:
-    """Match a free-text business_model string to the closest template."""
+def _resolve_template(business_model: str) -> tuple[str, list[StepTemplate]] | None:
+    """Match a free-text business_model string to the closest template.
+
+    Returns ``(template_key, steps)`` for a match, or ``None`` when no keyword in
+    ``MODEL_KEYWORDS`` fires. There is deliberately NO default template — an
+    unmatched model is reported as ungrounded by the builder, not fabricated as
+    SaaS. See the value-chain-grounding spec.
+    """
     lower = business_model.lower()
     for keywords, key in MODEL_KEYWORDS:
         for keyword in keywords:
             if keyword in lower:
                 return key, TEMPLATES[key]
-    return DEFAULT_TEMPLATE_KEY, TEMPLATES[DEFAULT_TEMPLATE_KEY]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -72,8 +77,27 @@ def build_programmatic_value_chain(
 
     Each step is linked to relevant risk categories (static mapping) and
     opportunities (matched by strategic_category + value_lever).
+
+    When ``business_model`` matches no template, returns an ungrounded placeholder
+    result instead of fabricating a default SaaS value chain (value-chain-grounding
+    spec).
     """
-    template_key, template_steps = _resolve_template(profile.business_model)
+    resolved = _resolve_template(profile.business_model)
+    if resolved is None:
+        shown = profile.business_model.strip() or "unknown"
+        reason = (
+            f"Could not determine how this business operates from available public "
+            f"sources (business model: {shown!r}). The operating model is mapped only "
+            f"when it can be grounded in evidence."
+        )
+        logger.info(
+            "Value chain ungrounded: business_model=%r matched no template — "
+            "returning insufficient-data placeholder",
+            profile.business_model,
+        )
+        return ValueChainResult(grounded=False, insufficient_data_reason=reason)
+
+    template_key, template_steps = resolved
 
     logger.info(
         "Building value chain: business_model=%s template=%s steps=%d",
@@ -104,4 +128,13 @@ def build_programmatic_value_chain(
         f"and {support_count} support activities based on {template_key} model"
     )
 
-    return ValueChainResult(steps=steps, summary=summary)
+    provenance_basis = (
+        f"Operating model derived from a {template_key} template "
+        f"(matched on business model {profile.business_model!r})."
+    )
+
+    return ValueChainResult(
+        steps=steps,
+        summary=summary,
+        provenance_basis=provenance_basis,
+    )

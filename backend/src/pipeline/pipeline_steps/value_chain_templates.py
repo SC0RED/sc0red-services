@@ -377,4 +377,8 @@ MODEL_KEYWORDS: list[tuple[list[str], str]] = [
     (["financial", "fintech", "banking", "insurance", "asset management"], "financial_services"),
 ]
 
-DEFAULT_TEMPLATE_KEY = "saas"
+# There is deliberately NO default template. A business model that matches no
+# keyword is reported as ungrounded by build_programmatic_value_chain (which
+# renders the "insufficient public data" placeholder) rather than silently
+# fabricated as a SaaS value chain. See the value-chain-grounding and
+# report-data-integrity specs.

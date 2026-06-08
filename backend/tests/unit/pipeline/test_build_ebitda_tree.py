@@ -2,7 +2,11 @@
 
 from src.models.model_company import CompanyProfile, EbitdaNode, EbitdaTreeResult
 from src.pipeline.pipeline_steps._ebitda_confidence import _compute_confidence
-from src.pipeline.pipeline_steps._ebitda_templates import _resolve_template
+from src.pipeline.pipeline_steps._ebitda_templates import (
+    _SIZE_TO_EMPLOYEES,
+    _estimate_revenue,
+    _resolve_template,
+)
 from src.pipeline.pipeline_steps.build_ebitda_tree import (
     _format_currency,
     _format_range,
@@ -13,43 +17,42 @@ from src.pipeline.pipeline_steps.build_ebitda_tree import (
 class TestResolveTemplate:
     def test_saas_keywords(self):
         for model in ["SaaS", "B2B SaaS", "Enterprise SaaS", "Software as a Service"]:
-            template, matched = _resolve_template(model)
+            template = _resolve_template(model)
+            assert template is not None
             assert template.label == "SaaS"
-            assert matched is True
 
     def test_services_keywords(self):
         for model in ["Professional Services", "Consulting", "Advisory", "Digital Agency"]:
-            template, matched = _resolve_template(model)
+            template = _resolve_template(model)
+            assert template is not None
             assert template.label == "Professional Services"
-            assert matched is True
 
     def test_ecommerce_keywords(self):
         for model in ["E-commerce", "ecommerce", "Marketplace", "DTC Retail"]:
-            template, matched = _resolve_template(model)
+            template = _resolve_template(model)
+            assert template is not None
             assert template.label == "E-commerce / Marketplace"
-            assert matched is True
 
     def test_manufacturing_keywords(self):
         for model in ["Manufacturing", "Industrial Products", "Hardware Manufacturer"]:
-            template, matched = _resolve_template(model)
+            template = _resolve_template(model)
+            assert template is not None
             assert template.label == "Manufacturing"
-            assert matched is True
 
     def test_financial_services_keywords(self):
         for model in ["Financial Services", "Fintech", "Banking Platform", "Insurance"]:
-            template, matched = _resolve_template(model)
+            template = _resolve_template(model)
+            assert template is not None
             assert template.label == "Financial Services"
-            assert matched is True
 
-    def test_unknown_defaults_to_saas_and_reports_unmatched(self):
-        template, matched = _resolve_template("Unknown Business Type")
-        assert template.label == "SaaS"
-        assert matched is False
+    def test_unknown_returns_none_no_silent_default(self):
+        # No keyword match must NOT fall back to SaaS — it returns None so the
+        # builder renders the insufficient-data placeholder.
+        assert _resolve_template("Unknown Business Type") is None
+        assert _resolve_template("debt settlement") is None
 
-    def test_empty_defaults_to_saas_and_reports_unmatched(self):
-        template, matched = _resolve_template("")
-        assert template.label == "SaaS"
-        assert matched is False
+    def test_empty_returns_none(self):
+        assert _resolve_template("") is None
 
 
 class TestFormatCurrency:
@@ -142,9 +145,7 @@ class TestBuildProgrammaticEbitdaTree:
         assert "Subscriptions" not in child_labels
 
     def test_manufacturing_template(self):
-        result = build_programmatic_ebitda_tree(
-            self._make_profile(business_model="Manufacturing")
-        )
+        result = build_programmatic_ebitda_tree(self._make_profile(business_model="Manufacturing"))
         cogs_node = result.nodes[1]
         child_labels = [c.label for c in cogs_node.children]
         assert "Raw Materials" in child_labels
@@ -152,7 +153,9 @@ class TestBuildProgrammaticEbitdaTree:
     def test_children_have_percentage_of_parent(self):
         result = build_programmatic_ebitda_tree(self._make_profile())
         revenue_node = result.nodes[0]
-        total_pct = sum(c.percentage_of_parent for c in revenue_node.children if c.percentage_of_parent)
+        total_pct = sum(
+            c.percentage_of_parent for c in revenue_node.children if c.percentage_of_parent
+        )
         assert total_pct == 100
 
     def test_revenue_estimate_is_populated(self):
@@ -167,9 +170,7 @@ class TestBuildProgrammaticEbitdaTree:
         assert "margin" in result.ebitda_estimate
 
     def test_summary_contains_company_name(self):
-        result = build_programmatic_ebitda_tree(
-            self._make_profile(company_name="Acme Corp")
-        )
+        result = build_programmatic_ebitda_tree(self._make_profile(company_name="Acme Corp"))
         assert "Acme Corp" in result.summary
 
     def test_summary_contains_business_model(self):
@@ -182,9 +183,7 @@ class TestBuildProgrammaticEbitdaTree:
             assert "$" in node.value_range
 
     def test_startup_has_smaller_revenue_than_enterprise(self):
-        startup = build_programmatic_ebitda_tree(
-            self._make_profile(company_size="Startup <50")
-        )
+        startup = build_programmatic_ebitda_tree(self._make_profile(company_size="Startup <50"))
         enterprise = build_programmatic_ebitda_tree(
             self._make_profile(company_size="Enterprise 5000+")
         )
@@ -291,27 +290,22 @@ class TestConfidenceComputation:
         # The size side should declare itself defaulted
         assert "default" in revenue_node.confidence_basis.lower()
 
-    def test_medium_when_size_matches_but_template_defaults(self):
-        # Unknown business model falls back to the SaaS default template.
+    def test_unmatched_template_yields_placeholder_not_low_confidence(self):
+        # Unknown business model no longer falls back to a low-confidence SaaS
+        # tree — it short-circuits to the insufficient-data placeholder, so no
+        # node is ever tagged "low" via a defaulted template.
         result = build_programmatic_ebitda_tree(
             _make_profile(business_model="Holographic Bunny Sales", company_size="Startup <50")
         )
-        revenue_node = result.nodes[0]
-        assert revenue_node.confidence_level == "medium"
-        assert revenue_node.confidence_basis is not None
-        assert "Startup <50" in revenue_node.confidence_basis
-        # The template side should declare itself defaulted
-        assert "default" in revenue_node.confidence_basis.lower()
+        assert result.grounded is False
+        assert result.nodes == []
 
-    def test_low_when_both_inputs_default(self):
+    def test_unmatched_template_with_unknown_size_is_placeholder(self):
         result = build_programmatic_ebitda_tree(
             _make_profile(business_model="Holographic Bunny Sales", company_size="")
         )
-        revenue_node = result.nodes[0]
-        assert revenue_node.confidence_level == "low"
-        assert revenue_node.confidence_basis is not None
-        # Both sides declare themselves defaulted
-        assert revenue_node.confidence_basis.lower().count("default") >= 2
+        assert result.grounded is False
+        assert result.nodes == []
 
     def test_revenue_confidence_propagates_to_revenue_children(self):
         result = build_programmatic_ebitda_tree(
@@ -359,9 +353,10 @@ class TestConfidenceComputation:
         assert ebitda.confidence_basis is None
 
     def test_revenue_basis_phrasing(self):
+        template = _resolve_template("SaaS")
+        assert template is not None
         level, basis = _compute_confidence(
-            template=_resolve_template("SaaS")[0],
-            template_matched=True,
+            template=template,
             company_size="Mid-market 200-1000",
             size_matched=True,
             node_kind="revenue",
@@ -372,9 +367,10 @@ class TestConfidenceComputation:
         assert basis.startswith("Revenue derived from")
 
     def test_cost_basis_phrasing(self):
+        template = _resolve_template("SaaS")
+        assert template is not None
         level, basis = _compute_confidence(
-            template=_resolve_template("SaaS")[0],
-            template_matched=True,
+            template=template,
             company_size="Mid-market 200-1000",
             size_matched=True,
             node_kind="cost",
@@ -384,7 +380,7 @@ class TestConfidenceComputation:
         assert "industry-benchmark" in basis
 
     def test_all_size_brackets_count_as_resolved(self):
-        """Every documented company_size bracket should produce high confidence with a known model."""
+        """Every documented company_size bracket is high confidence with a known model."""
         for size in [
             "Startup <50",
             "Small 50-200",
@@ -454,3 +450,79 @@ class TestEbitdaNodeBackwardCompat:
         result = EbitdaTreeResult.model_validate(old_tree)
         assert result.nodes[0].confidence_level is None
         assert result.nodes[0].confidence_basis is None
+
+    def test_old_tree_without_grounded_field_defaults_to_grounded(self):
+        """Records stored before grounded/insufficient_data existed are grounded."""
+        old_tree = {
+            "summary": "Acme Corp operates ...",
+            "revenue_estimate": "$5M-$20M",
+            "ebitda_estimate": "$1M-$5M (15-25% margin)",
+            "nodes": [],
+        }
+        result = EbitdaTreeResult.model_validate(old_tree)
+        assert result.grounded is True
+        assert result.insufficient_data_reason is None
+
+
+class TestInsufficientDataPlaceholder:
+    """No-match business models render the placeholder, never a fabricated SaaS P&L."""
+
+    def _profile(self, business_model: str) -> CompanyProfile:
+        return CompanyProfile(
+            company_name="Century Support Services, LLC",
+            industry="Consumer Finance",
+            business_model=business_model,
+            company_size="Mid-market 200-1000",
+        )
+
+    def test_debt_settlement_renders_placeholder_not_saas(self):
+        # The exact customer-reported case.
+        result = build_programmatic_ebitda_tree(self._profile("debt settlement"))
+        assert result.grounded is False
+        assert result.insufficient_data_reason is not None
+        assert result.nodes == []
+        # No fabricated SaaS figures anywhere in the result.
+        assert result.revenue_estimate == ""
+        assert result.ebitda_estimate == ""
+        assert "SaaS" not in result.summary
+        assert "Subscriptions" not in result.summary
+
+    def test_unknown_sentinel_renders_placeholder(self):
+        result = build_programmatic_ebitda_tree(self._profile("unknown"))
+        assert result.grounded is False
+        assert result.nodes == []
+
+    def test_matched_model_is_grounded(self):
+        result = build_programmatic_ebitda_tree(self._profile("B2B SaaS"))
+        assert result.grounded is True
+        assert result.insufficient_data_reason is None
+        assert len(result.nodes) == 5
+
+
+class TestRevenueRangeWidth:
+    """The revenue range must not compound two independent uncertainty bands."""
+
+    def test_range_ratio_does_not_compound_bands(self):
+        # For every template at a known size, the emitted high/low ratio must not
+        # exceed the larger of the two input bands' own ratios.
+        for model in ["SaaS", "Consulting", "E-commerce", "Manufacturing", "Fintech"]:
+            template = _resolve_template(model)
+            assert template is not None
+            rpe_low, rpe_high = template.revenue_per_employee
+            rpe_ratio = rpe_high / rpe_low
+            for size, (emp_low, emp_high) in _SIZE_TO_EMPLOYEES.items():
+                emp_ratio = emp_high / emp_low
+                low, high, _ = _estimate_revenue(template, size)
+                assert low > 0
+                emitted_ratio = high / low
+                bound = max(emp_ratio, rpe_ratio)
+                assert emitted_ratio <= bound + 1e-6, (
+                    f"{model}/{size}: emitted ratio {emitted_ratio:.2f} exceeds bound {bound:.2f}"
+                )
+
+    def test_saas_midmarket_no_longer_13x_wide(self):
+        # The old formula produced $30M-$400M (~13.3x) for SaaS mid-market.
+        template = _resolve_template("SaaS")
+        assert template is not None
+        low, high, _ = _estimate_revenue(template, "Mid-market 200-1000")
+        assert high / low < 5, f"range still too wide: {low}-{high}"

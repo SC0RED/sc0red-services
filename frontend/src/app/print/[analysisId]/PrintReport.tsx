@@ -118,7 +118,18 @@ export default function PrintReport({ analysis, generatedDate }: PrintReportProp
                 />
             ) : null}
 
-            {analysis.valueChain && analysis.valueChain.steps.length > 0 ? (
+            {analysis.valueChain && analysis.valueChain.grounded === false ? (
+                // Fact-vs-forecast data contract (value-chain-grounding spec):
+                // print an honest placeholder rather than omitting silently or
+                // fabricating a default operating model.
+                <section className="print-section print-section--break-before" data-render-mode="placeholder">
+                    <h2>Value Chain Analysis</h2>
+                    <p style={{ fontSize: '0.9rem', lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+                        {analysis.valueChain.insufficientDataReason ??
+                            "We couldn't determine how this business operates from available public sources, so the value chain is omitted. sc0red Services maps operations only when the underlying model is clear."}
+                    </p>
+                </section>
+            ) : analysis.valueChain && analysis.valueChain.steps.length > 0 ? (
                 <PrintValueChainList
                     valueChain={analysis.valueChain}
                     sortedOpportunities={sortedOpportunities}

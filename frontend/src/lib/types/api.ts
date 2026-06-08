@@ -48,6 +48,13 @@ export interface EbitdaTree {
     revenueEstimate?: string
     ebitdaEstimate?: string
     businessModelSummary?: string
+    /** Fact-vs-forecast data contract (report-data-integrity spec). `false`
+     *  when the business model matched no template and the financials could
+     *  not be grounded — `treeData` is empty and `insufficientDataReason`
+     *  explains why, so the UI renders a placeholder instead of a fabricated
+     *  P&L. Legacy records (and all grounded trees) are `true`. */
+    grounded?: boolean
+    insufficientDataReason?: string | null
 }
 
 export interface ValueChainStep {
@@ -62,6 +69,15 @@ export interface ValueChainStep {
 export interface ValueChain {
     steps: ValueChainStep[]
     summary: string
+    /** Fact-vs-forecast data contract (value-chain-grounding spec). `false`
+     *  when the business model matched no template and the operating model
+     *  could not be grounded — `steps` is empty and `insufficientDataReason`
+     *  explains why. Legacy records (and all grounded chains) are `true`. */
+    grounded?: boolean
+    insufficientDataReason?: string | null
+    /** Which matched template a grounded chain was built from (debug/audit
+     *  parity with the EBITDA tree's confidence basis). */
+    provenanceBasis?: string | null
 }
 
 export interface DocumentInfo {

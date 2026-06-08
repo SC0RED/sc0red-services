@@ -61,10 +61,32 @@ class TestBuildProgrammaticValueChain:
         labels = [s.label for s in result.steps]
         assert "Onboarding & KYC" in labels
 
-    def test_unknown_defaults_to_saas(self):
+    def test_unknown_model_renders_placeholder_not_saas(self):
         result = build_programmatic_value_chain(_make_profile("Unknown Model"))
+        assert result.grounded is False
+        assert result.insufficient_data_reason is not None
+        assert result.steps == []
+
+    def test_debt_settlement_renders_placeholder(self):
+        # The customer-reported case: a debt-settlement firm must not be mapped
+        # as a SaaS value chain.
+        result = build_programmatic_value_chain(_make_profile("debt settlement"))
+        assert result.grounded is False
+        assert result.steps == []
         labels = [s.label for s in result.steps]
-        assert "Renewal & Expansion" in labels
+        assert "Renewal & Expansion" not in labels
+
+    def test_unknown_sentinel_renders_placeholder(self):
+        result = build_programmatic_value_chain(_make_profile("unknown"))
+        assert result.grounded is False
+        assert result.steps == []
+
+    def test_matched_model_is_grounded_with_provenance(self):
+        result = build_programmatic_value_chain(_make_profile("SaaS"))
+        assert result.grounded is True
+        assert result.insufficient_data_reason is None
+        assert result.provenance_basis is not None
+        assert "saas" in result.provenance_basis
 
     def test_steps_have_risk_categories(self):
         result = build_programmatic_value_chain(_make_profile())
@@ -73,9 +95,7 @@ class TestBuildProgrammaticValueChain:
 
     def test_opportunities_linked_to_steps(self):
         opportunities = _make_opportunities()
-        result = build_programmatic_value_chain(
-            _make_profile(), opportunities=opportunities
-        )
+        result = build_programmatic_value_chain(_make_profile(), opportunities=opportunities)
         # At least one step should have linked opportunities
         all_indices = []
         for step in result.steps:

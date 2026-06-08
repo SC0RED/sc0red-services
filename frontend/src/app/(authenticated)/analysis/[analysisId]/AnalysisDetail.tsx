@@ -14,6 +14,7 @@ import AnalysisOverviewCards from '@/components/analysis/AnalysisOverviewCards'
 import AnalysisSection from '@/components/analysis/AnalysisSection'
 import EbitdaSection from '@/components/analysis/EbitdaSection'
 import FailedAnalysisView from '@/components/analysis/FailedAnalysisView'
+import InsufficientDataPlaceholder from '@/components/analysis/InsufficientDataPlaceholder'
 import StrategyMapSlot from '@/components/analysis/StrategyMapSlot'
 import TopActionsCallout from '@/components/analysis/TopActionsCallout'
 import DeepDiveCTA from '@/components/strategy-map/DeepDiveCTA'
@@ -73,6 +74,16 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
     const [documents, setDocuments] = useState<DocumentInfo[]>(data.documents ?? [])
 
     const reanalyze = useReanalyze({ analysisId, analyzedAt: data.analyzedAt })
+
+    // CTA from an insufficient-data placeholder: bring the reader to the
+    // always-present document-upload widget so they can supply data and
+    // re-analyse. The widget renders unconditionally at `#document-upload`,
+    // so this is never a dead-end link.
+    const scrollToDocumentUpload = useCallback(() => {
+        document
+            .querySelector('[data-testid="analysis-section-document-upload"]')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, [])
 
     const handleDocumentsChange = useCallback(async () => {
         reanalyze.clearError()
@@ -213,19 +224,46 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                     title="EBITDA Impact Model"
                     titleAdornment={<HelpTooltip term="ebitda_tree" />}
                 >
-                    <EbitdaSection ebitdaTree={data.ebitdaTree} opportunities={opportunities} />
+                    {data.ebitdaTree.grounded === false ? (
+                        <InsufficientDataPlaceholder
+                            testId="ebitda-insufficient-data"
+                            heading="Financial model not shown"
+                            body={
+                                data.ebitdaTree.insufficientDataReason ??
+                                "We couldn't establish this company's revenue model from public information, so we've left the financial breakdown out rather than estimate one. sc0red Services only presents financials it can ground in evidence."
+                            }
+                            ctaLabel="Have internal financials? Attach a document and we'll re-analyse."
+                            onCtaClick={scrollToDocumentUpload}
+                        />
+                    ) : (
+                        <EbitdaSection ebitdaTree={data.ebitdaTree} opportunities={opportunities} />
+                    )}
                 </AnalysisSection>
             )}
 
-            {data.valueChain && data.valueChain.steps.length > 0 && (
-                <AnalysisSection id="value-chain" title="Value Chain Analysis">
-                    <ValueChainDiagram
-                        steps={data.valueChain.steps}
-                        opportunities={opportunities}
-                        summary={data.valueChain.summary}
-                    />
-                </AnalysisSection>
-            )}
+            {data.valueChain &&
+                (data.valueChain.grounded === false ? (
+                    <AnalysisSection id="value-chain" title="Value Chain Analysis">
+                        <InsufficientDataPlaceholder
+                            testId="value-chain-insufficient-data"
+                            heading="Operating model not shown"
+                            body={
+                                data.valueChain.insufficientDataReason ??
+                                "We couldn't determine how this business operates from available public sources, so we haven't mapped a value chain. sc0red Services maps operations only when the underlying model is clear."
+                            }
+                            ctaLabel="Attach a document describing the business and we'll re-analyse."
+                            onCtaClick={scrollToDocumentUpload}
+                        />
+                    </AnalysisSection>
+                ) : data.valueChain.steps.length > 0 ? (
+                    <AnalysisSection id="value-chain" title="Value Chain Analysis">
+                        <ValueChainDiagram
+                            steps={data.valueChain.steps}
+                            opportunities={opportunities}
+                            summary={data.valueChain.summary}
+                        />
+                    </AnalysisSection>
+                ) : null)}
 
             {/* Beat 5 — RISK + Beat 6 — OPPORTUNITY EVIDENCE */}
             <AnalysisSection id="risk-breakdown" title="Risk Breakdown">
