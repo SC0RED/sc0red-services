@@ -17,8 +17,11 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, Literal
 
-from src.models.model_company import ValueChainResult, ValueChainStep
-from src.pipeline.pipeline_steps._provenance import confidence_from_provenance
+from src.models.model_company import Citation, ValueChainResult, ValueChainStep
+from src.pipeline.pipeline_steps._provenance import (
+    confidence_from_provenance,
+    reconcile_provenance,
+)
 
 if TYPE_CHECKING:
     from src.models.model_literals import ProvenanceTier
@@ -39,6 +42,7 @@ def _steps(
     provenance: ProvenanceTier,
     confidence: Literal["high", "medium", "low"],
     basis: str,
+    citations: list[Citation],
 ) -> list[ValueChainStep]:
     """Build ValueChainStep objects from researched {label, description} items."""
     steps: list[ValueChainStep] = []
@@ -53,19 +57,25 @@ def _steps(
                 confidence_level=confidence,
                 confidence_basis=basis,
                 provenance=provenance,
+                citations=list(citations),
             )
         )
     return steps
 
 
 def assemble_value_chain(  # noqa: NAMING001  "assemble" is a verb; validator list is partial
-    facts: FinancialResearchFacts, company_name: str
+    facts: FinancialResearchFacts, company_name: str, company_url: str = ""
 ) -> ValueChainResult:
     """Assemble the value chain from the researched operating-model steps.
 
     Returns the insufficient-data placeholder when the research produced no
     operating steps. Confidence is deterministic from the operating-model
     provenance tier (downgraded if the revenue model was judged implausible).
+
+    The operating model is read from the scraped company website rather than a
+    web search, so a ``disclosed`` step is grounded in that site — we attach the
+    company URL as its citation so ``disclosed`` always carries a source, per the
+    fact-provenance-labeling contract.
     """
     operating = facts.operating_steps
     primary_items = operating.get("primary_steps", [])
@@ -80,13 +90,22 @@ def assemble_value_chain(  # noqa: NAMING001  "assemble" is a verb; validator li
         )
 
     # ``provenance`` is schema-required (validated upstream) — direct access.
-    provenance: ProvenanceTier = operating["provenance"]
+    declared: ProvenanceTier = operating["provenance"]
     basis = str(operating.get("basis", ""))
+
+    # A site-grounded ``disclosed`` operating model is sourced from the scraped
+    # company website; attach it as the citation so the tier carries a source.
+    # If we somehow lack a URL, reconcile downgrades the unsourced ``disclosed``
+    # to ``industry_typical`` (same rule as the EBITDA node) rather than emitting
+    # a citation-less ``disclosed`` claim.
+    has_citation = declared == "disclosed" and bool(company_url)
+    provenance: ProvenanceTier = reconcile_provenance(declared, has_citation=has_citation)
     confidence = confidence_from_provenance(provenance, plausible=facts.revenue_model_plausible)
+    citations = [Citation(url=company_url, title="Company website")] if has_citation else []
 
     steps = [
-        *_steps(primary_items, "primary", provenance, confidence, basis),
-        *_steps(support_items, "support", provenance, confidence, basis),
+        *_steps(primary_items, "primary", provenance, confidence, basis, citations),
+        *_steps(support_items, "support", provenance, confidence, basis, citations),
     ]
     primary_count = sum(1 for step in steps if step.category == "primary")
     support_count = len(steps) - primary_count

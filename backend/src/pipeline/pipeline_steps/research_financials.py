@@ -122,11 +122,12 @@ class ResearchFinancials(RequestStep):
         company_name = getattr(profile, "company_name", "") or getattr(
             company_any, "company_name", ""
         )
+        company_url = getattr(company_any, "actual_url", "") or getattr(company_any, "url", "")
         try:
             facts = run_financial_research(
                 self._ai_client_factory,
                 company_name=company_name,
-                url=getattr(company_any, "actual_url", "") or getattr(company_any, "url", ""),
+                url=company_url,
                 industry=getattr(profile, "industry", ""),
                 scraped_text=accessor.get_scraped_text(),
                 document_text=accessor.get_document_text() or "",
@@ -150,5 +151,5 @@ class ResearchFinancials(RequestStep):
 
         return (
             assemble_ebitda_tree(facts, company_name),
-            assemble_value_chain(facts, company_name),
+            assemble_value_chain(facts, company_name, company_url),
         )
