@@ -77,6 +77,47 @@ class TestAssembleValueChain:
         assert len(primary) == 4
         assert len(support) == 1
 
+    def test_disclosed_steps_cite_the_company_website(self):
+        # A site-grounded "disclosed" operating model gets the company URL as its
+        # citation so the tier carries a source (fact-provenance-labeling).
+        facts = _facts(
+            operating_steps={
+                "primary_steps": [{"label": "Enrollment", "description": "Sign up"}],
+                "support_steps": [],
+                "provenance": "disclosed",
+                "basis": "Based on the website's described flow",
+            }
+        )
+        result = assemble_value_chain(facts, "Century", "https://www.centuryss.com/")
+        step = result.steps[0]
+        assert step.provenance == "disclosed"
+        assert step.confidence_level == "high"
+        assert step.citations[0].url == "https://www.centuryss.com/"
+        assert step.citations[0].title == "Company website"
+
+    def test_non_disclosed_steps_have_no_citation(self):
+        # industry_typical fixture → no citation even when a URL is available.
+        result = assemble_value_chain(_facts(), "Century", "https://www.centuryss.com/")
+        assert result.steps[0].provenance == "industry_typical"
+        assert result.steps[0].citations == []
+
+    def test_disclosed_without_url_downgrades_to_industry_typical(self):
+        # No URL to cite → an unsourced "disclosed" claim is downgraded rather
+        # than emitted citation-less (same reconcile rule as the EBITDA node).
+        facts = _facts(
+            operating_steps={
+                "primary_steps": [{"label": "Enrollment", "description": "Sign up"}],
+                "support_steps": [],
+                "provenance": "disclosed",
+                "basis": "site flow",
+            }
+        )
+        result = assemble_value_chain(facts, "Century", company_url="")
+        step = result.steps[0]
+        assert step.provenance == "industry_typical"
+        assert step.confidence_level == "medium"
+        assert step.citations == []
+
     def test_steps_carry_provenance_and_confidence(self):
         result = assemble_value_chain(_facts(), "Century")
         step = result.steps[0]

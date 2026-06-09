@@ -268,6 +268,7 @@ export default function AnalysisDetail({ data, analysisId }: { data: AnalysisDat
                             provenance={data.valueChain.steps[0]?.provenance}
                             confidenceLevel={data.valueChain.steps[0]?.confidence_level}
                             basis={data.valueChain.provenanceBasis}
+                            citations={data.valueChain.steps[0]?.citations}
                         />
                     </AnalysisSection>
                 ) : null)}
