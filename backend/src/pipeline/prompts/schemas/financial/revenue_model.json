@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "properties": {
+    "revenue_model": {
+      "type": "string"
+    },
+    "fee_structure": {
+      "type": "string"
+    },
+    "provenance": {
+      "type": "string",
+      "enum": [
+        "disclosed",
+        "industry_typical",
+        "derived_estimate"
+      ]
+    },
+    "basis": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "revenue_model",
+    "fee_structure",
+    "provenance",
+    "basis"
+  ],
+  "additionalProperties": false
+}

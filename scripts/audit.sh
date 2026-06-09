@@ -196,6 +196,33 @@ else
     pass "No duplicate tierColors definitions"
 fi
 
+# ── Data integrity: no silent default template on fact-bearing builders ──────
+section "Data integrity: fact-bearing builders render a placeholder, not a default"
+
+# Fact-bearing report sections (EBITDA tree, value chain) must never assert a
+# fabricated existing fact (the customer-reported SaaS-default bug). FORWARD
+# invariant: every fact-surface assembler — `assemble_*` (which builds the
+# EBITDA tree / value chain from researched facts) — MUST carry an explicit
+# insufficient-data branch (grounded=False) so an ungroundable input renders the
+# placeholder, not a fabricated surface. Stated as a required-branch check so it
+# can't be bypassed by renaming a helper or a constant.
+# See openspec specs: report-data-integrity, value-chain-grounding, ebitda-tree-confidence.
+MISSING_GROUNDED_BRANCH=""
+while IFS= read -r f; do
+    grep -Eq "def assemble_(ebitda_tree|value_chain)" "$f" 2>/dev/null || continue
+    if ! grep -Eq "grounded[[:space:]]*=[[:space:]]*False|insufficient_data" "$f" 2>/dev/null; then
+        MISSING_GROUNDED_BRANCH="$MISSING_GROUNDED_BRANCH $f"
+    fi
+done < <(find backend/src/pipeline/pipeline_steps -name '*.py' -not -name 'test_*' 2>/dev/null)
+
+if [ -n "$MISSING_GROUNDED_BRANCH" ]; then
+    for f in $MISSING_GROUNDED_BRANCH; do
+        fail "$f has a fact-surface assembler with no insufficient-data (grounded=False) branch — fact-bearing sections must render a placeholder on no-match, not fabricate one"
+    done
+else
+    pass "All fact-bearing assemblers have an insufficient-data placeholder branch"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 if [ "$ERRORS" -gt 0 ]; then

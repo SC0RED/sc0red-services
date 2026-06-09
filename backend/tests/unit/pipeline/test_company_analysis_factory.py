@@ -5,12 +5,11 @@ from unittest.mock import MagicMock
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnalysisFactory
-from src.pipeline.pipeline_steps.compute_ebitda_tree import ComputeEbitdaTree
-from src.pipeline.pipeline_steps.compute_value_chain import ComputeValueChain
 from src.pipeline.pipeline_steps.detail_opportunities import DetailOpportunities
 from src.pipeline.pipeline_steps.generate_strategy_map import GenerateStrategyMap
 from src.pipeline.pipeline_steps.parallel_profile_risk import ParallelProfileRiskAndIdeation
 from src.pipeline.pipeline_steps.persist_results import PersistResults
+from src.pipeline.pipeline_steps.research_financials import ResearchFinancials
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
 
 
@@ -25,32 +24,27 @@ class TestCompanyAnalysisFactory:
             request_id="r-1",
         )
 
-    def test_get_pipeline_returns_seven_steps(self):
-        # Per `redesign-strategy-map` Phase 4 the strategy-map step is
-        # back in the auto-pipeline (and the on-demand SQS worker that
-        # ran it in isolation was deleted in the same change). The
-        # pipeline runs every analysis end-to-end through to a persisted
-        # strategy map without any user-driven trigger.
+    def test_get_pipeline_returns_six_steps(self):
+        # The ai-researched-financials change folded ComputeEbitdaTree +
+        # ComputeValueChain into a single ResearchFinancials step, so the
+        # pipeline is now six steps (was seven).
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
-        assert len(pipeline) == 7
+        assert len(pipeline) == 6
         assert isinstance(pipeline[0], ScrapeAndResolveURL)
         assert isinstance(pipeline[1], ParallelProfileRiskAndIdeation)
         assert isinstance(pipeline[2], DetailOpportunities)
-        assert isinstance(pipeline[3], ComputeEbitdaTree)
-        assert isinstance(pipeline[4], ComputeValueChain)
-        assert isinstance(pipeline[5], GenerateStrategyMap)
-        assert isinstance(pipeline[6], PersistResults)
+        assert isinstance(pipeline[3], ResearchFinancials)
+        assert isinstance(pipeline[4], GenerateStrategyMap)
+        assert isinstance(pipeline[5], PersistResults)
 
-    def test_generate_strategy_map_sits_between_value_chain_and_persist(self):
-        # Order matters: ``GenerateStrategyMap`` consumes the profile,
-        # risk assessment, opportunities, EBITDA tree, and value chain
-        # produced by the upstream steps, then ``PersistResults`` writes
-        # the assembled map to DynamoDB alongside the other artifacts.
+    def test_strategy_map_sits_between_research_and_persist(self):
+        # ``GenerateStrategyMap`` consumes the researched EBITDA tree + value
+        # chain, then ``PersistResults`` writes everything to DynamoDB.
         factory = self._make_factory()
         pipeline = factory.get_pipeline()
-        value_chain_index = next(
-            i for i, step in enumerate(pipeline) if isinstance(step, ComputeValueChain)
+        research_index = next(
+            i for i, step in enumerate(pipeline) if isinstance(step, ResearchFinancials)
         )
         strategy_index = next(
             i for i, step in enumerate(pipeline) if isinstance(step, GenerateStrategyMap)
@@ -58,7 +52,7 @@ class TestCompanyAnalysisFactory:
         persist_index = next(
             i for i, step in enumerate(pipeline) if isinstance(step, PersistResults)
         )
-        assert value_chain_index < strategy_index < persist_index
+        assert research_index < strategy_index < persist_index
 
     def test_build_executor_wires_accessor(self):
         factory = self._make_factory()
@@ -68,7 +62,7 @@ class TestCompanyAnalysisFactory:
 
     def test_execute_pipeline_runs_all_steps(self):
         factory = self._make_factory()
-        mock_steps = [MagicMock() for _ in range(7)]
+        mock_steps = [MagicMock() for _ in range(6)]
         for i, step in enumerate(mock_steps):
             step.step_name.return_value = f"Step{i}"
         factory.get_pipeline = MagicMock(return_value=mock_steps)
@@ -89,5 +83,5 @@ class TestCompanyAnalysisFactory:
             assessment_repo=assessment_repo,
         )
         pipeline = factory.get_pipeline()
-        persist_step = pipeline[6]
+        persist_step = pipeline[5]
         assert isinstance(persist_step, PersistResults)
