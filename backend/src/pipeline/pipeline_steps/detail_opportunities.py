@@ -19,6 +19,7 @@ from src.pipeline.pipeline_steps.detail_opportunity import (
     DETAIL_SCHEMA,
     DETAIL_SYSTEM_PROMPT,
     build_detail_prompt,
+    sanitize_implementation_steps,
 )
 from src.pipeline.pipeline_steps.generate_opportunities import build_opportunity
 from src.pipeline.step_timer import StepTimer
@@ -126,6 +127,9 @@ class DetailOpportunities(RequestStep):
                 "strategic_category": ideation["strategic_category"],
                 "impact_rating": ideation["impact_rating"],
                 **detail_data,
+                # Strip any leaked field-name/value tokens the model appended to
+                # the steps array (override must follow ``**detail_data``).
+                "implementation_steps": sanitize_implementation_steps(detail_data),
             }
             all_opportunities.append(build_opportunity(merged))
 
