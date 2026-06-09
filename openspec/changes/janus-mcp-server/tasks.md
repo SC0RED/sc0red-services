@@ -158,9 +158,9 @@ Chosen the **LWA-layer-on-zip** approach (Option 2a), not the full Docker `Docke
 Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invokes.
 
 ### Read-tool drift fix (Bug E)
-- [ ] 2.6.1 Update `get_opportunities` formatter in `tools_read.py` to surface `investment_value_usd`, `roi_estimate_pct`, `timeline`, `strategic_category`.
-- [ ] 2.6.2 Update `get_ebitda_tree` formatter to surface `confidence_level`, `confidence_basis`, `linked_opportunity_indices`.
-- [ ] 2.6.3 Update `get_value_chain` formatter to surface `opportunity_indices` (or resolve them to opportunity titles inline for paper-readable output).
+- [x] 2.6.1 `get_opportunities` now surfaces the full Opportunity contract — `strategic_category`, `timeline`, `investment_range` + `investment_value_usd`, `roi_estimate` + `roi_estimate_pct`, `implementation_steps` (extracted to `_format_opportunities` in `_tools_read_helpers.py` to stay under the 400-line limit).
+- [x] 2.6.2 `get_ebitda_tree` resolves each node's `linked_opportunity_indices` to opportunity titles ("addresses: …"). (`confidence_level`/`confidence_basis` were already surfaced for the revenue node by the provenance work.)
+- [x] 2.6.3 `get_value_chain` — **fixed the `name`→`label` bug** (every step had rendered as "?"; the test fixtures wrongly used `name` too, masking it), and now surfaces `risk_categories`, `opportunity_indices` (resolved to titles), per-step `confidence_level`/`confidence_basis`, and the chain-level `provenance_basis`.
 
 ### Missing tools (Bug F + proposal gap)
 - [ ] 2.6.4 Add `get_strategy_map(analysis_id: str)` tool in `tools_read.py`. Render the BSC table as Markdown (four perspective rows, theme columns, per-objective title + first-sentence definition + linked opportunity titles).
