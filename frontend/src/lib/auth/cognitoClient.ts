@@ -80,6 +80,50 @@ export function signInWithCognito(email: string, password: string): Promise<Cogn
 }
 
 /**
+ * Refresh the Cognito session using a refresh token (server-safe).
+ *
+ * Used by the NextAuth `jwt` callback to mint a fresh idToken before the
+ * 1-hour idToken expiry, so server-side `backendFetch` calls never send an
+ * expired token. Uses a direct Cognito `InitiateAuth` (`REFRESH_TOKEN_AUTH`)
+ * call via `fetch` rather than `amazon-cognito-identity-js`, because this runs
+ * in the Node `jwt` callback (no browser storage/runtime). The app client is a
+ * public SPA client (no secret), so no `SECRET_HASH` is required. The refresh
+ * token itself is unchanged by this flow and remains valid for its 30-day life.
+ *
+ * The region is derived from the pool id (`<region>_xxxxx`) so no separate
+ * region env var is needed.
+ */
+export async function refreshCognitoSession(
+    refreshToken: string
+): Promise<{ idToken: string; accessToken: string }> {
+    const region = poolData.UserPoolId.split('_')[0]
+    const response = await fetch(`https://cognito-idp.${region}.amazonaws.com/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-amz-json-1.1',
+            'X-Amz-Target': 'AWSCognitoIdentityProviderService.InitiateAuth',
+        },
+        body: JSON.stringify({
+            AuthFlow: 'REFRESH_TOKEN_AUTH',
+            ClientId: poolData.ClientId,
+            AuthParameters: { REFRESH_TOKEN: refreshToken },
+        }),
+    })
+    if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(`Cognito refresh failed (${response.status}): ${detail}`)
+    }
+    const data = (await response.json()) as {
+        AuthenticationResult?: { IdToken?: string; AccessToken?: string }
+    }
+    const result = data.AuthenticationResult
+    if (!result?.IdToken || !result?.AccessToken) {
+        throw new Error('Cognito refresh returned no tokens in AuthenticationResult')
+    }
+    return { idToken: result.IdToken, accessToken: result.AccessToken }
+}
+
+/**
  * Complete the NEW_PASSWORD_REQUIRED challenge for invited users.
  */
 export function completeNewPasswordChallenge(

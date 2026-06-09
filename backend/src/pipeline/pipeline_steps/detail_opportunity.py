@@ -16,6 +16,58 @@ DETAIL_SCHEMA: dict[str, Any] = load_schema("detail")
 
 _DETAIL_TEMPLATE = load_template("detail")
 
+# The detail schema's ``implementation_steps`` is an unbounded string array, and
+# the model occasionally malforms its output by appending the OTHER detail
+# fields' names and values as extra "steps" (a structured-output glitch — it
+# passes schema validation because they are all strings). Those leaked items
+# duplicate the sibling fields, which is how we identify and strip them.
+_DETAIL_FIELD_NAMES = frozenset(
+    {
+        "implementation_steps",
+        "timeline",
+        "investment_range",
+        "roi_estimate",
+        "investment_value_usd",
+        "roi_estimate_pct",
+    }
+)
+_MIN_STEP_LENGTH = 3  # drops punctuation/empty leaks like ","
+_MAX_STEPS = 5  # the prompt asks for 3; a small cap backstops any residual leak
+
+
+def sanitize_implementation_steps(detail_data: dict[str, Any]) -> list[str]:
+    """Strip leaked field-name/value tokens from ``implementation_steps``.
+
+    Drops array items that (a) match a detail field name, (b) duplicate a sibling
+    field's value in the same response (e.g. the leaked ``roi_estimate`` prose or
+    ``timeline`` string), or (c) are empty/punctuation-only — then caps to
+    ``_MAX_STEPS``. Real steps lead the array, so the cap preserves them.
+    """
+    raw = detail_data.get("implementation_steps", [])
+    if not isinstance(raw, list):
+        return []
+
+    # Only the STRING sibling fields can be echoed verbatim into the steps array;
+    # the numeric fields' NAMES are already covered by ``_DETAIL_FIELD_NAMES``, and
+    # stringifying their values (incl. ``None`` → "None") would add noise.
+    leaked_values = {
+        str(detail_data.get(field, "")).strip()
+        for field in ("timeline", "investment_range", "roi_estimate")
+    }
+    leaked_values.discard("")
+
+    cleaned: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if len(text) < _MIN_STEP_LENGTH:
+            continue
+        if text in _DETAIL_FIELD_NAMES or text in leaked_values:
+            continue
+        cleaned.append(text)
+    return cleaned[:_MAX_STEPS]
+
 
 def _build_company_context(profile_dict: dict[str, Any]) -> str:
     """Build a focused company context string from profile fields."""

@@ -2,6 +2,13 @@
 
 from typing import Literal
 
+# Provenance tier for a researched FACT (see the fact-provenance-labeling
+# capability). Ordered most-grounded → least-grounded:
+#   - "disclosed": backed by a citable source (site, uploaded doc, or web search)
+#   - "industry_typical": the model's general world knowledge for the company type
+#   - "derived_estimate": computed/inferred with no citable source
+ProvenanceTier = Literal["disclosed", "industry_typical", "derived_estimate"]
+
 RiskScopeLiterals = Literal[
     "competitive_displacement",
     "technology_obsolescence",

@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "properties": {
+    "primary_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "description"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "support_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "description"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "provenance": {
+      "type": "string",
+      "enum": [
+        "disclosed",
+        "industry_typical",
+        "derived_estimate"
+      ]
+    },
+    "basis": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "primary_steps",
+    "support_steps",
+    "provenance",
+    "basis"
+  ],
+  "additionalProperties": false
+}

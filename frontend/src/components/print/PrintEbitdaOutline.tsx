@@ -37,6 +37,24 @@ interface PrintEbitdaOutlineProps {
  */
 
 export default function PrintEbitdaOutline({ ebitdaTree, sortedOpportunities }: PrintEbitdaOutlineProps) {
+    // Fact-vs-forecast data contract (report-data-integrity spec): when the
+    // financials could not be grounded, print an honest placeholder rather than
+    // an empty heading or a fabricated tree.
+    if (ebitdaTree.grounded === false) {
+        return (
+            <section
+                className="print-section print-section--break-before print-ebitda"
+                data-render-mode="placeholder"
+            >
+                <h2>EBITDA Impact Model</h2>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+                    {ebitdaTree.insufficientDataReason ??
+                        "We couldn't establish this company's revenue model from public information, so the financial breakdown is omitted. sc0red Services only presents financials it can ground in evidence."}
+                </p>
+            </section>
+        )
+    }
+
     return (
         <section
             className="print-section print-section--break-before print-ebitda"
@@ -73,8 +91,32 @@ export default function PrintEbitdaOutline({ ebitdaTree, sortedOpportunities }: 
                 ) : null}
             </div>
 
+            {renderProvenanceLine(ebitdaTree.treeData.find((node) => node.type === 'revenue'))}
+
             <OutlineRender treeData={ebitdaTree.treeData} sortedOpportunities={sortedOpportunities} />
         </section>
+    )
+}
+
+// ── Provenance line (the "show your work" labelling for the PDF) ──────
+
+const _TIER_LABEL: Record<string, string> = {
+    disclosed: 'Reported',
+    industry_typical: 'Industry estimate',
+    derived_estimate: 'Estimated',
+}
+
+function renderProvenanceLine(revenueNode: EbitdaNode | undefined) {
+    if (!revenueNode || (!revenueNode.provenance && !revenueNode.confidence_basis)) return null
+    const tier = revenueNode.provenance ? _TIER_LABEL[revenueNode.provenance] : null
+    const citation = (revenueNode.citations ?? [])[0]
+    return (
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+            {tier ? <strong>{tier}</strong> : null}
+            {revenueNode.confidence_level ? <span> · {revenueNode.confidence_level} confidence</span> : null}
+            {revenueNode.confidence_basis ? <span> — {revenueNode.confidence_basis}</span> : null}
+            {citation ? <span> · Source: {citation.title || citation.url}</span> : null}
+        </p>
     )
 }
 

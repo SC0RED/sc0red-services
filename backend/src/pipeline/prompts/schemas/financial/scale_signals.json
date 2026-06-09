@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "employee_estimate": {
+      "type": "string"
+    },
+    "basis": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "signals",
+    "employee_estimate",
+    "basis"
+  ],
+  "additionalProperties": false
+}

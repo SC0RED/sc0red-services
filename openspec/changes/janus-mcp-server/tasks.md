@@ -2,23 +2,40 @@
 
 This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Apr 14, 2026); a Phase A tactical scout on the deployed staging Lambda (Jun 3, 2026) uncovered a blocking architectural bug. PR 2.5 (new, below) is the next required step before any further customer-facing work can ship.
 
-## Where we left off
+## Where we left off (updated 2026-06-05)
 
 - ✅ PR 1 (OAuth Provider + Infrastructure) — shipped
 - ✅ PR 2 (Read Tools, 12 tools) — shipped
-- ✅ Phase A tactical scout — complete. Findings captured in `design.md` Decision 8 + the bug table below.
-- 🛑 **PR 2.5 (Runtime infrastructure fix, Mangum → LWA)** — identified, not started. Blocks everything downstream.
-- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — blocked on PR 2.5.
-- 🛑 Original PR 3–7 — blocked on PR 2.5 + PR 2.6.
+- ✅ Phase A tactical scout — complete.
+- ✅ **PR 2.5 (runtime fix) — CORE DONE + VALIDATED on staging.** The hard bug is fixed:
+  - Bug B (run-once 502) → fixed via AWS Lambda Web Adapter (#379). Warm-invoke verified: 3 consecutive 200s (was 200→502→502).
+  - Bug C (OAuth issuer = dead DNS) → fixed via SSM indirection (#382, after #380's circular-dep attempt was reverted in #381). Verified: metadata issuer = the real Function URL.
+  - DCR (`POST /register` 201) + `GET /authorize` 302 → working. Server boots, survives warm invokes, serves OAuth metadata.
+- ✅ **Bug G FIXED (#383)** — NextAuth now refreshes the Cognito idToken (refresh-token rotation in the jwt callback; tracked in change `fix-cognito-token-refresh`). The "Allow Access → Token expired/500" failure is gone.
+- ✅ **Bug I FIXED (#384)** — once the token passed through, "Allow Access" hit a 502: the frontend `/api/oauth/approve` route double-encoded the body (`JSON.stringify` on top of `backendFetch`'s own stringify), so the backend's `json.loads(event["body"])` got a string and `handle_oauth_approve` threw `AttributeError: 'str' object has no attribute 'get'`. Fixed by passing the object. Inspector now gets through consent → callback → token exchange.
+- ✅ **Bug J FIXED (#386, deployed)** — `/mcp` transport had no CORS, so the browser inspector's authed preflight 401'd with no `Access-Control-Allow-Origin` → `TypeError: Failed to fetch`. Fixed with an outermost `CORSMiddleware` (`src/mcp/cors.py`). Verified live post-deploy: `OPTIONS /mcp` → 200 + ACAO + `authorization` allowed; methods `GET, POST, DELETE, OPTIONS`.
+- ✅ **Bug K FIXED (#387, deployed)** — `/token` 500: our `Stored*` dataclasses omitted `expires_at`, which the SDK token handler (`token.py:145`, no None guard) + bearer-auth backend read → `AttributeError`. Added + populated `expires_at` on all three (auth code / refresh / access) from the stored `ttl` / JWT `exp`. Token exchange now succeeds (inspector got a token and reached the `/mcp` connection).
+- 🔴 **Bug L — `/mcp` POST → 421 "Invalid Host header" (current blocker).** With tokens working, the inspector's authed POST to `/mcp` is rejected by the SDK transport-security layer. FastMCP's default bind host is `127.0.0.1`, so with `transport_security` unset it AUTO-ENABLES DNS-rebinding protection with `allowed_hosts=["127.0.0.1:*","localhost:*","[::1]:*"]`. Under LWA the request reaches uvicorn with the Function URL Host (`…lambda-url.us-east-1.on.aws`), not in that localhost list → 421. Only surfaces now because it sits *behind* `RequireAuthMiddleware` (the earlier 401s). **Fix in progress** (`fix/mcp-transport-host-validation`): pass `transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)` — the protection guards localhost dev servers from browser DNS-rebinding and is inapplicable/redundant for a public TLS endpoint gated by an OAuth bearer token.
+- 🟡 **Bug H (non-blocking) — `GET /.well-known/oauth-protected-resource/mcp` → 404.** The inspector probes the RFC 9728 *path-suffixed* metadata location; we serve only the bare `/.well-known/oauth-protected-resource` (200). The inspector falls back to the bare path and proceeds, so this does NOT block the round-trip — it's a spec-compliance refinement for PR 2.6.
+- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — the read-tool drift fixes are independent and could proceed.
+- 🛑 Original PR 3–7 — downstream.
+
+## Resume here — next session
+
+The MCP runtime is healthy and the OAuth dance now issues tokens (Bugs G + I + J + K fixed). The remaining blocker is **Bug L** (421 Invalid Host header on the authed `/mcp` POST). Tackle in this order:
+1. **Bug L** — ship `fix/mcp-transport-host-validation` (disable DNS-rebinding protection). **Requires an MCP Lambda redeploy** (CDK). Then re-run the inspector round-trip → should complete (authed `/mcp` connects → tools list → `list_analyses`) → close PR 2.5's end-to-end validation.
+2. **PR 2.6** — read-tool drift (Bug E), `get_strategy_map`/`list_scans` (Bug F), tool-name rebrand, minimal Connected Apps UI, RFC 9728 path-suffixed metadata (Bug H — non-blocking). The drift fixes don't depend on Bug K.
+   - **RFC 8707 resource indicators (deferred from the Bug K PR's arch review).** The SDK base models carry `resource: str | None = None` on `AuthorizationCode`/`AccessToken`; our `Stored*` dataclasses omit it. No current 500 (the installed SDK's token handler doesn't read `.resource` on our objects), so it's a forward-compat gap. Do it properly here: thread `resource` through `authorize()` → `save_authorization_code` → `load_authorization_code` (and access tokens) rather than adding an always-`None` dead field.
 
 ## State of staging environment (live, in AWS)
 
 - **Account:** the sc0red-services AWS account (NOT 148256362911 — that's a different project's dev account).
 - **Region:** `us-east-1`.
 - **Lambda:** `sc0red-services-mcp-staging`. Active, last modified ~mid-May 2026 (rename-driven redeploy).
-- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — **DO NOT SHARE** with anyone. It serves exactly 1 request per cold-started container, then 502s, per Decision 8.
-- **Signing-key secret:** `sc0red-services-mcp-signing-key-staging` was populated 2026-06-03 with a freshly-generated RSA-2048 keypair via `aws secretsmanager put-secret-value`. The CDK construct still creates it empty — see Bug X.
-- **Status overall:** broken at runtime, do not promote to production until PR 2.5 ships.
+- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — internal only. As of #382 it survives warm invocations (3× 200) and serves OAuth metadata with issuer = the Function URL.
+- **Signing-key secret:** `sc0red-services-mcp-signing-key-staging` populated 2026-06-03 with an RSA-2048 keypair. The CDK construct still creates it empty (Bug X — partial fix shipped, full auto-gen deferred).
+- **Issuer URL:** resolved at cold start from SSM param `/sc0red-services/mcp/staging/issuer-url` (= the Function URL). #382.
+- **Status overall:** MCP runtime HEALTHY (run-once + issuer fixed). End-to-end OAuth still blocked by Bug G (frontend idToken refresh). Not yet promoted beyond staging.
 
 ## Bugs uncovered during Phase A — by status
 
@@ -30,7 +47,11 @@ This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Ap
 | D | `CONSENT_BASE_URL` env var on staging Lambda points at the *development* Amplify URL | ⚠ Latent — fix in PR 2.6 | Lambda env var configuration |
 | E | Read-tool formatters miss new Opportunity / EBITDA / value-chain fields shipped by `redesign-analysis-visuals` | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
 | F | No `get_strategy_map` tool exists; strategy map invisible to AI assistant users | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
-| X | `MCPConstruct` creates the signing-key secret empty; deploy succeeds but Lambda crashes silently at first invocation. Fail-late pattern, violates CLAUDE.md fail-fast standard. | 🛠 Systemic — fix during PR 2.5 | `infrastructure/stacks/mcp_construct.py` |
+| X | `MCPConstruct` creates the signing-key secret empty; deploy succeeds but Lambda crashes silently at first invocation. | ~ Partial: fail-fast error message added (#379). Full auto-gen via CDK custom resource still deferred. | `infrastructure/stacks/mcp_construct.py` |
+| G | **NextAuth does not refresh the Cognito idToken.** The server-read `getToken().idToken` goes stale after the 1h Cognito idToken expiry, so `backendFetch` (incl. the OAuth consent `/api/oauth/approve`) sends an expired token → API auth middleware returns `401 {"error":"Token expired"}`. **Reproduces right after re-login** (re-login may not rotate the JWT-stored idToken). Blocks the mcp-inspector OAuth round-trip AND any long-lived authenticated frontend session. | 🔴 BLOCKS end-to-end OAuth — frontend-auth bug, NOT MCP. Verified 2026-06-05. | `frontend/src/lib/api/serverToken.ts` (getBackendToken / idToken) + `frontend/src/lib/auth/authOptions.ts` (no refresh callback) |
+| H | MCP server doesn't serve RFC 9728 Protected Resource Metadata — `GET /.well-known/oauth-protected-resource/mcp → 404`. mcp-inspector fell back fine, but stricter clients may require it. | ⚠ Minor — PR 2.6 | MCP server routes |
+
+**Bugs B + C: FIXED + validated. A: partially fixed. D: re-assessed as non-bug (consent URL already points at the correct env frontend). E/F/H: PR 2.6. G: the active blocker for end-to-end OAuth — frontend, not MCP.**
 
 ## To re-establish context when resuming
 
@@ -82,39 +103,36 @@ PR 3–7                   — Original plan resumes. Write tools → destructiv
 
 ---
 
-## PR 2.5: Runtime infrastructure fix — Mangum → Lambda Web Adapter (NEW)
+## PR 2.5: Fix the run-once crash — cheap stateless config first, LWA only if needed (NEW)
 
-Source of truth: `design.md` Decision 8.
+Source of truth: `design.md` Decision 8 (revised 2026-06-03 — cheap config fix before any rewrite).
 
-### Spike + design validation
-- [ ] 2.5.1 Spike: stand up FastMCP + AWS Lambda Web Adapter locally in a Docker container. Validate the streamable-HTTP transport works end-to-end (OAuth metadata, DCR, PKCE, tool invocation) **across two sequential requests** without hitting the run-once guard. Time-box to 4 hrs; if it doesn't work, escalate to Decision-8 Option B (move off Lambda to ECS Fargate).
-- [ ] 2.5.2 If spike succeeds, update `design.md` Decision 8 with the validated LWA configuration: LWA layer version, port, env vars, Dockerfile shape, IAM patterns.
+### Step 1 — cheap config fix (ATTEMPTED — FAILED on staging 2026-06-04)
+- [x] 2.5.1 `backend/src/mcp/mcp_handler.py` — added `stateless_http=True, json_response=True`. (PR #378, merged.)
+- [x] 2.5.2 Lint + typecheck passed.
+- [x] 2.5.3 Deployed to staging via the development backend-deploy workflow. **RESULT: FAILED.** 1st request 200, 2nd + 3rd request **502** with the same `StreamableHTTPSessionManager .run() can only be called once` trace (via `mangum/adapter.py` lifespan). `stateless_http` changes session *handling* but `.run()` still lives in the ASGI lifespan that Mangum re-invokes per request → guard still trips.
+- [~] 2.5.4 Inspector round-trip — n/a, server still 502s on warm invokes.
+- [x] 2.5.5 **Decision gate: Step 1 failed → proceed to Step 2 (LWA).**
 
-### Infrastructure
-- [ ] 2.5.3 Rewrite `infrastructure/stacks/mcp_construct.py` to use Docker-based Lambda (`DockerImageFunction` or `PythonFunction` with container image). Attach the official AWS LWA layer.
-- [ ] 2.5.4 Add `backend/Dockerfile.mcp` that bundles `src/mcp` + dependencies + LWA at the right paths.
-- [ ] 2.5.5 Set the LWA env-var contract (`AWS_LWA_PORT`, `AWS_LWA_READINESS_CHECK_PATH=/health`, etc.).
+### Step 1 — ship
+- [x] 2.5.6 Shipped as PR #378 (merged to development; the merge is what deployed it to staging for the test). The stateless flags are KEPT — still correct posture under LWA, just insufficient alone.
 
-### Application layer
-- [ ] 2.5.6 Replace `backend/src/mcp/mcp_handler.py`'s Mangum `handle_event` with a uvicorn boot block (`uvicorn.run(_app, host="0.0.0.0", port=int(os.environ["AWS_LWA_PORT"]))`). Keep the rest of the file (signing-key load, FastMCP setup, OAuth provider, tool registrations) unchanged.
-- [ ] 2.5.7 Add a `/health` route to the FastMCP app for LWA's readiness probe.
+---
 
-### Bug X — fail-fast on empty signing key
-- [ ] 2.5.8 Update `MCPConstruct` to either (a) generate the RSA key pair via a custom resource at CDK synth and populate the secret, or (b) fail synth if the secret is empty for non-development environments. Matches the CLAUDE.md fail-fast contract.
+### Step 2 — LWA via Lambda layer (IN PROGRESS — branch `fix/mcp-lambda-web-adapter`)
+Chosen the **LWA-layer-on-zip** approach (Option 2a), not the full Docker `DockerImageFunction` rewrite — lighter, keeps the existing `pip install . -t /asset-output` bundling.
+- [~] 2.5.7 Local Docker spike — skipped (can't iterate Docker/AWS from the dev sandbox; validation is the staging deploy). Will pivot to Docker (2b) only if the layer approach fails on staging.
+- [x] 2.5.8 `infrastructure/stacks/mcp_construct.py` — added the architecture-aware LWA layer (`LambdaAdapterLayerX86`/`Arm64` v28), `handler="run_mcp.sh"`, env vars `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap`, `AWS_LWA_PORT=8080`, `AWS_LWA_READINESS_CHECK_PATH=/health`. (Layer approach — no `DockerImageFunction`.)
+- [x] 2.5.9 `backend/run_mcp.sh` (new, +x) execs `uvicorn src.mcp.mcp_handler:app`. `infrastructure/stacks/lambda_factory.py` bundling copies it to the package root + chmods it (`pip install .` doesn't include loose files).
+- [x] 2.5.10 `mcp_handler.py` — removed Mangum `handle_event`, exposed `app = mcp.streamable_http_app()`, added a `/health` `custom_route` for the LWA readiness probe.
+- [~] 2.5.11 Local twice-in-succession test — NOT added: the bug only manifests under Mangum's per-invocation lifespan re-run; a local ASGI test (TestClient/uvicorn) runs lifespan once and can't reproduce it. The meaningful test is the staging warm-invoke (2.5.12).
+- [x] 2.5.12 Deploy to staging — **LWA VALIDATED 2026-06-04.** Warm-invoke test passed: 3 consecutive requests all returned HTTP 200 (was 200→502→502 under Mangum). Server boots, survives warm invocations, and serves real OAuth discovery metadata. The run-once bug (Bug B) is fixed. (Inspector round-trip still pending Bug C fix — see below.)
+- [x] 2.5.13 Architecture-reviewer on the diff — 0 CRITICAL, safe to commit. Addressed before PR: removed dead `mangum` dep (pyproject + uv.lock), fixed the stale "via Mangum" docstring in `mcp_construct.py`. **Deferred (with note):** the shared-bundling separation-of-concerns — `build_bundling_options()` copies `run_mcp.sh` into all 3 Lambda packages. Kept as a documented temporary coupling until staging validates the LWA-via-layer approach; if validated, move the copy to an MCP-specific bundling variant before merge; if it fails and we pivot to Docker (2b), the bundling is reworked anyway.
 
-### Bug C / D — issuer + consent URL hardening
-- [ ] 2.5.9 Add `MCP_ISSUER_URL` to the Lambda env-var contract; default to the Function URL when no custom domain is configured. (Custom domain itself is out of scope here — defer to v1.1.)
-- [ ] 2.5.10 Per-environment `CONSENT_BASE_URL` wiring in CDK — staging Lambda points at staging frontend, not the dev Amplify URL.
-
-### Tests + verification
-- [ ] 2.5.11 Add the integration test that would have caught Bug B: call the OAuth metadata endpoint **twice in succession** against a locally-running container; both must return 200.
-- [ ] 2.5.12 Add a CDK unit test that the signing-key secret is non-empty after synth (Bug X regression guard).
-- [ ] 2.5.13 Deploy to staging, repeat the Phase A scout — cold-start curl, warm-invoke curl, then a full OAuth + tool round-trip via `npx @modelcontextprotocol/inspector`. All must pass; warm-invoke 200 is the critical one.
-
-### Quality gates + ship
-- [ ] 2.5.14 `uv run ruff check src/`, `uv run pyright src/`, `uv run pytest tests/mcp/ -q` — all green.
-- [ ] 2.5.15 Architecture-reviewer agent on the diff. Special focus: CDK construct change blast radius, new Dockerfile, IAM permissions for LWA.
-- [ ] 2.5.16 Conventional commit + PR. Body must reference `design.md` Decision 8 + this section.
+### Deferred to follow-up (orthogonal to the run-once fix)
+- [~] 2.5.14 Bug X — **partial fix in this branch:** added an actionable fail-fast error in `_load_signing_keys` when the secret is empty (instead of an opaque KeyError). **Full fix still deferred:** auto-generate the RSA pair via a CDK custom resource so deploy populates the secret.
+- [x] 2.5.15 Bug C — **FIXED via SSM indirection** (chosen over custom domain). First attempt (#380, `add_environment("MCP_ISSUER_URL", function_url.url)`) failed at deploy with a CFN circular dependency (Lambda env → FunctionUrl → Lambda); reverted in #381. Durable fix (`fix/mcp-issuer-url-via-ssm`): `MCPConstruct` stores `function_url.url` in an SSM parameter (`/sc0red-services/mcp/{env}/issuer-url`); the Lambda's env carries only the static parameter NAME (a literal string — no resource reference, no cycle); the handler reads the parameter at cold start to set the issuer. IAM grant uses a **constructed string ARN** (not `param.grant_read`) so the execution role doesn't reference the SSM resource either (that would re-introduce role → param → FunctionUrl → Lambda). Dependency graph verified acyclic: Lambda is a leaf; FunctionUrl → Lambda; SSMParam → FunctionUrl; role policy → string ARN. Validation = staging deploy (synth must NOT report a circular dependency) + the mcp-inspector OAuth round-trip.
+- [~] 2.5.16 Bug D — **re-assessed: not a functional bug.** `CONSENT_BASE_URL` IS set by the construct to the environment's frontend (dev Amplify URL for staging). Since the CDK `staging` env IS the `development` git branch / `dev.services.sc0red.ai` frontend, the consent redirect already points at the correct environment. The only imperfection is amplifyapp-URL vs custom-domain — the same cosmetic call accepted for `FRONTEND_BASE_URL` in the rename migration. The bogus handler *default* (never reached when deployed) was cleaned up alongside Bug C. No further action.
 
 ## PR 2.6: Quick wins polish — drift fix + missing tool + rebrand + minimal UI (NEW)
 

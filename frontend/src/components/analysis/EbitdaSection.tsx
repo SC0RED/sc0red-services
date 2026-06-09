@@ -1,6 +1,7 @@
 'use client'
 
 import AnalysisLegend from '@/components/analysis/AnalysisLegend'
+import ProvenanceCaption from '@/components/analysis/ProvenanceCaption'
 import EbitdaTree from '@/components/EbitdaTree'
 import type { EbitdaNode, EbitdaTree as EbitdaTreeData, Opportunity } from '@/lib/types/api'
 
@@ -43,6 +44,9 @@ function treeHasLinkedOpportunities(nodes: EbitdaNode[]): boolean {
  */
 export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSectionProps) {
     const showOpportunityLinkLegend = treeHasLinkedOpportunities(ebitdaTree.treeData)
+    // The revenue node carries the headline figure's provenance/confidence/basis
+    // + any citation — the "show your work" labelling for the estimate.
+    const revenueNode = ebitdaTree.treeData.find((node) => node.type === 'revenue')
     return (
         <div className="analysis-section-spacing">
             {/* Section heading + help tooltip live at the page level via
@@ -62,6 +66,16 @@ export default function EbitdaSection({ ebitdaTree, opportunities }: EbitdaSecti
                     <span className="badge badge-blue">EBITDA: {ebitdaTree.ebitdaEstimate}</span>
                 )}
             </div>
+
+            {revenueNode && (
+                <ProvenanceCaption
+                    testId="ebitda-provenance"
+                    provenance={revenueNode.provenance}
+                    confidenceLevel={revenueNode.confidence_level}
+                    basis={revenueNode.confidence_basis}
+                    citations={revenueNode.citations}
+                />
+            )}
 
             {ebitdaTree.businessModelSummary && (
                 <p

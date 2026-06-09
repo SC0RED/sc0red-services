@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "properties": {
+    "cogs_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "pct": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "pct"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opex_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "pct": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "pct"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "provenance": {
+      "type": "string",
+      "enum": [
+        "disclosed",
+        "industry_typical",
+        "derived_estimate"
+      ]
+    },
+    "basis": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "cogs_items",
+    "opex_items",
+    "provenance",
+    "basis"
+  ],
+  "additionalProperties": false
+}

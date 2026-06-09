@@ -336,11 +336,29 @@ Rationale: OAuth tokens need custom claims (client_id, scope) and different life
 
 Rationale: Read operations are cheap (DynamoDB queries). Write operations (scans) incur AI API costs ($0.10-0.50 per scan). Rate limits prevent runaway AI agents from burning through credits. Limits enforced in tool handlers before forwarding to backend.
 
-### 8. MCP transport — switch from Mangum to AWS Lambda Web Adapter (supersedes Decision 2)
+### 8. MCP transport — fix the run-once crash (revised 2026-06-03: test stateless config before any rewrite)
 
-**Status:** Decision captured 2026-06-03 during Phase A tactical scout. Implementation deferred — see `tasks.md` "Resume here" section.
+**Status:** Decision captured 2026-06-03 during Phase A tactical scout; **revised the same day** after researching the MCP-on-Lambda ecosystem. The original "rewrite to LWA" decision is now the *fallback*, not the first move — see the revision note immediately below.
 
-**Decision:** Replace the Mangum-based Lambda integration with AWS Lambda Web Adapter (LWA). LWA proxies HTTP between the Lambda Function URL and a real uvicorn server running inside the Lambda container. Mangum (chosen in Decision 2) is architecturally incompatible with the MCP SDK's streamable-HTTP transport when run on Lambda.
+**REVISION (2026-06-03) — try the cheap config fix first.** Research into the run-once crash (see Sources at the end of this decision) found that the MCP-on-Lambda ecosystem consistently fixes it with two FastMCP constructor flags, NOT necessarily an LWA rewrite:
+
+- `stateless_http=True` — disables the `Mcp-Session-Id` session negotiation and the persistent session task group. The run-once guard trips because the *current* handler runs in default **stateful** mode, where `StreamableHTTPSessionManager.run()` lives in the ASGI lifespan and Mangum re-invokes it per request. Stateless mode removes that persistent-session lifecycle.
+- `json_response=True` — returns plain `application/json` instead of SSE, which works with Lambda's buffered response model (no response-streaming infra needed).
+
+The current `backend/src/mcp/mcp_handler.py` sets **neither** (`FastMCP(name=..., auth_server_provider=..., auth=...)`, default stateful) — which is very likely the entire cause of Bug B. Both flags are confirmed valid in the installed SDK (`Settings.model_fields` includes `stateless_http` + `json_response`).
+
+**Revised plan — cheap → expensive:**
+
+1. **Step 1 (cheap, ~3 lines, no infra change):** add `stateless_http=True, json_response=True` to the `FastMCP(...)` call, keep Mangum, deploy to staging, hit the Function URL **twice in succession** + run a real tool call via `mcp-inspector`. If warm-invoke survives → **done; the LWA rewrite is unnecessary.**
+2. **Step 2 (fallback, only if Step 1 still 502s on the second request):** the full LWA rewrite described below.
+
+The asymmetry justifies testing cheap first: Step 1 is minutes (handler diff + staging deploy); Step 2 is ~1 day (Dockerfile + CDK `DockerImageFunction` rewrite). No source *definitively* confirms `stateless_http=True` resolves the run-once guard **under Mangum specifically** (the known-good guides pair it with LWA), so Step 1 is a genuine experiment — but a cheap one, isolated to a single 3-line change so the result is unambiguous.
+
+**Sources:** hidekazu-konishi "MCP Server on AWS Lambda Complete Guide" (LWA + stateless_http + json_response); agno issue #5334 (exact same run-once error, root cause = Mangum re-running lifespan; closed stale, no documented fix); MCP Python SDK issue #756 (stateless mode behaviour).
+
+---
+
+**Fallback decision (Step 2 — only if Step 1 fails):** Replace the Mangum-based Lambda integration with AWS Lambda Web Adapter (LWA). LWA proxies HTTP between the Lambda Function URL and a real uvicorn server running inside the Lambda container, so the ASGI lifespan runs once per cold start (like a real server) rather than per invocation.
 
 **Why (the discovery chain):**
 

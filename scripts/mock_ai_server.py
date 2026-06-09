@@ -583,6 +583,59 @@ _MOCK_RESPONSES: dict[str, object] = {
             },
         ],
     },
+    # ── ResearchFinancials decomposed DAG (ai-researched-financials) ──────────
+    "fin_company_type": {"company_type": "B2B SaaS - Testing", "basis": "mock site"},
+    "fin_revenue_model": {
+        "revenue_model": "Subscription SaaS",
+        "fee_structure": "Annual per-seat subscription",
+        "provenance": "industry_typical",
+        "basis": "mock",
+    },
+    "fin_disclosed_figures": {"found": False, "figures": []},
+    "fin_scale_signals": {
+        "signals": ["~300 staff", "enterprise clients"],
+        "employee_estimate": "~300",
+        "basis": "mock",
+    },
+    "fin_revenue_mix": {
+        "streams": [
+            {"label": "Subscriptions", "pct": 85},
+            {"label": "Professional Services", "pct": 15},
+        ],
+        "provenance": "industry_typical",
+        "basis": "mock",
+    },
+    "fin_margin_band": {
+        "gross_margin_low": 70,
+        "gross_margin_high": 85,
+        "ebitda_margin_low": 15,
+        "ebitda_margin_high": 35,
+        "provenance": "industry_typical",
+        "basis": "mock",
+    },
+    "fin_revenue_range": {
+        "revenue_low_usd": 30000000,
+        "revenue_high_usd": 80000000,
+        "provenance": "derived_estimate",
+        "basis": "mock: ~300 staff x rev/head",
+    },
+    "fin_cost_drivers": {
+        "cogs_items": [{"label": "Cloud Infrastructure", "pct": 60}, {"label": "Support", "pct": 40}],
+        "opex_items": [{"label": "Sales & Marketing", "pct": 55}, {"label": "G&A", "pct": 45}],
+        "provenance": "industry_typical",
+        "basis": "mock",
+    },
+    "fin_operating_steps": {
+        "primary_steps": [
+            {"label": "Lead Generation", "description": "Attract prospects"},
+            {"label": "Sales", "description": "Convert to customers"},
+            {"label": "Onboarding", "description": "Activate customers"},
+        ],
+        "support_steps": [{"label": "Engineering", "description": "Build the platform"}],
+        "provenance": "industry_typical",
+        "basis": "mock",
+    },
+    "fin_verify": {"plausible": True, "reason": "matches mock site"},
 }
 
 # Category keywords used to dispatch ideation responses
@@ -644,6 +697,23 @@ def _detect_step(body: dict) -> str:
         for key in ("actual_url", "company_name"):
             if key in props:
                 return key
+
+        # ResearchFinancials decomposed DAG — each question has a unique prop.
+        fin_keys = {
+            "company_type": "fin_company_type",
+            "fee_structure": "fin_revenue_model",
+            "figures": "fin_disclosed_figures",
+            "employee_estimate": "fin_scale_signals",
+            "streams": "fin_revenue_mix",
+            "gross_margin_low": "fin_margin_band",
+            "revenue_low_usd": "fin_revenue_range",
+            "cogs_items": "fin_cost_drivers",
+            "primary_steps": "fin_operating_steps",
+            "plausible": "fin_verify",
+        }
+        for prop, response_key in fin_keys.items():
+            if prop in props:
+                return response_key
 
         # Risk batches
         if "risk_scores" in props:
