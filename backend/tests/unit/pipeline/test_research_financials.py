@@ -43,10 +43,15 @@ def _make_step(*, opportunities: list[Opportunity] | None = None) -> tuple[Any, 
     step = rf.ResearchFinancials(ai_client_factory=MagicMock())
     accessor = MagicMock()
     company = accessor.company
-    company.company_name = "Century Support Services, LLC"
+    # Mirror production: the Company record's name is not populated at this
+    # pipeline stage — the extracted profile carries it.
+    company.company_name = ""
     company.actual_url = "https://centuryss.com"
     company.url = "https://centuryss.com"
-    company.profile = MagicMock(industry="Consumer debt settlement")
+    company.profile = MagicMock(
+        industry="Consumer debt settlement",
+        company_name="Century Support Services, LLC",
+    )
     company.opportunity_result = MagicMock(opportunities=opportunities or [])
     accessor.get_scraped_text.return_value = "debt relief content"
     accessor.get_document_text.return_value = None
@@ -70,6 +75,20 @@ class TestResearchFinancials:
         assert ebitda.nodes[1].linked_opportunity_indices == [0]  # cost node, Cost Side opp
         step.request_executor.mark_question_complete.assert_any_call("generate_ebitda_tree")
         step.request_executor.mark_question_complete.assert_any_call("compute_value_chain")
+
+    def test_company_name_comes_from_profile(self):
+        # Regression: the name lives on the profile at this stage; it must reach
+        # the research prompts + the assembled summaries (no nameless captions).
+        step, accessor = _make_step()
+        with patch.object(
+            rf, "run_financial_research", return_value=_facts(plausible=True)
+        ) as research:
+            step.execute()
+        assert research.call_args.kwargs["company_name"] == "Century Support Services, LLC"
+        ebitda = accessor.set_ebitda_tree.call_args[0][0]
+        value_chain = accessor.set_value_chain.call_args[0][0]
+        assert "Century Support Services, LLC" in ebitda.summary
+        assert "Century Support Services, LLC" in value_chain.summary
 
     def test_implausible_model_renders_placeholders(self):
         step, accessor = _make_step()

@@ -115,10 +115,17 @@ class ResearchFinancials(RequestStep):
     ) -> tuple[EbitdaTreeResult, ValueChainResult]:
         """Run research + assembly with soft-fail to the placeholder floor."""
         company_any = cast("object", company)
+        # The extracted profile carries the company name at this pipeline stage;
+        # the Company record's own ``company_name`` is not populated until persist.
+        # Prefer the profile name (fall back to the record) so the research
+        # prompts and the assembled summaries are not left nameless.
+        company_name = getattr(profile, "company_name", "") or getattr(
+            company_any, "company_name", ""
+        )
         try:
             facts = run_financial_research(
                 self._ai_client_factory,
-                company_name=getattr(company_any, "company_name", ""),
+                company_name=company_name,
                 url=getattr(company_any, "actual_url", "") or getattr(company_any, "url", ""),
                 industry=getattr(profile, "industry", ""),
                 scraped_text=accessor.get_scraped_text(),
@@ -141,7 +148,6 @@ class ResearchFinancials(RequestStep):
                 ValueChainResult(grounded=False, insufficient_data_reason=_VALUE_CHAIN_UNCONFIRMED),
             )
 
-        company_name = getattr(company_any, "company_name", "")
         return (
             assemble_ebitda_tree(facts, company_name),
             assemble_value_chain(facts, company_name),
