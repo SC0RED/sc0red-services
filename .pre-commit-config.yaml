@@ -175,10 +175,13 @@ repos:
         stages: [pre-push]
         always_run: true
 
-      # Dependency vulnerability check
+      # Dependency vulnerability check. Calls the Makefile `security-deps`
+      # target so the --ignore-vuln list lives in exactly ONE place and the
+      # hook can't drift from CI (which runs `make security`). Do not inline
+      # pip-audit flags here — add ignores in the Makefile target instead.
       - id: pip-audit
         name: Check dependency vulnerabilities
-        entry: bash -c 'cd backend && .venv/bin/pip-audit'
+        entry: bash -c 'make security-deps'
         language: system
         stages: [pre-push]
         pass_filenames: false

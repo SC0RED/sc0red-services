@@ -1,46 +1,38 @@
-"""Programmatic EBITDA tree builder — replaces the AI-generated EBITDA call.
+"""EBITDA tree assembler — builds the P&L tree from researched financial facts.
 
-Builds a P&L decomposition tree deterministically from the company profile,
-using industry benchmarks and business-model-specific templates. This eliminates
-a ~27s AI call from the pipeline's critical path.
+Replaces the old industry-template builder: instead of keyword-matching a company
+to a hardcoded P&L, this assembles the tree from ``FinancialResearchFacts``
+produced by the decomposed research DAG (``_financial_research``). Each node
+carries a provenance tier, a deterministic confidence level derived from that
+tier, and any web-search citations — see the ``decomposed-financial-research``,
+``fact-provenance-labeling``, and ``ebitda-tree-confidence`` capabilities.
 
-Inputs: CompanyProfile (business_model, company_size, company_name, industry)
-Output: EbitdaTreeResult (summary, revenue_estimate, ebitda_estimate, nested nodes)
-
-The static template data and the input-matching helpers
-(``_resolve_template``, ``_estimate_revenue``) live in ``_ebitda_templates.py``.
-The derivation-provenance label (``_compute_confidence``) lives in
-``_ebitda_confidence.py``. Both are split out to keep this file under the
-400-line module-size limit; everything is private (``_``-prefixed) so the
-public surface of ``pipeline_steps`` is unchanged.
+When the facts can't support a grounded tree (invalid range, or the caller's
+plausibility gate failed), the report falls to the "insufficient public data"
+placeholder per ``report-data-integrity``.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Literal
+import re
+from typing import TYPE_CHECKING, Any, Literal
 
-from src.models.model_company import EbitdaNode, EbitdaTreeResult
-from src.pipeline.pipeline_steps._ebitda_confidence import _compute_confidence
-from src.pipeline.pipeline_steps._ebitda_templates import (
-    _estimate_revenue,
-    _resolve_template,
+from src.models.model_company import Citation, EbitdaNode, EbitdaTreeResult
+from src.pipeline.pipeline_steps._provenance import (
+    confidence_from_provenance,
+    reconcile_provenance,
 )
 
 if TYPE_CHECKING:
-    from src.models.model_company import CompanyProfile
+    from src.models.model_literals import ProvenanceTier
+    from src.pipeline.pipeline_steps._financial_research import FinancialResearchFacts
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Currency formatting helpers
-# ---------------------------------------------------------------------------
 
 _BILLION = 1_000_000_000
 _MILLION = 1_000_000
 _THOUSAND = 1000
-_MAX_PERCENTAGE = 100
 
 
 def _format_currency(amount: int) -> str:
@@ -49,8 +41,7 @@ def _format_currency(amount: int) -> str:
         billions = amount / _BILLION
         return f"${billions:.1f}B" if billions % 1 else f"${int(billions)}B"
     if amount >= _MILLION:
-        millions = amount / _MILLION
-        return f"${int(millions)}M"
+        return f"${int(amount / _MILLION)}M"
     if amount >= _THOUSAND:
         return f"${int(amount / _THOUSAND)}K"
     return f"${amount}"
@@ -61,211 +52,257 @@ def _format_range(low: int, high: int) -> str:
     return f"{_format_currency(low)}-{_format_currency(high)}"
 
 
-def _apply_percentage(low: int, high: int, pct: int) -> tuple[int, int]:
-    """Apply a percentage to a revenue range, returning (low, high) in dollars."""
-    if not 0 <= pct <= _MAX_PERCENTAGE:
-        message = f"Percentage must be 0-100, got {pct}"
-        raise ValueError(message)
-    return int(low * pct / 100), int(high * pct / 100)
+def _clamp_pct(pct: Any) -> int:
+    """Coerce a model-supplied percentage to an int in [0, 100]."""
+    try:
+        value = int(pct)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, value))
 
 
-def _build_child_nodes(
-    items: list[tuple[str, str, int]],
-    parent_id: str,
-    node_type: Literal["revenue", "cost", "margin", "subtotal"],
+def _slug(label: str, fallback: str) -> str:
+    """Derive a stable node id from a free-text label."""
+    slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+    return slug or fallback
+
+
+def _to_citations(web_sources: list[Any]) -> list[Citation]:
+    """Map provider ``WebSearchSource`` objects to ``Citation`` models."""
+    citations: list[Citation] = []
+    for source in web_sources:
+        url = getattr(source, "url", "")
+        if url:
+            citations.append(Citation(url=url, title=getattr(source, "title", None) or ""))
+    return citations
+
+
+def _insufficient_data_result(reason: str) -> EbitdaTreeResult:
+    """Build the ungrounded placeholder result — no fabricated figures."""
+    return EbitdaTreeResult(grounded=False, insufficient_data_reason=reason)
+
+
+def _stream_children(
+    items: list[dict[str, Any]],
     parent_low: int,
     parent_high: int,
-    confidence_level: Literal["high", "medium", "low"] | None,
-    confidence_basis: str | None,
+    node_type: Literal["revenue", "cost"],
+    provenance: ProvenanceTier,
+    confidence: Literal["high", "medium", "low"],
+    basis: str,
+    parent_id: str,
 ) -> list[EbitdaNode]:
-    """Build child EbitdaNode objects for a set of line items.
-
-    ``confidence_level`` and ``confidence_basis`` are propagated to every leaf
-    child as-is — children inherit their parent's provenance signal because the
-    underlying inputs (template + size) are identical.
-    """
+    """Build leaf nodes for a set of researched {label, pct} line items."""
     children: list[EbitdaNode] = []
-    for item_id, label, pct in items:
-        child_low, child_high = _apply_percentage(parent_low, parent_high, pct)
+    for index, item in enumerate(items):
+        pct = _clamp_pct(item.get("pct"))
+        label = str(item.get("label", "Other"))
+        low = int(parent_low * pct / 100)
+        high = int(parent_high * pct / 100)
         children.append(
             EbitdaNode(
-                id=item_id,
+                id=_slug(label, f"{parent_id}_{index}"),
                 label=label,
                 type=node_type,
-                value_range=_format_range(child_low, child_high),
+                value_range=_format_range(low, high),
                 percentage_of_parent=pct,
                 description=f"{label} ({pct}% of {parent_id})",
-                confidence_level=confidence_level,
-                confidence_basis=confidence_basis,
+                confidence_level=confidence,
+                confidence_basis=basis,
+                provenance=provenance,
             )
         )
     return children
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+def assemble_ebitda_tree(  # noqa: NAMING001  "assemble" is a verb; validator list is partial
+    facts: FinancialResearchFacts, company_name: str
+) -> EbitdaTreeResult:
+    """Assemble the EBITDA tree from researched facts, tagging provenance per node.
 
-
-def build_programmatic_ebitda_tree(profile: CompanyProfile) -> EbitdaTreeResult:
-    """Build a complete EBITDA tree from the company profile using industry templates.
-
-    Uses business_model to select a P&L template and company_size to estimate
-    revenue ranges. All values are deterministic — no AI call required.
+    Returns the insufficient-data placeholder when the researched revenue range is
+    missing or invalid. Confidence is deterministic from each node's provenance
+    tier (downgraded if the revenue model was judged implausible).
     """
-    template, template_matched = _resolve_template(profile.business_model)
-    revenue_low, revenue_high, size_matched = _estimate_revenue(template, profile.company_size)
+    revenue_range = facts.revenue_range
+    revenue_low = int(revenue_range.get("revenue_low_usd", 0) or 0)
+    revenue_high = int(revenue_range.get("revenue_high_usd", 0) or 0)
+    if revenue_low <= 0 or revenue_high < revenue_low:
+        return _insufficient_data_result(
+            "Could not establish a reliable revenue figure from public information; "
+            "financials are shown only when they can be grounded in evidence."
+        )
 
-    revenue_confidence_level, revenue_confidence_basis = _compute_confidence(
-        template=template,
-        template_matched=template_matched,
-        company_size=profile.company_size,
-        size_matched=size_matched,
-        node_kind="revenue",
+    # ``revenue_model_plausible`` is always True here — the ResearchFinancials
+    # step renders the placeholder before assembling when it is False. The
+    # ``plausible`` arg is kept as a defensive belt for direct callers.
+    plausible = facts.revenue_model_plausible
+    revenue_citations = _to_citations(facts.citations.get("revenue_range", []))
+    # ``provenance`` is a schema-required field validated upstream by
+    # run_structured_ai_call — access directly (fail-fast). A missing key here is
+    # a contract violation that surfaces as KeyError → the step's placeholder.
+    revenue_prov: ProvenanceTier = reconcile_provenance(
+        revenue_range["provenance"],
+        has_citation=bool(revenue_citations),
     )
-    cost_confidence_level, cost_confidence_basis = _compute_confidence(
-        template=template,
-        template_matched=template_matched,
-        company_size=profile.company_size,
-        size_matched=size_matched,
-        node_kind="cost",
+    revenue_conf = confidence_from_provenance(revenue_prov, plausible=plausible)
+    revenue_basis = str(revenue_range.get("basis", ""))
+
+    mix_prov: ProvenanceTier = facts.revenue_mix["provenance"]
+    mix_conf = confidence_from_provenance(mix_prov, plausible=plausible)
+    cost_prov: ProvenanceTier = facts.cost_drivers["provenance"]
+    cost_conf = confidence_from_provenance(cost_prov, plausible=plausible)
+
+    margins = facts.margins
+    gross_low = _clamp_pct(margins.get("gross_margin_low"))
+    gross_high = _clamp_pct(margins.get("gross_margin_high"))
+    ebitda_low_pct = _clamp_pct(margins.get("ebitda_margin_low"))
+    ebitda_high_pct = _clamp_pct(margins.get("ebitda_margin_high"))
+
+    nodes = _build_nodes(
+        facts=facts,
+        company_name=company_name,
+        revenue_low=revenue_low,
+        revenue_high=revenue_high,
+        margins=(gross_low, gross_high, ebitda_low_pct, ebitda_high_pct),
+        revenue=(revenue_prov, revenue_conf, revenue_basis, revenue_citations),
+        mix=(mix_prov, mix_conf),
+        cost=(cost_prov, cost_conf),
     )
 
+    revenue_estimate = _format_range(revenue_low, revenue_high)
+    ebitda_low = int(revenue_low * ebitda_low_pct / 100)
+    ebitda_high = int(revenue_high * ebitda_high_pct / 100)
+    ebitda_estimate = (
+        f"{_format_range(ebitda_low, ebitda_high)} ({ebitda_low_pct}-{ebitda_high_pct}% margin)"
+    )
+    top_stream = facts.revenue_mix.get("streams", [{}])[0]
+    summary = (
+        f"{company_name} is a {facts.company_type} with a "
+        f"{facts.revenue_model.get('revenue_model', 'n/a')} revenue model. "
+        f"Estimated annual revenue {revenue_estimate}. "
+        f"Primary revenue: {top_stream.get('label', 'n/a')} "
+        f"(~{_clamp_pct(top_stream.get('pct'))}%). Estimated EBITDA {ebitda_estimate}."
+    )
     logger.info(
-        "Building programmatic EBITDA tree: business_model=%s template=%s "
-        "revenue=%s confidence=%s (template_matched=%s size_matched=%s)",
-        profile.business_model,
-        template.label,
-        _format_range(revenue_low, revenue_high),
-        revenue_confidence_level,
-        template_matched,
-        size_matched,
+        "Assembled EBITDA tree: company_type=%s revenue=%s provenance=%s plausible=%s",
+        facts.company_type,
+        revenue_estimate,
+        revenue_prov,
+        plausible,
+    )
+    return EbitdaTreeResult(
+        summary=summary,
+        revenue_estimate=revenue_estimate,
+        ebitda_estimate=ebitda_estimate,
+        nodes=nodes,
+        grounded=True,
     )
 
-    # Derive COGS percentage from gross margin (inverse relationship)
-    cogs_pct_low = 100 - template.gross_margin[1]  # low COGS when high margin
-    cogs_pct_high = 100 - template.gross_margin[0]  # high COGS when low margin
-    cogs_low = int(revenue_low * cogs_pct_low / 100)
-    cogs_high = int(revenue_high * cogs_pct_high / 100)
 
-    # Gross Profit derived directly from gross margin percentages
-    gross_profit_low = int(revenue_low * template.gross_margin[0] / 100)
-    gross_profit_high = int(revenue_high * template.gross_margin[1] / 100)
+def _build_nodes(
+    *,
+    facts: FinancialResearchFacts,
+    company_name: str,
+    revenue_low: int,
+    revenue_high: int,
+    margins: tuple[int, int, int, int],
+    revenue: tuple[ProvenanceTier, Literal["high", "medium", "low"], str, list[Citation]],
+    mix: tuple[ProvenanceTier, Literal["high", "medium", "low"]],
+    cost: tuple[ProvenanceTier, Literal["high", "medium", "low"]],
+) -> list[EbitdaNode]:
+    """Build the five root nodes (revenue, COGS, gross profit, OpEx, EBITDA)."""
+    gross_low, gross_high, ebitda_low_pct, ebitda_high_pct = margins
+    revenue_prov, revenue_conf, revenue_basis, revenue_citations = revenue
+    mix_prov, mix_conf = mix
+    cost_prov, cost_conf = cost
+    cost_basis = str(facts.cost_drivers.get("basis", ""))
 
-    # Derive OpEx percentage from the spread between gross margin and EBITDA margin
-    opex_pct_low = template.gross_margin[0] - template.ebitda_margin[1]
-    opex_pct_high = template.gross_margin[1] - template.ebitda_margin[0]
-    opex_low = int(revenue_low * opex_pct_low / 100)
-    opex_high = int(revenue_high * opex_pct_high / 100)
+    cogs_low = int(revenue_low * (100 - gross_high) / 100)
+    cogs_high = int(revenue_high * (100 - gross_low) / 100)
+    opex_low = int(revenue_low * max(0, gross_low - ebitda_high_pct) / 100)
+    opex_high = int(revenue_high * max(0, gross_high - ebitda_low_pct) / 100)
 
-    # EBITDA
-    ebitda_low = int(revenue_low * template.ebitda_margin[0] / 100)
-    ebitda_high = int(revenue_high * template.ebitda_margin[1] / 100)
-
-    # Build node tree. Leaf nodes (revenue streams, COGS items, OpEx items) carry
-    # the per-kind confidence pair; subtotal/margin rollups (gross profit, EBITDA)
-    # do NOT — they inherit visually via their children's chips, per the
-    # ebitda-tree-confidence spec.
-    revenue_children = _build_child_nodes(
-        template.revenue_streams,
-        "revenue",
-        "revenue",
-        revenue_low,
-        revenue_high,
-        revenue_confidence_level,
-        revenue_confidence_basis,
-    )
     revenue_node = EbitdaNode(
         id="revenue",
         label="Total Revenue",
         type="revenue",
         value_range=_format_range(revenue_low, revenue_high),
-        description=f"Total annual revenue for {profile.company_name}",
-        children=revenue_children,
-        confidence_level=revenue_confidence_level,
-        confidence_basis=revenue_confidence_basis,
-    )
-
-    cogs_children = _build_child_nodes(
-        template.cogs_items,
-        "cogs",
-        "cost",
-        cogs_low,
-        cogs_high,
-        cost_confidence_level,
-        cost_confidence_basis,
+        description=f"Total annual revenue for {company_name}",
+        children=_stream_children(
+            facts.revenue_mix.get("streams", []),
+            revenue_low,
+            revenue_high,
+            "revenue",
+            mix_prov,
+            mix_conf,
+            str(facts.revenue_mix.get("basis", "")),
+            "revenue",
+        ),
+        confidence_level=revenue_conf,
+        confidence_basis=revenue_basis,
+        provenance=revenue_prov,
+        citations=revenue_citations,
     )
     cogs_node = EbitdaNode(
         id="cogs",
         label="Cost of Revenue",
         type="cost",
         value_range=_format_range(cogs_low, cogs_high),
-        description="Direct costs of delivering products and services",
-        children=cogs_children,
-        confidence_level=cost_confidence_level,
-        confidence_basis=cost_confidence_basis,
+        description="Direct costs of delivering the service",
+        children=_stream_children(
+            facts.cost_drivers.get("cogs_items", []),
+            cogs_low,
+            cogs_high,
+            "cost",
+            cost_prov,
+            cost_conf,
+            cost_basis,
+            "cogs",
+        ),
+        confidence_level=cost_conf,
+        confidence_basis=cost_basis,
+        provenance=cost_prov,
     )
-
     gross_profit_node = EbitdaNode(
         id="gross_profit",
         label="Gross Profit",
         type="subtotal",
-        value_range=_format_range(gross_profit_low, gross_profit_high),
-        description=(
-            f"Revenue minus cost of revenue "
-            f"({template.gross_margin[0]}-{template.gross_margin[1]}% margin)"
+        value_range=_format_range(
+            int(revenue_low * gross_low / 100), int(revenue_high * gross_high / 100)
         ),
-    )
-
-    opex_children = _build_child_nodes(
-        template.opex_items,
-        "opex",
-        "cost",
-        opex_low,
-        opex_high,
-        cost_confidence_level,
-        cost_confidence_basis,
+        description=f"Revenue minus cost of revenue ({gross_low}-{gross_high}% margin)",
     )
     opex_node = EbitdaNode(
         id="opex",
         label="Operating Expenses",
         type="cost",
         value_range=_format_range(opex_low, opex_high),
-        description="Total operating expenses excluding COGS",
-        children=opex_children,
-        confidence_level=cost_confidence_level,
-        confidence_basis=cost_confidence_basis,
+        description="Operating expenses excluding COGS",
+        children=_stream_children(
+            facts.cost_drivers.get("opex_items", []),
+            opex_low,
+            opex_high,
+            "cost",
+            cost_prov,
+            cost_conf,
+            cost_basis,
+            "opex",
+        ),
+        confidence_level=cost_conf,
+        confidence_basis=cost_basis,
+        provenance=cost_prov,
     )
-
     ebitda_node = EbitdaNode(
         id="ebitda",
         label="EBITDA",
         type="subtotal",
-        value_range=_format_range(ebitda_low, ebitda_high),
+        value_range=_format_range(
+            int(revenue_low * ebitda_low_pct / 100), int(revenue_high * ebitda_high_pct / 100)
+        ),
         description=(
             f"Earnings before interest, taxes, depreciation and amortisation "
-            f"({template.ebitda_margin[0]}-{template.ebitda_margin[1]}% margin)"
+            f"({ebitda_low_pct}-{ebitda_high_pct}% margin)"
         ),
     )
-
-    revenue_estimate = _format_range(revenue_low, revenue_high)
-    ebitda_estimate = (
-        f"{_format_range(ebitda_low, ebitda_high)} "
-        f"({template.ebitda_margin[0]}-{template.ebitda_margin[1]}% margin)"
-    )
-
-    primary_stream = template.revenue_streams[0][1]
-    summary = (
-        f"{profile.company_name} operates a {template.label} business model "
-        f"with estimated annual revenue of {revenue_estimate}. "
-        f"Primary revenue comes from {primary_stream} "
-        f"(~{template.revenue_streams[0][2]}%). "
-        f"At industry-typical margins, estimated EBITDA is {ebitda_estimate}."
-    )
-
-    return EbitdaTreeResult(
-        summary=summary,
-        revenue_estimate=revenue_estimate,
-        ebitda_estimate=ebitda_estimate,
-        nodes=[revenue_node, cogs_node, gross_profit_node, opex_node, ebitda_node],
-    )
+    return [revenue_node, cogs_node, gross_profit_node, opex_node, ebitda_node]

@@ -127,6 +127,9 @@ class PersistResults(RequestStep):
                 {
                     "steps": [step.model_dump() for step in value_chain.steps],
                     "summary": value_chain.summary,
+                    "grounded": value_chain.grounded,
+                    "insufficient_data_reason": value_chain.insufficient_data_reason,
+                    "provenance_basis": value_chain.provenance_basis,
                 },
             )
 
@@ -140,6 +143,8 @@ class PersistResults(RequestStep):
                     "revenue_estimate": ebitda_tree.revenue_estimate,
                     "ebitda_estimate": ebitda_tree.ebitda_estimate,
                     "business_model_summary": ebitda_tree.summary,
+                    "grounded": ebitda_tree.grounded,
+                    "insufficient_data_reason": ebitda_tree.insufficient_data_reason,
                 },
             )
 

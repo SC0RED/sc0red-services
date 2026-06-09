@@ -25,6 +25,15 @@ export interface Opportunity {
     roi_estimate_pct?: number | null
 }
 
+/** Provenance tier for a researched FACT (fact-provenance-labeling spec). */
+export type ProvenanceTier = 'disclosed' | 'industry_typical' | 'derived_estimate'
+
+/** A source backing a `disclosed` fact (web-search result / site / document). */
+export interface Citation {
+    url: string
+    title?: string
+}
+
 export interface EbitdaNode {
     id: string
     label: string
@@ -35,12 +44,14 @@ export interface EbitdaNode {
     linked_opportunity_indices: number[]
     parent_id?: string | null
     children?: EbitdaNode[]
-    /** Per-node derivation provenance — see `ebitda-tree-confidence`
-     *  capability spec. `null` / undefined for rollup (subtotal/margin) nodes
-     *  and for any record stored before the confidence fields were added; the
-     *  frontend suppresses the chip in those cases (no "unknown" badge). */
+    /** Deterministic confidence + 1-line basis for the node's value (the
+     *  "show your work" labelling). `null`/undefined for rollups and legacy
+     *  records. See `fact-provenance-labeling` + `ebitda-tree-confidence`. */
     confidence_level?: 'high' | 'medium' | 'low' | null
     confidence_basis?: string | null
+    /** Provenance tier + citations for the node's value. */
+    provenance?: ProvenanceTier | null
+    citations?: Citation[]
 }
 
 export interface EbitdaTree {
@@ -48,6 +59,13 @@ export interface EbitdaTree {
     revenueEstimate?: string
     ebitdaEstimate?: string
     businessModelSummary?: string
+    /** Fact-vs-forecast data contract (report-data-integrity spec). `false`
+     *  when the business model matched no template and the financials could
+     *  not be grounded — `treeData` is empty and `insufficientDataReason`
+     *  explains why, so the UI renders a placeholder instead of a fabricated
+     *  P&L. Legacy records (and all grounded trees) are `true`. */
+    grounded?: boolean
+    insufficientDataReason?: string | null
 }
 
 export interface ValueChainStep {
@@ -57,11 +75,26 @@ export interface ValueChainStep {
     category: 'primary' | 'support'
     risk_categories: string[]
     opportunity_indices: number[]
+    /** Researched-step provenance + deterministic confidence (fact-provenance
+     *  -labeling). `null`/undefined for legacy template-built steps. */
+    confidence_level?: 'high' | 'medium' | 'low' | null
+    confidence_basis?: string | null
+    provenance?: ProvenanceTier | null
+    citations?: Citation[]
 }
 
 export interface ValueChain {
     steps: ValueChainStep[]
     summary: string
+    /** Fact-vs-forecast data contract (value-chain-grounding spec). `false`
+     *  when the business model matched no template and the operating model
+     *  could not be grounded — `steps` is empty and `insufficientDataReason`
+     *  explains why. Legacy records (and all grounded chains) are `true`. */
+    grounded?: boolean
+    insufficientDataReason?: string | null
+    /** Which matched template a grounded chain was built from (debug/audit
+     *  parity with the EBITDA tree's confidence basis). */
+    provenanceBasis?: string | null
 }
 
 export interface DocumentInfo {

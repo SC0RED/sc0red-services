@@ -12,7 +12,7 @@
         },
         "business_model": {
             "type": "string",
-            "description": "How they make money (SaaS, marketplace, services, product, etc.)"
+            "description": "How they make money, grounded in the website content (e.g. SaaS, marketplace, professional services, manufacturing, financial services, debt settlement). This is an existing FACT — if the content gives no clear signal, return exactly \"unknown\" rather than guessing."
         },
         "description": {
             "type": "string",
@@ -26,11 +26,19 @@
         "target_market": {"type": "string", "description": "Who their customers are"},
         "company_size": {
             "type": "string",
-            "description": "Estimated size (Startup <50, Small 50-200, Mid-market 200-1000, Enterprise 1000+)"
+            "enum": [
+                "Startup <50",
+                "Small 50-200",
+                "Mid-market 200-1000",
+                "Large 1000-5000",
+                "Enterprise 5000+",
+                "unknown"
+            ],
+            "description": "Estimated employee-count band, grounded in the content. Use exactly one of the allowed values; return \"unknown\" if the content gives no size signal."
         },
         "revenue_model": {
             "type": "string",
-            "description": "Subscription, transaction, professional services, etc."
+            "description": "How revenue is actually charged, grounded in the content (e.g. subscription, transaction fee, success fee, professional services). This is an existing FACT — return exactly \"unknown\" if the content gives no clear signal rather than guessing."
         },
         "tech_signals": {
             "type": "array",

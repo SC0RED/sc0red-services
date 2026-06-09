@@ -89,6 +89,9 @@ def save_value_chain(table: DynamoDBTable, assessment_id: str, data: dict[str, A
         "assessment_id": assessment_id,
         "steps": json.dumps(data["steps"]),
         "summary": data["summary"],
+        "grounded": data["grounded"],
+        "insufficient_data_reason": data["insufficient_data_reason"],
+        "provenance_basis": data["provenance_basis"],
     }
     table.put_item(item)
 
@@ -116,7 +119,15 @@ def get_value_chain(table: DynamoDBTable, assessment_id: str) -> dict[str, Any] 
     if isinstance(steps, str):
         steps = json.loads(steps)
 
-    return {"steps": steps, "summary": item["summary"]}
+    return {
+        "steps": steps,
+        "summary": item["summary"],
+        # Records stored before the grounding contract default to grounded
+        # (they carry real steps). The reason/basis are null then.
+        "grounded": item.get("grounded", True),
+        "insufficientDataReason": item.get("insufficient_data_reason"),
+        "provenanceBasis": item.get("provenance_basis"),
+    }
 
 
 # ── PDF Export ─────────────────────────────────────────────────────────────
