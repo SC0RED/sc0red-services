@@ -20,6 +20,7 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_secretsmanager as secretsmanager
 from aws_cdk import aws_ssm as ssm
+from aws_cdk import custom_resources as cr
 from constructs import Construct
 
 if TYPE_CHECKING:
@@ -51,6 +52,11 @@ class MCPConstruct(Construct):
         self._frontend_domain = frontend_domain
 
         signing_key = self._create_signing_key()
+        self._add_signing_key_generator(
+            signing_key=signing_key,
+            bundling=bundling,
+            architecture=lambda_architecture,
+        )
         mcp_lambda = self._create_lambda(
             bundling=bundling,
             architecture=lambda_architecture,
@@ -116,12 +122,24 @@ class MCPConstruct(Construct):
         return self._function_url
 
     def _create_signing_key(self) -> secretsmanager.Secret:
-        """Create or reference the RSA signing key for OAuth JWT tokens."""
+        """Create the RSA signing-key secret for OAuth JWT tokens.
+
+        Created with a placeholder body; the ``SigningKeyGenerator`` custom
+        resource (see ``_add_signing_key_generator``) populates it with a real
+        RSA keypair at deploy time (Bug X), so no manual ``put-secret-value`` is
+        needed per environment.
+        """
         return secretsmanager.Secret(
             self,
             "OAuthSigningKey",
             secret_name=f"sc0red-services-mcp-signing-key-{self._environment}",
-            description="RSA private key for signing MCP OAuth JWT tokens",
+            description="RSA keypair for signing MCP OAuth JWT tokens (auto-populated on deploy)",
+            # NOTE: this generate_secret_string MUST stay byte-for-byte as
+            # originally deployed. CloudFormation regenerates the secret VALUE on
+            # ANY change to GenerateSecretString — which would wipe staging's
+            # hand-populated key before the SigningKeyGenerator idempotency check
+            # runs, invalidating live tokens. The "auto-populated" context lives
+            # in `description` (metadata-only, safe to change).
             generate_secret_string=secretsmanager.SecretStringGenerator(
                 generate_string_key="placeholder",
                 secret_string_template='{"note": "Replace with RSA private key via CLI"}',
@@ -131,6 +149,57 @@ class MCPConstruct(Construct):
                 if self._environment == "development"
                 else cdk.RemovalPolicy.RETAIN
             ),
+        )
+
+    def _add_signing_key_generator(
+        self,
+        *,
+        signing_key: secretsmanager.Secret,
+        bundling: cdk.BundlingOptions,
+        architecture: lambda_.Architecture,
+    ) -> None:
+        """Populate the signing-key secret with an RSA keypair at deploy time (Bug X).
+
+        A custom-resource Lambda generates the keypair on first deploy and writes
+        it into the secret, so each environment self-populates instead of needing
+        a manual ``put-secret-value``. The handler is idempotent
+        (``signing_key_provider.handle``): it no-ops when the secret already holds
+        a keypair, so a hand-populated key (staging) is preserved and redeploys
+        never rotate the key — rotation would invalidate every live access token.
+        """
+        generator_name = f"sc0red-services-mcp-signing-key-generator-{self._environment}"
+        generator_logs = logs.LogGroup(
+            self,
+            "SigningKeyGeneratorLogs",
+            log_group_name=f"/aws/lambda/{generator_name}",
+            # Deploy-time-only Lambda — short retention is plenty; explicit so it
+            # doesn't default to never-expire like the MCP Lambda's log group.
+            retention=logs.RetentionDays.ONE_WEEK,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+        generator = lambda_.Function(
+            self,
+            "SigningKeyGenerator",
+            function_name=generator_name,
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            architecture=architecture,
+            handler="src.mcp.signing_key_provider.handle",
+            # Reuses the MCP Lambda's backend bundle (cryptography + token_utils).
+            # CDK dedups the identical asset, so this does not re-bundle.
+            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            timeout=Duration.seconds(60),
+            memory_size=256,
+            log_group=generator_logs,
+        )
+        signing_key.grant_read(generator)
+        signing_key.grant_write(generator)
+
+        provider = cr.Provider(self, "SigningKeyProvider", on_event_handler=generator)
+        cdk.CustomResource(
+            self,
+            "SigningKeyPopulate",
+            service_token=provider.service_token,
+            properties={"SecretArn": signing_key.secret_arn},
         )
 
     def _create_lambda(
