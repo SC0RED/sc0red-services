@@ -64,6 +64,63 @@ def _get_assessment_data(assessment_repo: Any, company_id: str) -> dict[str, Any
     }
 
 
+def _opportunity_titles(opportunities: list[dict[str, Any]], indices: list[int]) -> list[str]:
+    """Resolve opportunity-array indices to their titles.
+
+    The EBITDA tree (``linked_opportunity_indices``) and value-chain steps
+    (``opportunity_indices``) reference opportunities by their position in the
+    analysis's ``opportunities`` array. Resolving to titles makes the read-tool
+    output paper-readable instead of leaking raw indices. The linkage is a soft
+    data contract (the AI may not populate it, or may emit a stale index), so
+    out-of-range indices are skipped rather than raising.
+    """
+    return [
+        opportunities[index].get("title", f"opportunity #{index + 1}")
+        for index in indices
+        if 0 <= index < len(opportunities)
+    ]
+
+
+def _format_opportunities(company_name: str, opps: list[dict[str, Any]]) -> str:
+    """Render the opportunities list as Markdown for an MCP client.
+
+    Surfaces the full Opportunity contract: strategic category, timeline,
+    investment (narrative range + numeric point estimate), ROI (narrative +
+    numeric %), and implementation steps — not just title/lever/impact.
+    """
+    lines = [f"## Opportunities — {company_name} ({len(opps)})"]
+    for index, opp in enumerate(opps, 1):
+        lines.append(f"\n### {index}. {opp.get('title', 'Untitled')}")
+        if opp.get("strategic_category"):
+            lines.append(f"Category: {opp['strategic_category']}")
+        lines.append(f"Value Lever: {opp.get('value_lever') or 'N/A'}")
+        lines.append(f"Impact: {opp.get('impact_rating') or 'N/A'}")
+        if opp.get("timeline"):
+            lines.append(f"Timeline: {opp['timeline']}")
+        # Investment / ROI carry both a narrative string range (per-card copy)
+        # and a numeric point estimate (Quick Wins matrix axes); surface the
+        # number alongside the prose when the AI could ground it.
+        if opp.get("investment_range") or opp.get("investment_value_usd") is not None:
+            investment = opp.get("investment_range") or "N/A"
+            if opp.get("investment_value_usd") is not None:
+                investment += f" (~${opp['investment_value_usd']:,})"
+            lines.append(f"Investment: {investment}")
+        if opp.get("roi_estimate") or opp.get("roi_estimate_pct") is not None:
+            roi = opp.get("roi_estimate") or "N/A"
+            if opp.get("roi_estimate_pct") is not None:
+                roi += f" (~{opp['roi_estimate_pct']:g}%)"
+            lines.append(f"ROI: {roi}")
+        if opp.get("description"):
+            lines.append(f"Description: {opp['description']}")
+        if opp.get("implementation_steps"):
+            lines.append("Implementation steps:")
+            lines.extend(
+                f"  {step_index}. {step}"
+                for step_index, step in enumerate(opp["implementation_steps"], 1)
+            )
+    return "\n".join(lines)
+
+
 def _ungrounded_message(payload: dict[str, Any], heading: str, fallback: str) -> str | None:
     """Return the placeholder text for an ungrounded FACT surface, else None.
 

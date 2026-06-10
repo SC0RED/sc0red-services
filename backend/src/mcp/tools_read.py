@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 
 from src.mcp._tools_read_helpers import (
     _format_analysis_summary,
+    _format_opportunities,
     _get_assessment_data,
+    _opportunity_titles,
     _ungrounded_message,
     _verify_org_access,
 )
@@ -203,15 +205,7 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         if not data["opportunities"]:
             return f"No opportunities found for analysis {analysis_id}."
         name = company.get("company_name", "Unknown")
-        opps = data["opportunities"]
-        lines = [f"## Opportunities — {name} ({len(opps)})"]
-        for i, opp in enumerate(opps, 1):
-            lines.append(f"\n### {i}. {opp.get('title', 'Untitled')}")
-            lines.append(f"Value Lever: {opp.get('value_lever', 'N/A')}")
-            lines.append(f"Impact: {opp.get('impact_rating', 'N/A')}")
-            if opp.get("description"):
-                lines.append(f"Description: {opp['description']}")
-        return "\n".join(lines)
+        return _format_opportunities(name, data["opportunities"])
 
     @mcp.tool()
     async def get_ebitda_tree(analysis_id: str) -> str:
@@ -257,7 +251,15 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
             # Each node is `EbitdaNode.model_dump()` — snake_case keys. Reading
             # `value` (the legacy key) silently rendered blank for every node;
             # the correct field on the persisted shape is `value_range`.
-            lines.extend(f"- {n.get('label', '?')}: {n.get('value_range', '')}" for n in tree_data)
+            opportunities = data["opportunities"]
+            for node in tree_data:
+                line = f"- {node.get('label', '?')}: {node.get('value_range', '')}"
+                linked = _opportunity_titles(
+                    opportunities, node.get("linked_opportunity_indices", [])
+                )
+                if linked:
+                    line += f" — addresses: {', '.join(linked)}"
+                lines.append(line)
         return "\n".join(lines)
 
     @mcp.tool()
@@ -286,10 +288,26 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         lines = [f"## {heading}"]
         if chain.get("summary"):
             lines.append(chain["summary"])
+        # Container-level fields are camelCased by the repo (like
+        # ``insufficientDataReason``); only the per-step dicts keep their
+        # snake_case ``model_dump()`` keys.
+        if chain.get("provenanceBasis"):
+            lines.append(f"_Basis: {chain['provenanceBasis']}_")
+        opportunities = data["opportunities"]
         for step in chain.get("steps", []):
-            lines.append(f"\n### {step.get('name', '?')} ({step.get('category', '')})")
+            # Steps are `ValueChainStep.model_dump()` — the activity name is
+            # `label` (reading `name` rendered every step as "?").
+            lines.append(f"\n### {step.get('label', '?')} ({step.get('category', '')})")
             if step.get("description"):
                 lines.append(step["description"])
+            if step.get("risk_categories"):
+                lines.append(f"Risk areas: {', '.join(step['risk_categories'])}")
+            linked = _opportunity_titles(opportunities, step.get("opportunity_indices", []))
+            if linked:
+                lines.append(f"Linked opportunities: {', '.join(linked)}")
+            if step.get("confidence_basis"):
+                confidence = step.get("confidence_level") or "?"
+                lines.append(f"Confidence: {confidence} — {step['confidence_basis']}")
         return "\n".join(lines)
 
     @mcp.tool()
