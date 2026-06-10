@@ -171,8 +171,8 @@ Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invoke
 - [ ] 2.6.7 Apply the chosen convention across all tool registrations + planned prompt names. Update tests.
 
 ### Minimal Connected Apps UI (PR 7 subset)
-- [ ] 2.6.8 Build a minimal "Connected Apps" settings page that lists registered OAuth clients + lets the user revoke. Defer the full PR 7 polish (audit log surfacing, fancy empty states) to PR 7.
-- [ ] 2.6.9 Short "Connect to AI assistants" doc: Function URL (or custom domain when added) + the OAuth flow.
+- [~] 2.6.8 **Backend done** — `GET /api/connected-apps` (list the user's connected AI assistants — per-user OAuth consents, client name denormalized on the consent record) + `DELETE /api/connected-apps/{client_id}` (revoke consent). Per-user scoped (no IDOR). Revoke = consent revoke; active tokens lapse within their 1h TTL (immediate token revocation deferred to PR 7). **Frontend settings page is the remaining half** (separate PR).
+- [ ] 2.6.9 Short "Connect to AI assistants" doc: Function URL (or custom domain when added) + the OAuth flow. (Ships with the frontend PR.)
 
 ### Tests + ship
 - [~] 2.6.10 Unit tests for the new tools landed with 2.6.4/2.6.5 (get_strategy_map: perspectives/objectives, first-sentence trim, index→title resolution, no-map, cross-org; list_scans: render + empty). Formatter tests for the rebrand/UI items follow with their tasks.

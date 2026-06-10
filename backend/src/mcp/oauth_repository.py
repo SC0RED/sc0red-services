@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 
 class OAuthRepository:
@@ -179,15 +180,37 @@ class OAuthRepository:
 
     # ── Consent Records ──────────────────────────────────────────────────────
 
-    def save_consent(self, user_id: str, client_id: str) -> None:
-        """Record that a user has consented to a client."""
+    def save_consent(self, user_id: str, client_id: str, client_name: str = "") -> None:
+        """Record that a user has consented to a client.
+
+        ``client_name`` is denormalized onto the record so the Connected Apps
+        list can render names without an N+1 ``get_client`` per consent (the
+        "store computed data at write time" DynamoDB pattern). Re-consenting to
+        the same client upserts the record, refreshing ``consented_at`` to now.
+        """
         self._table.put_item(
             Item={
                 "pk": f"OAUTH_CONSENT#{user_id}",
                 "sk": f"CLIENT#{client_id}",
+                "client_name": client_name,
                 "consented_at": int(time.time()),
             }
         )
+
+    def list_consents_by_user(self, user_id: str) -> list[dict[str, Any]]:
+        """List every client a user has consented to (handles pagination)."""
+        items: list[dict[str, Any]] = []
+        query_kwargs: dict[str, Any] = {
+            "KeyConditionExpression": Key("pk").eq(f"OAUTH_CONSENT#{user_id}")
+        }
+        while True:
+            response = self._table.query(**query_kwargs)
+            items.extend(response.get("Items", []))
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            query_kwargs["ExclusiveStartKey"] = last_key
+        return items
 
     def has_consent(self, user_id: str, client_id: str) -> bool:
         """Check if a user has previously consented to a client."""
