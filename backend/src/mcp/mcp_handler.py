@@ -46,18 +46,17 @@ def _load_signing_keys() -> tuple[str, str]:
             SecretId=OAUTH_SIGNING_KEY_SECRET_ARN,
         )
         secret: dict[str, str] = json.loads(response["SecretString"])  # type: ignore[arg-type]
-        # The CDK construct currently creates this secret with a placeholder
-        # body and never populates the RSA keypair (Bug X — full auto-generation
-        # fix tracked as a follow-up). A missing key here means the secret was
-        # never populated post-deploy; fail with an actionable message instead
-        # of an opaque KeyError so the operator knows exactly what to run.
+        # The secret is auto-populated at deploy time by the SigningKeyGenerator
+        # custom resource (Bug X fixed — see infrastructure/stacks/mcp_construct.py
+        # `_add_signing_key_generator`). If the keypair is missing here, that
+        # custom resource failed during the stack deploy; fail with an actionable
+        # message instead of an opaque KeyError.
         if "private_key" not in secret or "public_key" not in secret:
             raise RuntimeError(
                 f"OAuth signing-key secret {OAUTH_SIGNING_KEY_SECRET_ARN} is missing "
-                "'private_key'/'public_key' — the CDK construct creates it empty "
-                "and it was never populated. Populate it with an RSA keypair "
-                "(private_key + public_key PEM); see design.md Decision 8 / the "
-                "migration doc for the exact put-secret-value command."
+                "'private_key'/'public_key' — the SigningKeyGenerator custom resource "
+                "did not populate it. Check the CloudFormation stack events for the "
+                "'SigningKeyPopulate' resource (and the generator Lambda's logs)."
             )
         return secret["private_key"], secret["public_key"]
 
