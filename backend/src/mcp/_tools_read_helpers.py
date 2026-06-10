@@ -40,10 +40,19 @@ def _format_analysis_summary(company: dict[str, Any]) -> str:
     )
 
 
-def _get_assessment_data(assessment_repo: Any, company_id: str) -> dict[str, Any]:
-    """Load latest assessment data for a company. Mirrors handle_get_analysis."""
+def _latest_assessment_id(assessment_repo: Any, company_id: str) -> str | None:
+    """Return the most-recent assessment id for a company, or None if none exist."""
     assessments = assessment_repo.find_by_company(company_id)
     if not assessments:
+        return None
+    assessments.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+    return assessments[0]["id"]
+
+
+def _get_assessment_data(assessment_repo: Any, company_id: str) -> dict[str, Any]:
+    """Load latest assessment data for a company. Mirrors handle_get_analysis."""
+    aid = _latest_assessment_id(assessment_repo, company_id)
+    if aid is None:
         return {
             "risk_scores": [],
             "opportunities": [],
@@ -51,9 +60,6 @@ def _get_assessment_data(assessment_repo: Any, company_id: str) -> dict[str, Any
             "value_chain": None,
             "documents": [],
         }
-
-    assessments.sort(key=lambda a: a.get("created_at", ""), reverse=True)
-    aid = assessments[0]["id"]
 
     return {
         "risk_scores": assessment_repo.get_risk_scores(aid),
@@ -132,3 +138,136 @@ def _ungrounded_message(payload: dict[str, Any], heading: str, fallback: str) ->
         return None
     reason = payload.get("insufficientDataReason") or fallback
     return f"## {heading}\nNot available: {reason}"
+
+
+def _format_value_chain(
+    company_name: str, chain: dict[str, Any], opportunities: list[dict[str, Any]]
+) -> str:
+    """Render the value chain as Markdown for an MCP client."""
+    heading = f"Value Chain — {company_name}"
+    if placeholder := _ungrounded_message(
+        chain,
+        heading,
+        "The business model could not be grounded in public information, "
+        "so no operating model is shown.",
+    ):
+        return placeholder
+    lines = [f"## {heading}"]
+    if chain.get("summary"):
+        lines.append(chain["summary"])
+    # Container-level fields are camelCased by the repo (like
+    # ``insufficientDataReason``); only the per-step dicts keep their
+    # snake_case ``model_dump()`` keys.
+    if chain.get("provenanceBasis"):
+        lines.append(f"_Basis: {chain['provenanceBasis']}_")
+    for step in chain.get("steps", []):
+        # Steps are `ValueChainStep.model_dump()` — the activity name is `label`
+        # (reading `name` rendered every step as "?").
+        lines.append(f"\n### {step.get('label', '?')} ({step.get('category', '')})")
+        if step.get("description"):
+            lines.append(step["description"])
+        if step.get("risk_categories"):
+            lines.append(f"Risk areas: {', '.join(step['risk_categories'])}")
+        linked = _opportunity_titles(opportunities, step.get("opportunity_indices", []))
+        if linked:
+            lines.append(f"Linked opportunities: {', '.join(linked)}")
+        if step.get("confidence_basis"):
+            confidence = step.get("confidence_level") or "?"
+            lines.append(f"Confidence: {confidence} — {step['confidence_basis']}")
+    return "\n".join(lines)
+
+
+def _first_sentence(text: str) -> str:
+    """First sentence of a definition, for compact BSC objective rendering."""
+    stripped = text.strip()
+    head, separator, _ = stripped.partition(". ")
+    return head + "." if separator else stripped
+
+
+def _format_objective(objective: dict[str, Any], opportunities: list[dict[str, Any]]) -> str:
+    """Render one BSC objective: title — first-sentence definition — links."""
+    line = f"- **{objective.get('title', '?')}**"
+    if objective.get("confidence"):
+        line += f" ({objective['confidence']})"
+    if objective.get("definition"):
+        line += f" — {_first_sentence(objective['definition'])}"
+    linked = _opportunity_titles(opportunities, objective.get("linked_opportunity_indices", []))
+    if linked:
+        line += f" [opportunities: {', '.join(linked)}]"
+    return line
+
+
+def _format_strategy_map(
+    strategy_map: dict[str, Any], company_name: str, opportunities: list[dict[str, Any]]
+) -> str:
+    """Render the Balanced Scorecard strategy map as sectioned Markdown.
+
+    A sectioned layout (one heading per BSC perspective, one bullet per
+    objective) reads better for an AI client than a cramped four-row table;
+    each objective shows its title, the first sentence of its definition, and
+    any linked opportunity titles. Top-level keys are camelCase
+    (``model_dump(by_alias=True)`` at persist); nested objective fields keep
+    their snake_case names.
+    """
+    vision = strategy_map.get("vision", {})
+    mission = strategy_map.get("mission", {})
+    value_proposition = strategy_map.get("valueProposition", {})
+    lines = [f"## Strategy Map — {company_name}"]
+    if vision.get("statement"):
+        suffix = " (synthesised)" if vision.get("synthesised") else ""
+        lines.append(f"**Vision:** {vision['statement']}{suffix}")
+    if mission.get("statement"):
+        suffix = " (synthesised)" if mission.get("synthesised") else ""
+        lines.append(f"**Mission:** {mission['statement']}{suffix}")
+    if value_proposition.get("primary"):
+        discipline = value_proposition["primary"]
+        if value_proposition.get("secondary"):
+            discipline += f" + {value_proposition['secondary']}"
+        lines.append(f"**Value Proposition:** {discipline}")
+
+    priorities = strategy_map.get("strategicPriorities", [])
+    if priorities:
+        lines.append("\n### Strategic Priorities")
+        lines.extend(f"- {p.get('name', '?')}: {p.get('result', '')}" for p in priorities)
+
+    lines.append("\n### Financial")
+    lines.extend(
+        _format_objective(o, opportunities)
+        for o in strategy_map.get("financial", {}).get("objectives", [])
+    )
+    lines.append("\n### Customer")
+    lines.extend(
+        _format_objective(o, opportunities)
+        for o in strategy_map.get("customer", {}).get("objectives", [])
+    )
+    lines.append("\n### Internal Processes")
+    for theme in strategy_map.get("internalProcesses", {}).get("themes", []):
+        lines.append(f"**{theme.get('name', '?')}**")
+        lines.extend(_format_objective(o, opportunities) for o in theme.get("objectives", []))
+    lines.append("\n### Organizational Capacity")
+    capacity = strategy_map.get("organizationalCapacity", {})
+    for facet in ("people", "technology", "culture"):
+        if capacity.get(facet):
+            lines.append(f"_{facet.title()}_")
+            lines.append(_format_objective(capacity[facet], opportunities))
+
+    core_values = strategy_map.get("coreValues", {})
+    if core_values.get("values"):
+        suffix = " (inferred)" if core_values.get("synthesised") else ""
+        lines.append(f"\n### Core Values{suffix}")
+        lines.append(", ".join(core_values["values"]))
+    return "\n".join(lines)
+
+
+def _format_scans(scans: list[dict[str, Any]]) -> str:
+    """Render the org's scans as Markdown for an MCP client."""
+    lines = [f"## Scans ({len(scans)})"]
+    for scan in scans:
+        line = (
+            f"- {scan['id']} — {scan.get('status', 'unknown')} "
+            f"({scan.get('type', 'unknown')}, {scan.get('progress', 0)}%)"
+        )
+        if scan.get("created_at"):
+            line += f" — {scan['created_at']}"
+        lines.append(line)
+    return "\n".join(lines)

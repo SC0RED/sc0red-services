@@ -163,8 +163,8 @@ Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invoke
 - [x] 2.6.3 `get_value_chain` — **fixed the `name`→`label` bug** (every step had rendered as "?"; the test fixtures wrongly used `name` too, masking it), and now surfaces `risk_categories`, `opportunity_indices` (resolved to titles), per-step `confidence_level`/`confidence_basis`, and the chain-level `provenance_basis`.
 
 ### Missing tools (Bug F + proposal gap)
-- [ ] 2.6.4 Add `get_strategy_map(analysis_id: str)` tool in `tools_read.py`. Render the BSC table as Markdown (four perspective rows, theme columns, per-objective title + first-sentence definition + linked opportunity titles).
-- [ ] 2.6.5 Add `list_scans` tool — proposal listed 13 read tools; only 12 are registered today.
+- [x] 2.6.4 Added `get_strategy_map(analysis_id)` — renders the BSC as sectioned Markdown (vision/mission/value-prop/priorities, then the four perspectives with per-objective title + first-sentence definition + linked opportunity titles, plus core values). Sectioned layout chosen over a cramped 4-row table — reads better for an LLM client. (`_format_strategy_map` in `_tools_read_helpers.py`.)
+- [x] 2.6.5 Added `list_scans` — lists the org's scans (id, status, type, progress, created_at) via `scan_repo.find_recent_by_org`. Read-tool count is now 13 (matches the proposal).
 
 ### Rebrand for customer visibility
 - [ ] 2.6.6 Decide naming convention per `design.md` Decision 9 (placeholder). Capture the decision before any rename sweep.
@@ -175,7 +175,7 @@ Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invoke
 - [ ] 2.6.9 Short "Connect to AI assistants" doc: Function URL (or custom domain when added) + the OAuth flow.
 
 ### Tests + ship
-- [ ] 2.6.10 Unit tests for the new formatters + the new tools (`get_strategy_map`, `list_scans`).
+- [~] 2.6.10 Unit tests for the new tools landed with 2.6.4/2.6.5 (get_strategy_map: perspectives/objectives, first-sentence trim, index→title resolution, no-map, cross-org; list_scans: render + empty). Formatter tests for the rebrand/UI items follow with their tasks.
 - [ ] 2.6.11 Frontend gates: `npm run lint`, `npx tsc --noEmit`, `npm test`.
 - [ ] 2.6.12 Architecture-reviewer pass.
 - [ ] 2.6.13 Conventional commit + PR.

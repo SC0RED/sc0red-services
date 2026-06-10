@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 from src.mcp._tools_read_helpers import (
     _format_analysis_summary,
     _format_opportunities,
+    _format_scans,
+    _format_strategy_map,
+    _format_value_chain,
     _get_assessment_data,
+    _latest_assessment_id,
     _opportunity_titles,
     _ungrounded_message,
     _verify_org_access,
@@ -276,39 +280,34 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         data = _get_assessment_data(assessment_repo, analysis_id)
         if not data["value_chain"]:
             return f"No value chain found for analysis {analysis_id}."
-        chain = data["value_chain"]
-        heading = f"Value Chain — {company.get('company_name', 'Unknown')}"
-        if placeholder := _ungrounded_message(
-            chain,
-            heading,
-            "The business model could not be grounded in public information, "
-            "so no operating model is shown.",
-        ):
-            return placeholder
-        lines = [f"## {heading}"]
-        if chain.get("summary"):
-            lines.append(chain["summary"])
-        # Container-level fields are camelCased by the repo (like
-        # ``insufficientDataReason``); only the per-step dicts keep their
-        # snake_case ``model_dump()`` keys.
-        if chain.get("provenanceBasis"):
-            lines.append(f"_Basis: {chain['provenanceBasis']}_")
-        opportunities = data["opportunities"]
-        for step in chain.get("steps", []):
-            # Steps are `ValueChainStep.model_dump()` — the activity name is
-            # `label` (reading `name` rendered every step as "?").
-            lines.append(f"\n### {step.get('label', '?')} ({step.get('category', '')})")
-            if step.get("description"):
-                lines.append(step["description"])
-            if step.get("risk_categories"):
-                lines.append(f"Risk areas: {', '.join(step['risk_categories'])}")
-            linked = _opportunity_titles(opportunities, step.get("opportunity_indices", []))
-            if linked:
-                lines.append(f"Linked opportunities: {', '.join(linked)}")
-            if step.get("confidence_basis"):
-                confidence = step.get("confidence_level") or "?"
-                lines.append(f"Confidence: {confidence} — {step['confidence_basis']}")
-        return "\n".join(lines)
+        name = company.get("company_name", "Unknown")
+        return _format_value_chain(name, data["value_chain"], data["opportunities"])
+
+    @mcp.tool()
+    async def get_strategy_map(analysis_id: str) -> str:
+        """Get the Balanced Scorecard strategy map for a specific analysis.
+
+        Returns the company's vision, mission, value proposition, strategic
+        priorities, and the four BSC perspectives (Financial, Customer,
+        Internal Processes, Organizational Capacity) with each objective's
+        title, definition, and any linked opportunities.
+
+        Args:
+            analysis_id: The ID of the analysis.
+        """
+        user = get_authenticated_user()
+        company = company_repo.get_by_id(analysis_id)
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
+            return error
+        # The strategy map is a separate sub-record not loaded by
+        # _get_assessment_data, so fetch it (and opportunities, for index→title
+        # links) directly off the latest assessment id.
+        aid = _latest_assessment_id(assessment_repo, analysis_id)
+        strategy_map = assessment_repo.get_strategy_map(aid) if aid else None
+        if not strategy_map:
+            return f"No strategy map found for analysis {analysis_id}."
+        name = company.get("company_name", "Unknown")
+        return _format_strategy_map(strategy_map, name, assessment_repo.get_opportunities(aid))
 
     @mcp.tool()
     async def get_scan(scan_id: str) -> str:
@@ -340,6 +339,19 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
                         f"— ID: {c.get('id', '')}"
                     )
         return "\n".join(lines)
+
+    @mcp.tool()
+    async def list_scans() -> str:  # noqa: NAMING001
+        """List the scans in your organization.
+
+        Returns each scan's ID, status, type (single/portfolio), and progress.
+        Use get_scan with the ID for a scan's linked analyses.
+        """
+        user = get_authenticated_user()
+        scans = scan_repo.find_recent_by_org(user.org_id, limit=None)
+        if not scans:
+            return "No scans found. Use start_company_scan to analyze a company."
+        return _format_scans(scans)
 
     @mcp.tool()
     async def list_team_members() -> str:  # noqa: NAMING001

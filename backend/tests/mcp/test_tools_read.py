@@ -577,6 +577,131 @@ class TestGetScan:
         assert "not found" in text
 
 
+def _strategy_map_fixture():
+    """A minimal camelCase strategy map matching the persisted wire shape
+    (model_dump(by_alias=True))."""
+    objective = {
+        "id": "F1",
+        "title": "Grow recurring revenue",
+        "definition": "Expand ARR via land-and-expand. Second sentence ignored.",
+        "confidence": "HIGH",
+        "linked_opportunity_indices": [0],
+    }
+    return {
+        "vision": {"statement": "Be the category leader", "synthesised": True},
+        "mission": {"statement": "Help PE firms see AI risk"},
+        "valueProposition": {"primary": "product_leadership"},
+        "strategicPriorities": [{"name": "Expand", "result": "Double ARR"}],
+        "financial": {"objectives": [objective]},
+        "customer": {
+            "objectives": [
+                {"id": "C1", "title": "I trust the data", "definition": "Customers rely on us."}
+            ]
+        },
+        "internalProcesses": {
+            "themes": [
+                {
+                    "name": "Data quality",
+                    "objectives": [
+                        {"id": "I1.1", "title": "Clean pipelines", "definition": "Keep data fresh."}
+                    ],
+                }
+            ]
+        },
+        "organizationalCapacity": {
+            "people": {"id": "O.P", "title": "Hire experts", "definition": "Recruit ML talent."},
+            "technology": {
+                "id": "O.T",
+                "title": "Scale infra",
+                "definition": "Invest in platform.",
+            },
+            "culture": {"id": "O.C", "title": "Ship fast", "definition": "Bias to action."},
+        },
+        "coreValues": {"values": ["Rigor", "Speed", "Trust"], "synthesised": True},
+    }
+
+
+class TestGetStrategyMap:
+    @pytest.mark.asyncio
+    async def test_returns_perspectives_and_objectives(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        assessment_repo.find_by_company.return_value = [{"id": "a1", "created_at": "2026-01-01"}]
+        assessment_repo.get_strategy_map.return_value = _strategy_map_fixture()
+        assessment_repo.get_opportunities.return_value = [{"title": "Automate support"}]
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "Strategy Map — Acme" in text
+        assert "Be the category leader (synthesised)" in text
+        assert "### Financial" in text
+        assert "Grow recurring revenue" in text
+        # First sentence only — the second sentence must be dropped.
+        assert "Expand ARR via land-and-expand." in text
+        assert "Second sentence ignored" not in text
+        # linked_opportunity_indices resolved to the opportunity title.
+        assert "opportunities: Automate support" in text
+        assert "Core Values (inferred)" in text
+
+    @pytest.mark.asyncio
+    async def test_no_strategy_map(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        assessment_repo.find_by_company.return_value = [{"id": "a1", "created_at": "2026-01-01"}]
+        assessment_repo.get_strategy_map.return_value = None
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "No strategy map" in text
+
+    @pytest.mark.asyncio
+    async def test_no_assessment_at_all(self):
+        # No assessment for the company → _latest_assessment_id returns None →
+        # get_strategy_map is never called. Covers the `aid is None` guard.
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        assessment_repo.find_by_company.return_value = []
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "No strategy map" in text
+        assessment_repo.get_strategy_map.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cross_org_denied(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company(org_id="other-org")
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "not found" in text
+
+
+class TestListScans:
+    @pytest.mark.asyncio
+    async def test_returns_scans(self):
+        storage, _, _, scan_repo, *_ = _make_storage()
+        scan_repo.find_recent_by_org.return_value = [
+            {
+                "id": "s1",
+                "status": "complete",
+                "type": "single",
+                "progress": 100,
+                "created_at": "2026-01-02",
+            },
+            {"id": "s2", "status": "running", "type": "portfolio", "progress": 40},
+        ]
+        server = _make_server(storage)
+        text = (await server.call_tool("list_scans", {}))[0][0].text
+        assert "Scans (2)" in text
+        assert "s1 — complete (single, 100%)" in text
+        assert "2026-01-02" in text
+        assert "s2 — running (portfolio, 40%)" in text
+
+    @pytest.mark.asyncio
+    async def test_empty(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("list_scans", {}))[0][0].text
+        assert "No scans found" in text
+
+
 class TestListTeamMembers:
     @pytest.mark.asyncio
     async def test_returns(self):
