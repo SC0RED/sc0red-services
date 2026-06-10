@@ -171,8 +171,8 @@ Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invoke
 - [ ] 2.6.7 Apply the chosen convention across all tool registrations + planned prompt names. Update tests.
 
 ### Minimal Connected Apps UI (PR 7 subset)
-- [~] 2.6.8 **Backend done** — `GET /api/connected-apps` (list the user's connected AI assistants — per-user OAuth consents, client name denormalized on the consent record) + `DELETE /api/connected-apps/{client_id}` (revoke consent). Per-user scoped (no IDOR). Revoke = consent revoke; active tokens lapse within their 1h TTL (immediate token revocation deferred to PR 7). **Frontend settings page is the remaining half** (separate PR).
-- [ ] 2.6.9 Short "Connect to AI assistants" doc: Function URL (or custom domain when added) + the OAuth flow. (Ships with the frontend PR.)
+- [x] 2.6.8 **DONE.** Backend (#404): `GET /api/connected-apps` (list the user's connected AI assistants — per-user OAuth consents, client name denormalized on the consent record) + `DELETE /api/connected-apps/{client_id}` (revoke consent). Per-user scoped (no IDOR). Frontend: `settings/connected-apps` page + `ConnectedAppsView` (list + optimistic disconnect with undo, mirroring the team member-removal pattern), linked from `SettingsView`. Revoke = consent revoke; active tokens lapse within their 1h TTL (immediate token revocation deferred to PR 7).
+- [x] 2.6.9 **DONE** — the "How to connect" guidance ships inline on the Connected Apps page (Streamable HTTP transport + the MCP server URL + the consent flow), where users actually look. (A standalone Function-URL doc can follow once a custom domain is wired; the URL is env-specific so it isn't hardcoded in the UI.)
 
 ### Tests + ship
 - [~] 2.6.10 Unit tests for the new tools landed with 2.6.4/2.6.5 (get_strategy_map: perspectives/objectives, first-sentence trim, index→title resolution, no-map, cross-org; list_scans: render + empty). Formatter tests for the rebrand/UI items follow with their tasks.
