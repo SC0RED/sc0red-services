@@ -35,7 +35,7 @@ The OAuth + transport chain is DONE and validated; PR 2.5 is complete. Next is *
 3. **Tool-name rebrand.** Align tool names with the sc0red Services brand.
 4. **Minimal Connected Apps UI.** Surface MCP/OAuth connected apps in the frontend.
 5. ✅ **Bug H — RFC 9728 path-suffixed metadata** — DONE (set `resource_server_url` to `…/mcp`).
-6. **RFC 8707 resource indicators (deferred from #387's arch review).** SDK base models carry `resource: str | None = None` on `AuthorizationCode`/`AccessToken`; our `Stored*` dataclasses omit it. No current 500 (installed SDK doesn't read `.resource` on our objects) — forward-compat only. Do it properly: thread `resource` through `authorize()` → `save_authorization_code` → `load_authorization_code` (and access tokens), not as an always-`None` dead field.
+6. **RFC 8707 resource indicators — DEFERRED (decision 2026-06-09, won't-do for now).** Investigated and consciously deferred: (a) the installed SDK doesn't enforce `resource` (the token handler parses it into the request model but never validates it against the auth code or passes it to issuance), so nothing is broken without it; (b) full threading needs FRONTEND work — `resource` arrives at `authorize()` but the consent flow bounces through the frontend consent page before the auth code is created, so the value is lost unless the consent page echoes it back; (c) the security substance (audience-restricted `aud`) is ~redundant here — RFC 8707 prevents token replay when one AS serves MULTIPLE resource servers, but we are both the issuer AND the only resource server, so the existing `iss` check already scopes tokens. Hard-validating `aud` would add redeploy risk to the validated `/mcp` flow for ~no gain. Revisit only if we add a second resource server or a client demands strict RFC 8707.
 
 ### Other deferred / known follow-ups
 - **Bug X (signing key) — full fix still deferred.** The CDK construct creates `sc0red-services-mcp-signing-key-staging` EMPTY; it was hand-populated 2026-06-03 with an RSA-2048 keypair. Partial fail-fast already shipped (actionable error in `_load_signing_keys` if empty). Full fix = auto-generate the RSA pair via a CDK custom resource so deploy populates the secret (and so testing/production don't need manual population).
@@ -70,7 +70,7 @@ The OAuth + transport chain is DONE and validated; PR 2.5 is complete. Next is *
 | K | `Stored*` OAuth models missing `expires_at` → SDK token handler `AttributeError` → `/token` 500 | ✅ Fixed (#387) | `backend/src/mcp/oauth_provider.py` |
 | L | Auto-enabled DNS-rebinding protection rejected the Function-URL Host → `/mcp` 421 | ✅ Fixed (#388) | `backend/src/mcp/mcp_handler.py` |
 
-**Resolved: A (partial), B (#379), C (#382), G (#383), I (#384), J (#386), K (#387), L (#388). D: re-assessed as non-bug. End-to-end OAuth round-trip VALIDATED 2026-06-08. Open: E/F/H + RFC 8707 resource indicators → PR 2.6; X (signing-key auto-gen) → deferred. Use mcp-inspector Direct mode.**
+**Resolved: A (partial), B (#379), C (#382), G (#383), I (#384), J (#386), K (#387), L (#388), E (#399), F (#400), H (#401). D: re-assessed as non-bug. End-to-end OAuth round-trip VALIDATED 2026-06-08. PR 2.6 remaining: tool-name rebrand (recommendation: keep current names), Connected Apps UI. Deferred: RFC 8707 resource indicators (redundant for a single-resource server — see item 6), X (signing-key auto-gen). Use mcp-inspector Direct mode.**
 
 ## To re-establish context when resuming
 
