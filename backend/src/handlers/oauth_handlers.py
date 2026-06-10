@@ -1,7 +1,10 @@
-"""OAuth consent approval handler.
+"""OAuth consent + connected-apps handlers.
 
-Called by the frontend consent UI when the user clicks "Allow Access".
-Generates an authorization code and returns the redirect URL.
+``handle_oauth_approve`` is called by the frontend consent UI when the user
+clicks "Allow Access" — it generates an authorization code and records the
+consent. ``handle_list_connected_apps`` / ``handle_revoke_connected_app`` back
+the Connected Apps settings page (list + disconnect the AI assistants a user has
+connected).
 """
 
 from __future__ import annotations
@@ -69,7 +72,7 @@ def handle_oauth_approve(
         scopes=scopes,
     )
 
-    _repository.save_consent(authentication.user_id, client_id)
+    _repository.save_consent(authentication.user_id, client_id, client.get("client_name") or "")
 
     query_params: dict[str, str] = {"code": code}
     if state:
@@ -85,3 +88,48 @@ def handle_oauth_approve(
     )
 
     return build_json_response({"redirect_url": redirect_url})
+
+
+def handle_list_connected_apps(
+    _event: dict[str, Any],
+    authentication: AuthContext,
+    _storage: DynamoDBStorageProvider,
+) -> dict[str, Any]:
+    """List the AI assistants the user has connected (GET /api/connected-apps).
+
+    "Connected apps" are this user's OAuth consents. The client name is read off
+    the consent record (denormalized at consent time), so the list is a single
+    query with no per-app lookup. ``consented_at`` may be ``null`` for legacy
+    consents written before timestamp tracking — the UI must tolerate that.
+    """
+    from src.handlers.api_gateway_handler import build_json_response
+
+    consents = _repository.list_consents_by_user(authentication.user_id)
+    connected_apps = [
+        {
+            "client_id": consent["sk"].removeprefix("CLIENT#"),
+            "client_name": consent.get("client_name") or "Unknown app",
+            "consented_at": consent.get("consented_at"),
+        }
+        for consent in consents
+    ]
+    return build_json_response({"connected_apps": connected_apps})
+
+
+def handle_revoke_connected_app(
+    _event: dict[str, Any],
+    authentication: AuthContext,
+    _storage: DynamoDBStorageProvider,
+    client_id: str,
+) -> dict[str, Any]:
+    """Disconnect an app for this user (DELETE /api/connected-apps/{client_id}).
+
+    Revokes the user's consent, so the app must re-consent on its next
+    connection. Any active access token lapses within its 1h TTL — immediate
+    token revocation is deferred (it needs a user→token index).
+    """
+    from src.handlers.api_gateway_handler import build_json_response
+
+    _repository.revoke_consent(authentication.user_id, client_id)
+    logger.info("Connected app revoked: user=%s client=%s", authentication.user_id, client_id)
+    return build_json_response({"revoked": True})
