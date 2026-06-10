@@ -115,9 +115,19 @@ _oauth_provider = Sc0redServicesOAuthProvider(
     consent_base_url=_consent_base_url,
 )
 
+# The protected RESOURCE is the ``/mcp`` transport endpoint, not the Function
+# URL root. RFC 9728 §3.1 inserts ``/.well-known/oauth-protected-resource``
+# between host and the resource path, so the metadata for a resource at
+# ``…/mcp`` lives at ``…/.well-known/oauth-protected-resource/mcp`` (Bug H).
+# Previously ``resource_server_url`` was the root (path ``/``), which the SDK
+# treats as empty → it served + advertised the BARE ``…/oauth-protected-resource``
+# and the path-suffixed location 404'd for spec-strict clients (mcp-inspector
+# probes it). The issuer (authorization server) stays the root.
+_resource_server_url = f"{_issuer_url.rstrip('/')}/mcp"
+
 _authentication_settings = AuthSettings(
     issuer_url=_issuer_url,  # type: ignore[arg-type]
-    resource_server_url=_issuer_url,  # type: ignore[arg-type]
+    resource_server_url=_resource_server_url,  # type: ignore[arg-type]
     client_registration_options=ClientRegistrationOptions(
         enabled=True,
         valid_scopes=["read", "write"],
