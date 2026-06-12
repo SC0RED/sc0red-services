@@ -4,7 +4,7 @@
 
 - [x] 1.1 Request the staging cert (dev account, MUST be us-east-1): `aws acm request-certificate --domain-name mcp.dev.services.sc0red.ai --validation-method DNS --region us-east-1` → note the ARN.
 - [x] 1.2 Get the validation record: `aws acm describe-certificate --certificate-arn <arn> --region us-east-1 --query 'Certificate.DomainValidationOptions[0].ResourceRecord'` → hand the CNAME (name + value) to the prod-account Route 53 admin.
-- [ ] 1.3 Confirm the cert reaches `ISSUED` (usually minutes after the record lands).
+- [x] 1.3 Cert ISSUED (2026-06-12) — validation CNAME added in the prod-account Route 53. (usually minutes after the record lands).
 
 ## 2. CDK (config-gated, per D2–D4)
 
