@@ -148,17 +148,34 @@ def register_write_tools(
         scan = scan_repo.get_by_id(scan_id)
         if error := _verify_org_access(scan, user, "Scan", scan_id):
             return error
+        if scan is None:
+            # _verify_org_access returns an error when scan is None; this is
+            # defensive narrowing for type checkers — unreachable at runtime.
+            raise RuntimeError(f"scan {scan_id} vanished between access check and read")
+        # Guard the scan state here (not in the shared core — the web UI's flow
+        # already makes these impossible, but an LLM has no such guardrail):
+        # re-confirming a running scan would duplicate the fan-out, burning
+        # pipeline runs.
+        if scan.get("type") != "portfolio":
+            return (
+                f"Scan {scan_id} is not a portfolio scan — only portfolio "
+                "discoveries can be confirmed."
+            )
+        if scan.get("status") != "awaiting_confirmation":
+            return (
+                f"Scan {scan_id} is not awaiting confirmation (status: "
+                f"{scan.get('status', 'unknown')}). Companies can only be confirmed once, "
+                "while the scan is in awaiting_confirmation."
+            )
         try:
             rate_limiter.check_and_increment(user.org_id)
         except ScanRateLimitedError as error:
             return str(error)
         # Resolve names from the discovery results so analysis cards render
         # with real company names, matching the web confirm flow.
-        # scan is non-None here — _verify_org_access already returned for a
-        # missing record.
         discovered_names = {
             company.get("url", ""): company.get("name", "")
-            for company in scan.get("portfolio_companies", [])  # type: ignore[reportOptionalMemberAccess]
+            for company in scan.get("portfolio_companies", [])
         }
         companies = [{"url": url, "name": discovered_names.get(url, "")} for url in company_urls]
         try:

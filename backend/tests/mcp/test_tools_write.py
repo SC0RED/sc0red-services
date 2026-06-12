@@ -119,6 +119,7 @@ class TestConfirmPortfolioScan:
         scan = {
             "id": "scan-1",
             "org_id": "org-1",
+            "type": "portfolio",
             "status": "awaiting_confirmation",
             "portfolio_companies": [
                 {"name": "Acme", "url": "https://acme.com"},
@@ -177,6 +178,36 @@ class TestConfirmPortfolioScan:
         assert "not found" in text
         sqs.send_message.assert_not_called()
         # A denied call must not consume a rate-limit slot.
+        limiter.check_and_increment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_already_running_scan_refused(self, harness):
+        # Re-confirming a running scan would duplicate the fan-out (an LLM has
+        # no UI guardrail preventing this). No writes, no rate slot consumed.
+        server, scan_repo, sqs, limiter = harness
+        scan_repo.get_by_id.return_value = self._scan(status="running")
+        text = await _call(
+            server,
+            "confirm_portfolio_scan",
+            {"scan_id": "scan-1", "company_urls": ["https://acme.com"]},
+        )
+        assert "not awaiting confirmation" in text
+        assert "running" in text
+        scan_repo.update.assert_not_called()
+        sqs.send_message.assert_not_called()
+        limiter.check_and_increment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_non_portfolio_scan_refused(self, harness):
+        server, scan_repo, sqs, limiter = harness
+        scan_repo.get_by_id.return_value = self._scan(type="single", status="running")
+        text = await _call(
+            server,
+            "confirm_portfolio_scan",
+            {"scan_id": "scan-1", "company_urls": ["https://acme.com"]},
+        )
+        assert "not a portfolio scan" in text
+        sqs.send_message.assert_not_called()
         limiter.check_and_increment.assert_not_called()
 
     @pytest.mark.asyncio

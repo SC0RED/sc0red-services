@@ -42,8 +42,8 @@ def limiter():
         yield ScanRateLimiter("sc0red-services-test")
 
 
-def _window_rows(limiter_instance, org_id):
-    table = limiter_instance._table
+def _window_rows(_limiter_instance, org_id):
+    table = boto3.resource("dynamodb", region_name="us-east-1").Table("sc0red-services-test")
     response = table.query(
         KeyConditionExpression=boto3.dynamodb.conditions.Key("pk").eq(f"RATE_LIMIT#{org_id}")
     )
@@ -99,9 +99,10 @@ class TestDailyLimit:
             with pytest.raises(ScanRateLimitedError, match=r"30 scans/day"):
                 limiter.check_and_increment("org-1")
 
-    def test_day_refusal_releases_the_hour_slot(self, limiter):
-        # When the day window refuses, the already-consumed hour slot must be
-        # handed back so rejected attempts don't eat the hourly budget.
+    def test_day_refusal_consumes_no_hour_slot(self, limiter):
+        # The two windows are consumed in one transaction — when the day window
+        # refuses, the hour slot must not be consumed either (no leaked slots,
+        # even if the process dies mid-call).
         day = datetime(2026, 6, 11, tzinfo=UTC)
         with patch("src.mcp.scan_rate_limiter.datetime") as mock_datetime:
             calls = 0
@@ -114,10 +115,12 @@ class TestDailyLimit:
                     calls += 1
             # Fresh hour window; day is exhausted.
             mock_datetime.now.return_value = day.replace(hour=23, minute=30)
-            with pytest.raises(ScanRateLimitedError):
+            with pytest.raises(ScanRateLimitedError, match=r"30 scans/day"):
                 limiter.check_and_increment("org-1")
         rows = _window_rows(limiter, "org-1")
-        assert rows["SCAN#HOUR#2026-06-11T23"]["counter"] == 0
+        # Nothing committed for the fresh hour window — the transaction rolled
+        # back both updates together.
+        assert "SCAN#HOUR#2026-06-11T23" not in rows
 
 
 class TestWindowExpiry:
