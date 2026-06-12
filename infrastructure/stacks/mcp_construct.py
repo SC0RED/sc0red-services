@@ -25,6 +25,7 @@ from constructs import Construct
 
 if TYPE_CHECKING:
     from aws_cdk import aws_dynamodb as dynamodb
+    from aws_cdk import aws_sqs as sqs
 
 
 class MCPConstruct(Construct):
@@ -42,6 +43,7 @@ class MCPConstruct(Construct):
         api_url: str,
         cognito_user_pool_id: str,
         cognito_client_id: str,
+        analysis_queue: sqs.Queue,
         frontend_domain: str = "",
     ) -> None:
         """Initialize MCP construct."""
@@ -69,6 +71,12 @@ class MCPConstruct(Construct):
 
         table.grant_read_write_data(mcp_lambda)
         signing_key.grant_read(mcp_lambda)
+        # MCP write tools dispatch scan work to the analysis queue, exactly like
+        # the API Lambda. (Step Functions wiring for multi-company confirms is
+        # added by the stack post-construction — the batch coordinator doesn't
+        # exist yet when this construct is built.)
+        analysis_queue.grant_send_messages(mcp_lambda)
+        mcp_lambda.add_environment("ANALYSIS_QUEUE_URL", analysis_queue.queue_url)
 
         function_url = mcp_lambda.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.NONE,
@@ -120,6 +128,11 @@ class MCPConstruct(Construct):
     def function_url(self) -> str:
         """The Lambda Function URL for the MCP server."""
         return self._function_url
+
+    @property
+    def lambda_function(self) -> lambda_.Function:
+        """The MCP server Lambda — for post-construction grants (Step Functions)."""
+        return self._lambda
 
     def _create_signing_key(self) -> secretsmanager.Secret:
         """Create the RSA signing-key secret for OAuth JWT tokens.

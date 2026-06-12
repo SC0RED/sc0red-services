@@ -1,15 +1,15 @@
-"""Scan handlers — start, status, confirm, delete."""
+"""Scan handlers — start, status, confirm, delete.
+
+The start/confirm business logic lives in ``scan_core`` (shared with the MCP
+write tools); these handlers own only the HTTP envelope — body parsing,
+presence validation, org access, and response shapes.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
-import os
-import uuid
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-
-import boto3
 
 from src.handlers.api_gateway_handler import (
     NOT_FOUND,
@@ -18,17 +18,13 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
-from src.handlers.sqs_messages import (
-    build_analysis_message,
-    build_portfolio_discovery_message,
-)
+from src.handlers.scan_core import ScanInputError, confirm_scan, start_scan
 from src.utilities.scan_summary import build_unified_analyses
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
     from src.handlers.auth_middleware import AuthContext
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
-    from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 
 logger = logging.getLogger(__name__)
 
@@ -48,103 +44,18 @@ def handle_scan_start(
     if not url or not scan_type:
         return build_error("url and type required", code=VALIDATION_ERROR)
 
-    scan_repo = storage.create_scan_repository()
-    scan_id = _create_scan_record(scan_repo, url, scan_type, authentication)
-
-    if scan_type == "portfolio":
-        return _start_portfolio_scan(scan_id, url, authentication, sqs, queue_url)
-    return _start_single_scan(scan_repo, scan_id, url, authentication, sqs, queue_url)
-
-
-def _create_scan_record(
-    scan_repo: DynamoDBScanRepository,
-    url: str,
-    scan_type: str,
-    authentication: AuthContext,
-) -> str:
-    scan_id = str(uuid.uuid4())
-    # Portfolio scans are created in "discovering" so the DB record matches
-    # the API response the client receives. The worker is idempotent — it
-    # re-asserts "discovering" on entry, then transitions to
-    # "awaiting_confirmation" (success) or "failed" (domain error). Single
-    # scans are "running" since they dispatch per-company work to SQS.
-    initial_status = "discovering" if scan_type == "portfolio" else "running"
-    scan_repo.create(
-        {
-            "id": scan_id,
-            "org_id": authentication.org_id,
-            "created_by": authentication.user_id,
-            "type": scan_type,
-            "source_url": url,
-            "status": initial_status,
-            "progress": 0,
-            "created_at": datetime.now(UTC).isoformat(),
-        }
+    result = start_scan(
+        storage.create_scan_repository(),
+        url=url,
+        scan_type=scan_type,
+        authentication=authentication,
+        sqs=sqs,
+        queue_url=queue_url,
     )
-    return scan_id
-
-
-def _start_portfolio_scan(
-    scan_id: str,
-    url: str,
-    authentication: AuthContext,
-    sqs: Any,
-    queue_url: str,
-) -> LambdaResponse:
-    """Dispatch portfolio discovery to the SQS worker and return immediately.
-
-    The worker runs ``DiscoverPortfolio`` → ``ValidatePortfolioCompanies`` and
-    writes results to the scan record. Clients poll GET /api/scan/{id} to
-    observe the status transition through ``discovering`` to
-    ``awaiting_confirmation`` (or ``failed``).
-    """
-    sqs.send_message(
-        QueueUrl=queue_url,
-        MessageBody=build_portfolio_discovery_message(
-            url=url,
-            org_id=authentication.org_id,
-            user_id=authentication.user_id,
-            scan_id=scan_id,
-        ),
-    )
-    return build_json_response(
-        {
-            "scanId": scan_id,
-            "status": "discovering",
-        }
-    )
-
-
-def _start_single_scan(
-    scan_repo: DynamoDBScanRepository,
-    scan_id: str,
-    url: str,
-    authentication: AuthContext,
-    sqs: Any,
-    queue_url: str,
-) -> LambdaResponse:
-    analysis_id = str(uuid.uuid4())
-    scan_repo.update(scan_id, {"status": "running", "progress": 10, "total_companies": 1})
-    scan_repo.link_company(scan_id, analysis_id, "")
-
-    sqs.send_message(
-        QueueUrl=queue_url,
-        MessageBody=build_analysis_message(
-            url=url,
-            org_id=authentication.org_id,
-            user_id=authentication.user_id,
-            scan_id=scan_id,
-            request_id=analysis_id,
-        ),
-    )
-
-    return build_json_response(
-        {
-            "scanId": scan_id,
-            "status": "running",
-            "analysisId": analysis_id,
-        }
-    )
+    response: dict[str, Any] = {"scanId": result["scan_id"], "status": result["status"]}
+    if "analysis_id" in result:
+        response["analysisId"] = result["analysis_id"]
+    return build_json_response(response)
 
 
 def _compute_scan_progress(
@@ -263,7 +174,8 @@ def handle_scan_confirm(
     """Handle POST /api/scan/{scan_id}/confirm.
 
     Creates scan→company links and dispatches analyses via Step Functions
-    (portfolio scans with multiple companies) or SQS (single company).
+    (portfolio scans with multiple companies) or SQS (single company) — see
+    ``scan_core.confirm_scan``.
     """
     body = json.loads(event.get("body") or "{}")
     companies = body.get("companies", [])
@@ -275,74 +187,19 @@ def handle_scan_confirm(
     if not scan or scan.get("org_id") != authentication.org_id:
         return build_error("Scan not found", 404, NOT_FOUND)
 
-    valid_companies = [c for c in companies if c.get("url", "").startswith(("http://", "https://"))]
-    if not valid_companies:
-        return build_error("At least one company with a url is required", code=VALIDATION_ERROR)
-
-    scan_repo.update(
-        scan_id,
-        {"status": "running", "progress": 10, "total_companies": len(valid_companies)},
-    )
-
-    # Create scan→company links and build the company list for dispatch.
-    # The link record persists company_url + order_index so the portfolio
-    # view can render every card from t=0 in submission order, even
-    # before a worker has picked up the SQS message.
-    queued = []
-    company_payloads = []
-    for index, company in enumerate(valid_companies):
-        company_name = company.get("name", "")
-        company_url = company["url"]
-        analysis_id = str(uuid.uuid4())
-        scan_repo.link_company(
-            scan_id,
-            analysis_id,
-            company_name,
-            company_url=company_url,
-            order_index=index,
+    try:
+        result = confirm_scan(
+            scan_repo,
+            scan_id=scan_id,
+            companies=companies,
+            authentication=authentication,
+            sqs=sqs,
+            queue_url=queue_url,
         )
-        queued.append({"name": company_name, "analysisId": analysis_id})
-        company_payloads.append(
-            {
-                "name": company_name,
-                "url": company_url,
-                "analysis_id": analysis_id,
-            }
-        )
+    except ScanInputError as error:
+        return build_error(str(error), code=VALIDATION_ERROR)
 
-    if len(valid_companies) == 1:
-        # Single company — send directly to SQS (fast path, no orchestration).
-        sqs.send_message(
-            QueueUrl=queue_url,
-            MessageBody=build_analysis_message(
-                url=valid_companies[0]["url"],
-                org_id=authentication.org_id,
-                user_id=authentication.user_id,
-                scan_id=scan_id,
-                request_id=queued[0]["analysisId"],
-                company_name=valid_companies[0].get("name", ""),
-            ),
-        )
-    else:
-        # Multiple companies — dispatch via Step Functions in waves.
-        # Fail-fast: missing ARN in a deployed environment is a config bug.
-        state_machine_arn = os.environ["PORTFOLIO_STATE_MACHINE_ARN"]
-        wave_size = int(os.environ.get("WAVE_SIZE", "4"))
-        sfn_client = boto3.client("stepfunctions")
-        sfn_client.start_execution(
-            stateMachineArn=state_machine_arn,
-            input=json.dumps(
-                {
-                    "companies": company_payloads,
-                    "wave_size": wave_size,
-                    "scan_id": scan_id,
-                    "org_id": authentication.org_id,
-                    "user_id": authentication.user_id,
-                }
-            ),
-        )
-
-    return build_json_response({"ok": True, "queued": queued}, 202)
+    return build_json_response({"ok": True, "queued": result["queued"]}, 202)
 
 
 def handle_delete_scan(
