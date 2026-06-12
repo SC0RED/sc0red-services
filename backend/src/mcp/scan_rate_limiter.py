@@ -103,5 +103,5 @@ class ScanRateLimiter:
         }
 
 
-def _is_condition_failed(reasons: list[dict[str, Any]], index: int) -> bool:
+def _is_condition_failed(reasons: list[dict[str, Any]], index: int) -> bool:  # noqa: NAMING001  is_ predicate; checker mis-flags leading-underscore
     return len(reasons) > index and reasons[index].get("Code") == "ConditionalCheckFailed"
