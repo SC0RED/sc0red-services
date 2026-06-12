@@ -12,6 +12,14 @@ if TYPE_CHECKING:
     from src.mcp.auth_context import AuthenticatedUser
 
 
+# Empty-state guidance shared by list_analyses / list_scans — must only name
+# tools that actually exist on the server (mcp-scan-tools spec).
+NO_SCANS_GUIDANCE = (
+    "Use start_company_scan to analyze a company, "
+    "or start_portfolio_scan to discover a PE firm's portfolio."
+)
+
+
 def _verify_org_access(
     record: dict[str, Any] | None, user: AuthenticatedUser, label: str, record_id: str
 ) -> str | None:

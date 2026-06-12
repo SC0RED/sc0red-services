@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 from src.mcp._tools_read_helpers import (
+    NO_SCANS_GUIDANCE,
     _format_analysis_summary,
     _format_opportunities,
     _format_scans,
@@ -83,7 +84,7 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
 
         if not analyzed:
-            return "No analyses found. Use start_company_scan to analyze a company."
+            return f"No analyses found. {NO_SCANS_GUIDANCE}"
 
         lines = [f"## {len(analyzed)} Analyses"]
         for c in analyzed:
@@ -350,7 +351,7 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         user = get_authenticated_user()
         scans = scan_repo.find_recent_by_org(user.org_id, limit=None)
         if not scans:
-            return "No scans found. Use start_company_scan to analyze a company."
+            return f"No scans found. {NO_SCANS_GUIDANCE}"
         return _format_scans(scans)
 
     @mcp.tool()

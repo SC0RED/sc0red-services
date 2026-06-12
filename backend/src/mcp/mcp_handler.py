@@ -175,13 +175,27 @@ mcp = FastMCP(
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 
+from src.mcp.scan_rate_limiter import ScanRateLimiter  # noqa: E402
 from src.mcp.tools_read import register_read_tools  # noqa: E402
 from src.mcp.tools_search import register_search_tools  # noqa: E402
+from src.mcp.tools_write import register_write_tools  # noqa: E402
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider  # noqa: E402
 
 _storage = DynamoDBStorageProvider()
 register_read_tools(mcp, _storage)
 register_search_tools(mcp, _storage)
+# Write tools dispatch scan work to the analysis queue. ANALYSIS_QUEUE_URL is
+# set by MCPConstruct in deployed environments (and passed explicitly for local
+# runs). Hard env access — a missing queue is a deploy bug and must crash the
+# Lambda at cold start, not orphan scan records mid-dispatch (mirrors
+# api_gateway_handler).
+register_write_tools(
+    mcp,
+    _storage,
+    sqs_client=boto3.client("sqs"),  # type: ignore[reportUnknownMemberType]
+    queue_url=os.environ["ANALYSIS_QUEUE_URL"],
+    rate_limiter=ScanRateLimiter(DYNAMODB_TABLE),
+)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
