@@ -7,11 +7,15 @@ const mockReplace = vi.fn()
 const mockPush = vi.fn()
 const mockSignIn = vi.fn()
 let mockStatus = 'unauthenticated'
+let mockCallbackUrl: string | null = null
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
         replace: mockReplace,
         push: mockPush,
+    }),
+    useSearchParams: () => ({
+        get: (key: string) => (key === 'callbackUrl' ? mockCallbackUrl : null),
     }),
 }))
 
@@ -26,6 +30,7 @@ describe('SignupPage', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockStatus = 'unauthenticated'
+        mockCallbackUrl = null
     })
 
     it('renders signup form when unauthenticated', () => {
@@ -84,6 +89,27 @@ describe('SignupPage', () => {
                 redirect: false,
             })
             expect(mockPush).toHaveBeenCalledWith('/dashboard')
+        })
+    })
+
+    it('returns to the callbackUrl after signup (new user in OAuth consent flow)', async () => {
+        mockCallbackUrl = '/oauth/authorize?client_id=abc&scope=read+write&state=xyz'
+        ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ success: true }),
+        })
+        mockSignIn.mockResolvedValue({ ok: true })
+
+        render(<SignupPage />)
+
+        fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Test User' } })
+        fireEvent.change(screen.getByLabelText('Work email'), { target: { value: 'test@test.com' } })
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
+        fireEvent.change(screen.getByLabelText('Firm name'), { target: { value: 'Test Org' } })
+        fireEvent.click(screen.getByText('Create Account & Start'))
+
+        await waitFor(() => {
+            expect(mockPush).toHaveBeenCalledWith('/oauth/authorize?client_id=abc&scope=read+write&state=xyz')
         })
     })
 
