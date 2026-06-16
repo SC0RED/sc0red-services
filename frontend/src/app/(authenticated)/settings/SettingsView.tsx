@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -120,6 +121,22 @@ export default function SettingsView() {
                         ) : null
                     }
                 />
+            </Section>
+
+            <Section title="Connected Apps">
+                <p
+                    style={{
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-tertiary)',
+                        marginBottom: '0.75rem',
+                    }}
+                >
+                    Manage the AI assistants connected to sc0red Services over MCP — review what you&rsquo;ve
+                    connected and disconnect any you no longer use.
+                </p>
+                <Link href="/settings/connected-apps" className="btn btn-ghost btn-sm">
+                    Manage connected apps
+                </Link>
             </Section>
 
             <Section title="Appearance">

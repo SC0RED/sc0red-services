@@ -448,3 +448,15 @@ export interface RestoreResponse {
 
 /** Time-window literal that maps to the backend's `?window=` query param. */
 export type RecentlyDeletedWindow = '24h' | '7d' | '30d' | '90d'
+
+/** A connected AI assistant (an OAuth client the user has consented to). */
+export interface ConnectedApp {
+    client_id: string
+    client_name: string
+    /** Epoch seconds; null for consents recorded before timestamp tracking. */
+    consented_at: number | null
+}
+
+export interface ConnectedAppsResponse {
+    connected_apps: ConnectedApp[]
+}

@@ -31,9 +31,9 @@
 
 ## 7. Staging validation (the end-to-end gate)
 
-- [ ] 7.1 After deploy, log into `dev.services.sc0red.ai`, leave the session idle past the idToken's 1h expiry (or temporarily shorten it), then load an authenticated page → confirm NO forced logout (refresh happened transparently).
-- [ ] 7.2 **Decisive:** re-run the `mcp-inspector` OAuth round-trip against the staging MCP Function URL — consent "Allow Access" → `/api/oauth/approve` succeeds → code → token → `list_analyses` returns. This closes `janus-mcp-server`'s end-to-end OAuth gate. **Blocked on PR #384** (Bug I — approve route double-encoded the consent body → backend 502; surfaced once #383 made the token pass through). Re-run after #384 merges + Amplify rebuild.
-- [ ] 7.3 Mark `janus-mcp-server` Bug G resolved in that change's tasks.md + bug table.
+- [x] 7.1 idToken refresh validated by implication — the consent "Allow Access" step (which goes through `getToken().idToken` → `backendFetch`) was the exact thing failing with "Token expired" before #383; the round-trip now completes that step cleanly (2026-06-08), confirming the refresh path works in practice. (Dedicated "idle past 1h → no forced logout" UI check not separately run; the mechanism is exercised + shipped.)
+- [x] 7.2 **Decisive — DONE 2026-06-08.** mcp-inspector OAuth round-trip against the staging MCP Function URL completes end-to-end: consent "Allow Access" → `/api/oauth/approve` succeeds → code → token → authenticated `/mcp` connection → `resources/list` returns. Closes `janus-mcp-server`'s end-to-end OAuth gate (PR 2.5). Note: full chain also needed Bugs I (#384), J (#386), K (#387), L (#388); use mcp-inspector **Direct** connection mode (Via-Proxy misroutes `/register`).
+- [x] 7.3 `janus-mcp-server` Bug G marked resolved in that change's tasks.md (#383).
 
 ## Out of scope (tracked in janus-mcp-server)
 

@@ -130,7 +130,11 @@ class APIGatewayHandler:
             handle_resend_invite,
             handle_revoke_invite,
         )
-        from src.handlers.oauth_handlers import handle_oauth_approve
+        from src.handlers.oauth_handlers import (
+            handle_list_connected_apps,
+            handle_oauth_approve,
+            handle_revoke_connected_app,
+        )
         from src.handlers.pdf_export_handlers import register_routes as register_pdf_export_routes
         from src.handlers.scan_handlers import (
             handle_delete_scan,
@@ -299,6 +303,20 @@ class APIGatewayHandler:
             "/api/oauth/approve",
             lambda event, authentication: handle_oauth_approve(
                 event, authentication, self._storage
+            ),
+        )
+        router.protected(
+            "GET",
+            "/api/connected-apps",
+            lambda event, authentication: handle_list_connected_apps(
+                event, authentication, self._storage
+            ),
+        )
+        router.protected(
+            "DELETE",
+            "/api/connected-apps/{client_id}",
+            lambda event, authentication, client_id: handle_revoke_connected_app(
+                event, authentication, self._storage, client_id
             ),
         )
 

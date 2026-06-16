@@ -1,17 +1,20 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 
 import { Button, Card, FormField, Input } from '@/components/ui'
+import { authPathWithCallback, resolvePostAuthPath } from '@/lib/utils/authRedirect'
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL ?? 'https://www.sc0red.com'
 
-export default function SignupPage() {
+function SignupForm() {
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const callbackUrl = searchParams.get('callbackUrl')
     const [form, setForm] = useState({
         name: '',
         email: '',
@@ -46,7 +49,9 @@ export default function SignupPage() {
 
         // Auto sign in
         await signIn('credentials', { email: form.email, password: form.password, redirect: false })
-        router.push('/dashboard')
+        // Resume the OAuth consent flow if we arrived from it (callbackUrl);
+        // otherwise land on the dashboard.
+        router.push(resolvePostAuthPath(callbackUrl))
     }
 
     return (
@@ -232,12 +237,24 @@ export default function SignupPage() {
                     <div className="divider" style={{ margin: '1.5rem 0' }} />
                     <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
                         Already have an account?{' '}
-                        <Link href="/login" style={{ color: 'var(--accent-blue)', fontWeight: 500 }}>
+                        <Link
+                            href={authPathWithCallback('/login', callbackUrl)}
+                            style={{ color: 'var(--accent-blue)', fontWeight: 500 }}
+                        >
                             Sign in
                         </Link>
                     </p>
                 </Card>
             </div>
         </div>
+    )
+}
+
+export default function SignupPage() {
+    // useSearchParams requires a Suspense boundary during prerender.
+    return (
+        <Suspense>
+            <SignupForm />
+        </Suspense>
     )
 }

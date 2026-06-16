@@ -1,8 +1,14 @@
-# ⏸ ON HOLD — paused 2026-06-03
+# ✅ PR 2.5 COMPLETE — end-to-end OAuth round-trip VALIDATED 2026-06-08
 
-This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Apr 14, 2026); a Phase A tactical scout on the deployed staging Lambda (Jun 3, 2026) uncovered a blocking architectural bug. PR 2.5 (new, below) is the next required step before any further customer-facing work can ship.
+PR 1 + PR 2 shipped (Apr 14, 2026). A Phase A tactical scout (Jun 3) uncovered a chain of blocking bugs (B → C/D → G → I → J → K → L); **all are now fixed, deployed to staging, and the mcp-inspector OAuth round-trip completes end-to-end** (validated 2026-06-08 — see below). The next work is PR 2.6 (polish: read-tool drift, missing tools, rebrand, minimal UI).
 
-## Where we left off (updated 2026-06-05)
+## ✅ End-to-end validation (2026-06-08)
+
+mcp-inspector v0.22.0 → staging MCP Function URL `…/mcp`, **Connection Type = Direct**, Transport = Streamable HTTP. Full chain succeeds: discovery → DCR → `/authorize` → consent "Allow Access" → callback → token exchange → **authenticated `/mcp` connection established** → MCP protocol calls work (`resources/list` returned `{resourceTemplates: []}`; tools/prompts/resources tabs all live). Inspector shows **Connected** to "sc0red Services" (server v1.27.2).
+
+**⚠️ Inspector gotcha (operational note):** use **Connection Type = "Direct"**, NOT "Via Proxy". In Via-Proxy mode the inspector's local Express proxy (`:6277`) misrouted the DCR `POST /register` to itself and returned an Express `Cannot POST /register` HTML 404 (`ServerError: HTTP 404: Invalid OAuth error response`). Direct mode sends OAuth + transport straight to the Lambda; our CORS (#386) makes that work browser-side. Our `/register` was always correct (advertised endpoint = the Lambda; returns JSON) — the misroute was entirely inspector-side.
+
+## Where we left off (updated 2026-06-08)
 
 - ✅ PR 1 (OAuth Provider + Infrastructure) — shipped
 - ✅ PR 2 (Read Tools, 12 tools) — shipped
@@ -15,24 +21,34 @@ This change is paused while other priorities take focus. PR 1 + PR 2 shipped (Ap
 - ✅ **Bug I FIXED (#384)** — once the token passed through, "Allow Access" hit a 502: the frontend `/api/oauth/approve` route double-encoded the body (`JSON.stringify` on top of `backendFetch`'s own stringify), so the backend's `json.loads(event["body"])` got a string and `handle_oauth_approve` threw `AttributeError: 'str' object has no attribute 'get'`. Fixed by passing the object. Inspector now gets through consent → callback → token exchange.
 - ✅ **Bug J FIXED (#386, deployed)** — `/mcp` transport had no CORS, so the browser inspector's authed preflight 401'd with no `Access-Control-Allow-Origin` → `TypeError: Failed to fetch`. Fixed with an outermost `CORSMiddleware` (`src/mcp/cors.py`). Verified live post-deploy: `OPTIONS /mcp` → 200 + ACAO + `authorization` allowed; methods `GET, POST, DELETE, OPTIONS`.
 - ✅ **Bug K FIXED (#387, deployed)** — `/token` 500: our `Stored*` dataclasses omitted `expires_at`, which the SDK token handler (`token.py:145`, no None guard) + bearer-auth backend read → `AttributeError`. Added + populated `expires_at` on all three (auth code / refresh / access) from the stored `ttl` / JWT `exp`. Token exchange now succeeds (inspector got a token and reached the `/mcp` connection).
-- 🔴 **Bug L — `/mcp` POST → 421 "Invalid Host header" (current blocker).** With tokens working, the inspector's authed POST to `/mcp` is rejected by the SDK transport-security layer. FastMCP's default bind host is `127.0.0.1`, so with `transport_security` unset it AUTO-ENABLES DNS-rebinding protection with `allowed_hosts=["127.0.0.1:*","localhost:*","[::1]:*"]`. Under LWA the request reaches uvicorn with the Function URL Host (`…lambda-url.us-east-1.on.aws`), not in that localhost list → 421. Only surfaces now because it sits *behind* `RequireAuthMiddleware` (the earlier 401s). **Fix in progress** (`fix/mcp-transport-host-validation`): pass `transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)` — the protection guards localhost dev servers from browser DNS-rebinding and is inapplicable/redundant for a public TLS endpoint gated by an OAuth bearer token.
-- 🟡 **Bug H (non-blocking) — `GET /.well-known/oauth-protected-resource/mcp` → 404.** The inspector probes the RFC 9728 *path-suffixed* metadata location; we serve only the bare `/.well-known/oauth-protected-resource` (200). The inspector falls back to the bare path and proceeds, so this does NOT block the round-trip — it's a spec-compliance refinement for PR 2.6.
-- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tool + rebrand + minimal UI) — the read-tool drift fixes are independent and could proceed.
+- ✅ **Bug L FIXED (#388, deployed + validated)** — `/mcp` POST → 421 "Invalid Host header". FastMCP's default bind host is `127.0.0.1`, so with `transport_security` unset it auto-enabled DNS-rebinding protection (`allowed_hosts=["127.0.0.1:*","localhost:*","[::1]:*"]`); under LWA the Function URL Host failed that localhost list → 421 (behind `RequireAuthMiddleware`, so only surfaced once tokens worked). Disabled it via `transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)` — inapplicable/redundant for a public TLS endpoint gated by an OAuth bearer token. Post-deploy round-trip in Direct mode succeeds.
+- ✅ **Bug H FIXED — RFC 9728 path-suffixed metadata.** Root cause: `resource_server_url` was the Function URL root (path `/`), which the SDK treats as empty → served + advertised the BARE `/.well-known/oauth-protected-resource` and 404'd the path-suffixed `…/mcp` that spec-strict clients probe. Fixed by pointing `resource_server_url` at the actual protected resource (`…/mcp`): the SDK now registers the route at `/.well-known/oauth-protected-resource/mcp`, `metadata.resource = …/mcp`, and the `WWW-Authenticate` header points there. Issuer (authorization server) stays the root. Verified the URL derivation locally; verify post-deploy via curl.
+- 🛑 PR 2.6 (Quick wins polish — drift fix + missing tools + rebrand + minimal UI) — **now unblocked**; this is the next chunk of work.
 - 🛑 Original PR 3–7 — downstream.
 
-## Resume here — next session
+## Resume here — next session (PR 2.6)
 
-The MCP runtime is healthy and the OAuth dance now issues tokens (Bugs G + I + J + K fixed). The remaining blocker is **Bug L** (421 Invalid Host header on the authed `/mcp` POST). Tackle in this order:
-1. **Bug L** — ship `fix/mcp-transport-host-validation` (disable DNS-rebinding protection). **Requires an MCP Lambda redeploy** (CDK). Then re-run the inspector round-trip → should complete (authed `/mcp` connects → tools list → `list_analyses`) → close PR 2.5's end-to-end validation.
-2. **PR 2.6** — read-tool drift (Bug E), `get_strategy_map`/`list_scans` (Bug F), tool-name rebrand, minimal Connected Apps UI, RFC 9728 path-suffixed metadata (Bug H — non-blocking). The drift fixes don't depend on Bug K.
-   - **RFC 8707 resource indicators (deferred from the Bug K PR's arch review).** The SDK base models carry `resource: str | None = None` on `AuthorizationCode`/`AccessToken`; our `Stored*` dataclasses omit it. No current 500 (the installed SDK's token handler doesn't read `.resource` on our objects), so it's a forward-compat gap. Do it properly here: thread `resource` through `authorize()` → `save_authorization_code` → `load_authorization_code` (and access tokens) rather than adding an always-`None` dead field.
+The OAuth + transport chain is DONE and validated; PR 2.5 is complete. Next is **PR 2.6 (polish)** — none of it blocks anything else, do in any order:
+
+1. **Bug E — read-tool output drift.** Reconcile the read tools' output shape with the current API/model. (Independent; was flagged in Phase A. See the "Read-tool drift fix (Bug E)" section below for specifics.)
+2. **Bug F — missing tools.** Add `get_strategy_map` and `list_scans` (see "Missing tools (Bug F + proposal gap)" section).
+3. **Tool-name rebrand.** Align tool names with the sc0red Services brand.
+4. **Minimal Connected Apps UI.** Surface MCP/OAuth connected apps in the frontend.
+5. ✅ **Bug H — RFC 9728 path-suffixed metadata** — DONE (set `resource_server_url` to `…/mcp`).
+6. **RFC 8707 resource indicators — DEFERRED (decision 2026-06-09, won't-do for now).** Investigated and consciously deferred: (a) the installed SDK doesn't enforce `resource` (the token handler parses it into the request model but never validates it against the auth code or passes it to issuance), so nothing is broken without it; (b) full threading needs FRONTEND work — `resource` arrives at `authorize()` but the consent flow bounces through the frontend consent page before the auth code is created, so the value is lost unless the consent page echoes it back; (c) the security substance (audience-restricted `aud`) is ~redundant here — RFC 8707 prevents token replay when one AS serves MULTIPLE resource servers, but we are both the issuer AND the only resource server, so the existing `iss` check already scopes tokens. Hard-validating `aud` would add redeploy risk to the validated `/mcp` flow for ~no gain. Revisit only if we add a second resource server or a client demands strict RFC 8707.
+
+### Other deferred / known follow-ups
+- ✅ **Bug X (signing key) — FIXED.** A CDK custom resource (`SigningKeyGenerator` Lambda → `signing_key_provider.handle`, wired via `custom_resources.Provider` in `MCPConstruct._add_signing_key_generator`) now generates the RSA keypair into the secret at deploy time, so each environment self-populates — no manual `put-secret-value`. **Idempotent**: it no-ops when the secret already holds a keypair, so staging's hand-populated key is preserved and redeploys never rotate (rotation would invalidate live tokens). This unblocks promotion to testing/production. Handler is 100%-tested; CDK wiring validated via isolated synth (custom resource + provider + read/write grants).
+- **Promote beyond staging.** The MCP Lambda + all fixes (#379/#382/#383/#384/#386/#387/#388) are live on **staging (development) / us-east-1** only. Not yet promoted to testing/production (testing+prod use us-east-2). Promote via the development → testing → production PR flow when ready.
+- **Validation health-check.** Quick re-run of the inspector round-trip after any future MCP Lambda deploy (Direct mode) is the canonical smoke test.
 
 ## State of staging environment (live, in AWS)
 
 - **Account:** the sc0red-services AWS account (NOT 148256362911 — that's a different project's dev account).
 - **Region:** `us-east-1`.
 - **Lambda:** `sc0red-services-mcp-staging`. Active, last modified ~mid-May 2026 (rename-driven redeploy).
-- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — internal only. As of #382 it survives warm invocations (3× 200) and serves OAuth metadata with issuer = the Function URL.
+- **Branded URL (customer-facing):** `https://mcp.dev.services.sc0red.ai/mcp` — CloudFront in front of the Function URL (mcp-custom-domain change, #407). Issuer + all OAuth metadata now advertise this host; the raw Function URL appears in no advertised metadata.
+- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — internal origin only (behind CloudFront). As of #382 it survives warm invocations (3× 200); since #407 it is no longer the advertised issuer.
 - **Signing-key secret:** `sc0red-services-mcp-signing-key-staging` populated 2026-06-03 with an RSA-2048 keypair. The CDK construct still creates it empty (Bug X — partial fix shipped, full auto-gen deferred).
 - **Issuer URL:** resolved at cold start from SSM param `/sc0red-services/mcp/staging/issuer-url` (= the Function URL). #382.
 - **Status overall:** MCP runtime HEALTHY (run-once + issuer fixed). End-to-end OAuth still blocked by Bug G (frontend idToken refresh). Not yet promoted beyond staging.
@@ -42,16 +58,20 @@ The MCP runtime is healthy and the OAuth dance now issues tokens (Bugs G + I + J
 | # | Bug | Status | Where |
 |---|---|---|---|
 | A | Signing-key secret empty → import-time `KeyError: 'private_key'` | ✅ Fixed operationally in staging (2026-06-03) | `backend/src/mcp/mcp_handler.py:38` |
-| B | Mangum + `StreamableHTTPSessionManager` incompatibility — lifespan startup re-fires per invocation, run-once guard trips | 🛑 Blocking — see `design.md` Decision 8 | `backend/src/mcp/mcp_handler.py:102` |
-| C | Default `MCP_ISSUER_URL` points at non-existent DNS `mcp.{stage}.sc0red-services.sc0red.com` | ⚠ Latent — fix in PR 2.5 or 2.6 | `backend/src/mcp/mcp_handler.py:50` |
+| B | Mangum + `StreamableHTTPSessionManager` incompatibility — lifespan startup re-fires per invocation, run-once guard trips | ✅ Fixed via LWA (#379) | `backend/src/mcp/mcp_handler.py:102` |
+| C | Default `MCP_ISSUER_URL` points at non-existent DNS `mcp.{stage}.sc0red-services.sc0red.com` | ✅ Fixed via SSM indirection (#382) | `backend/src/mcp/mcp_handler.py:50` |
 | D | `CONSENT_BASE_URL` env var on staging Lambda points at the *development* Amplify URL | ⚠ Latent — fix in PR 2.6 | Lambda env var configuration |
 | E | Read-tool formatters miss new Opportunity / EBITDA / value-chain fields shipped by `redesign-analysis-visuals` | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
 | F | No `get_strategy_map` tool exists; strategy map invisible to AI assistant users | ⚠ Latent — fix in PR 2.6 | `backend/src/mcp/tools_read.py` |
-| X | `MCPConstruct` creates the signing-key secret empty; deploy succeeds but Lambda crashes silently at first invocation. | ~ Partial: fail-fast error message added (#379). Full auto-gen via CDK custom resource still deferred. | `infrastructure/stacks/mcp_construct.py` |
-| G | **NextAuth does not refresh the Cognito idToken.** The server-read `getToken().idToken` goes stale after the 1h Cognito idToken expiry, so `backendFetch` (incl. the OAuth consent `/api/oauth/approve`) sends an expired token → API auth middleware returns `401 {"error":"Token expired"}`. **Reproduces right after re-login** (re-login may not rotate the JWT-stored idToken). Blocks the mcp-inspector OAuth round-trip AND any long-lived authenticated frontend session. | 🔴 BLOCKS end-to-end OAuth — frontend-auth bug, NOT MCP. Verified 2026-06-05. | `frontend/src/lib/api/serverToken.ts` (getBackendToken / idToken) + `frontend/src/lib/auth/authOptions.ts` (no refresh callback) |
-| H | MCP server doesn't serve RFC 9728 Protected Resource Metadata — `GET /.well-known/oauth-protected-resource/mcp → 404`. mcp-inspector fell back fine, but stricter clients may require it. | ⚠ Minor — PR 2.6 | MCP server routes |
+| X | `MCPConstruct` creates the signing-key secret empty; deploy succeeds but Lambda crashes silently at first invocation. | ✅ Fixed — fail-fast added (#379) + CDK custom resource auto-generates the keypair at deploy time (idempotent; preserves a hand-populated key). | `infrastructure/stacks/mcp_construct.py`, `backend/src/mcp/signing_key_provider.py` |
+| G | **NextAuth does not refresh the Cognito idToken.** The server-read `getToken().idToken` goes stale after the 1h Cognito idToken expiry, so `backendFetch` (incl. the OAuth consent `/api/oauth/approve`) sends an expired token → API auth middleware returns `401 {"error":"Token expired"}`. **Reproduces right after re-login** (re-login may not rotate the JWT-stored idToken). Blocks the mcp-inspector OAuth round-trip AND any long-lived authenticated frontend session. | ✅ Fixed (#383) — refresh-token rotation in the NextAuth jwt callback. | `frontend/src/lib/api/serverToken.ts` (getBackendToken / idToken) + `frontend/src/lib/auth/authOptions.ts` |
+| H | MCP server doesn't serve RFC 9728 Protected Resource Metadata — `GET /.well-known/oauth-protected-resource/mcp → 404`. mcp-inspector fell back fine, but stricter clients may require it. | ✅ Fixed — `resource_server_url` set to `…/mcp` so the SDK registers the path-suffixed route | `backend/src/mcp/mcp_handler.py` |
+| I | Frontend `/api/oauth/approve` double-encoded the consent body → backend `AttributeError` → 502 | ✅ Fixed (#384) | `frontend/src/app/api/oauth/approve/route.ts` |
+| J | `/mcp` transport had no CORS → browser preflight blocked (`Failed to fetch`) | ✅ Fixed (#386) | `backend/src/mcp/cors.py` |
+| K | `Stored*` OAuth models missing `expires_at` → SDK token handler `AttributeError` → `/token` 500 | ✅ Fixed (#387) | `backend/src/mcp/oauth_provider.py` |
+| L | Auto-enabled DNS-rebinding protection rejected the Function-URL Host → `/mcp` 421 | ✅ Fixed (#388) | `backend/src/mcp/mcp_handler.py` |
 
-**Bugs B + C: FIXED + validated. A: partially fixed. D: re-assessed as non-bug (consent URL already points at the correct env frontend). E/F/H: PR 2.6. G: the active blocker for end-to-end OAuth — frontend, not MCP.**
+**Resolved: A (partial), B (#379), C (#382), G (#383), I (#384), J (#386), K (#387), L (#388), E (#399), F (#400), H (#401). D: re-assessed as non-bug. End-to-end OAuth round-trip VALIDATED 2026-06-08. Bug X (signing-key auto-gen) FIXED. PR 2.6 remaining: tool-name rebrand (recommendation: keep current names), Connected Apps UI. Promotion to testing/production now unblocked (Bug X cleared the per-env signing-key blocker). Deferred: RFC 8707 resource indicators (redundant for a single-resource server — see item 6). Use mcp-inspector Direct mode.**
 
 ## To re-establish context when resuming
 
@@ -111,7 +131,7 @@ Source of truth: `design.md` Decision 8 (revised 2026-06-03 — cheap config fix
 - [x] 2.5.1 `backend/src/mcp/mcp_handler.py` — added `stateless_http=True, json_response=True`. (PR #378, merged.)
 - [x] 2.5.2 Lint + typecheck passed.
 - [x] 2.5.3 Deployed to staging via the development backend-deploy workflow. **RESULT: FAILED.** 1st request 200, 2nd + 3rd request **502** with the same `StreamableHTTPSessionManager .run() can only be called once` trace (via `mangum/adapter.py` lifespan). `stateless_http` changes session *handling* but `.run()` still lives in the ASGI lifespan that Mangum re-invokes per request → guard still trips.
-- [~] 2.5.4 Inspector round-trip — n/a, server still 502s on warm invokes.
+- [x] 2.5.4 Inspector round-trip — **VALIDATED 2026-06-08.** Full OAuth + transport chain completes (mcp-inspector v0.22.0, Direct mode): discovery → DCR → authorize → consent → token → authed `/mcp` connect → `resources/list` returns. Required Bugs G/I/J/K/L all fixed + deployed.
 - [x] 2.5.5 **Decision gate: Step 1 failed → proceed to Step 2 (LWA).**
 
 ### Step 1 — ship
@@ -130,7 +150,7 @@ Chosen the **LWA-layer-on-zip** approach (Option 2a), not the full Docker `Docke
 - [x] 2.5.13 Architecture-reviewer on the diff — 0 CRITICAL, safe to commit. Addressed before PR: removed dead `mangum` dep (pyproject + uv.lock), fixed the stale "via Mangum" docstring in `mcp_construct.py`. **Deferred (with note):** the shared-bundling separation-of-concerns — `build_bundling_options()` copies `run_mcp.sh` into all 3 Lambda packages. Kept as a documented temporary coupling until staging validates the LWA-via-layer approach; if validated, move the copy to an MCP-specific bundling variant before merge; if it fails and we pivot to Docker (2b), the bundling is reworked anyway.
 
 ### Deferred to follow-up (orthogonal to the run-once fix)
-- [~] 2.5.14 Bug X — **partial fix in this branch:** added an actionable fail-fast error in `_load_signing_keys` when the secret is empty (instead of an opaque KeyError). **Full fix still deferred:** auto-generate the RSA pair via a CDK custom resource so deploy populates the secret.
+- [x] 2.5.14 Bug X — **FULLY FIXED.** Fail-fast error in `_load_signing_keys` (#379) + a CDK custom resource (`SigningKeyGenerator`) that auto-generates the RSA keypair into the secret at deploy time. Idempotent (no-op if already populated → preserves a hand-populated key, never rotates on redeploy). Unblocks testing/production promotion.
 - [x] 2.5.15 Bug C — **FIXED via SSM indirection** (chosen over custom domain). First attempt (#380, `add_environment("MCP_ISSUER_URL", function_url.url)`) failed at deploy with a CFN circular dependency (Lambda env → FunctionUrl → Lambda); reverted in #381. Durable fix (`fix/mcp-issuer-url-via-ssm`): `MCPConstruct` stores `function_url.url` in an SSM parameter (`/sc0red-services/mcp/{env}/issuer-url`); the Lambda's env carries only the static parameter NAME (a literal string — no resource reference, no cycle); the handler reads the parameter at cold start to set the issuer. IAM grant uses a **constructed string ARN** (not `param.grant_read`) so the execution role doesn't reference the SSM resource either (that would re-introduce role → param → FunctionUrl → Lambda). Dependency graph verified acyclic: Lambda is a leaf; FunctionUrl → Lambda; SSMParam → FunctionUrl; role policy → string ARN. Validation = staging deploy (synth must NOT report a circular dependency) + the mcp-inspector OAuth round-trip.
 - [~] 2.5.16 Bug D — **re-assessed: not a functional bug.** `CONSENT_BASE_URL` IS set by the construct to the environment's frontend (dev Amplify URL for staging). Since the CDK `staging` env IS the `development` git branch / `dev.services.sc0red.ai` frontend, the consent redirect already points at the correct environment. The only imperfection is amplifyapp-URL vs custom-domain — the same cosmetic call accepted for `FRONTEND_BASE_URL` in the rename migration. The bogus handler *default* (never reached when deployed) was cleaned up alongside Bug C. No further action.
 
@@ -139,24 +159,24 @@ Chosen the **LWA-layer-on-zip** approach (Option 2a), not the full Docker `Docke
 Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invokes.
 
 ### Read-tool drift fix (Bug E)
-- [ ] 2.6.1 Update `get_opportunities` formatter in `tools_read.py` to surface `investment_value_usd`, `roi_estimate_pct`, `timeline`, `strategic_category`.
-- [ ] 2.6.2 Update `get_ebitda_tree` formatter to surface `confidence_level`, `confidence_basis`, `linked_opportunity_indices`.
-- [ ] 2.6.3 Update `get_value_chain` formatter to surface `opportunity_indices` (or resolve them to opportunity titles inline for paper-readable output).
+- [x] 2.6.1 `get_opportunities` now surfaces the full Opportunity contract — `strategic_category`, `timeline`, `investment_range` + `investment_value_usd`, `roi_estimate` + `roi_estimate_pct`, `implementation_steps` (extracted to `_format_opportunities` in `_tools_read_helpers.py` to stay under the 400-line limit).
+- [x] 2.6.2 `get_ebitda_tree` resolves each node's `linked_opportunity_indices` to opportunity titles ("addresses: …"). (`confidence_level`/`confidence_basis` were already surfaced for the revenue node by the provenance work.)
+- [x] 2.6.3 `get_value_chain` — **fixed the `name`→`label` bug** (every step had rendered as "?"; the test fixtures wrongly used `name` too, masking it), and now surfaces `risk_categories`, `opportunity_indices` (resolved to titles), per-step `confidence_level`/`confidence_basis`, and the chain-level `provenance_basis`.
 
 ### Missing tools (Bug F + proposal gap)
-- [ ] 2.6.4 Add `get_strategy_map(analysis_id: str)` tool in `tools_read.py`. Render the BSC table as Markdown (four perspective rows, theme columns, per-objective title + first-sentence definition + linked opportunity titles).
-- [ ] 2.6.5 Add `list_scans` tool — proposal listed 13 read tools; only 12 are registered today.
+- [x] 2.6.4 Added `get_strategy_map(analysis_id)` — renders the BSC as sectioned Markdown (vision/mission/value-prop/priorities, then the four perspectives with per-objective title + first-sentence definition + linked opportunity titles, plus core values). Sectioned layout chosen over a cramped 4-row table — reads better for an LLM client. (`_format_strategy_map` in `_tools_read_helpers.py`.)
+- [x] 2.6.5 Added `list_scans` — lists the org's scans (id, status, type, progress, created_at) via `scan_repo.find_recent_by_org`. Read-tool count is now 13 (matches the proposal).
 
 ### Rebrand for customer visibility
 - [ ] 2.6.6 Decide naming convention per `design.md` Decision 9 (placeholder). Capture the decision before any rename sweep.
 - [ ] 2.6.7 Apply the chosen convention across all tool registrations + planned prompt names. Update tests.
 
 ### Minimal Connected Apps UI (PR 7 subset)
-- [ ] 2.6.8 Build a minimal "Connected Apps" settings page that lists registered OAuth clients + lets the user revoke. Defer the full PR 7 polish (audit log surfacing, fancy empty states) to PR 7.
-- [ ] 2.6.9 Short "Connect to AI assistants" doc: Function URL (or custom domain when added) + the OAuth flow.
+- [x] 2.6.8 **DONE.** Backend (#404): `GET /api/connected-apps` (list the user's connected AI assistants — per-user OAuth consents, client name denormalized on the consent record) + `DELETE /api/connected-apps/{client_id}` (revoke consent). Per-user scoped (no IDOR). Frontend: `settings/connected-apps` page + `ConnectedAppsView` (list + optimistic disconnect with undo, mirroring the team member-removal pattern), linked from `SettingsView`. Revoke = consent revoke; active tokens lapse within their 1h TTL (immediate token revocation deferred to PR 7).
+- [x] 2.6.9 **DONE** — the "How to connect" guidance ships inline on the Connected Apps page (Streamable HTTP transport + the MCP server URL + the consent flow), where users actually look. (A standalone Function-URL doc can follow once a custom domain is wired; the URL is env-specific so it isn't hardcoded in the UI.)
 
 ### Tests + ship
-- [ ] 2.6.10 Unit tests for the new formatters + the new tools (`get_strategy_map`, `list_scans`).
+- [~] 2.6.10 Unit tests for the new tools landed with 2.6.4/2.6.5 (get_strategy_map: perspectives/objectives, first-sentence trim, index→title resolution, no-map, cross-org; list_scans: render + empty). Formatter tests for the rebrand/UI items follow with their tasks.
 - [ ] 2.6.11 Frontend gates: `npm run lint`, `npx tsc --noEmit`, `npm test`.
 - [ ] 2.6.12 Architecture-reviewer pass.
 - [ ] 2.6.13 Conventional commit + PR.
@@ -225,22 +245,25 @@ Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invoke
 - [ ] 2.14 Tool description validation: test with Claude Desktop (post-deployment)
 - [x] 2.15 Architecture review + audit (4 CRITICAL fixed, 4 MEDIUM fixed)
 
-## PR 3: Write Tools
+## PR 3: Write Tools — ⛔ SUPERSEDED by the `mcp-write-tools` change (shipped #406)
 
-### Tool implementations
-- [ ] 3.1 `start_company_scan` — initiate single company scan
-- [ ] 3.2 `start_portfolio_scan` — initiate PE portfolio discovery
-- [ ] 3.3 `confirm_portfolio_scan` — confirm discovered companies for analysis
-- [ ] 3.4 `poll_scan_until_complete` — server-side polling with timeout
+The scan write tools + rate limiting shipped via the standalone `mcp-write-tools`
+change (PR #406, merged 2026-06-12), scoped down from this original plan.
+
+### Shipped in mcp-write-tools (#406)
+- [x] 3.1 `start_company_scan` — initiate single company scan
+- [x] 3.2 `start_portfolio_scan` — initiate PE portfolio discovery
+- [x] 3.3 `confirm_portfolio_scan` — confirm discovered companies for analysis
+- [x] 3.7 Rate limiting (5 scans/hour, 30 scans/day per org — transactional counters; read-rate cap dropped as unnecessary)
+- [x] 3.8 Unit test per tool (success, validation errors, org scoping, scope gating)
+- [x] 3.9 Rate limiting tests (within limit, exceeded, per-org, transactional roll-back)
+- [x] 3.11 Architecture review + audit
+
+### Deferred (still open — own future change)
+- [ ] 3.4 `poll_scan_until_complete` — deferred by design (a blocking tool pins a Lambda invocation; clients poll `get_scan`)
 - [ ] 3.5 `upload_document` — accept base64 content, upload to S3, register
 - [ ] 3.6 `reanalyze_with_documents` — trigger re-analysis pipeline
-- [ ] 3.7 Implement rate limiting (100 reads/min, 5 scans/hour, 30 scans/day per org)
-
-### Tests
-- [ ] 3.8 Unit test per tool (success, validation errors, org scoping)
-- [ ] 3.9 Rate limiting tests (within limit, exceeded, per-org)
-- [ ] 3.10 Integration test: full scan flow via MCP (start → poll → view results)
-- [ ] 3.11 Architecture review + audit
+- [ ] 3.10 Integration test: full scan flow via MCP (start → poll → view results) — pending staging validation (mcp-write-tools tasks 6.1–6.3)
 
 ## PR 4: Destructive Tools + Audit Logging
 
