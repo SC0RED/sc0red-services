@@ -327,6 +327,23 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
             f"Type: {scan.get('type', 'unknown')}",
             f"Progress: {scan.get('progress', 0)}%",
         ]
+        # Portfolio discoveries land their candidate companies on the scan
+        # record (set by the discovery worker). Surface them with their URLs so
+        # the confirm flow has something to pass to confirm_portfolio_scan —
+        # the write tools point clients here to "review the discovered
+        # companies".
+        portfolio_companies = scan.get("portfolio_companies", [])
+        if portfolio_companies:
+            lines.append(f"\n### Discovered Companies ({len(portfolio_companies)})")
+            if scan.get("status") == "awaiting_confirmation":
+                lines.append(
+                    "Confirm the ones to analyze with "
+                    "confirm_portfolio_scan(scan_id, [company URLs]):"
+                )
+            for company in portfolio_companies:
+                name = company.get("name") or "?"
+                url = company.get("url", "")
+                lines.append(f"- {name} — {url}")
         scan_companies = scan_repo.get_scan_companies(scan_id)
         if scan_companies:
             cids = [sc.get("company_id", "") for sc in scan_companies if sc.get("company_id")]
@@ -345,7 +362,7 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
     async def list_scans() -> str:  # noqa: NAMING001
         """List the scans in your organization.
 
-        Returns each scan's ID, status, type (single/portfolio), and progress.
+        Returns each scan's ID, status, type (standalone/portfolio), and progress.
         Use get_scan with the ID for a scan's linked analyses.
         """
         user = get_authenticated_user()

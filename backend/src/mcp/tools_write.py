@@ -68,7 +68,11 @@ def register_write_tools(
         result = start_scan(
             scan_repo,
             url=url,
-            scan_type="single",
+            # "standalone" is the scan type the web UI persists for a
+            # single-company scan; match it so MCP-started scans render
+            # identically in the UI (the backend treats any non-"portfolio"
+            # type as the single-scan path).
+            scan_type="standalone",
             authentication=user,
             sqs=sqs_client,
             queue_url=queue_url,

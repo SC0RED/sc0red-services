@@ -570,6 +570,30 @@ class TestGetScan:
         assert "running" in text
 
     @pytest.mark.asyncio
+    async def test_lists_discovered_companies_for_confirmation(self):
+        # A portfolio scan awaiting confirmation must surface the discovered
+        # companies WITH urls so confirm_portfolio_scan has something to pass.
+        storage, _, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "awaiting_confirmation",
+            "type": "portfolio",
+            "progress": 20,
+            "org_id": "test-org",
+            "portfolio_companies": [
+                {"name": "Acme", "url": "https://acme.com"},
+                {"name": "Beta", "url": "https://beta.com"},
+            ],
+        }
+        scan_repo.get_scan_companies.return_value = []
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "Discovered Companies (2)" in text
+        assert "https://acme.com" in text
+        assert "https://beta.com" in text
+        assert "confirm_portfolio_scan" in text
+
+    @pytest.mark.asyncio
     async def test_not_found(self):
         storage, *_ = _make_storage()
         server = _make_server(storage)
