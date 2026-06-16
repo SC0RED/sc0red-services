@@ -72,6 +72,15 @@ environment_config: dict[str, object] = {
         "api_burst_limit": 100,
         "github_repository": "https://github.com/SC0RED/sc0red-services",
         "amplify_branch": "testing",
+        # Branded MCP endpoint (mcp-custom-domain). Cert requested out-of-band in
+        # the testing account, us-east-1 (CloudFront requires us-east-1 regardless
+        # of the testing stack's region); validation + the CNAME -> CloudFront
+        # record live in the production account's Route 53.
+        "mcp_domain": "mcp.test.services.sc0red.ai",
+        "mcp_certificate_arn": (
+            "arn:aws:acm:us-east-1:205293249227:certificate/"
+            "66937018-f060-4eb3-9202-36f9457e53f3"
+        ),
     },
     "production": {
         "removal_policy": cdk.RemovalPolicy.RETAIN,

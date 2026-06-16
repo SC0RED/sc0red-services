@@ -21,9 +21,18 @@
 ## 4. Staging validation
 
 - [x] 4.1 `curl https://mcp.dev.services.sc0red.ai/health` → 200; `…/.well-known/oauth-authorization-server` → issuer + all endpoints on the branded host, no `lambda-url` anywhere; `…/.well-known/oauth-protected-resource/mcp` → `resource` on the branded host.
-- [ ] 4.2 mcp-inspector round-trip against `https://mcp.dev.services.sc0red.ai/mcp` (Direct mode): fresh consent → tools list (16) → a read tool returns. (Existing connections invalidated by the issuer flip — expected, reconnect.)
+- [x] 4.2 mcp-inspector round-trip on the branded host — fresh consent (incl. the login/signup→consent redirect fix #409), 17 tools, read + write tools verified by the user.
 - [x] 4.3 Update the janus-mcp-server tracking (staging URL references) + Connected Apps "How to connect" guidance if it names a URL.
 
-## 5. Testing/production (during promotion — not now)
+## 5. Testing promotion
 
-- [ ] 5.1 Repeat 1.x per account (us-east-1 certs in the testing/prod accounts), fill their env config, deploy, add the 2 records each, validate.
+- [ ] 5.0 **Prereq (admin):** restore repo access to `TEST_AWS_ACCESS_KEY_ID` + `TEST_AWS_SECRET_ACCESS_KEY` org secrets (same repository-access fix done for DEV — TEST/PROD were not restored). Without this the testing deploy fails at "Configure AWS credentials".
+- [ ] 5.1 **Cert (testing account, us-east-1):** `aws acm request-certificate --domain-name mcp.test.services.sc0red.ai --validation-method DNS --region us-east-1` → add the validation CNAME in the production-account Route 53 → confirm ISSUED.
+- [ ] 5.2 Add the testing `mcp_domain` (`mcp.test.services.sc0red.ai`) + `mcp_certificate_arn` to `app.py` → PR to development.
+- [ ] 5.3 Promote development → testing (PR); deploy runs `cdk deploy Sc0redServices-testing`.
+- [ ] 5.4 Grab the testing `MCPCloudFrontDomain` output → add `mcp.test.services.sc0red.ai CNAME <cloudfront>` in the production-account Route 53.
+- [ ] 5.5 Validate `https://mcp.test.services.sc0red.ai`: health, metadata on the branded host, inspector round-trip.
+
+## 6. Production promotion (later)
+
+- [ ] 6.1 Same as §5 for the production account: restore `PROD_AWS_*` secret access, request the `mcp.services.sc0red.ai` cert (prod account, us-east-1), config, promote testing → production, add the 2 DNS records, validate.
