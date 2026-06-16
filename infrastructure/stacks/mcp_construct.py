@@ -6,6 +6,9 @@ Creates:
   Lambda Web Adapter (LWA) — see design.md Decision 8
 - Lambda Function URL for Streamable HTTP transport
 - CfnOutput for the MCP server URL
+- When ``mcp_domain`` is configured: a CloudFront distribution serving the
+  branded hostname (cert by ARN) + CfnOutputs for the DNS CNAME target and
+  the branded URL (see the mcp-custom-domain change)
 """
 
 from __future__ import annotations
@@ -15,6 +18,9 @@ from typing import TYPE_CHECKING
 
 import aws_cdk as cdk
 from aws_cdk import CfnOutput, Duration
+from aws_cdk import aws_certificatemanager as acm
+from aws_cdk import aws_cloudfront as cloudfront
+from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
@@ -45,9 +51,20 @@ class MCPConstruct(Construct):
         cognito_client_id: str,
         analysis_queue: sqs.Queue,
         frontend_domain: str = "",
+        mcp_domain: str = "",
+        mcp_certificate_arn: str = "",
     ) -> None:
         """Initialize MCP construct."""
         super().__init__(scope, construct_id)
+
+        # Fail-fast at synth: the custom domain needs BOTH values (a domain
+        # without its us-east-1 cert can't attach to CloudFront; a cert without
+        # a domain is dead config).
+        if bool(mcp_domain) != bool(mcp_certificate_arn):
+            raise ValueError(
+                "mcp_domain and mcp_certificate_arn must be configured together "
+                f"(got domain={mcp_domain!r}, certificate_arn={mcp_certificate_arn!r})"
+            )
 
         self._environment = environment
 
@@ -114,6 +131,14 @@ class MCPConstruct(Construct):
             )
         )
 
+        if mcp_domain:
+            self._add_custom_domain(
+                mcp_lambda=mcp_lambda,
+                function_url=function_url,
+                domain=mcp_domain,
+                certificate_arn=mcp_certificate_arn,
+            )
+
         self._function_url = function_url.url
         self._lambda = mcp_lambda
 
@@ -133,6 +158,69 @@ class MCPConstruct(Construct):
     def lambda_function(self) -> lambda_.Function:
         """The MCP server Lambda — for post-construction grants (Step Functions)."""
         return self._lambda
+
+    def _add_custom_domain(
+        self,
+        *,
+        mcp_lambda: lambda_.Function,
+        function_url: lambda_.FunctionUrl,
+        domain: str,
+        certificate_arn: str,
+    ) -> None:
+        """Serve + advertise the MCP server on a branded hostname (mcp-custom-domain).
+
+        A CloudFront distribution fronts the WHOLE Function URL — the OAuth and
+        discovery endpoints live on the same origin as the ``/mcp`` transport, so
+        every path must move together. Setting ``MCP_ISSUER_URL`` (a static
+        string — no resource reference, so no Lambda↔FunctionUrl cycle) flips all
+        advertised URLs (issuer, token endpoint, RFC 9728 ``resource``,
+        ``WWW-Authenticate``) to the branded host; the SSM parameter remains as
+        the fallback for environments without a domain.
+
+        The certificate is imported by ARN (requested out-of-band via CLI):
+        CloudFront only accepts us-east-1 certs, and a CDK-managed DNS-validated
+        cert would pause the deploy waiting for the cross-account validation
+        record (DNS lives in the production account's Route 53).
+        """
+        certificate = acm.Certificate.from_certificate_arn(
+            self, "MCPDomainCertificate", certificate_arn
+        )
+        # The Function URL token is "https://<host>/" — take the host segment.
+        function_url_host = cdk.Fn.select(2, cdk.Fn.split("/", function_url.url))
+        distribution = cloudfront.Distribution(
+            self,
+            "MCPDistribution",
+            comment=f"sc0red-services MCP — {self._environment}",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=origins.HttpOrigin(function_url_host),
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                # Every request is dynamic + bearer-authenticated.
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                # Function URLs route by their own Host header — forwarding the
+                # viewer Host would break the origin. This managed policy
+                # forwards everything else (including Authorization).
+                origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            ),
+            domain_names=[domain],
+            certificate=certificate,
+        )
+        mcp_lambda.add_environment("MCP_ISSUER_URL", f"https://{domain}")
+
+        CfnOutput(
+            cdk.Stack.of(self),
+            "MCPCloudFrontDomain",
+            value=distribution.distribution_domain_name,
+            description=(
+                f"CNAME target for {domain} (add in the production account's Route 53)"
+            ),
+        )
+        CfnOutput(
+            cdk.Stack.of(self),
+            "MCPCustomDomainUrl",
+            value=f"https://{domain}/mcp",
+            description=f"Branded MCP endpoint — {self._environment}",
+        )
 
     def _create_signing_key(self) -> secretsmanager.Secret:
         """Create the RSA signing-key secret for OAuth JWT tokens.

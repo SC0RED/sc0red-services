@@ -257,6 +257,10 @@ class Sc0redServicesStack(Stack):
             cognito_client_id=cognito.app_client_id,
             analysis_queue=queue,
             frontend_domain=frontend_domain,
+            # `or ""` (not a str() coercion) so an explicit None stays falsy
+            # instead of becoming the truthy string "None".
+            mcp_domain=str(config.get("mcp_domain") or ""),
+            mcp_certificate_arn=str(config.get("mcp_certificate_arn") or ""),
         )
 
         worker_handler.add_event_source(

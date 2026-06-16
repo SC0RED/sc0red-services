@@ -50,6 +50,17 @@ environment_config: dict[str, object] = {
         "api_burst_limit": 100,
         "github_repository": "https://github.com/SC0RED/sc0red-services",
         "amplify_branch": "development",
+        # Branded MCP endpoint (mcp-custom-domain change). The certificate is
+        # requested out-of-band via CLI and referenced by ARN: CloudFront only
+        # accepts us-east-1 certs, and a CDK-managed DNS-validated cert would
+        # pause the CI deploy waiting for the cross-account validation record
+        # (DNS lives in the production account's Route 53; records are added
+        # manually there, per the Amplify-domain precedent).
+        "mcp_domain": "mcp.dev.services.sc0red.ai",
+        "mcp_certificate_arn": (
+            "arn:aws:acm:us-east-1:484719706337:certificate/"
+            "b2a6308a-bb34-45e7-965c-b88f4689c969"
+        ),
     },
     "testing": {
         "removal_policy": cdk.RemovalPolicy.SNAPSHOT,
