@@ -16,13 +16,13 @@
 ## 3. Ship + DNS
 
 - [x] 3.1 PR (base development). NOTE: merge only after the GitHub→AWS secrets access is restored — the merge triggers the backend deploy.
-- [ ] 3.2 Post-deploy: grab the `MCPCloudFrontDomain` output → admin adds `mcp.dev.services.sc0red.ai CNAME <dxxxx.cloudfront.net>` in the prod-account Route 53.
+- [x] 3.2 Deployed; `MCPCloudFrontDomain` = d17pf11lx7inko.cloudfront.net → CNAME added in the prod-account Route 53 (DNS resolves). → admin adds `mcp.dev.services.sc0red.ai CNAME <dxxxx.cloudfront.net>` in the prod-account Route 53.
 
 ## 4. Staging validation
 
-- [ ] 4.1 `curl https://mcp.dev.services.sc0red.ai/health` → 200; `…/.well-known/oauth-authorization-server` → issuer + all endpoints on the branded host, no `lambda-url` anywhere; `…/.well-known/oauth-protected-resource/mcp` → `resource` on the branded host.
+- [x] 4.1 `curl https://mcp.dev.services.sc0red.ai/health` → 200; `…/.well-known/oauth-authorization-server` → issuer + all endpoints on the branded host, no `lambda-url` anywhere; `…/.well-known/oauth-protected-resource/mcp` → `resource` on the branded host.
 - [ ] 4.2 mcp-inspector round-trip against `https://mcp.dev.services.sc0red.ai/mcp` (Direct mode): fresh consent → tools list (16) → a read tool returns. (Existing connections invalidated by the issuer flip — expected, reconnect.)
-- [ ] 4.3 Update the janus-mcp-server tracking (staging URL references) + Connected Apps "How to connect" guidance if it names a URL.
+- [x] 4.3 Update the janus-mcp-server tracking (staging URL references) + Connected Apps "How to connect" guidance if it names a URL.
 
 ## 5. Testing/production (during promotion — not now)
 

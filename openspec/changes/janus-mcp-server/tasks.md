@@ -47,7 +47,8 @@ The OAuth + transport chain is DONE and validated; PR 2.5 is complete. Next is *
 - **Account:** the sc0red-services AWS account (NOT 148256362911 — that's a different project's dev account).
 - **Region:** `us-east-1`.
 - **Lambda:** `sc0red-services-mcp-staging`. Active, last modified ~mid-May 2026 (rename-driven redeploy).
-- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — internal only. As of #382 it survives warm invocations (3× 200) and serves OAuth metadata with issuer = the Function URL.
+- **Branded URL (customer-facing):** `https://mcp.dev.services.sc0red.ai/mcp` — CloudFront in front of the Function URL (mcp-custom-domain change, #407). Issuer + all OAuth metadata now advertise this host; the raw Function URL appears in no advertised metadata.
+- **Function URL:** `https://wme4eulc26biz3ttnayifd6zsu0kinpn.lambda-url.us-east-1.on.aws/` — internal origin only (behind CloudFront). As of #382 it survives warm invocations (3× 200); since #407 it is no longer the advertised issuer.
 - **Signing-key secret:** `sc0red-services-mcp-signing-key-staging` populated 2026-06-03 with an RSA-2048 keypair. The CDK construct still creates it empty (Bug X — partial fix shipped, full auto-gen deferred).
 - **Issuer URL:** resolved at cold start from SSM param `/sc0red-services/mcp/staging/issuer-url` (= the Function URL). #382.
 - **Status overall:** MCP runtime HEALTHY (run-once + issuer fixed). End-to-end OAuth still blocked by Bug G (frontend idToken refresh). Not yet promoted beyond staging.
@@ -244,22 +245,25 @@ Pre-requisite: PR 2.5 merged and staging smoke-tested healthy across warm invoke
 - [ ] 2.14 Tool description validation: test with Claude Desktop (post-deployment)
 - [x] 2.15 Architecture review + audit (4 CRITICAL fixed, 4 MEDIUM fixed)
 
-## PR 3: Write Tools
+## PR 3: Write Tools — ⛔ SUPERSEDED by the `mcp-write-tools` change (shipped #406)
 
-### Tool implementations
-- [ ] 3.1 `start_company_scan` — initiate single company scan
-- [ ] 3.2 `start_portfolio_scan` — initiate PE portfolio discovery
-- [ ] 3.3 `confirm_portfolio_scan` — confirm discovered companies for analysis
-- [ ] 3.4 `poll_scan_until_complete` — server-side polling with timeout
+The scan write tools + rate limiting shipped via the standalone `mcp-write-tools`
+change (PR #406, merged 2026-06-12), scoped down from this original plan.
+
+### Shipped in mcp-write-tools (#406)
+- [x] 3.1 `start_company_scan` — initiate single company scan
+- [x] 3.2 `start_portfolio_scan` — initiate PE portfolio discovery
+- [x] 3.3 `confirm_portfolio_scan` — confirm discovered companies for analysis
+- [x] 3.7 Rate limiting (5 scans/hour, 30 scans/day per org — transactional counters; read-rate cap dropped as unnecessary)
+- [x] 3.8 Unit test per tool (success, validation errors, org scoping, scope gating)
+- [x] 3.9 Rate limiting tests (within limit, exceeded, per-org, transactional roll-back)
+- [x] 3.11 Architecture review + audit
+
+### Deferred (still open — own future change)
+- [ ] 3.4 `poll_scan_until_complete` — deferred by design (a blocking tool pins a Lambda invocation; clients poll `get_scan`)
 - [ ] 3.5 `upload_document` — accept base64 content, upload to S3, register
 - [ ] 3.6 `reanalyze_with_documents` — trigger re-analysis pipeline
-- [ ] 3.7 Implement rate limiting (100 reads/min, 5 scans/hour, 30 scans/day per org)
-
-### Tests
-- [ ] 3.8 Unit test per tool (success, validation errors, org scoping)
-- [ ] 3.9 Rate limiting tests (within limit, exceeded, per-org)
-- [ ] 3.10 Integration test: full scan flow via MCP (start → poll → view results)
-- [ ] 3.11 Architecture review + audit
+- [ ] 3.10 Integration test: full scan flow via MCP (start → poll → view results) — pending staging validation (mcp-write-tools tasks 6.1–6.3)
 
 ## PR 4: Destructive Tools + Audit Logging
 

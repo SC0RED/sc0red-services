@@ -55,7 +55,9 @@ class TestStartCompanyScan:
         scan_repo.create.assert_called_once()
         record = scan_repo.create.call_args.args[0]
         assert record["org_id"] == "org-1"
-        assert record["type"] == "single"
+        # "standalone" matches the type the web UI persists for single scans,
+        # so MCP-started scans render identically in the UI.
+        assert record["type"] == "standalone"
         sqs.send_message.assert_called_once()
         assert sqs.send_message.call_args.kwargs["QueueUrl"] == QUEUE_URL
         assert "Scan started" in text

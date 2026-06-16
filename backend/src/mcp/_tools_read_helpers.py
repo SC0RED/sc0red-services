@@ -1,7 +1,8 @@
-"""Private helpers for the MCP read tools.
+"""Shared helpers for the MCP read/write tool modules.
 
-Pure functions extracted from ``tools_read.py`` to keep that module under the
-400-line limit. Module-private — imported only by ``tools_read.py``.
+Pure functions + shared constants extracted from ``tools_read.py`` to keep that
+module under the 400-line limit. Imported by ``tools_read``, ``tools_read_scans``,
+and ``tools_write``.
 """
 
 from __future__ import annotations
