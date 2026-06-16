@@ -26,13 +26,19 @@
 
 ## 5. Testing promotion
 
-- [ ] 5.0 **Prereq (admin):** restore repo access to `TEST_AWS_ACCESS_KEY_ID` + `TEST_AWS_SECRET_ACCESS_KEY` org secrets (same repository-access fix done for DEV — TEST/PROD were not restored). Without this the testing deploy fails at "Configure AWS credentials".
-- [ ] 5.1 **Cert (testing account, us-east-1):** `aws acm request-certificate --domain-name mcp.test.services.sc0red.ai --validation-method DNS --region us-east-1` → add the validation CNAME in the production-account Route 53 → confirm ISSUED.
-- [ ] 5.2 Add the testing `mcp_domain` (`mcp.test.services.sc0red.ai`) + `mcp_certificate_arn` to `app.py` → PR to development.
-- [ ] 5.3 Promote development → testing (PR); deploy runs `cdk deploy Sc0redServices-testing`.
-- [ ] 5.4 Grab the testing `MCPCloudFrontDomain` output → add `mcp.test.services.sc0red.ai CNAME <cloudfront>` in the production-account Route 53.
-- [ ] 5.5 Validate `https://mcp.test.services.sc0red.ai`: health, metadata on the branded host, inspector round-trip.
+- [x] 5.0 TEST_AWS keys restored as **testing environment** secrets (admin); `deploy-testing.yml` declares `environment: testing`, so they resolve.
+- [x] 5.1 Testing cert ISSUED (`...66937018...`, testing account us-east-1); validation CNAME added in the prod-account Route 53.
+- [x] 5.2 Testing config added to app.py (PR #410, merged).
+- [x] 5.3 Promoted development → testing (PR #411); `Sc0redServices-testing` deployed.
+- [x] 5.4 `MCPCloudFrontDomain` = d2xossqs1x5e9j.cloudfront.net → `mcp.test.services.sc0red.ai` CNAME added in the prod-account Route 53.
+- [x] 5.5 Validated `https://mcp.test.services.sc0red.ai`: health 200, metadata + WWW-Authenticate on the branded host (0 lambda-url leaks), inspector round-trip (17 tools) user-confirmed.
 
 ## 6. Production promotion (later)
 
-- [ ] 6.1 Same as §5 for the production account: restore `PROD_AWS_*` secret access, request the `mcp.services.sc0red.ai` cert (prod account, us-east-1), config, promote testing → production, add the 2 DNS records, validate.
+- [x] 6.0 PROD_AWS keys present as **production environment** secrets (admin); `deploy-production.yml` declares `environment: production` (no approval gate → merge auto-deploys).
+- [ ] 6.1 **Cert (production account, us-east-1):** `mcp.services.sc0red.ai` requested (`...5cb75da8...`); add validation CNAME in the prod Route 53 → confirm ISSUED.
+- [ ] 6.2 Add production `mcp_domain`/`mcp_certificate_arn` to app.py → PR to development.
+- [ ] 6.3 Sync development → testing.
+- [ ] 6.4 Promote testing → production; deploy runs `cdk deploy Sc0redServices-production`.
+- [ ] 6.5 Grab the production `MCPCloudFrontDomain` output → add `mcp.services.sc0red.ai CNAME <cloudfront>` in the prod Route 53.
+- [ ] 6.6 Validate `https://mcp.services.sc0red.ai`.
