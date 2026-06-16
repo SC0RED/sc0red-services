@@ -1,17 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 
 import { Button, Card, FormField, Input } from '@/components/ui'
+import { authPathWithCallback, resolvePostAuthPath } from '@/lib/utils/authRedirect'
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL ?? 'https://www.sc0red.com'
 
-export default function LoginPage() {
+function LoginForm() {
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const callbackUrl = searchParams.get('callbackUrl')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
@@ -29,7 +32,7 @@ export default function LoginPage() {
         })
 
         if (res?.ok) {
-            router.push('/dashboard')
+            router.push(resolvePostAuthPath(callbackUrl))
         } else {
             setError('Invalid email or password')
             setLoading(false)
@@ -125,12 +128,24 @@ export default function LoginPage() {
                     <div className="divider" style={{ margin: '1.5rem 0' }} />
                     <p className="text-center text-secondary text-sm">
                         Don&apos;t have an account?{' '}
-                        <Link href="/signup" style={{ color: 'var(--accent-blue)', fontWeight: 500 }}>
+                        <Link
+                            href={authPathWithCallback('/signup', callbackUrl)}
+                            style={{ color: 'var(--accent-blue)', fontWeight: 500 }}
+                        >
                             Create one
                         </Link>
                     </p>
                 </Card>
             </div>
         </div>
+    )
+}
+
+export default function LoginPage() {
+    // useSearchParams requires a Suspense boundary during prerender.
+    return (
+        <Suspense>
+            <LoginForm />
+        </Suspense>
     )
 }

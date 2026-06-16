@@ -446,7 +446,7 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch("src.handlers.scan_handlers.boto3")
+    @patch("src.handlers.scan_core.boto3")
     @patch.dict(
         "os.environ",
         {
@@ -568,7 +568,7 @@ class TestAPIGatewayHandler:
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch("src.handlers.api_gateway_handler.boto3")
-    @patch("src.handlers.scan_handlers.boto3")
+    @patch("src.handlers.scan_core.boto3")
     @patch.dict(
         "os.environ",
         {

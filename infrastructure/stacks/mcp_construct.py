@@ -6,6 +6,9 @@ Creates:
   Lambda Web Adapter (LWA) — see design.md Decision 8
 - Lambda Function URL for Streamable HTTP transport
 - CfnOutput for the MCP server URL
+- When ``mcp_domain`` is configured: a CloudFront distribution serving the
+  branded hostname (cert by ARN) + CfnOutputs for the DNS CNAME target and
+  the branded URL (see the mcp-custom-domain change)
 """
 
 from __future__ import annotations
@@ -15,15 +18,20 @@ from typing import TYPE_CHECKING
 
 import aws_cdk as cdk
 from aws_cdk import CfnOutput, Duration
+from aws_cdk import aws_certificatemanager as acm
+from aws_cdk import aws_cloudfront as cloudfront
+from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_secretsmanager as secretsmanager
 from aws_cdk import aws_ssm as ssm
+from aws_cdk import custom_resources as cr
 from constructs import Construct
 
 if TYPE_CHECKING:
     from aws_cdk import aws_dynamodb as dynamodb
+    from aws_cdk import aws_sqs as sqs
 
 
 class MCPConstruct(Construct):
@@ -41,16 +49,33 @@ class MCPConstruct(Construct):
         api_url: str,
         cognito_user_pool_id: str,
         cognito_client_id: str,
+        analysis_queue: sqs.Queue,
         frontend_domain: str = "",
+        mcp_domain: str = "",
+        mcp_certificate_arn: str = "",
     ) -> None:
         """Initialize MCP construct."""
         super().__init__(scope, construct_id)
+
+        # Fail-fast at synth: the custom domain needs BOTH values (a domain
+        # without its us-east-1 cert can't attach to CloudFront; a cert without
+        # a domain is dead config).
+        if bool(mcp_domain) != bool(mcp_certificate_arn):
+            raise ValueError(
+                "mcp_domain and mcp_certificate_arn must be configured together "
+                f"(got domain={mcp_domain!r}, certificate_arn={mcp_certificate_arn!r})"
+            )
 
         self._environment = environment
 
         self._frontend_domain = frontend_domain
 
         signing_key = self._create_signing_key()
+        self._add_signing_key_generator(
+            signing_key=signing_key,
+            bundling=bundling,
+            architecture=lambda_architecture,
+        )
         mcp_lambda = self._create_lambda(
             bundling=bundling,
             architecture=lambda_architecture,
@@ -63,6 +88,12 @@ class MCPConstruct(Construct):
 
         table.grant_read_write_data(mcp_lambda)
         signing_key.grant_read(mcp_lambda)
+        # MCP write tools dispatch scan work to the analysis queue, exactly like
+        # the API Lambda. (Step Functions wiring for multi-company confirms is
+        # added by the stack post-construction — the batch coordinator doesn't
+        # exist yet when this construct is built.)
+        analysis_queue.grant_send_messages(mcp_lambda)
+        mcp_lambda.add_environment("ANALYSIS_QUEUE_URL", analysis_queue.queue_url)
 
         function_url = mcp_lambda.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.NONE,
@@ -100,6 +131,14 @@ class MCPConstruct(Construct):
             )
         )
 
+        if mcp_domain:
+            self._add_custom_domain(
+                mcp_lambda=mcp_lambda,
+                function_url=function_url,
+                domain=mcp_domain,
+                certificate_arn=mcp_certificate_arn,
+            )
+
         self._function_url = function_url.url
         self._lambda = mcp_lambda
 
@@ -115,13 +154,93 @@ class MCPConstruct(Construct):
         """The Lambda Function URL for the MCP server."""
         return self._function_url
 
+    @property
+    def lambda_function(self) -> lambda_.Function:
+        """The MCP server Lambda — for post-construction grants (Step Functions)."""
+        return self._lambda
+
+    def _add_custom_domain(
+        self,
+        *,
+        mcp_lambda: lambda_.Function,
+        function_url: lambda_.FunctionUrl,
+        domain: str,
+        certificate_arn: str,
+    ) -> None:
+        """Serve + advertise the MCP server on a branded hostname (mcp-custom-domain).
+
+        A CloudFront distribution fronts the WHOLE Function URL — the OAuth and
+        discovery endpoints live on the same origin as the ``/mcp`` transport, so
+        every path must move together. Setting ``MCP_ISSUER_URL`` (a static
+        string — no resource reference, so no Lambda↔FunctionUrl cycle) flips all
+        advertised URLs (issuer, token endpoint, RFC 9728 ``resource``,
+        ``WWW-Authenticate``) to the branded host; the SSM parameter remains as
+        the fallback for environments without a domain.
+
+        The certificate is imported by ARN (requested out-of-band via CLI):
+        CloudFront only accepts us-east-1 certs, and a CDK-managed DNS-validated
+        cert would pause the deploy waiting for the cross-account validation
+        record (DNS lives in the production account's Route 53).
+        """
+        certificate = acm.Certificate.from_certificate_arn(
+            self, "MCPDomainCertificate", certificate_arn
+        )
+        # The Function URL token is "https://<host>/" — take the host segment.
+        function_url_host = cdk.Fn.select(2, cdk.Fn.split("/", function_url.url))
+        distribution = cloudfront.Distribution(
+            self,
+            "MCPDistribution",
+            comment=f"sc0red-services MCP — {self._environment}",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=origins.HttpOrigin(function_url_host),
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                # Every request is dynamic + bearer-authenticated.
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                # Function URLs route by their own Host header — forwarding the
+                # viewer Host would break the origin. This managed policy
+                # forwards everything else (including Authorization).
+                origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            ),
+            domain_names=[domain],
+            certificate=certificate,
+        )
+        mcp_lambda.add_environment("MCP_ISSUER_URL", f"https://{domain}")
+
+        CfnOutput(
+            cdk.Stack.of(self),
+            "MCPCloudFrontDomain",
+            value=distribution.distribution_domain_name,
+            description=(
+                f"CNAME target for {domain} (add in the production account's Route 53)"
+            ),
+        )
+        CfnOutput(
+            cdk.Stack.of(self),
+            "MCPCustomDomainUrl",
+            value=f"https://{domain}/mcp",
+            description=f"Branded MCP endpoint — {self._environment}",
+        )
+
     def _create_signing_key(self) -> secretsmanager.Secret:
-        """Create or reference the RSA signing key for OAuth JWT tokens."""
+        """Create the RSA signing-key secret for OAuth JWT tokens.
+
+        Created with a placeholder body; the ``SigningKeyGenerator`` custom
+        resource (see ``_add_signing_key_generator``) populates it with a real
+        RSA keypair at deploy time (Bug X), so no manual ``put-secret-value`` is
+        needed per environment.
+        """
         return secretsmanager.Secret(
             self,
             "OAuthSigningKey",
             secret_name=f"sc0red-services-mcp-signing-key-{self._environment}",
-            description="RSA private key for signing MCP OAuth JWT tokens",
+            description="RSA keypair for signing MCP OAuth JWT tokens (auto-populated on deploy)",
+            # NOTE: this generate_secret_string MUST stay byte-for-byte as
+            # originally deployed. CloudFormation regenerates the secret VALUE on
+            # ANY change to GenerateSecretString — which would wipe staging's
+            # hand-populated key before the SigningKeyGenerator idempotency check
+            # runs, invalidating live tokens. The "auto-populated" context lives
+            # in `description` (metadata-only, safe to change).
             generate_secret_string=secretsmanager.SecretStringGenerator(
                 generate_string_key="placeholder",
                 secret_string_template='{"note": "Replace with RSA private key via CLI"}',
@@ -131,6 +250,57 @@ class MCPConstruct(Construct):
                 if self._environment == "development"
                 else cdk.RemovalPolicy.RETAIN
             ),
+        )
+
+    def _add_signing_key_generator(
+        self,
+        *,
+        signing_key: secretsmanager.Secret,
+        bundling: cdk.BundlingOptions,
+        architecture: lambda_.Architecture,
+    ) -> None:
+        """Populate the signing-key secret with an RSA keypair at deploy time (Bug X).
+
+        A custom-resource Lambda generates the keypair on first deploy and writes
+        it into the secret, so each environment self-populates instead of needing
+        a manual ``put-secret-value``. The handler is idempotent
+        (``signing_key_provider.handle``): it no-ops when the secret already holds
+        a keypair, so a hand-populated key (staging) is preserved and redeploys
+        never rotate the key — rotation would invalidate every live access token.
+        """
+        generator_name = f"sc0red-services-mcp-signing-key-generator-{self._environment}"
+        generator_logs = logs.LogGroup(
+            self,
+            "SigningKeyGeneratorLogs",
+            log_group_name=f"/aws/lambda/{generator_name}",
+            # Deploy-time-only Lambda — short retention is plenty; explicit so it
+            # doesn't default to never-expire like the MCP Lambda's log group.
+            retention=logs.RetentionDays.ONE_WEEK,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+        generator = lambda_.Function(
+            self,
+            "SigningKeyGenerator",
+            function_name=generator_name,
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            architecture=architecture,
+            handler="src.mcp.signing_key_provider.handle",
+            # Reuses the MCP Lambda's backend bundle (cryptography + token_utils).
+            # CDK dedups the identical asset, so this does not re-bundle.
+            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            timeout=Duration.seconds(60),
+            memory_size=256,
+            log_group=generator_logs,
+        )
+        signing_key.grant_read(generator)
+        signing_key.grant_write(generator)
+
+        provider = cr.Provider(self, "SigningKeyProvider", on_event_handler=generator)
+        cdk.CustomResource(
+            self,
+            "SigningKeyPopulate",
+            service_token=provider.service_token,
+            properties={"SecretArn": signing_key.secret_arn},
         )
 
     def _create_lambda(

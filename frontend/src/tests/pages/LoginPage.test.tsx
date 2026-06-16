@@ -7,11 +7,15 @@ const mockReplace = vi.fn()
 const mockPush = vi.fn()
 const mockSignIn = vi.fn()
 let mockStatus = 'unauthenticated'
+let mockCallbackUrl: string | null = null
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
         replace: mockReplace,
         push: mockPush,
+    }),
+    useSearchParams: () => ({
+        get: (key: string) => (key === 'callbackUrl' ? mockCallbackUrl : null),
     }),
 }))
 
@@ -24,6 +28,7 @@ describe('LoginPage', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockStatus = 'unauthenticated'
+        mockCallbackUrl = null
     })
 
     it('renders login form when unauthenticated', () => {
@@ -54,6 +59,48 @@ describe('LoginPage', () => {
     })
 
     it('redirects to dashboard on successful login', async () => {
+        mockSignIn.mockResolvedValue({ ok: true })
+        render(<LoginPage />)
+
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'test@test.com' } })
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct' } })
+        fireEvent.click(screen.getByText('Sign In'))
+
+        await waitFor(() => {
+            expect(mockPush).toHaveBeenCalledWith('/dashboard')
+        })
+    })
+
+    it('returns to the callbackUrl after login (OAuth consent flow)', async () => {
+        mockCallbackUrl = '/oauth/authorize?client_id=abc&scope=read+write&state=xyz'
+        mockSignIn.mockResolvedValue({ ok: true })
+        render(<LoginPage />)
+
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'test@test.com' } })
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct' } })
+        fireEvent.click(screen.getByText('Sign In'))
+
+        await waitFor(() => {
+            expect(mockPush).toHaveBeenCalledWith('/oauth/authorize?client_id=abc&scope=read+write&state=xyz')
+        })
+    })
+
+    it('ignores an off-site callbackUrl (open-redirect guard) and uses dashboard', async () => {
+        mockCallbackUrl = 'https://evil.com/phish'
+        mockSignIn.mockResolvedValue({ ok: true })
+        render(<LoginPage />)
+
+        fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'test@test.com' } })
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct' } })
+        fireEvent.click(screen.getByText('Sign In'))
+
+        await waitFor(() => {
+            expect(mockPush).toHaveBeenCalledWith('/dashboard')
+        })
+    })
+
+    it('ignores a protocol-relative callbackUrl (open-redirect guard)', async () => {
+        mockCallbackUrl = '//evil.com/phish'
         mockSignIn.mockResolvedValue({ ok: true })
         render(<LoginPage />)
 

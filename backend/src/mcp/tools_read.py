@@ -6,8 +6,14 @@ import json
 from typing import TYPE_CHECKING
 
 from src.mcp._tools_read_helpers import (
+    NO_SCANS_GUIDANCE,
     _format_analysis_summary,
+    _format_opportunities,
+    _format_strategy_map,
+    _format_value_chain,
     _get_assessment_data,
+    _latest_assessment_id,
+    _opportunity_titles,
     _ungrounded_message,
     _verify_org_access,
 )
@@ -77,7 +83,7 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         analyzed = [c for c in companies if c.get("overall_risk_score") is not None]
 
         if not analyzed:
-            return "No analyses found. Use start_company_scan to analyze a company."
+            return f"No analyses found. {NO_SCANS_GUIDANCE}"
 
         lines = [f"## {len(analyzed)} Analyses"]
         for c in analyzed:
@@ -203,15 +209,7 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         if not data["opportunities"]:
             return f"No opportunities found for analysis {analysis_id}."
         name = company.get("company_name", "Unknown")
-        opps = data["opportunities"]
-        lines = [f"## Opportunities — {name} ({len(opps)})"]
-        for i, opp in enumerate(opps, 1):
-            lines.append(f"\n### {i}. {opp.get('title', 'Untitled')}")
-            lines.append(f"Value Lever: {opp.get('value_lever', 'N/A')}")
-            lines.append(f"Impact: {opp.get('impact_rating', 'N/A')}")
-            if opp.get("description"):
-                lines.append(f"Description: {opp['description']}")
-        return "\n".join(lines)
+        return _format_opportunities(name, data["opportunities"])
 
     @mcp.tool()
     async def get_ebitda_tree(analysis_id: str) -> str:
@@ -257,7 +255,15 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
             # Each node is `EbitdaNode.model_dump()` — snake_case keys. Reading
             # `value` (the legacy key) silently rendered blank for every node;
             # the correct field on the persisted shape is `value_range`.
-            lines.extend(f"- {n.get('label', '?')}: {n.get('value_range', '')}" for n in tree_data)
+            opportunities = data["opportunities"]
+            for node in tree_data:
+                line = f"- {node.get('label', '?')}: {node.get('value_range', '')}"
+                linked = _opportunity_titles(
+                    opportunities, node.get("linked_opportunity_indices", [])
+                )
+                if linked:
+                    line += f" — addresses: {', '.join(linked)}"
+                lines.append(line)
         return "\n".join(lines)
 
     @mcp.tool()
@@ -274,54 +280,34 @@ def register_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
         data = _get_assessment_data(assessment_repo, analysis_id)
         if not data["value_chain"]:
             return f"No value chain found for analysis {analysis_id}."
-        chain = data["value_chain"]
-        heading = f"Value Chain — {company.get('company_name', 'Unknown')}"
-        if placeholder := _ungrounded_message(
-            chain,
-            heading,
-            "The business model could not be grounded in public information, "
-            "so no operating model is shown.",
-        ):
-            return placeholder
-        lines = [f"## {heading}"]
-        if chain.get("summary"):
-            lines.append(chain["summary"])
-        for step in chain.get("steps", []):
-            lines.append(f"\n### {step.get('name', '?')} ({step.get('category', '')})")
-            if step.get("description"):
-                lines.append(step["description"])
-        return "\n".join(lines)
+        name = company.get("company_name", "Unknown")
+        return _format_value_chain(name, data["value_chain"], data["opportunities"])
 
     @mcp.tool()
-    async def get_scan(scan_id: str) -> str:
-        """Get scan details including status and linked analyses.
+    async def get_strategy_map(analysis_id: str) -> str:
+        """Get the Balanced Scorecard strategy map for a specific analysis.
+
+        Returns the company's vision, mission, value proposition, strategic
+        priorities, and the four BSC perspectives (Financial, Customer,
+        Internal Processes, Organizational Capacity) with each objective's
+        title, definition, and any linked opportunities.
 
         Args:
-            scan_id: The ID of the scan.
+            analysis_id: The ID of the analysis.
         """
         user = get_authenticated_user()
-        scan = scan_repo.get_by_id(scan_id)
-        if error := _verify_org_access(scan, user, "Scan", scan_id):
+        company = company_repo.get_by_id(analysis_id)
+        if error := _verify_org_access(company, user, "Analysis", analysis_id):
             return error
-        lines = [
-            f"## Scan {scan_id}",
-            f"Status: {scan.get('status', 'unknown')}",
-            f"Type: {scan.get('type', 'unknown')}",
-            f"Progress: {scan.get('progress', 0)}%",
-        ]
-        scan_companies = scan_repo.get_scan_companies(scan_id)
-        if scan_companies:
-            cids = [sc.get("company_id", "") for sc in scan_companies if sc.get("company_id")]
-            if cids:
-                cdata = company_repo.get_by_ids(cids)
-                lines.append(f"\n### Analyses ({len(cdata)})")
-                for c in cdata:
-                    score = c.get("overall_risk_score", "N/A")
-                    lines.append(
-                        f"- {c.get('company_name', '?')} — Score: {score}/10 "
-                        f"— ID: {c.get('id', '')}"
-                    )
-        return "\n".join(lines)
+        # The strategy map is a separate sub-record not loaded by
+        # _get_assessment_data, so fetch it (and opportunities, for index→title
+        # links) directly off the latest assessment id.
+        aid = _latest_assessment_id(assessment_repo, analysis_id)
+        strategy_map = assessment_repo.get_strategy_map(aid) if aid else None
+        if not strategy_map:
+            return f"No strategy map found for analysis {analysis_id}."
+        name = company.get("company_name", "Unknown")
+        return _format_strategy_map(strategy_map, name, assessment_repo.get_opportunities(aid))
 
     @mcp.tool()
     async def list_team_members() -> str:  # noqa: NAMING001

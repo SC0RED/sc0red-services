@@ -255,7 +255,12 @@ class Sc0redServicesStack(Stack):
             api_url=api.url,
             cognito_user_pool_id=cognito.user_pool_id,
             cognito_client_id=cognito.app_client_id,
+            analysis_queue=queue,
             frontend_domain=frontend_domain,
+            # `or ""` (not a str() coercion) so an explicit None stays falsy
+            # instead of becoming the truthy string "None".
+            mcp_domain=str(config.get("mcp_domain") or ""),
+            mcp_certificate_arn=str(config.get("mcp_certificate_arn") or ""),
         )
 
         worker_handler.add_event_source(
@@ -293,6 +298,15 @@ class Sc0redServicesStack(Stack):
         # Auto-configure wave_size from worker concurrency — single source of truth
         api_handler.add_environment("PORTFOLIO_STATE_MACHINE_ARN", batch_coordinator.state_machine_arn)
         api_handler.add_environment("WAVE_SIZE", str(worker_concurrency))
+
+        # MCP write tools confirm portfolio scans through the same Step Functions
+        # dispatch as the API (scan_core.confirm_scan) — same grant + env, wired
+        # here because the batch coordinator is created after MCPConstruct.
+        batch_coordinator.grant_start_execution(_mcp.lambda_function)
+        _mcp.lambda_function.add_environment(
+            "PORTFOLIO_STATE_MACHINE_ARN", batch_coordinator.state_machine_arn
+        )
+        _mcp.lambda_function.add_environment("WAVE_SIZE", str(worker_concurrency))
 
         CfnOutput(self, "ApiUrl", value=api.url, description=f"API Gateway URL — {environment}")
         CfnOutput(self, "TableName", value=table.table_name)
