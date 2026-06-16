@@ -37,7 +37,7 @@
 
 - [x] 6.0 PROD_AWS keys present as **production environment** secrets (admin); `deploy-production.yml` declares `environment: production` (no approval gate → merge auto-deploys).
 - [ ] 6.1 **Cert (production account, us-east-1):** `mcp.services.sc0red.ai` requested (`...5cb75da8...`); add validation CNAME in the prod Route 53 → confirm ISSUED.
-- [ ] 6.2 Add production `mcp_domain`/`mcp_certificate_arn` to app.py → PR to development.
+- [x] 6.2 Production config added to app.py (this PR, #412).
 - [ ] 6.3 Sync development → testing.
 - [ ] 6.4 Promote testing → production; deploy runs `cdk deploy Sc0redServices-production`.
 - [ ] 6.5 Grab the production `MCPCloudFrontDomain` output → add `mcp.services.sc0red.ai CNAME <cloudfront>` in the prod Route 53.
