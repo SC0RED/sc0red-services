@@ -53,9 +53,11 @@ def _make_storage():
 def _make_server(storage):
     server = FastMCP("test")
     from src.mcp.tools_read import register_read_tools
+    from src.mcp.tools_read_scans import register_scan_read_tools
     from src.mcp.tools_search import register_search_tools
 
     register_read_tools(server, storage)
+    register_scan_read_tools(server, storage)
     register_search_tools(server, storage)
     return server
 
@@ -544,7 +546,7 @@ class TestGetScan:
         scan_repo.get_by_id.return_value = {
             "id": "s1",
             "status": "complete",
-            "type": "single",
+            "type": "standalone",
             "progress": 100,
             "org_id": "test-org",
         }
@@ -705,7 +707,7 @@ class TestListScans:
             {
                 "id": "s1",
                 "status": "complete",
-                "type": "single",
+                "type": "standalone",
                 "progress": 100,
                 "created_at": "2026-01-02",
             },
@@ -714,7 +716,7 @@ class TestListScans:
         server = _make_server(storage)
         text = (await server.call_tool("list_scans", {}))[0][0].text
         assert "Scans (2)" in text
-        assert "s1 — complete (single, 100%)" in text
+        assert "s1 — complete (standalone, 100%)" in text
         assert "2026-01-02" in text
         assert "s2 — running (portfolio, 40%)" in text
 

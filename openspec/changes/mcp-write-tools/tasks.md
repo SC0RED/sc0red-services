@@ -31,7 +31,7 @@
 
 ## 6. Staging validation
 
-- [ ] 6.1 After deploy: connect with mcp-inspector (Direct mode) → tools list shows 16 tools → `start_company_scan` on a test URL → `get_scan` shows progress → analysis completes and `get_analysis` returns it.
+- [ ] 6.1 After deploy: connect with mcp-inspector (Direct mode) → tools list shows 17 tools (10 read + 2 scan-read + 2 search + 3 write) → `start_company_scan` on a test URL → `get_scan` shows progress → analysis completes and `get_analysis` returns it.
 - [ ] 6.2 Portfolio flow: `start_portfolio_scan` → poll to `awaiting_confirmation` → `confirm_portfolio_scan` → companies analyze.
 - [ ] 6.3 Rate limit: 6th scan call within the hour returns the limit message (and the web UI can still start scans).
 - [x] 6.4 janus-mcp-server PR 3 marked superseded-by-`mcp-write-tools` (poll/document tools deferred to a future change).
