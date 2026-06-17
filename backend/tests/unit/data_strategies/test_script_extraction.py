@@ -42,9 +42,9 @@ def test_handles_escaped_json_islands():
     # Next.js-style stringified JSON: keys escaped as \"name\":\"...\".
     # Enough items to clear the JSON-pair threshold.
     items = (
-        r'{\"name\":\"Acme\",\"slug\":\"acme\"},'
-        r'{\"name\":\"Globex\",\"slug\":\"globex\"},'
-        r'{\"name\":\"Initech\",\"slug\":\"initech\"}'
+        r"{\"name\":\"Acme\",\"slug\":\"acme\"},"
+        r"{\"name\":\"Globex\",\"slug\":\"globex\"},"
+        r"{\"name\":\"Initech\",\"slug\":\"initech\"}"
     )
     html = (
         '<html><head><script>self.__next_f.push([1,"{\\"items\\":['

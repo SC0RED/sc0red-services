@@ -15,10 +15,13 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
+import jsonschema
+from signalfield_core.exceptions.base import EngineError
 from signalfield_core.pipeline.step import RequestStep
+from signalfield_core.utilities.future_manager import FutureManagerError
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
-from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
+from src.pipeline.pipeline_steps.ai_call import run_grounded_ai_call, run_structured_ai_call
 from src.pipeline.prompts.loader import load_schema, load_system_prompt, load_template
 
 if TYPE_CHECKING:
@@ -31,7 +34,6 @@ logger = logging.getLogger(__name__)
 # Truncation budgets for the AI extraction prompt. These govern how much of
 # the scraped page is visible to the LLM — too small and large portfolios
 # (70+ companies) get truncated mid-list. Well under GPT-4o's 128k context.
-_AI_PAGE_TEXT_BUDGET = 30_000
 _AI_LINKS_TEXT_BUDGET = 10_000
 _AI_LINK_COUNT_BUDGET = 300
 # Combined content budget for the AI extraction prompt. Larger than the visible
@@ -40,6 +42,12 @@ _AI_LINK_COUNT_BUDGET = 300
 # script-embedded sites; plain-text pages stay well under it. ~50K tokens — fine
 # for the once-per-firm discovery call.
 _AI_CONTENT_BUDGET = 200_000
+
+# Low-water mark: when site-derived discovery finds this many companies OR FEWER,
+# run the web-search fallback to recover the firm's portfolio (the site is opaque
+# / client-side-only / not embedding its list). Default 0 = rescue only total
+# failures; raise to also catch thin/partial scrapes once we've seen real data.
+_FALLBACK_THRESHOLD = 0
 
 
 def _normalize_domain(url: str) -> str:
@@ -86,12 +94,50 @@ def _merge_results(
     return auto_included, needs_validation
 
 
+def _merge_fallback(
+    auto_included: list[dict[str, str]],
+    needs_validation: list[dict[str, str]],
+    fallback: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Union web-search fallback candidates into ``needs_validation`` only.
+
+    Model-sourced candidates always require validation (never ``auto_included``).
+    Deduplicated by normalized domain against the existing site-derived results,
+    so the fallback only ADDS companies the site did not surface.
+    """
+    seen = {_normalize_domain(c["url"]) for c in (*auto_included, *needs_validation)}
+    merged = list(needs_validation)
+    for company in fallback:
+        # ``name``/``url`` are schema-required on the web-search response, so
+        # access them directly — a missing key is a schema violation, not a
+        # default-to-empty case.
+        domain = _normalize_domain(company["url"])
+        if not domain or domain in seen:
+            continue
+        seen.add(domain)
+        merged.append({"name": company["name"], "url": company["url"], "description": ""})
+    return merged
+
+
 class DiscoverPortfolio(RequestStep):
     """Discovers portfolio companies using heuristic + AI extraction paths."""
 
     def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
         super().__init__()
         self._ai_client_factory = ai_client_factory
+
+    def _require_ai_factory(self) -> AIClientFactory:
+        """Return the AI client factory, failing fast if absent.
+
+        The AI extraction and web-search fallback both run only inside an
+        ``if self._ai_client_factory`` guard in :meth:`execute`, so a missing
+        factory here is a programming error — surface it loudly rather than
+        passing ``None`` into the AI call.
+        """
+        if self._ai_client_factory is None:
+            message = "DiscoverPortfolio requires an AI client factory for this path"
+            raise RuntimeError(message)
+        return self._ai_client_factory
 
     def execute(self) -> None:
         """Run heuristic + AI discovery and merge results."""
@@ -110,6 +156,7 @@ class DiscoverPortfolio(RequestStep):
         # Path 2: AI extraction reuses scraped data (no duplicate HTTP requests)
         ai_companies: list[dict[str, str]] = []
         diagnostic = ""
+        is_pe_firm = True  # assume PE unless the extractor says otherwise
 
         if self._ai_client_factory:
             page_text = metadata.get("page_text", "")
@@ -118,7 +165,8 @@ class DiscoverPortfolio(RequestStep):
             if page_text or script_text:
                 ai_result = self._run_ai_extraction(url, page_text, script_text, page_links)
                 ai_companies = ai_result.get("companies", [])
-                if not ai_result.get("is_pe_firm", True):
+                is_pe_firm = ai_result.get("is_pe_firm", True)
+                if not is_pe_firm:
                     diagnostic = ai_result.get(
                         "firm_type_description",
                         "This does not appear to be a PE/VC firm.",
@@ -130,8 +178,18 @@ class DiscoverPortfolio(RequestStep):
             auto_included, needs_validation = _merge_results(heuristic_companies, ai_companies)
         else:
             auto_included, needs_validation = [], []
-            if not diagnostic:
-                diagnostic = "Could not identify portfolio companies from this website."
+
+        # Site-first, fallback-on-low-yield: when the firm's own site yields too
+        # few companies (opaque / client-side-only / non-embedding), recover the
+        # portfolio via web search. Strictly additive — fallback candidates enter
+        # the needs-validation tier only, never auto-included.
+        site_total = len(auto_included) + len(needs_validation)
+        if self._ai_client_factory and is_pe_firm and site_total <= _FALLBACK_THRESHOLD:
+            fallback = self._run_web_search_fallback(url)
+            needs_validation = _merge_fallback(auto_included, needs_validation, fallback)
+
+        if not (auto_included or needs_validation) and not diagnostic:
+            diagnostic = "Could not identify portfolio companies from this website."
 
         total = len(auto_included) + len(needs_validation)
         logger.info(
@@ -193,7 +251,7 @@ class DiscoverPortfolio(RequestStep):
         # (added 2026-05-15). DiscoverPortfolio doesn't surface token
         # telemetry yet; opt-in later if needed.
         _label, result, _elapsed, _tokens = run_structured_ai_call(
-            ai_client_factory=self._ai_client_factory,
+            ai_client_factory=self._require_ai_factory(),
             user_prompt=prompt,
             schema=schema,
             system_prompt=system_prompt,
@@ -201,3 +259,49 @@ class DiscoverPortfolio(RequestStep):
             step_name="DiscoverPortfolio",
         )
         return result
+
+    def _run_web_search_fallback(self, firm_url: str) -> list[dict[str, str]]:
+        """Recover the firm's portfolio via web search when the site is opaque.
+
+        Fail-soft: a search/AI failure (or empty result) yields no candidates and
+        never crashes the scan — only programming errors propagate. Results are
+        model-sourced candidates that the downstream validation step confirms.
+        """
+        template = load_template("discover_portfolio_websearch")
+        schema = load_schema("discover_portfolio_websearch")
+        system_prompt = load_system_prompt("portfolio_validation")
+        prompt = template.format(firm_url=firm_url)
+        try:
+            _label, content, _elapsed, _tokens, _sources = run_grounded_ai_call(
+                ai_client_factory=self._require_ai_factory(),
+                user_prompt=prompt,
+                schema=schema,
+                system_prompt=system_prompt,
+                label="portfolio_web_fallback",
+                step_name="DiscoverPortfolio",
+            )
+        except (
+            EngineError,
+            FutureManagerError,
+            jsonschema.ValidationError,
+            ValueError,
+            RuntimeError,
+            KeyError,
+            TypeError,
+        ):
+            # Fail-soft: a search failure or a malformed (schema-invalid) AI
+            # response yields no extra candidates — the scan continues on the
+            # site-derived results rather than crashing.
+            logger.exception(
+                "[DiscoverPortfolio] web-search fallback failed for %s; "
+                "continuing with site results",
+                firm_url,
+            )
+            return []
+        companies = content["companies"]
+        logger.info(
+            "[DiscoverPortfolio] web-search fallback recovered %d candidate(s) for %s",
+            len(companies),
+            firm_url,
+        )
+        return companies

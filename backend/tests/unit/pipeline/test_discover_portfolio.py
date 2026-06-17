@@ -7,7 +7,43 @@ import pytest
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_steps.ai_call import TokenCounts
-from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
+from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio, _merge_fallback
+
+
+def _grounded(companies: list[dict[str, str]]):
+    return (
+        "portfolio_web_fallback",
+        {"companies": companies},
+        0.0,
+        TokenCounts(input_tokens=10, output_tokens=5, cached_input_tokens=0),
+        [],
+    )
+
+
+class TestMergeFallback:
+    def test_adds_new_candidates_to_needs_validation(self):
+        out = _merge_fallback(
+            auto_included=[{"name": "A", "url": "https://a.com"}],
+            needs_validation=[{"name": "B", "url": "https://b.com"}],
+            fallback=[{"name": "C", "url": "https://c.com"}],
+        )
+        urls = {c["url"] for c in out}
+        assert urls == {"https://b.com", "https://c.com"}  # A stays auto-included, C added
+
+    def test_dedupes_against_site_results_by_domain(self):
+        out = _merge_fallback(
+            auto_included=[{"name": "A", "url": "https://a.com"}],
+            needs_validation=[],
+            fallback=[
+                {"name": "A dup", "url": "https://www.a.com/"},
+                {"name": "New", "url": "https://new.com"},
+            ],
+        )
+        assert {c["url"] for c in out} == {"https://new.com"}
+
+    def test_skips_candidates_without_a_domain(self):
+        out = _merge_fallback([], [], [{"name": "X", "url": ""}])
+        assert out == []
 
 
 class TestDiscoverPortfolio:
@@ -59,7 +95,10 @@ class TestDiscoverPortfolio:
             captured["prompt"] = user_prompt
             return (
                 "extract_portfolio",
-                {"is_pe_firm": True, "companies": [{"name": "Sophos", "url": "https://sophos.com"}]},
+                {
+                    "is_pe_firm": True,
+                    "companies": [{"name": "Sophos", "url": "https://sophos.com"}],
+                },
                 0.0,
                 TokenCounts(input_tokens=10, output_tokens=5, cached_input_tokens=0),
             )
@@ -76,6 +115,99 @@ class TestDiscoverPortfolio:
         assert captured["prompt"].index("Sophos") < captured["prompt"].index("skeleton")
         details = step._request_executor.add_details.call_args[0][0]
         assert details["portfolio_count"] == 1
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_low_yield_triggers_web_search_fallback(self, mock_strategy_cls, mock_grounded):
+        # Opaque site: no companies, no embedded data → fallback fires.
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = mock_strategy
+        mock_grounded.return_value = _grounded([{"name": "Jamf", "url": "https://jamf.com"}])
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://vista.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        mock_grounded.assert_called_once()
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_count"] == 1
+        # Fallback candidate is validation-tier, never auto-included.
+        assert {c["url"] for c in details["portfolio_companies"]} == {"https://jamf.com"}
+        assert details["portfolio_auto_included"] == []
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_healthy_site_skips_fallback(self, mock_strategy_cls, mock_grounded):
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "x",
+            {
+                "companies": [{"name": "Co", "url": "https://co.com"}],
+                "page_text": "",
+                "script_text": "",
+                "all_links": [],
+            },
+        )
+        mock_strategy_cls.return_value = mock_strategy
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        mock_grounded.assert_not_called()
+        assert step._request_executor.add_details.call_args[0][0]["portfolio_count"] == 1
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_fallback_fails_soft(self, mock_strategy_cls, mock_grounded):
+        from signalfield_core.exceptions.base import EngineError
+
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = mock_strategy
+        mock_grounded.side_effect = EngineError("search down")
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()  # must not raise
+
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_count"] == 0
+        assert details["portfolio_diagnostic"]
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_fallback_fails_soft_on_schema_violation(self, mock_strategy_cls, mock_grounded):
+        # A malformed (schema-invalid) AI response must NOT crash the scan —
+        # run_grounded_ai_call re-raises jsonschema.ValidationError.
+        import jsonschema
+
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = mock_strategy
+        mock_grounded.side_effect = jsonschema.ValidationError("bad response shape")
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()  # must not raise
+
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_count"] == 0
+        assert details["portfolio_diagnostic"]
 
     def test_execute_no_url_raises(self):
         company = Company(url="")
