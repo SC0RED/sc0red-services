@@ -44,7 +44,7 @@ class TestRunAIExtraction:
                 1.0,
                 TokenCounts(input_tokens=100, output_tokens=50, cached_input_tokens=0),
             )
-            result = step._run_ai_extraction("https://firm.com", "page text", [{"text": "link", "href": "https://x.com"}])  # noqa: SLF001
+            result = step._run_ai_extraction("https://firm.com", "page text", "", [{"text": "link", "href": "https://x.com"}])  # noqa: SLF001
             assert len(result["companies"]) == 1
 
     def test_propagates_error(self):
@@ -53,7 +53,7 @@ class TestRunAIExtraction:
 
         with patch("src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call", side_effect=RuntimeError("AI error")):
             with pytest.raises(RuntimeError, match="AI error"):
-                step._run_ai_extraction("https://firm.com", "page text", [{"text": "a", "href": "b"}])  # noqa: SLF001
+                step._run_ai_extraction("https://firm.com", "page text", "", [{"text": "a", "href": "b"}])  # noqa: SLF001
 
 
 class TestDiscoverPortfolioStep:

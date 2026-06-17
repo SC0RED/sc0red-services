@@ -34,6 +34,12 @@ logger = logging.getLogger(__name__)
 _AI_PAGE_TEXT_BUDGET = 30_000
 _AI_LINKS_TEXT_BUDGET = 10_000
 _AI_LINK_COUNT_BUDGET = 300
+# Combined content budget for the AI extraction prompt. Larger than the visible
+# page-text budget because embedded-JSON portfolios live in a dense ~200K script
+# island (script_text is prioritised ahead of the page skeleton). Only bites for
+# script-embedded sites; plain-text pages stay well under it. ~50K tokens — fine
+# for the once-per-firm discovery call.
+_AI_CONTENT_BUDGET = 200_000
 
 
 def _normalize_domain(url: str) -> str:
@@ -107,9 +113,10 @@ class DiscoverPortfolio(RequestStep):
 
         if self._ai_client_factory:
             page_text = metadata.get("page_text", "")
+            script_text = metadata.get("script_text", "")
             page_links = metadata.get("all_links", [])
-            if page_text:
-                ai_result = self._run_ai_extraction(url, page_text, page_links)
+            if page_text or script_text:
+                ai_result = self._run_ai_extraction(url, page_text, script_text, page_links)
                 ai_companies = ai_result.get("companies", [])
                 if not ai_result.get("is_pe_firm", True):
                     diagnostic = ai_result.get(
@@ -156,9 +163,20 @@ class DiscoverPortfolio(RequestStep):
         self,
         firm_url: str,
         page_text: str,
+        script_text: str,
         links: list[dict[str, str]],
     ) -> dict[str, Any]:
-        """Send page text to AI for structured company extraction."""
+        """Send scraped content to AI for structured company extraction.
+
+        Prioritises ``script_text`` (the data-bearing inline JSON where SSR sites
+        embed the portfolio) ahead of the visible ``page_text`` skeleton, within
+        the same budget — so embedded-JSON portfolios are extractable while
+        anchor/text portfolios still work.
+        """
+        if script_text and page_text:
+            content = f"{script_text}\n\n{page_text}"
+        else:
+            content = script_text or page_text
         links_text = "\n".join(
             f"- {link['text']}: {link['href']}" for link in links[:_AI_LINK_COUNT_BUDGET]
         )
@@ -168,7 +186,7 @@ class DiscoverPortfolio(RequestStep):
 
         prompt = template.format(
             firm_url=firm_url,
-            page_text=page_text[:_AI_PAGE_TEXT_BUDGET],
+            page_text=content[:_AI_CONTENT_BUDGET],
             links_text=links_text[:_AI_LINKS_TEXT_BUDGET],
         )
         # ``_tokens`` is the 4th tuple element from run_structured_ai_call

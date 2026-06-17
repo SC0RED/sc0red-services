@@ -37,6 +37,46 @@ class TestDiscoverPortfolio:
         assert details["portfolio_auto_included"] == []
         step._request_executor.mark_question_complete.assert_called_with("discover_portfolio")
 
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_script_json_is_fed_to_ai_extraction(self, mock_strategy_cls):
+        """Embedded-JSON portfolios: script_text reaches the AI extractor, prioritised."""
+        script_text = '{"companies":[{"name":"Sophos","url":"https://sophos.com"}]}'
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "ignored",
+            {"companies": [], "page_text": "skeleton", "script_text": script_text, "all_links": []},
+        )
+        mock_strategy_cls.return_value = mock_strategy
+
+        accessor = CompanyAccessor(Company(url="https://pefirm.com/portfolio"))
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        captured: dict[str, str] = {}
+
+        def _fake_call(*, user_prompt: str, **_: object):
+            captured["prompt"] = user_prompt
+            return (
+                "extract_portfolio",
+                {"is_pe_firm": True, "companies": [{"name": "Sophos", "url": "https://sophos.com"}]},
+                0.0,
+                TokenCounts(input_tokens=10, output_tokens=5, cached_input_tokens=0),
+            )
+
+        with patch(
+            "src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call",
+            side_effect=_fake_call,
+        ):
+            step.execute()
+
+        # The script JSON (where the companies live) is in the extraction prompt,
+        # ahead of the visible skeleton.
+        assert "Sophos" in captured["prompt"]
+        assert captured["prompt"].index("Sophos") < captured["prompt"].index("skeleton")
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_count"] == 1
+
     def test_execute_no_url_raises(self):
         company = Company(url="")
         accessor = CompanyAccessor(company)
