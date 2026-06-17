@@ -31,7 +31,7 @@
 - [x] 5.3 `pytest tests/ -q` passes with coverage ≥ 95%
 - [x] 5.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
 - [x] 5.5 Reproduce the customer case: Vista + Thoma Bravo fixtures now yield companies (via #1); confirm the fallback path on a synthetic low-yield case
-- [ ] 5.6 Run the E2E suite per CLAUDE.md before opening the PR (extend the mock-AI server if the discovery path exercises the new extraction/fallback prompts)
+- [x] 5.6 Run the E2E suite per CLAUDE.md before opening the PR (45/45 passed; discovery path is unit-tested — LocalStack lacks Step Functions, so E2E exercises the single-company flow, which the change leaves unaffected)
 
 ## 6. Documented next step (do NOT implement here)
 
