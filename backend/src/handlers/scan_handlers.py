@@ -19,7 +19,11 @@ from src.handlers.api_gateway_handler import (
     check_org_access,
 )
 from src.handlers.scan_core import ScanInputError, confirm_scan, start_scan
-from src.utilities.scan_summary import build_unified_analyses
+from src.utilities.scan_summary import (
+    build_unified_analyses,
+    compute_scan_progress,
+    derive_progress_label,
+)
 
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
@@ -58,44 +62,6 @@ def handle_scan_start(
     return build_json_response(response)
 
 
-def _compute_scan_progress(
-    analyses: list[dict[str, Any]],
-    scan_progress: int,
-    total_companies: int = 0,
-) -> tuple[int, int]:
-    """Return (done_count, computed_progress) from per-company pipeline progress.
-
-    Uses ``total_companies`` (from the scan record, set at confirm time) as the
-    denominator. Drives terminal-state detection off the explicit ``state``
-    field set by ``build_unified_analyses`` rather than re-deriving from
-    ``analyzedAt``/``error`` — the contract that ``state`` is authoritative
-    means downstream logic should not duplicate the derivation.
-    """
-    if not analyses:
-        return 0, scan_progress
-    # Use the true total; fall back to len(analyses) for standalone scans
-    # where total_companies may be 0 or absent.
-    total = max(total_companies, len(analyses))
-    done_count = sum(1 for a in analyses if a.get("state") in ("done", "failed"))
-    company_progress_sum = sum(
-        100 if a.get("state") in ("done", "failed") else a.get("pipelineProgress", 0)
-        for a in analyses
-    )
-    return done_count, company_progress_sum // total
-
-
-def _derive_progress_label(
-    analyses: list[dict[str, Any]],
-    fallback_label: str,
-) -> str:
-    """Return the progress label from the most advanced in-progress company."""
-    in_progress = [a for a in analyses if a.get("state") == "scanning"]
-    if in_progress:
-        furthest = max(in_progress, key=lambda a: a.get("pipelineProgress", 0))
-        return str(furthest.get("pipelineLabel", fallback_label))
-    return fallback_label
-
-
 def handle_scan_status(
     _event: dict[str, Any],
     authentication: AuthContext,
@@ -125,7 +91,7 @@ def handle_scan_status(
     status = scan.get("status")
     total_companies = scan.get("total_companies", 0)
 
-    done_count, computed_progress = _compute_scan_progress(
+    done_count, computed_progress = compute_scan_progress(
         analyses, scan.get("progress", 0), total_companies
     )
 
@@ -139,7 +105,7 @@ def handle_scan_status(
     # Use the higher of scan-level or computed progress
     progress = max(scan.get("progress", 0), computed_progress)
 
-    progress_label = _derive_progress_label(analyses, scan.get("progress_label", ""))
+    progress_label = derive_progress_label(analyses, scan.get("progress_label", ""))
 
     logger.info(
         "[poll] scan=%s status=%s progress=%s analyses=%d",
