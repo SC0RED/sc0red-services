@@ -17,6 +17,11 @@ from src.mcp._tools_read_helpers import (
     _verify_org_access,
 )
 from src.mcp.auth_context import get_authenticated_user
+from src.utilities.scan_summary import (
+    build_unified_analyses,
+    compute_scan_progress,
+    derive_progress_label,
+)
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -40,11 +45,37 @@ def register_scan_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> 
         scan = scan_repo.get_by_id(scan_id)
         if error := _verify_org_access(scan, user, "Scan", scan_id):
             return error
+        if scan is None:
+            # _verify_org_access returns an error when scan is None; this is
+            # defensive narrowing for type checkers — unreachable at runtime.
+            raise RuntimeError(f"scan {scan_id} vanished between access check and read")
+
+        scan_companies = scan_repo.get_scan_companies(scan_id)
+        company_ids = [sc["company_id"] for sc in scan_companies if sc.get("company_id")]
+        companies_batch = company_repo.get_by_ids(company_ids) if company_ids else []
+        analyses = build_unified_analyses(scan_companies, companies_batch)
+
+        # Compute progress the same way GET /scan/{id} does — workers update each
+        # company's pipeline_progress mid-run but NOT the scan record's progress
+        # (see request_executor._report_progress), so reading the raw stored
+        # progress would sit at the kickoff value (10%) until completion. Take
+        # the higher of stored vs. computed so a finished scan still reads 100%.
+        status = scan.get("status", "unknown")
+        total_companies = scan.get("total_companies", 0)
+        done_count, computed_progress = compute_scan_progress(
+            analyses, scan.get("progress", 0), total_companies
+        )
+        if status == "running" and total_companies and done_count >= total_companies:
+            status = "complete"
+            computed_progress = 100
+        progress = max(scan.get("progress", 0), computed_progress)
+        progress_label = derive_progress_label(analyses, scan.get("progress_label", ""))
+
         lines = [
             f"## Scan {scan_id}",
-            f"Status: {scan.get('status', 'unknown')}",
+            f"Status: {status}",
             f"Type: {scan.get('type', 'unknown')}",
-            f"Progress: {scan.get('progress', 0)}%",
+            f"Progress: {progress}%" + (f" — {progress_label}" if progress_label else ""),
         ]
         # Portfolio discoveries land their candidate companies on the scan
         # record (set by the discovery worker). Surface them with their URLs so
@@ -63,18 +94,13 @@ def register_scan_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> 
                 name = company.get("name") or "?"
                 url = company.get("url", "")
                 lines.append(f"- {name} — {url}")
-        scan_companies = scan_repo.get_scan_companies(scan_id)
-        if scan_companies:
-            cids = [sc.get("company_id", "") for sc in scan_companies if sc.get("company_id")]
-            if cids:
-                cdata = company_repo.get_by_ids(cids)
-                lines.append(f"\n### Analyses ({len(cdata)})")
-                for c in cdata:
-                    score = c.get("overall_risk_score", "N/A")
-                    lines.append(
-                        f"- {c.get('company_name', '?')} — Score: {score}/10 "
-                        f"— ID: {c.get('id', '')}"
-                    )
+        if analyses:
+            lines.append(f"\n### Analyses ({len(analyses)})")
+            for analysis in analyses:
+                score = analysis.get("overallRiskScore")
+                score_text = f"{score}/10" if score is not None else "in progress"
+                name = analysis.get("companyName") or "(pending)"
+                lines.append(f"- {name} — Score: {score_text} — ID: {analysis.get('id', '')}")
         return "\n".join(lines)
 
     @mcp.tool()
