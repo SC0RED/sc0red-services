@@ -36,9 +36,9 @@
 ## 6. Production promotion (later)
 
 - [x] 6.0 PROD_AWS keys present as **production environment** secrets (admin); `deploy-production.yml` declares `environment: production` (no approval gate → merge auto-deploys).
-- [ ] 6.1 **Cert (production account, us-east-1):** `mcp.services.sc0red.ai` requested (`...5cb75da8...`); add validation CNAME in the prod Route 53 → confirm ISSUED.
+- [x] 6.1 Production cert ISSUED (`...5cb75da8...`, prod account us-east-1); validation CNAME added in the prod Route 53.
 - [x] 6.2 Production config added to app.py (this PR, #412).
-- [ ] 6.3 Sync development → testing.
-- [ ] 6.4 Promote testing → production; deploy runs `cdk deploy Sc0redServices-production`.
-- [ ] 6.5 Grab the production `MCPCloudFrontDomain` output → add `mcp.services.sc0red.ai CNAME <cloudfront>` in the prod Route 53.
-- [ ] 6.6 Validate `https://mcp.services.sc0red.ai`.
+- [x] 6.3 Synced development → testing (PR #413).
+- [x] 6.4 Promoted testing → production (PR #414); `Sc0redServices-production` deployed.
+- [x] 6.5 `MCPCloudFrontDomain` = d1zn808hr7lhgd.cloudfront.net → `mcp.services.sc0red.ai` CNAME added in the prod Route 53.
+- [x] 6.6 Validated `https://mcp.services.sc0red.ai`: health 200, branded OAuth metadata (0 lambda-url leaks), 401 on unauthenticated /mcp.
