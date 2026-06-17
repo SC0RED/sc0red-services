@@ -589,6 +589,43 @@ class TestGetScan:
         assert "in progress" in text  # no score yet
 
     @pytest.mark.asyncio
+    async def test_running_portfolio_scan_reports_live_progress(self):
+        # Same bug affects portfolio scans (stored progress stuck at 10% until
+        # complete). Progress must be computed from per-company state across all
+        # companies: 8 done + 2 scanning@50% over 10 → (8*100 + 2*50)//10 = 90%.
+        storage, company_repo, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "running",
+            "type": "portfolio",
+            "progress": 10,
+            "total_companies": 10,
+            "org_id": "test-org",
+        }
+        scan_repo.get_scan_companies.return_value = [
+            {"company_id": f"c{i}", "order_index": i} for i in range(10)
+        ]
+        companies = [
+            _make_company(id=f"c{i}", company_name=f"Co{i}", analyzed_at="2026-01-01")
+            for i in range(8)
+        ]
+        companies += [
+            _make_company(
+                id=f"c{i}",
+                company_name=f"Co{i}",
+                overall_risk_score=None,
+                analyzed_at=None,
+                pipeline_progress=50,
+            )
+            for i in range(8, 10)
+        ]
+        company_repo.get_by_ids.return_value = companies
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "Progress: 90%" in text
+        assert "Progress: 10%" not in text
+
+    @pytest.mark.asyncio
     async def test_scan_no_companies(self):
         storage, _, _, scan_repo, *_ = _make_storage()
         scan_repo.get_by_id.return_value = {
