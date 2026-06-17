@@ -94,12 +94,17 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         # Collect links and text from all portfolio-like pages
         all_links: list[dict[str, Any]] = []
         page_texts: list[str] = []
+        script_texts: list[str] = []
         for path in PORTFOLIO_PATHS:
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
                 result = scrape_url(page_url)
                 all_links.extend({**link, "source": page_url} for link in result["links"])
                 page_texts.append(result["text"])
+                # Data-bearing inline script JSON (where SSR sites hide the
+                # portfolio list) — fed to the AI extraction path downstream.
+                if result.get("script_text"):
+                    script_texts.append(result["script_text"])
             except Exception:  # scrape_url raises httpx + parsing errors
                 logger.info("Failed to scrape %s", page_url, exc_info=True)
                 continue
@@ -202,6 +207,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             "companies": companies,
             "count": len(companies),
             "page_text": "\n\n".join(page_texts),
+            "script_text": "\n\n".join(script_texts),
             "all_links": all_links,
         }
 

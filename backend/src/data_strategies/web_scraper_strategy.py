@@ -27,6 +27,15 @@ SCRAPER_HEADERS = {
 }
 SCRAPER_TIMEOUT = 15.0
 _MAX_TEXT_LENGTH = 20_000
+# Budget for data-bearing inline <script> JSON. Modern SSR sites (Next.js etc.)
+# embed page data — including portfolio company lists — as JSON inside <script>
+# tags rather than the visible DOM, so we capture it before stripping scripts.
+# Large because a single hydration island can be 250KB+ (a 300-company portfolio),
+# and the companies are spread throughout it — head-truncating too tightly drops
+# most of the list. Scripts are ranked by JSON key:value density so the data
+# island wins over code bundles / analytics.
+_MAX_SCRIPT_TEXT_LENGTH = 200_000
+_MIN_SCRIPT_JSON_PAIRS = 5  # skip code/analytics scripts with little JSON structure
 
 _LOGO_SUFFIX_RE = re.compile(r"[-_ ]?logo$", re.IGNORECASE)
 _FILENAME_TOKEN_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|[-_.\s]+")
@@ -147,11 +156,46 @@ def normalize_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
 
+def _extract_data_scripts(soup: BeautifulSoup) -> str:
+    """Concatenate inline ``<script>`` text that looks data-bearing (JSON islands).
+
+    Server-rendered SPA sites embed page data — including portfolio company lists
+    — as JSON inside ``<script>`` tags, leaving the visible ``<body>`` an empty
+    skeleton. We rank inline scripts by JSON key:value-string density (the densest
+    data island first), truncated to a budget; code bundles / analytics scripts
+    with little JSON structure are skipped. Density (not a specific key like
+    ``name``) is the signal because sites use different schemas. Captured BEFORE
+    the scripts are decomposed so the visible-``text`` extraction is unchanged for
+    other callers.
+    """
+    candidates: list[tuple[int, str]] = []
+    for script in soup.find_all("script"):
+        if script.get("src"):
+            continue  # external script reference — no inline data
+        content = script.string or script.get_text() or ""
+        # Count JSON `"key":"value"` pairs, including escaped (`\"key\":\"value\"`)
+        # blobs that SSR frameworks stringify into a JS string.
+        json_pairs = content.count('":"') + content.count('\\":\\"')
+        if json_pairs >= _MIN_SCRIPT_JSON_PAIRS:
+            candidates.append((json_pairs, content))
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    collected: list[str] = []
+    total = 0
+    for _, content in candidates:
+        if total >= _MAX_SCRIPT_TEXT_LENGTH:
+            break
+        chunk = content[: _MAX_SCRIPT_TEXT_LENGTH - total]
+        collected.append(chunk)
+        total += len(chunk)
+    return "\n".join(collected)
+
+
 def scrape_url(url: str) -> dict[str, Any]:
     """Scrape a URL and return structured data.
 
     Returns:
-        Dict with keys: title, description, text, links, meta_keywords
+        Dict with keys: title, description, text, links, meta_keywords, script_text
     """
     normalized = normalize_url(url)
 
@@ -160,6 +204,10 @@ def scrape_url(url: str) -> dict[str, Any]:
         response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
+
+    # Capture data-bearing inline script JSON BEFORE stripping scripts below —
+    # this is where SSR sites hide the portfolio company list.
+    script_text = _extract_data_scripts(soup)
 
     # Remove script, style, nav clutter (matches Cheerio removals)
     for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
@@ -243,6 +291,7 @@ def scrape_url(url: str) -> dict[str, Any]:
         "text": text,
         "links": links,
         "meta_keywords": meta_keywords,
+        "script_text": script_text,
     }
 
 
