@@ -558,6 +558,37 @@ class TestGetScan:
         assert "Acme" in text
 
     @pytest.mark.asyncio
+    async def test_running_scan_reports_live_computed_progress(self):
+        # Regression: workers update the company's pipeline_progress mid-run but
+        # NOT the scan record's progress (stuck at the kickoff 10%). get_scan
+        # must compute live progress from the company, like GET /scan/{id} —
+        # otherwise it sits at 10% until the scan flips to complete.
+        storage, company_repo, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "running",
+            "type": "standalone",
+            "progress": 10,  # stale kickoff value on the record
+            "total_companies": 1,
+            "org_id": "test-org",
+        }
+        scan_repo.get_scan_companies.return_value = [{"company_id": "c1"}]
+        company_repo.get_by_ids.return_value = [
+            _make_company(
+                overall_risk_score=None,
+                analyzed_at=None,
+                pipeline_progress=60,
+                pipeline_label="Analyzing value chain",
+            )
+        ]
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "Progress: 60%" in text
+        assert "10%" not in text
+        assert "Analyzing value chain" in text
+        assert "in progress" in text  # no score yet
+
+    @pytest.mark.asyncio
     async def test_scan_no_companies(self):
         storage, _, _, scan_repo, *_ = _make_storage()
         scan_repo.get_by_id.return_value = {
