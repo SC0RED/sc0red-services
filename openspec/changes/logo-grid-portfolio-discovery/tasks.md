@@ -22,9 +22,9 @@
 - [x] 4.1 `ruff check` + `ruff format` + naming validator + abbreviations clean on changed files
 - [x] 4.2 `pyright src/` introduces no new error category
 - [x] 4.3 `pytest tests/ -q` passes with coverage ≥ 95%
-- [ ] 4.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
+- [x] 4.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
 - [x] 4.5 Reproduce locally: `vistaequitypartners.com/companies` now yields ~68 logo-grid names that seed the fallback (extraction verified live; the grounded resolution itself runs in the deployed env)
-- [ ] 4.6 Run the E2E suite per CLAUDE.md before opening the PR
+- [x] 4.6 Run the E2E suite per CLAUDE.md before opening the PR
 
 ## 5. Documented next step (do NOT implement here)
 
