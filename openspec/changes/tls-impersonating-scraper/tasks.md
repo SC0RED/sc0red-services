@@ -28,9 +28,9 @@
 - [x] 5.1 `ruff check` + `ruff format` + naming validator + abbreviations clean on changed files
 - [x] 5.2 `pyright src/` introduces no new error category
 - [x] 5.3 `pytest tests/ -q` passes with coverage ≥ 95%
-- [ ] 5.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
+- [x] 5.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
 - [x] 5.5 Reproduce the customer case: `gainsight.com` now scrapes full content via the impersonating transport (local check)
-- [ ] 5.6 Run the E2E suite per CLAUDE.md before opening the PR; confirm `curl_cffi` fetches the `ai-mock` company HTML over plain http (extend the mock/compose only if needed)
+- [x] 5.6 Run the E2E suite per CLAUDE.md before opening the PR; confirm `curl_cffi` fetches the `ai-mock` company HTML over plain http (extend the mock/compose only if needed)
 
 ## 6. Documented next step (do NOT implement here)
 
