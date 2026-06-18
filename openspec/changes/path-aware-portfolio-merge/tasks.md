@@ -18,6 +18,6 @@
 - [x] 3.1 `ruff check` + `ruff format` + naming validator + abbreviations clean on changed files
 - [x] 3.2 `pyright src/` introduces no new error category
 - [x] 3.3 `pytest tests/ -q` passes with coverage ≥ 95%
-- [ ] 3.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
+- [x] 3.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
 - [x] 3.5 Reproduce end-to-end locally: strategy(151) → `_merge_results` now yields ~151 (auto_included + needs_validation), not 1
-- [ ] 3.6 Run the E2E suite per CLAUDE.md before opening the PR
+- [x] 3.6 Run the E2E suite per CLAUDE.md before opening the PR
