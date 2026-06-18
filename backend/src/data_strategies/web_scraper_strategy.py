@@ -56,7 +56,7 @@ MIN_NAME_LENGTH = 2
 MAX_NAME_LENGTH = 60
 
 
-def title_case_tokens(raw: str) -> str:
+def title_case_tokens(raw: str) -> str:  # noqa: NAMING001  (transform util, not a verb)
     """Split a slug-like string on separators / camelCase and title-case."""
     tokens = [t for t in _FILENAME_TOKEN_SPLIT_RE.split(raw) if t]
     if not tokens:
