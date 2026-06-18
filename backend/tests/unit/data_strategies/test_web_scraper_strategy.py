@@ -260,6 +260,17 @@ class TestScrapeUrl:
         # existing keys still present
         assert "text" in result and "links" in result and "script_text" in result
 
+    def test_scrape_returns_logo_company_names(self):
+        html = (
+            "<html><body>"
+            '<img alt="Logo of software company Jamf">'
+            '<img alt="Logo of software company Datto">'
+            "<p>skeleton</p></body></html>"
+        )
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
+        assert result["logo_company_names"] == ["Jamf", "Datto"]
+
     def test_scrape_skips_hash_and_mailto_links(self):
         html = (
             "<html><body>"

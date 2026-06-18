@@ -414,6 +414,7 @@ def _empty_scrape_result():
         "meta_keywords": "",
         "script_text": "",
         "embedded_companies": [],
+        "logo_company_names": [],
     }
 
 
@@ -472,3 +473,27 @@ class TestEmbeddedStructuredCandidates:
             if c["url"] == "https://www.thomabravo.com/portfolio/calabrio"
         ]
         assert len(calabrio) == 1
+
+
+class TestLogoGridSeeds:
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_logo_names_collected_and_firm_excluded(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/").endswith("/companies"):
+                # "VistaEquityPartners" == the firm stem (self-reference); "Avista"
+                # merely contains it as a substring and must be kept.
+                result["logo_company_names"] = ["Jamf", "Datto", "VistaEquityPartners", "Avista"]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy(
+            {"url": "https://www.vistaequitypartners.com"}
+        ).execute()
+        # logo names surface as seeds; site companies stay 0 (names have no URL)
+        assert meta["count"] == 0
+        seeds = meta["logo_company_names"]
+        assert "Jamf" in seeds and "Datto" in seeds
+        # exact firm self-reference filtered out, substring match retained
+        assert "VistaEquityPartners" not in seeds
+        assert "Avista" in seeds

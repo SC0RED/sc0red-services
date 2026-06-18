@@ -98,6 +98,11 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         # the root) yield a detail-page parent, so root-page records are ignored
         # for URL construction; the same companies are recovered from /portfolio.
         structured_by_slug: dict[str, dict[str, str]] = {}
+        # Names from logo-image alt grids (e.g. Vista) — no on-site URL, so these
+        # seed the web-search fallback rather than becoming candidates directly.
+        logo_names: dict[str, str] = {}  # lower-key -> display name (deduped)
+        firm_stem = firm_domain[4:] if firm_domain.startswith("www.") else firm_domain
+        firm_stem = firm_stem.split(".", 1)[0].lower()
         for path in PORTFOLIO_PATHS:
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
@@ -108,6 +113,12 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 # portfolio list) — fed to the AI extraction path downstream.
                 if result.get("script_text"):
                     script_texts.append(result["script_text"])
+                for name in result.get("logo_company_names", []):
+                    key = name.lower()
+                    # Exact match excludes the firm's own name without dropping
+                    # companies that merely contain the stem (e.g. "Avista").
+                    if key not in logo_names and key != firm_stem:
+                        logo_names[key] = name
                 if path:
                     for record in result.get("embedded_companies", []):
                         slug = record["slug"]
@@ -233,6 +244,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             "page_text": "\n\n".join(page_texts),
             "script_text": "\n\n".join(script_texts),
             "all_links": all_links,
+            "logo_company_names": list(logo_names.values()),
         }
 
     def _fallback_data_attributes(self, base_origin: str, firm_domain: str) -> list[dict[str, str]]:
