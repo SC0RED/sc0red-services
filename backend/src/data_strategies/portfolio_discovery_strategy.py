@@ -115,7 +115,9 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                     script_texts.append(result["script_text"])
                 for name in result.get("logo_company_names", []):
                     key = name.lower()
-                    if key not in logo_names and firm_stem not in key:
+                    # Exact match excludes the firm's own name without dropping
+                    # companies that merely contain the stem (e.g. "Avista").
+                    if key not in logo_names and key != firm_stem:
                         logo_names[key] = name
                 if path:
                     for record in result.get("embedded_companies", []):

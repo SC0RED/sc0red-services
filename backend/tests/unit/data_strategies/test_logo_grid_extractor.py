@@ -21,6 +21,16 @@ def test_extracts_logo_of_company_names():
     assert out == ["Jamf", "Datto", "KnowBe4"]
 
 
+def test_extracts_multiword_descriptor_before_company():
+    html = """
+    <html><body>
+      <img alt="Logo of cloud software company Jamf">
+      <img alt="Logo of the company Okta">
+    </body></html>
+    """
+    assert extract_logo_companies(_soup(html)) == ["Jamf", "Okta"]
+
+
 def test_excludes_firm_and_non_company_logos():
     # No "company" keyword → not a portfolio company logo.
     html = """

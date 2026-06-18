@@ -481,8 +481,9 @@ class TestLogoGridSeeds:
         def fake(url):
             result = _empty_scrape_result()
             if url.rstrip("/").endswith("/companies"):
-                # last entry contains the firm's domain stem → a self-reference
-                result["logo_company_names"] = ["Jamf", "Datto", "VistaEquityPartners"]
+                # "VistaEquityPartners" == the firm stem (self-reference); "Avista"
+                # merely contains it as a substring and must be kept.
+                result["logo_company_names"] = ["Jamf", "Datto", "VistaEquityPartners", "Avista"]
             return result
 
         mock_scrape.side_effect = fake
@@ -493,5 +494,6 @@ class TestLogoGridSeeds:
         assert meta["count"] == 0
         seeds = meta["logo_company_names"]
         assert "Jamf" in seeds and "Datto" in seeds
-        # firm self-reference (contains the domain stem) filtered out
+        # exact firm self-reference filtered out, substring match retained
         assert "VistaEquityPartners" not in seeds
+        assert "Avista" in seeds

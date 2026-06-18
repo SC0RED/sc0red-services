@@ -23,10 +23,11 @@ if TYPE_CHECKING:
 _MIN_LOGO_NAME = 2
 _MAX_LOGO_NAME = 60
 
-# "Logo of [the] [software|enterprise|portfolio] company {Name}" — the precise,
-# high-signal form. Requiring the "company" keyword naturally excludes the
-# firm's own header logo (e.g. "Vista logo"), partner badges, and press logos.
-_LOGO_OF_COMPANY_RE = re.compile(r"(?i)^logo of (?:the )?(?:[\w-]+ )?company\s+(.+)$")
+# "Logo of [the] [<descriptor words>] company {Name}" — the precise, high-signal
+# form. Allows multi-word descriptors ("cloud software company …"). Requiring the
+# "company" keyword naturally excludes the firm's own header logo (e.g. "Vista
+# logo"), partner badges, and press logos.
+_LOGO_OF_COMPANY_RE = re.compile(r"(?i)^logo of (?:the )?(?:[\w-]+ )*company\s+(.+)$")
 
 
 def extract_logo_companies(soup: BeautifulSoup) -> list[str]:
