@@ -93,6 +93,11 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         all_links: list[dict[str, Any]] = []
         page_texts: list[str] = []
         script_texts: list[str] = []
+        # Structured {name, slug} records parsed deterministically from hydration
+        # JSON, keyed by slug → a detail-page candidate. Only listing paths (not
+        # the root) yield a detail-page parent, so root-page records are ignored
+        # for URL construction; the same companies are recovered from /portfolio.
+        structured_by_slug: dict[str, dict[str, str]] = {}
         for path in PORTFOLIO_PATHS:
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
@@ -103,6 +108,15 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 # portfolio list) — fed to the AI extraction path downstream.
                 if result.get("script_text"):
                     script_texts.append(result["script_text"])
+                if path:
+                    for record in result.get("embedded_companies", []):
+                        slug = record["slug"]
+                        if slug not in structured_by_slug:
+                            structured_by_slug[slug] = {
+                                "name": record["name"],
+                                "url": f"{page_url.rstrip('/')}/{slug}",
+                                "description": "",
+                            }
             except ImpersonateError:
                 raise  # misconfigured _IMPERSONATE_TARGET — a bug, not a per-page failure
             except RequestException:  # transport/HTTP error — skip this page, fail-soft
@@ -198,6 +212,16 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             except Exception:  # urlparse and link access raise various errors
                 logger.debug("Skipping malformed link", exc_info=True)
                 continue
+
+        # Merge deterministic structured-JSON candidates (detail-page URLs),
+        # deduped by URL against the link-derived ones. These are the reliable
+        # path for SSR/headless-CMS sites whose company list lives in embedded
+        # JSON rather than anchors.
+        for candidate in structured_by_slug.values():
+            if candidate["url"] in seen_urls:
+                continue
+            seen_urls.add(candidate["url"])
+            companies.append(candidate)
 
         # Fallback: data attributes (data-company-name, data-company-link)
         if not companies:

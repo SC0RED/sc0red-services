@@ -13,6 +13,7 @@ from src.data_strategies.web_scraper_strategy import (
     _SCRAPER_TIMEOUT,
     WebScraperStrategy,
     _extract_context_name,
+    _extract_embedded_companies,
     _extract_name_from_img_src,
     extract_name_from_url,
     fetch_page_html,
@@ -21,11 +22,75 @@ from src.data_strategies.web_scraper_strategy import (
 )
 
 
+def _soup(html: str) -> BeautifulSoup:
+    return BeautifulSoup(html, "html.parser")
+
+
 def _http_error(status_code: int) -> HTTPError:
     """Build a curl_cffi HTTPError whose .response carries a status code."""
     error = HTTPError(f"HTTP Error {status_code}")
     error.response = MagicMock(status_code=status_code)
     return error
+
+
+class TestExtractEmbeddedCompanies:
+    def test_extracts_escaped_json_records(self):
+        # SSR/headless-CMS shape: stringified JSON with escaped quotes, each
+        # company record large with logo/timestamp noise around name+slug.
+        html = (
+            "<html><head><script>"
+            'self.__next_f.push([1,"{\\"items\\":['
+            r"{\"name\":\"Calabrio\",\"slug\":\"calabrio\","
+            r"\"logoSolidBlack\":{\"alt\":\"Calabrio logo\",\"filename\":\"x.svg\"}},"
+            r"{\"name\":\"ABC Fitness Solutions\",\"slug\":\"abc\",\"updatedAt\":\"2025-11-19\"},"
+            r"{\"name\":\"Dynatrace\",\"slug\":\"dynatrace\"}"
+            ']}"])</script></head><body></body></html>'
+        )
+        out = _extract_embedded_companies(_soup(html))
+        names = {c["name"] for c in out}
+        slugs = {c["slug"] for c in out}
+        assert names == {"Calabrio", "ABC Fitness Solutions", "Dynatrace"}
+        assert slugs == {"calabrio", "abc", "dynatrace"}
+
+    def test_extracts_plain_json_records(self):
+        html = (
+            "<html><head><script>"
+            'window.__DATA__ = {"companies":['
+            '{"name":"Acme Corp","slug":"acme"},'
+            '{"name":"Globex","slug":"globex"}]}'
+            "</script></head><body></body></html>"
+        )
+        out = _extract_embedded_companies(_soup(html))
+        assert {c["slug"] for c in out} == {"acme", "globex"}
+
+    def test_excludes_name_without_adjacent_slug(self):
+        # Logo asset (name but no slug) and searchableNormalized (name, no slug)
+        # must NOT be mistaken for companies.
+        html = (
+            "<html><head><script>"
+            r"{\"logo\":{\"name\":\"some-logo\",\"filename\":\"logo.svg\"},"
+            r"\"searchableNormalized\":{\"name\":\"bottomline\"}}"
+            "</script></head><body></body></html>"
+        )
+        assert _extract_embedded_companies(_soup(html)) == []
+
+    def test_dedupes_by_slug(self):
+        html = (
+            "<html><head><script>"
+            '{"a":{"name":"Acme","slug":"acme"},"b":{"name":"Acme Dup","slug":"acme"}}'
+            "</script></head><body></body></html>"
+        )
+        out = _extract_embedded_companies(_soup(html))
+        assert len(out) == 1
+        assert out[0]["slug"] == "acme"
+
+    def test_no_records_returns_empty(self):
+        html = "<html><head><script>console.log('hi')</script></head><body><p>x</p></body></html>"
+        assert _extract_embedded_companies(_soup(html)) == []
+
+    def test_skips_external_scripts(self):
+        html = '<html><head><script src="https://cdn/app.js"></script></head><body></body></html>'
+        assert _extract_embedded_companies(_soup(html)) == []
 
 
 class TestNormalizeUrl:
@@ -182,6 +247,18 @@ class TestScrapeUrl:
         with _patch_html(html):
             result = scrape_url("https://example.com")
         assert any(link["text"] == "Visit Company" for link in result["links"])
+
+    def test_scrape_returns_embedded_companies(self):
+        html = (
+            "<html><head><script>"
+            '{"items":[{"name":"Acme Corp","slug":"acme"},{"name":"Globex","slug":"globex"}]}'
+            "</script></head><body><p>skeleton</p></body></html>"
+        )
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
+        assert {c["slug"] for c in result["embedded_companies"]} == {"acme", "globex"}
+        # existing keys still present
+        assert "text" in result and "links" in result and "script_text" in result
 
     def test_scrape_skips_hash_and_mailto_links(self):
         html = (
