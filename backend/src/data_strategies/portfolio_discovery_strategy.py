@@ -12,16 +12,15 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
 from bs4 import BeautifulSoup
+from curl_cffi.requests.exceptions import ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 from src.data_strategies.web_scraper_strategy import (
     MAX_NAME_LENGTH,
     MIN_NAME_LENGTH,
-    SCRAPER_HEADERS,
-    SCRAPER_TIMEOUT,
     extract_name_from_url,
+    fetch_page_html,
     scrape_url,
 )
 
@@ -51,7 +50,6 @@ _STARTS_WITH_SKIP = re.compile(
     r"^(the|our|a|an|login|sign|contact|about|terms|privacy)\b", re.IGNORECASE
 )
 
-_HTTP_OK = 200
 # Name-length bounds live in ``web_scraper_strategy`` as the single source of
 # truth — both discovery and extraction apply the same thresholds.
 _MIN_COMPANY_NAME_LENGTH = MIN_NAME_LENGTH
@@ -105,7 +103,9 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 # portfolio list) — fed to the AI extraction path downstream.
                 if result.get("script_text"):
                     script_texts.append(result["script_text"])
-            except Exception:  # scrape_url raises httpx + parsing errors
+            except ImpersonateError:
+                raise  # misconfigured _IMPERSONATE_TARGET — a bug, not a per-page failure
+            except RequestException:  # transport/HTTP error — skip this page, fail-soft
                 logger.info("Failed to scrape %s", page_url, exc_info=True)
                 continue
 
@@ -219,15 +219,8 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         for path in PORTFOLIO_PATHS:
             page_url = f"{base_origin}{path}" if path else base_origin
             try:
-                with httpx.Client(follow_redirects=True, timeout=SCRAPER_TIMEOUT) as client:
-                    response = client.get(
-                        page_url,
-                        headers=SCRAPER_HEADERS,
-                    )
-                    if response.status_code != _HTTP_OK:
-                        continue
-
-                soup = BeautifulSoup(response.text, "html.parser")
+                html = fetch_page_html(page_url)
+                soup = BeautifulSoup(html, "html.parser")
                 attrs = {"data-company-name": True, "data-company-link": True}
                 for el in soup.find_all(attrs=attrs):
                     name = (el.get("data-company-name") or "").strip()
@@ -241,7 +234,9 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                     ):
                         seen.add(url)
                         companies.append({"name": name, "url": url, "description": ""})
-            except Exception:  # httpx + BeautifulSoup can raise various errors
+            except ImpersonateError:
+                raise  # misconfigured _IMPERSONATE_TARGET — a bug, not a per-path failure
+            except RequestException:  # transport/HTTP error — skip this path, fail-soft
                 logger.debug("Skipping fallback path %s", page_url, exc_info=True)
                 continue
 

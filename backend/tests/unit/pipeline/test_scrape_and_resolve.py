@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
+from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
@@ -81,6 +81,7 @@ class TestScrapeAndResolveURL:
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
     def test_execute_insufficient_content(self, mock_scraper_cls, mock_resolver_cls):
         mock_scraper = MagicMock()
+        # Genuine thin-but-OK page: no transport error → plain message, no HTTP status.
         mock_scraper.execute.return_value = ("short", {})
         mock_scraper_cls.return_value = mock_scraper
 
@@ -91,7 +92,28 @@ class TestScrapeAndResolveURL:
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
-        with pytest.raises(ValueError, match="Insufficient content"):
+        with pytest.raises(
+            ValueError, match=r"Insufficient content scraped from https://example.com$"
+        ):
+            step.execute()
+
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.URLResolutionStrategy")
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
+    def test_execute_surfaces_bot_block_status(self, mock_scraper_cls, mock_resolver_cls):
+        mock_scraper = MagicMock()
+        # Bot block: WebScraperStrategy returns empty text + the HTTP status.
+        mock_scraper.execute.return_value = ("", {"error": "HTTP 403"})
+        mock_scraper_cls.return_value = mock_scraper
+
+        company = Company(url="https://blocked.com")
+        accessor = CompanyAccessor(company)
+
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        # The real cause (HTTP 403) is surfaced, not masked as generic insufficient content.
+        with pytest.raises(ValueError, match=r"HTTP 403"):
             step.execute()
 
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")
@@ -117,7 +139,7 @@ class TestScrapeAndResolveURL:
         )
         mock_resolver_cls.return_value = mock_resolver
 
-        mock_scrape_url.side_effect = httpx.RequestError("Connection error")
+        mock_scrape_url.side_effect = CurlConnectionError("Connection error")
 
         company = Company(url="https://original.com")
         accessor = CompanyAccessor(company)
