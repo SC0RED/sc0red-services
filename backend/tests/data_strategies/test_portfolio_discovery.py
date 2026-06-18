@@ -15,6 +15,9 @@ def _mock_scrape(links):
         "text": "Portfolio page",
         "links": links,
         "meta_keywords": "",
+        "script_text": "",
+        "embedded_companies": [],
+        "logo_company_names": [],
     }
 
 
@@ -143,4 +146,81 @@ class TestScrapeFailSoft:
             ),
         ):
             _, result = strategy.execute()
+        assert result["companies"] == []
+
+
+class TestDetailLinkSlugNames:
+    def test_descriptive_text_uses_slug_name(self):
+        links = [
+            {
+                "text": "Integrated cloud communications platform for businesses worldwide today",
+                "href": "https://firm.com/investments/8x8",
+                "context_name": "",
+            },
+        ]
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
+            _, result = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        companies = result["companies"]
+        assert any(
+            c["name"] == "8x8" and c["url"] == "https://firm.com/investments/8x8"
+            for c in companies
+        )
+
+    def test_slug_with_separators_title_cased(self):
+        links = [
+            {
+                "text": "K-12 student information system for school districts across the country",
+                "href": "https://firm.com/investments/aeries-software",
+                "context_name": "",
+            },
+        ]
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
+            _, result = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert any(c["name"] == "Aeries Software" for c in result["companies"])
+
+    def test_clean_anchor_text_preserved(self):
+        # Short, valid anchor name on a detail link is kept (slug does not override).
+        links = [
+            {"text": "Accela", "href": "https://firm.com/investments/accela", "context_name": ""},
+        ]
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
+            _, result = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        names = [c["name"] for c in result["companies"]]
+        assert "Accela" in names
+
+    def test_non_detail_same_domain_link_not_a_candidate(self):
+        links = [
+            {"text": "About Us", "href": "https://firm.com/about", "context_name": ""},
+        ]
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
+            _, result = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert result["companies"] == []
+
+    def test_unusable_text_and_unusable_slug_dropped(self):
+        # Internal detail link, descriptive text (out of bounds) AND a 1-char slug
+        # (slug name also out of bounds) → no derivable name → dropped.
+        links = [
+            {
+                "text": "A very long descriptive sentence exceeding the name length cap",
+                "href": "https://firm.com/investments/a",
+                "context_name": "",
+            },
+        ]
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
+            _, result = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
         assert result["companies"] == []

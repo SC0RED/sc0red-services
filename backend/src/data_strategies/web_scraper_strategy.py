@@ -56,7 +56,7 @@ MIN_NAME_LENGTH = 2
 MAX_NAME_LENGTH = 60
 
 
-def _title_case_tokens(raw: str) -> str:
+def title_case_tokens(raw: str) -> str:  # noqa: NAMING001  (transform util, not a verb)
     """Split a slug-like string on separators / camelCase and title-case."""
     tokens = [t for t in _FILENAME_TOKEN_SPLIT_RE.split(raw) if t]
     if not tokens:
@@ -82,7 +82,7 @@ def _extract_name_from_img_src(src: str) -> str:
     stem = basename.rsplit(".", 1)[0] if "." in basename else basename
     # Strip trailing '-logo' / '_logo' / 'logo'
     stem = _LOGO_SUFFIX_RE.sub("", stem)
-    name = _title_case_tokens(stem)
+    name = title_case_tokens(stem)
     if not (MIN_NAME_LENGTH < len(name) <= MAX_NAME_LENGTH):
         return ""
     return name
@@ -113,7 +113,7 @@ def extract_name_from_url(url: str) -> str:
     # Drop TLD (last dotted segment)
     parts = host.rsplit(".", 1)
     stem = parts[0] if len(parts) > 1 else host
-    name = _title_case_tokens(stem)
+    name = title_case_tokens(stem)
     if not (MIN_NAME_LENGTH < len(name) <= MAX_NAME_LENGTH):
         return ""
     return name
