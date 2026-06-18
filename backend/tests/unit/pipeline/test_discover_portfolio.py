@@ -142,6 +142,74 @@ class TestDiscoverPortfolio:
 
     @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_fallback_seeded_with_logo_names(self, mock_strategy_cls, mock_grounded):
+        # Logo-grid site (Vista): site yields 0 companies but logo names exist →
+        # the fallback is seeded with those names to resolve their URLs.
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {
+                "companies": [],
+                "page_text": "",
+                "script_text": "",
+                "all_links": [],
+                "logo_company_names": ["Jamf", "Datto"],
+            },
+        )
+        mock_strategy_cls.return_value = mock_strategy
+
+        captured: dict[str, str] = {}
+
+        def _capture(*, user_prompt: str, **_: object):
+            captured["prompt"] = user_prompt
+            return _grounded(
+                [
+                    {"name": "Jamf", "url": "https://jamf.com"},
+                    {"name": "Datto", "url": "https://datto.com"},
+                ]
+            )
+
+        mock_grounded.side_effect = _capture
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://vista.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        assert "Jamf" in captured["prompt"] and "Datto" in captured["prompt"]
+        assert "known to include" in captured["prompt"].lower()
+        details = step._request_executor.add_details.call_args[0][0]
+        assert {c["url"] for c in details["portfolio_companies"]} == {
+            "https://jamf.com",
+            "https://datto.com",
+        }
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_fallback_unseeded_when_no_logo_names(self, mock_strategy_cls, mock_grounded):
+        # Opaque site with no logo grid → comprehensive (unseeded) prompt.
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = mock_strategy
+
+        captured: dict[str, str] = {}
+
+        def _capture(*, user_prompt: str, **_: object):
+            captured["prompt"] = user_prompt
+            return _grounded([{"name": "Acme", "url": "https://acme.com"}])
+
+        mock_grounded.side_effect = _capture
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://opaque.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        assert "known to include" not in captured["prompt"].lower()
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_healthy_site_skips_fallback(self, mock_strategy_cls, mock_grounded):
         mock_strategy = MagicMock()
         mock_strategy.execute.return_value = (

@@ -16,16 +16,15 @@ from curl_cffi import requests as curl_requests
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
+from src.data_strategies.logo_grid_extractor import extract_logo_companies
+
 logger = logging.getLogger(__name__)
 
-# Browser fingerprint to impersonate. curl_cffi (libcurl + BoringSSL) presents a
-# real-browser TLS/HTTP-2 handshake so fingerprint-based bot protection
-# (Cloudflare JA3 bot management) serves full content instead of a 403.
-# MAINTENANCE NOTE: this target ages — stale fingerprints (e.g. chrome120/124)
-# get blocked just like a plain HTTP client. Keep curl_cffi reasonably fresh and
-# bump this to a current target if blocks reappear. curl_cffi also emits a
-# browser-consistent header set when impersonating, so we deliberately do NOT
-# layer custom headers on top (that would break fingerprint coherence).
+# Browser fingerprint curl_cffi (libcurl + BoringSSL) impersonates so Cloudflare
+# JA3 bot management serves full content instead of a 403. MAINTENANCE: stale
+# targets (e.g. chrome120/124) get blocked — keep curl_cffi fresh and bump this.
+# Impersonation also sets a browser-consistent header set, so we add no custom
+# headers (that would break fingerprint coherence).
 _IMPERSONATE_TARGET = "chrome136"
 _SCRAPER_TIMEOUT = 15.0
 _MAX_TEXT_LENGTH = 20_000
@@ -257,7 +256,7 @@ def scrape_url(url: str) -> dict[str, Any]:
 
     Returns:
         Dict with keys: title, description, text, links, meta_keywords,
-        script_text, embedded_companies
+        script_text, embedded_companies, logo_company_names
     """
     normalized = normalize_url(url)
     html = fetch_page_html(normalized)
@@ -269,6 +268,8 @@ def scrape_url(url: str) -> dict[str, Any]:
     # deterministic parse of structured {name, slug} records over the full script.
     script_text = _extract_data_scripts(soup)
     embedded_companies = _extract_embedded_companies(soup)
+    # Names from logo-image alt text (logo-grid sites with no links/JSON).
+    logo_company_names = extract_logo_companies(soup)
 
     # Remove script, style, nav clutter (matches Cheerio removals)
     for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
@@ -354,6 +355,7 @@ def scrape_url(url: str) -> dict[str, Any]:
         "meta_keywords": meta_keywords,
         "script_text": script_text,
         "embedded_companies": embedded_companies,
+        "logo_company_names": logo_company_names,
     }
 
 

@@ -197,7 +197,10 @@ class DiscoverPortfolio(RequestStep):
         # the needs-validation tier only, never auto-included.
         site_total = len(auto_included) + len(needs_validation)
         if self._ai_client_factory and is_pe_firm and site_total <= _FALLBACK_THRESHOLD:
-            fallback = self._run_web_search_fallback(url)
+            # Seed with on-site logo-grid names when present (e.g. Vista): the
+            # site supplies the authoritative WHO, web search resolves the URLs.
+            seed_names = metadata.get("logo_company_names", [])
+            fallback = self._run_web_search_fallback(url, seed_names)
             needs_validation = _merge_fallback(auto_included, needs_validation, fallback)
 
         if not (auto_included or needs_validation) and not diagnostic:
@@ -272,8 +275,16 @@ class DiscoverPortfolio(RequestStep):
         )
         return result
 
-    def _run_web_search_fallback(self, firm_url: str) -> list[dict[str, str]]:
+    def _run_web_search_fallback(
+        self,
+        firm_url: str,
+        seed_names: list[str] | None = None,
+    ) -> list[dict[str, str]]:
         """Recover the firm's portfolio via web search when the site is opaque.
+
+        When ``seed_names`` is provided (e.g. names read from a logo grid), the
+        prompt is seeded with them so the model resolves their official URLs
+        rather than recalling the portfolio from scratch.
 
         Fail-soft: a search/AI failure (or empty result) yields no candidates and
         never crashes the scan — only programming errors propagate. Results are
@@ -282,7 +293,17 @@ class DiscoverPortfolio(RequestStep):
         template = load_template("discover_portfolio_websearch")
         schema = load_schema("discover_portfolio_websearch")
         system_prompt = load_system_prompt("portfolio_validation")
-        prompt = template.format(firm_url=firm_url)
+        if seed_names:
+            known = ", ".join(seed_names)
+            known_block = (
+                "The firm's portfolio is known to include these companies "
+                f"(found on its own site): {known}.\n"
+                "Return each of these companies' official website URL, and add "
+                "any other current holdings you find."
+            )
+        else:
+            known_block = ""
+        prompt = template.format(firm_url=firm_url, known_companies=known_block)
         try:
             _label, content, _elapsed, _tokens, _sources = run_grounded_ai_call(
                 ai_client_factory=self._require_ai_factory(),

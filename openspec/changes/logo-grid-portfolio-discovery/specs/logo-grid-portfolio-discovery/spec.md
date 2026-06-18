@@ -2,13 +2,13 @@
 
 ### Requirement: Extract company names from logo-image alt text
 
-The scraper SHALL extract portfolio company names from logo `<img>` `alt` text on a firm's portfolio page — handling at least "Logo of [the] [software] company {Name}" and "{Name} logo" forms — cleaning boilerplate ("logo of", "company", trailing punctuation), bounding by the existing name-length limits, excluding the firm's own logo, and deduplicating. These names are surfaced additively (a new field) without disturbing existing scrape output.
+The scraper SHALL extract portfolio company names from logo `<img>` `alt` text on a firm's portfolio page — matching the "Logo of [the] [<descriptor>] company {Name}" form — cleaning trailing punctuation, bounding by the existing name-length limits, and deduplicating. Requiring the "company" keyword excludes the firm's own header logo and non-company badges. These names are surfaced additively (a new field) without disturbing existing scrape output. Firm self-references are additionally filtered downstream by the discovery strategy.
 
 #### Scenario: Logo grid with names in alt text
 
 - **WHEN** a portfolio page renders companies as logo images with `alt="Logo of software company Jamf"` (no links, no detail pages)
 - **THEN** "Jamf" is extracted as a company name
-- **AND** the firm's own logo (`alt="Vista logo"`) is not included
+- **AND** the firm's own logo (`alt="Vista logo"`, which lacks the "company" keyword) is not included
 
 #### Scenario: Site without a logo grid
 
