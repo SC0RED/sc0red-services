@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-import httpx
+from curl_cffi.requests.exceptions import ImpersonateError, RequestException
 from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
@@ -48,7 +48,12 @@ class ScrapeAndResolveURL(RequestStep):
             text, metadata = scraper.execute()
 
         if not text or len(text.strip()) < _MIN_CONTENT_LENGTH:
-            message = f"Insufficient content scraped from {url}"
+            # Surface the underlying transport failure (e.g. "HTTP 403" from a
+            # bot block) when one is known, so the real cause is diagnosable
+            # rather than masked behind a generic "insufficient content".
+            scrape_error = metadata.get("error")
+            detail = f" ({scrape_error})" if scrape_error else ""
+            message = f"Insufficient content scraped from {url}{detail}"
             raise ValueError(message)
 
         accessor.set_scraped_text(text)
@@ -81,7 +86,9 @@ class ScrapeAndResolveURL(RequestStep):
                             f"[Content from actual company website ({actual_url}):\n{actual_text}]"
                         )
                         accessor.set_scraped_text(combined)
-                except (httpx.RequestError, httpx.HTTPStatusError):
+                except ImpersonateError:
+                    raise  # misconfigured _IMPERSONATE_TARGET — a bug, not a scrape miss
+                except RequestException:
                     logger.warning("Failed to scrape resolved URL %s, using original", actual_url)
                     accessor.set_actual_url(url)
 

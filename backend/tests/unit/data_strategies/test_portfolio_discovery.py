@@ -1,12 +1,16 @@
 """Tests for portfolio discovery strategy."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import pytest
+from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError
 
 from src.data_strategies.portfolio_discovery_strategy import (
     _GENERIC_CTA_PATTERNS,
-    PORTFOLIO_PATHS,
     _SOCIAL_DOMAINS,
+    PORTFOLIO_PATHS,
     PortfolioDiscoveryStrategy,
 )
 
@@ -140,13 +144,26 @@ class TestPortfolioDiscoveryStrategy:
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     def test_execute_scrape_failure_skips_page(self, mock_scrape):
-        mock_scrape.side_effect = RuntimeError("Connection error")
+        # Transport/HTTP errors are the fail-soft contract — skip the page.
+        mock_scrape.side_effect = CurlConnectionError("Connection error")
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _raw_json, meta = strategy.execute()
 
-        # Should not raise, just returns empty
+        # Should not raise, just returns empty — and it kept trying every path
+        # rather than aborting on the first transport error.
         assert meta["companies"] == []
+        assert mock_scrape.call_count == len(PORTFOLIO_PATHS)
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_impersonation_misconfig_propagates(self, mock_scrape):
+        # A bad _IMPERSONATE_TARGET is a programming error — it must NOT be
+        # swallowed by the fail-soft transport handler as "no companies".
+        mock_scrape.side_effect = ImpersonateError("bad target")
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        with pytest.raises(ImpersonateError):
+            strategy.execute()
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     def test_execute_internal_portfolio_links(self, mock_scrape):
@@ -311,8 +328,8 @@ class TestPortfolioDiscoveryStrategy:
         assert len(meta["companies"]) == 50
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
-    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
-    def test_fallback_data_attributes(self, mock_httpx_client, mock_scrape):
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    def test_fallback_data_attributes(self, mock_fetch, mock_scrape):
         """When no links found, fallback to data-company-name/data-company-link attributes."""
         mock_scrape.return_value = {
             "text": "content",
@@ -322,18 +339,12 @@ class TestPortfolioDiscoveryStrategy:
             "meta_keywords": "",
         }
 
-        html = """
+        mock_fetch.return_value = """
         <html><body>
             <div data-company-name="DataCo" data-company-link="https://dataco.com"></div>
             <div data-company-name="BetaInc" data-company-link="https://betainc.com"></div>
         </body></html>
         """
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = html
-        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _, meta = strategy.execute()
@@ -343,8 +354,8 @@ class TestPortfolioDiscoveryStrategy:
         assert "BetaInc" in names
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
-    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
-    def test_fallback_invalid_data_attributes(self, mock_httpx_client, mock_scrape):
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    def test_fallback_invalid_data_attributes(self, mock_fetch, mock_scrape):
         """Fallback skips: empty name, non-http URL, duplicate URLs."""
         mock_scrape.return_value = {
             "text": "content",
@@ -354,7 +365,7 @@ class TestPortfolioDiscoveryStrategy:
             "meta_keywords": "",
         }
 
-        html = """
+        mock_fetch.return_value = """
         <html><body>
             <div data-company-name="" data-company-link="https://empty.com"></div>
             <div data-company-name="NoHttp" data-company-link="ftp://nohttp.com"></div>
@@ -362,12 +373,6 @@ class TestPortfolioDiscoveryStrategy:
             <div data-company-name="DupeCo" data-company-link="https://valid.com"></div>
         </body></html>
         """
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = html
-        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _, meta = strategy.execute()
@@ -380,9 +385,9 @@ class TestPortfolioDiscoveryStrategy:
         assert len([c for c in meta["companies"] if c["url"] == "https://valid.com"]) == 1
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
-    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
-    def test_fallback_http_error(self, mock_httpx_client, mock_scrape):
-        """HTTP error during fallback path is handled gracefully."""
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    def test_fallback_http_error(self, mock_fetch, mock_scrape):
+        """HTTP error during fallback path is handled gracefully (fail-soft)."""
         mock_scrape.return_value = {
             "text": "content",
             "title": "title",
@@ -391,11 +396,8 @@ class TestPortfolioDiscoveryStrategy:
             "meta_keywords": "",
         }
 
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
+        # The impersonating transport raises HTTPError on a bad status (e.g. 500).
+        mock_fetch.side_effect = HTTPError("HTTP Error 500")
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _, meta = strategy.execute()

@@ -1,6 +1,7 @@
 """Web scraper data strategy — ports scrapeUrl() from pe-scan/src/lib/scraper/index.ts.
 
-Uses httpx + BeautifulSoup4 instead of Cheerio.
+Uses curl_cffi (browser-impersonating TLS transport) + BeautifulSoup4 instead of
+Cheerio. Impersonation lets the scraper past TLS-fingerprint bot protection.
 """
 
 from __future__ import annotations
@@ -10,22 +11,23 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
 from bs4 import BeautifulSoup
+from curl_cffi import requests as curl_requests
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 logger = logging.getLogger(__name__)
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-SCRAPER_HEADERS = {
-    "User-Agent": _USER_AGENT,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-SCRAPER_TIMEOUT = 15.0
+# Browser fingerprint to impersonate. curl_cffi (libcurl + BoringSSL) presents a
+# real-browser TLS/HTTP-2 handshake so fingerprint-based bot protection
+# (Cloudflare JA3 bot management) serves full content instead of a 403.
+# MAINTENANCE NOTE: this target ages — stale fingerprints (e.g. chrome120/124)
+# get blocked just like a plain HTTP client. Keep curl_cffi reasonably fresh and
+# bump this to a current target if blocks reappear. curl_cffi also emits a
+# browser-consistent header set when impersonating, so we deliberately do NOT
+# layer custom headers on top (that would break fingerprint coherence).
+_IMPERSONATE_TARGET = "chrome136"
+_SCRAPER_TIMEOUT = 15.0
 _MAX_TEXT_LENGTH = 20_000
 # Budget for data-bearing inline <script> JSON. Modern SSR sites (Next.js etc.)
 # embed page data — including portfolio company lists — as JSON inside <script>
@@ -191,6 +193,25 @@ def _extract_data_scripts(soup: BeautifulSoup) -> str:
     return "\n".join(collected)
 
 
+def fetch_page_html(url: str) -> str:
+    """GET a URL via the browser-impersonating transport and return its HTML.
+
+    Sole scraping transport: ``curl_cffi`` with browser impersonation so that
+    TLS-fingerprint bot protection serves full content. Raises ``curl_cffi``
+    ``RequestException`` subclasses on failure (``HTTPError`` on a bad status,
+    ``ConnectionError``/``Timeout`` on transport errors); callers translate
+    those into their existing error contracts.
+    """
+    response = curl_requests.get(
+        url,
+        impersonate=_IMPERSONATE_TARGET,
+        timeout=_SCRAPER_TIMEOUT,
+        allow_redirects=True,
+    )
+    response.raise_for_status()
+    return response.text
+
+
 def scrape_url(url: str) -> dict[str, Any]:
     """Scrape a URL and return structured data.
 
@@ -198,12 +219,8 @@ def scrape_url(url: str) -> dict[str, Any]:
         Dict with keys: title, description, text, links, meta_keywords, script_text
     """
     normalized = normalize_url(url)
-
-    with httpx.Client(follow_redirects=True, timeout=SCRAPER_TIMEOUT) as client:
-        response = client.get(normalized, headers=SCRAPER_HEADERS)
-        response.raise_for_status()
-
-    soup = BeautifulSoup(response.text, "html.parser")
+    html = fetch_page_html(normalized)
+    soup = BeautifulSoup(html, "html.parser")
 
     # Capture data-bearing inline script JSON BEFORE stripping scripts below —
     # this is where SSR sites hide the portfolio company list.
@@ -296,7 +313,7 @@ def scrape_url(url: str) -> dict[str, Any]:
 
 
 class WebScraperStrategy(DataStrategyExecutor):
-    """DataStrategyExecutor that scrapes a URL using httpx + BeautifulSoup.
+    """DataStrategyExecutor that scrapes a URL using curl_cffi + BeautifulSoup.
 
     Config keys:
         url (str): The URL to scrape.
@@ -320,9 +337,16 @@ class WebScraperStrategy(DataStrategyExecutor):
                 "links": result["links"],
                 "meta_keywords": result["meta_keywords"],
             }
-        except httpx.HTTPStatusError as e:
+        except ImpersonateError:
+            raise  # misconfigured _IMPERSONATE_TARGET — a bug, surface it loudly
+        except HTTPError as e:
             logger.warning("HTTP error scraping %s: %s", url, e)
-            return "", {"error": f"HTTP {e.response.status_code}"}
-        except httpx.RequestError as e:
+            # curl_cffi's HTTPError.response is optional; read the status code
+            # defensively so a missing response degrades to the error string
+            # rather than crashing inside the handler.
+            status_code = getattr(e.response, "status_code", None)
+            detail = f"HTTP {status_code}" if status_code is not None else str(e)
+            return "", {"error": detail}
+        except RequestException as e:
             logger.warning("Request error scraping %s: %s", url, e)
             return "", {"error": str(e)}

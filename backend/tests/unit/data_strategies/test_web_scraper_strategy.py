@@ -3,18 +3,29 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import httpx
-
+import pytest
 from bs4 import BeautifulSoup
+from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError
 
 from src.data_strategies.web_scraper_strategy import (
+    _IMPERSONATE_TARGET,
+    _SCRAPER_TIMEOUT,
     WebScraperStrategy,
     _extract_context_name,
     _extract_name_from_img_src,
     extract_name_from_url,
+    fetch_page_html,
     normalize_url,
     scrape_url,
 )
+
+
+def _http_error(status_code: int) -> HTTPError:
+    """Build a curl_cffi HTTPError whose .response carries a status code."""
+    error = HTTPError(f"HTTP Error {status_code}")
+    error.response = MagicMock(status_code=status_code)
+    return error
 
 
 class TestNormalizeUrl:
@@ -36,11 +47,47 @@ class TestNormalizeUrl:
         assert result == "https://example.com/"
 
 
-class TestScrapeUrl:
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_success(self, mock_client_cls):
+class TestFetchPageHtml:
+    @patch("src.data_strategies.web_scraper_strategy.curl_requests.get")
+    def test_impersonates_and_returns_text(self, mock_get):
         mock_response = MagicMock()
-        mock_response.text = """
+        mock_response.text = "<html><body>hi</body></html>"
+        mock_get.return_value = mock_response
+
+        html = fetch_page_html("https://example.com")
+        assert html == "<html><body>hi</body></html>"
+        # Sole transport: curl_cffi with a browser impersonation target + redirects.
+        _args, kwargs = mock_get.call_args
+        assert kwargs["impersonate"] == _IMPERSONATE_TARGET
+        assert kwargs["timeout"] == _SCRAPER_TIMEOUT
+        assert kwargs["allow_redirects"] is True
+        mock_response.raise_for_status.assert_called_once()
+
+    @patch("src.data_strategies.web_scraper_strategy.curl_requests.get")
+    def test_raises_on_bad_status(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = _http_error(403)
+        mock_get.return_value = mock_response
+
+        try:
+            fetch_page_html("https://example.com")
+        except HTTPError as error:
+            assert error.response.status_code == 403
+        else:
+            raise AssertionError("expected HTTPError")
+
+
+def _patch_html(html: str):
+    """Patch the transport so scrape_url parses the given HTML."""
+    return patch(
+        "src.data_strategies.web_scraper_strategy.fetch_page_html",
+        return_value=html,
+    )
+
+
+class TestScrapeUrl:
+    def test_scrape_success(self):
+        html = """
         <html>
         <head>
             <title>Test Page</title>
@@ -54,55 +101,31 @@ class TestScrapeUrl:
         </body>
         </html>
         """
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert result["title"] == "Test Page"
         assert result["description"] == "A test page"
         assert result["meta_keywords"] == "test,page"
         assert "content about a company" in result["text"]
         assert any(link["text"] == "Link Text" for link in result["links"])
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_fallback_h1_title(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = "<html><body><h1>Fallback Title</h1><p>content here</p></body></html>"
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+    def test_scrape_fallback_h1_title(self):
+        html = "<html><body><h1>Fallback Title</h1><p>content here</p></body></html>"
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert result["title"] == "Fallback Title"
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_og_description_fallback(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
+    def test_scrape_og_description_fallback(self):
+        html = (
             '<html><head><meta property="og:description" content="OG Desc"></head>'
             "<body><p>body</p></body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert result["description"] == "OG Desc"
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_removes_clutter(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
+    def test_scrape_removes_clutter(self):
+        html = (
             "<html><body>"
             "<nav>Navigation</nav>"
             "<footer>Footer</footer>"
@@ -110,127 +133,66 @@ class TestScrapeUrl:
             "<p>Real content here</p>"
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Navigation" not in result["text"]
         assert "var x" not in result["text"]
         assert "Real content" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_removes_element_with_exact_clutter_class(self, mock_client_cls):
+    def test_scrape_removes_element_with_exact_clutter_class(self):
         """Element with class exactly matching 'sidebar' is removed."""
-        mock_response = MagicMock()
-        mock_response.text = (
-            "<html><body>"
-            '<div class="sidebar">Sidebar junk</div>'
-            "<p>Main content</p>"
-            "</body></html>"
+        html = (
+            '<html><body><div class="sidebar">Sidebar junk</div><p>Main content</p></body></html>'
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Sidebar junk" not in result["text"]
         assert "Main content" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_preserves_compound_class_with_clutter_substring(self, mock_client_cls):
+    def test_scrape_preserves_compound_class_with_clutter_substring(self):
         """Element with class 'no-sidebar' is NOT removed — token matching, not substring."""
-        mock_response = MagicMock()
-        mock_response.text = (
+        html = (
             '<html><body class="home no-sidebar wp-theme">'
             "<p>Important content about the company</p>"
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Important content" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_never_removes_body_element(self, mock_client_cls):
+    def test_scrape_never_removes_body_element(self):
         """<body> is never decomposed even if its class matches a clutter keyword."""
-        mock_response = MagicMock()
-        mock_response.text = (
+        html = (
             '<html><body class="sidebar">'
             "<p>Content inside body with sidebar class</p>"
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Content inside body" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_image_link_fallback(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
-            '<html><body><a href="https://co.com"><img alt="Company Logo"></a></body></html>'
-        )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+    def test_scrape_image_link_fallback(self):
+        html = '<html><body><a href="https://co.com"><img alt="Company Logo"></a></body></html>'
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert any(link["text"] == "Company Logo" for link in result["links"])
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_aria_label_fallback(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
-            '<html><body><a href="https://co.com" aria-label="Visit Company"></a></body></html>'
-        )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+    def test_scrape_aria_label_fallback(self):
+        html = '<html><body><a href="https://co.com" aria-label="Visit Company"></a></body></html>'
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert any(link["text"] == "Visit Company" for link in result["links"])
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_skips_hash_and_mailto_links(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
+    def test_scrape_skips_hash_and_mailto_links(self):
+        html = (
             "<html><body>"
             '<a href="#section">Anchor</a>'
             '<a href="mailto:test@test.com">Email</a>'
             '<a href="https://good.com">Good Link</a>'
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert len(result["links"]) == 1
         assert result["links"][0]["text"] == "Good Link"
 
@@ -259,30 +221,47 @@ class TestWebScraperStrategy:
 
     @patch("src.data_strategies.web_scraper_strategy.scrape_url")
     def test_execute_http_error(self, mock_scrape):
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        mock_scrape.side_effect = httpx.HTTPStatusError(
-            "Not found",
-            request=MagicMock(),
-            response=mock_response,
-        )
+        mock_scrape.side_effect = _http_error(404)
         strategy = WebScraperStrategy(config={"url": "https://example.com"})
         text, meta = strategy.execute()
         assert text == ""
         assert "404" in meta["error"]
 
     @patch("src.data_strategies.web_scraper_strategy.scrape_url")
+    def test_execute_http_error_without_response(self, mock_scrape):
+        # Defensive branch: HTTPError with no .response → degrade to the error
+        # string rather than crash on "HTTP None".
+        error = HTTPError("boom")
+        error.response = None
+        mock_scrape.side_effect = error
+        strategy = WebScraperStrategy(config={"url": "https://example.com"})
+        text, meta = strategy.execute()
+        assert text == ""
+        assert meta["error"] == "boom"
+
+    @patch("src.data_strategies.web_scraper_strategy.scrape_url")
     def test_execute_request_error(self, mock_scrape):
-        mock_scrape.side_effect = httpx.RequestError("Connection refused", request=MagicMock())
+        mock_scrape.side_effect = CurlConnectionError("Connection refused")
         strategy = WebScraperStrategy(config={"url": "https://example.com"})
         text, meta = strategy.execute()
         assert text == ""
         assert "error" in meta
 
+    @patch("src.data_strategies.web_scraper_strategy.scrape_url")
+    def test_execute_impersonation_misconfig_propagates(self, mock_scrape):
+        # A bad _IMPERSONATE_TARGET is a programming/config error — it must crash
+        # loudly, not be swallowed into the ("", {"error": ...}) transport contract.
+        mock_scrape.side_effect = ImpersonateError("bad target")
+        strategy = WebScraperStrategy(config={"url": "https://example.com"})
+        with pytest.raises(ImpersonateError):
+            strategy.execute()
+
 
 class TestNameFromImgSrc:
     def test_hyphenated_filename(self):
-        assert _extract_name_from_img_src("https://cdn/access-healthcare.png") == "Access Healthcare"
+        assert (
+            _extract_name_from_img_src("https://cdn/access-healthcare.png") == "Access Healthcare"
+        )
 
     def test_underscored_filename(self):
         assert _extract_name_from_img_src("access_healthcare.png") == "Access Healthcare"
@@ -305,7 +284,9 @@ class TestNameFromImgSrc:
 
     def test_handles_query_string_and_fragment(self):
         assert _extract_name_from_img_src("/img/access-healthcare.png?v=2") == "Access Healthcare"
-        assert _extract_name_from_img_src("/img/access-healthcare.png#anchor") == "Access Healthcare"
+        assert (
+            _extract_name_from_img_src("/img/access-healthcare.png#anchor") == "Access Healthcare"
+        )
 
     def test_no_extension(self):
         assert _extract_name_from_img_src("/img/access-healthcare") == "Access Healthcare"
@@ -339,7 +320,10 @@ class TestNameFromUrl:
 
     def test_subdomain_stripped_only_if_www(self):
         # Non-www subdomain is kept as part of the hostname stem
-        assert extract_name_from_url("https://portfolio.endurancelift.com") == "Portfolio Endurancelift"
+        assert (
+            extract_name_from_url("https://portfolio.endurancelift.com")
+            == "Portfolio Endurancelift"
+        )
 
     def test_empty_returns_empty(self):
         assert extract_name_from_url("") == ""

@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
+
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
 
 
@@ -21,7 +23,10 @@ class TestCTAContextHandling:
         links = [
             {"text": "LEARN MORE", "href": "https://acme.com", "context_name": "Acme Corp"},
         ]
-        with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
             companies = result["companies"]
@@ -40,7 +45,10 @@ class TestCTAContextHandling:
         links = [
             {"text": "LEARN MORE", "href": "https://acme.com", "context_name": ""},
         ]
-        with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
             companies = result["companies"]
@@ -52,7 +60,10 @@ class TestCTAContextHandling:
         links = [
             {"text": "Acme Corp", "href": "https://acme.com", "context_name": ""},
         ]
-        with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
             assert len(result["companies"]) == 1
@@ -62,7 +73,10 @@ class TestCTAContextHandling:
         links = [
             {"text": "About Us", "href": "https://firm.com/about", "context_name": ""},
         ]
-        with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
             assert len(result["companies"]) == 0
@@ -71,7 +85,10 @@ class TestCTAContextHandling:
         links = [
             {"text": "Follow Us", "href": "https://twitter.com/firm", "context_name": ""},
         ]
-        with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
             assert len(result["companies"]) == 0
@@ -83,7 +100,10 @@ class TestCTAContextHandling:
             {"text": "Learn More", "href": "https://beta.com", "context_name": "Beta Inc"},
             {"text": "Learn More", "href": "https://gamma.com", "context_name": ""},
         ]
-        with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
             assert len(result["companies"]) == 3
@@ -94,7 +114,10 @@ class TestCTAContextHandling:
         links = [
             {"text": "", "href": "https://acme.com", "context_name": "Acme Corp"},
         ]
-        with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url", return_value=_mock_scrape(links)):
+        with patch(
+            "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+            return_value=_mock_scrape(links),
+        ):
             strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
             _, result = strategy.execute()
             assert len(result["companies"]) == 1
@@ -102,4 +125,22 @@ class TestCTAContextHandling:
     def test_no_url_returns_empty(self):
         strategy = PortfolioDiscoveryStrategy({"url": ""})
         _, result = strategy.execute()
+        assert result["companies"] == []
+
+
+class TestScrapeFailSoft:
+    def test_transport_error_skips_page_without_raising(self):
+        """A transport/HTTP error on a portfolio page is skipped, not fatal."""
+        strategy = PortfolioDiscoveryStrategy({"url": "https://firm.com"})
+        with (
+            patch(
+                "src.data_strategies.portfolio_discovery_strategy.scrape_url",
+                side_effect=CurlConnectionError("blocked"),
+            ),
+            patch(
+                "src.data_strategies.portfolio_discovery_strategy.PortfolioDiscoveryStrategy._fallback_data_attributes",
+                return_value=[],
+            ),
+        ):
+            _, result = strategy.execute()
         assert result["companies"] == []
