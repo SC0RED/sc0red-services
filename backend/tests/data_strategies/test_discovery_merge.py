@@ -1,23 +1,34 @@
 """Tests for portfolio discovery merge logic."""
 
-from src.pipeline.pipeline_steps.discover_portfolio import _merge_results, _normalize_domain
+from src.pipeline.pipeline_steps.discover_portfolio import _merge_results, _normalize_url_key
 
 
-class TestNormalizeDomain:
+class TestNormalizeUrlKey:
     def test_strips_www(self):
-        assert _normalize_domain("https://www.stripe.com") == "stripe.com"
+        assert _normalize_url_key("https://www.stripe.com") == "stripe.com"
 
     def test_no_www(self):
-        assert _normalize_domain("https://stripe.com") == "stripe.com"
+        assert _normalize_url_key("https://stripe.com") == "stripe.com"
 
-    def test_with_path(self):
-        assert _normalize_domain("https://stripe.com/pricing") == "stripe.com"
+    def test_root_and_trailing_slash_equal(self):
+        assert _normalize_url_key("https://stripe.com/") == _normalize_url_key("https://stripe.com")
+
+    def test_path_is_part_of_key(self):
+        # Path-aware: distinct paths on the same host are distinct keys.
+        assert _normalize_url_key("https://firm.com/portfolio/a") == "firm.com/portfolio/a"
+        assert _normalize_url_key("https://firm.com/portfolio/a") != _normalize_url_key(
+            "https://firm.com/portfolio/b"
+        )
 
     def test_adds_https(self):
-        assert _normalize_domain("stripe.com") == "stripe.com"
+        assert _normalize_url_key("stripe.com") == "stripe.com"
 
-    def test_lowercase(self):
-        assert _normalize_domain("https://Stripe.COM") == "stripe.com"
+    def test_lowercase_host(self):
+        assert _normalize_url_key("https://Stripe.COM") == "stripe.com"
+
+    def test_lowercase_path(self):
+        key = _normalize_url_key("https://firm.com/Portfolio/Stripe")
+        assert key == "firm.com/portfolio/stripe"
 
 
 class TestMergeResults:
@@ -77,13 +88,23 @@ class TestMergeResults:
         assert auto_included == []
         assert needs_validation == []
 
-    def test_deduplicates_by_domain(self):
+    def test_deduplicates_same_url_www_variant(self):
         heuristic = [
             {"name": "Acme", "url": "https://acme.com"},
-            {"name": "Acme2", "url": "https://www.acme.com"},  # same domain
+            {"name": "Acme2", "url": "https://www.acme.com"},  # same host, root path
         ]
         ai: list[dict[str, str]] = []
         auto_included, needs_validation = _merge_results(heuristic, ai)
-        # Same-domain heuristic entries dedupe; AI empty → all go to remainder
+        # www/root variants of the same URL still dedupe; AI empty → remainder
         assert auto_included == []
         assert len(needs_validation) == 1  # deduped
+
+    def test_same_domain_distinct_detail_pages_not_collapsed(self):
+        # Regression: a firm's per-company detail pages share a domain but are
+        # distinct companies — they must NOT collapse to one.
+        heuristic = [
+            {"name": f"Co{i}", "url": f"https://firm.com/portfolio/co{i}"} for i in range(25)
+        ]
+        auto_included, needs_validation = _merge_results(heuristic, [])
+        assert auto_included == []
+        assert len(needs_validation) == 25  # all preserved, not collapsed to 1
