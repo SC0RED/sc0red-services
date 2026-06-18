@@ -41,6 +41,16 @@ _MIN_SCRIPT_JSON_PAIRS = 5  # skip code/analytics scripts with little JSON struc
 
 _LOGO_SUFFIX_RE = re.compile(r"[-_ ]?logo$", re.IGNORECASE)
 _FILENAME_TOKEN_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|[-_.\s]+")
+# Matches a structured company record embedded as JSON in a hydration script:
+# an adjacent ``"name":"…","slug":"…"`` pair, in both plain JSON and the
+# escaped/stringified form SSR frameworks emit (``\"name\":\"…\"``). Requiring
+# ``name`` to be immediately followed by ``slug`` is the discriminator that
+# separates real company records from surrounding metadata (logo assets carry
+# ``filename`` not ``name``; ``searchableNormalized`` has ``name`` but no
+# adjacent ``slug``).
+_EMBEDDED_RECORD_RE = re.compile(
+    r'\\?"name\\?"\s*:\s*\\?"([^"\\]+)\\?"\s*,\s*\\?"slug\\?"\s*:\s*\\?"([^"\\]+)\\?"'
+)
 # Public — imported by :mod:`portfolio_discovery_strategy` so both the
 # discovery heuristic and the AI-derived name fallbacks apply identical bounds.
 MIN_NAME_LENGTH = 2
@@ -193,6 +203,36 @@ def _extract_data_scripts(soup: BeautifulSoup) -> str:
     return "\n".join(collected)
 
 
+def _extract_embedded_companies(soup: BeautifulSoup) -> list[dict[str, str]]:
+    """Parse structured ``{name, slug}`` company records from hydration scripts.
+
+    SSR / headless-CMS portfolio sites embed the company list as JSON in a
+    ``<script>`` island (e.g. ``{"name":"Calabrio","slug":"calabrio", …}``).
+    AI extraction over that raw, deeply-nested escaped JSON is unreliable, so we
+    parse the records deterministically here — over the FULL script content (not
+    the truncated :func:`_extract_data_scripts` copy), so the complete list is
+    recovered. Returns ``[{"name", "slug"}]`` deduplicated by slug; empty when no
+    records are present (discovery then proceeds via the link / AI paths).
+    """
+    companies: list[dict[str, str]] = []
+    seen_slugs: set[str] = set()
+    for script in soup.find_all("script"):
+        if script.get("src"):
+            continue  # external script reference — no inline data
+        content = script.string or script.get_text() or ""
+        for raw_name, raw_slug in _EMBEDDED_RECORD_RE.findall(content):
+            name = raw_name.strip()
+            slug = raw_slug.strip()
+            # Skip empty/dup slugs and slugs with "/" (would make a bad detail URL).
+            if not slug or "/" in slug or slug in seen_slugs:
+                continue
+            if not (MIN_NAME_LENGTH < len(name) <= MAX_NAME_LENGTH):
+                continue
+            seen_slugs.add(slug)
+            companies.append({"name": name, "slug": slug})
+    return companies
+
+
 def fetch_page_html(url: str) -> str:
     """GET a URL via the browser-impersonating transport and return its HTML.
 
@@ -216,15 +256,19 @@ def scrape_url(url: str) -> dict[str, Any]:
     """Scrape a URL and return structured data.
 
     Returns:
-        Dict with keys: title, description, text, links, meta_keywords, script_text
+        Dict with keys: title, description, text, links, meta_keywords,
+        script_text, embedded_companies
     """
     normalized = normalize_url(url)
     html = fetch_page_html(normalized)
     soup = BeautifulSoup(html, "html.parser")
 
     # Capture data-bearing inline script JSON BEFORE stripping scripts below —
-    # this is where SSR sites hide the portfolio company list.
+    # this is where SSR sites hide the portfolio company list. ``script_text`` is
+    # the (truncated) blob fed to AI extraction; ``embedded_companies`` is the
+    # deterministic parse of structured {name, slug} records over the full script.
     script_text = _extract_data_scripts(soup)
+    embedded_companies = _extract_embedded_companies(soup)
 
     # Remove script, style, nav clutter (matches Cheerio removals)
     for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
@@ -309,6 +353,7 @@ def scrape_url(url: str) -> dict[str, Any]:
         "links": links,
         "meta_keywords": meta_keywords,
         "script_text": script_text,
+        "embedded_companies": embedded_companies,
     }
 
 
@@ -331,6 +376,7 @@ class WebScraperStrategy(DataStrategyExecutor):
 
         try:
             result = scrape_url(url)
+            # script_text/embedded_companies omitted — discovery-only, unused here.
             return result["text"], {
                 "title": result["title"],
                 "description": result["description"],

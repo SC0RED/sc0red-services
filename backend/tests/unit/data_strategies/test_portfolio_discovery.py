@@ -403,3 +403,72 @@ class TestPortfolioDiscoveryStrategy:
         _, meta = strategy.execute()
 
         assert meta["companies"] == []
+
+
+def _empty_scrape_result():
+    return {
+        "title": "",
+        "description": "",
+        "text": "",
+        "links": [],
+        "meta_keywords": "",
+        "script_text": "",
+        "embedded_companies": [],
+    }
+
+
+class TestEmbeddedStructuredCandidates:
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_embedded_records_become_detail_page_candidates(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/").endswith("/portfolio"):
+                result["embedded_companies"] = [
+                    {"name": "Calabrio", "slug": "calabrio"},
+                    {"name": "Dynatrace", "slug": "dynatrace"},
+                ]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://www.thomabravo.com"}).execute()
+
+        urls = {c["url"] for c in meta["companies"]}
+        assert "https://www.thomabravo.com/portfolio/calabrio" in urls
+        assert "https://www.thomabravo.com/portfolio/dynatrace" in urls
+        assert {"Calabrio", "Dynatrace"} <= {c["name"] for c in meta["companies"]}
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_root_only_records_do_not_create_root_urls(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/") == "https://www.thomabravo.com":  # root only
+                result["embedded_companies"] = [{"name": "Acme", "slug": "acme"}]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://www.thomabravo.com"}).execute()
+
+        # No detail-page parent for the root, so no candidate is fabricated.
+        urls = {c["url"] for c in meta["companies"]}
+        assert not any(u.endswith("/acme") for u in urls)
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_dedupes_structured_against_heuristic_link(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/").endswith("/portfolio"):
+                result["links"] = [
+                    {"text": "Calabrio", "href": "https://www.thomabravo.com/portfolio/calabrio"}
+                ]
+                result["embedded_companies"] = [{"name": "Calabrio", "slug": "calabrio"}]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://www.thomabravo.com"}).execute()
+
+        calabrio = [
+            c
+            for c in meta["companies"]
+            if c["url"] == "https://www.thomabravo.com/portfolio/calabrio"
+        ]
+        assert len(calabrio) == 1
