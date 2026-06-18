@@ -150,8 +150,10 @@ class TestPortfolioDiscoveryStrategy:
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _raw_json, meta = strategy.execute()
 
-        # Should not raise, just returns empty
+        # Should not raise, just returns empty — and it kept trying every path
+        # rather than aborting on the first transport error.
         assert meta["companies"] == []
+        assert mock_scrape.call_count == len(PORTFOLIO_PATHS)
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     def test_impersonation_misconfig_propagates(self, mock_scrape):

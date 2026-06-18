@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from curl_cffi import requests as curl_requests
-from curl_cffi.requests.exceptions import HTTPError, RequestException
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 logger = logging.getLogger(__name__)
@@ -337,6 +337,8 @@ class WebScraperStrategy(DataStrategyExecutor):
                 "links": result["links"],
                 "meta_keywords": result["meta_keywords"],
             }
+        except ImpersonateError:
+            raise  # misconfigured _IMPERSONATE_TARGET — a bug, surface it loudly
         except HTTPError as e:
             logger.warning("HTTP error scraping %s: %s", url, e)
             # curl_cffi's HTTPError.response is optional; read the status code

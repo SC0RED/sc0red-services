@@ -3,12 +3,14 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from bs4 import BeautifulSoup
 from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
-from curl_cffi.requests.exceptions import HTTPError
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError
 
 from src.data_strategies.web_scraper_strategy import (
     _IMPERSONATE_TARGET,
+    _SCRAPER_TIMEOUT,
     WebScraperStrategy,
     _extract_context_name,
     _extract_name_from_img_src,
@@ -57,6 +59,7 @@ class TestFetchPageHtml:
         # Sole transport: curl_cffi with a browser impersonation target + redirects.
         _args, kwargs = mock_get.call_args
         assert kwargs["impersonate"] == _IMPERSONATE_TARGET
+        assert kwargs["timeout"] == _SCRAPER_TIMEOUT
         assert kwargs["allow_redirects"] is True
         mock_response.raise_for_status.assert_called_once()
 
@@ -243,6 +246,15 @@ class TestWebScraperStrategy:
         text, meta = strategy.execute()
         assert text == ""
         assert "error" in meta
+
+    @patch("src.data_strategies.web_scraper_strategy.scrape_url")
+    def test_execute_impersonation_misconfig_propagates(self, mock_scrape):
+        # A bad _IMPERSONATE_TARGET is a programming/config error — it must crash
+        # loudly, not be swallowed into the ("", {"error": ...}) transport contract.
+        mock_scrape.side_effect = ImpersonateError("bad target")
+        strategy = WebScraperStrategy(config={"url": "https://example.com"})
+        with pytest.raises(ImpersonateError):
+            strategy.execute()
 
 
 class TestNameFromImgSrc:

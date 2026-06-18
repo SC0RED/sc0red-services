@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-from curl_cffi.requests.exceptions import RequestException
+from curl_cffi.requests.exceptions import ImpersonateError, RequestException
 from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.url_resolution_strategy import URLResolutionStrategy
@@ -86,6 +86,8 @@ class ScrapeAndResolveURL(RequestStep):
                             f"[Content from actual company website ({actual_url}):\n{actual_text}]"
                         )
                         accessor.set_scraped_text(combined)
+                except ImpersonateError:
+                    raise  # misconfigured _IMPERSONATE_TARGET — a bug, not a scrape miss
                 except RequestException:
                     logger.warning("Failed to scrape resolved URL %s, using original", actual_url)
                     accessor.set_actual_url(url)
