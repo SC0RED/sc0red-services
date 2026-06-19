@@ -21,7 +21,7 @@
 - [x] 4.1 `ruff check` + `ruff format` + naming validator + abbreviations clean on changed files
 - [x] 4.2 `pyright src/` introduces no new error category
 - [x] 4.3 `pytest tests/ -q` passes with coverage ≥ 95%
-- [ ] 4.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
+- [x] 4.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
 - [x] 4.5 Confirm locally: `franciscopartners.com/investments` scrape still succeeds; simulate a 403-then-200 and a persistent 403 to exercise retry + surfaced fallback
-- [ ] 4.6 Run the E2E suite per CLAUDE.md before opening the PR
+- [x] 4.6 Run the E2E suite per CLAUDE.md before opening the PR
 - [ ] 4.7 After deploy: re-run Francisco Partners on dev a few times and confirm a consistent full count (no more 75/175 flip)
