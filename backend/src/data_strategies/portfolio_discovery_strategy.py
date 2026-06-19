@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
-from curl_cffi.requests.exceptions import ImpersonateError, RequestException
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 from src.data_strategies.web_scraper_strategy import (
@@ -121,6 +121,10 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
         logo_names: dict[str, str] = {}  # lower-key -> display name (deduped)
         firm_stem = firm_domain[4:] if firm_domain.startswith("www.") else firm_domain
         firm_stem = firm_stem.split(".", 1)[0].lower()
+        # True if a listing page fetch was blocked/timed out (a non-404 error
+        # surviving the transport's retries) — distinguishes a genuinely empty
+        # site from one we simply couldn't reach.
+        site_fetch_failed = False
         for path in PORTFOLIO_PATHS:
             page_url = firm_url if not path else f"{base_origin}{path}"
             try:
@@ -148,7 +152,15 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                             }
             except ImpersonateError:
                 raise  # misconfigured _IMPERSONATE_TARGET — a bug, not a per-page failure
-            except RequestException:  # transport/HTTP error — skip this page, fail-soft
+            except HTTPError as error:  # bad status surviving retries
+                # 404/410 = page legitimately absent (expected for paths a firm
+                # doesn't use); anything else = a real block we couldn't get past.
+                if getattr(error.response, "status_code", None) not in (404, 410):
+                    site_fetch_failed = True
+                logger.info("Failed to scrape %s", page_url, exc_info=True)
+                continue
+            except RequestException:  # connection/timeout surviving retries — a real failure
+                site_fetch_failed = True
                 logger.info("Failed to scrape %s", page_url, exc_info=True)
                 continue
 
@@ -273,6 +285,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
             "script_text": "\n\n".join(script_texts),
             "all_links": all_links,
             "logo_company_names": list(logo_names.values()),
+            "site_fetch_failed": site_fetch_failed,
         }
 
     def _fallback_data_attributes(self, base_origin: str, firm_domain: str) -> list[dict[str, str]]:

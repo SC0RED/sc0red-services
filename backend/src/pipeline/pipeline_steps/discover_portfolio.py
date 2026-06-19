@@ -197,6 +197,17 @@ class DiscoverPortfolio(RequestStep):
         # the needs-validation tier only, never auto-included.
         site_total = len(auto_included) + len(needs_validation)
         if self._ai_client_factory and is_pe_firm and site_total <= _FALLBACK_THRESHOLD:
+            # Surface WHY we're falling back: a fetch failure means a scrapeable
+            # site was unreachable this run (result may be incomplete), vs a
+            # genuinely empty/opaque site where web search is the right recovery.
+            if metadata.get("site_fetch_failed"):
+                logger.warning(
+                    "Site fetch failed for %s — falling back to web search; "
+                    "result may be incomplete",
+                    url,
+                )
+            else:
+                logger.info("Site yielded no companies for %s — using web-search fallback", url)
             # Seed with on-site logo-grid names when present (e.g. Vista): the
             # site supplies the authoritative WHO, web search resolves the URLs.
             seed_names = metadata.get("logo_company_names", [])
