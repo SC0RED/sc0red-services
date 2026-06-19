@@ -9,14 +9,11 @@ from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError
 
 from src.data_strategies.web_scraper_strategy import (
-    _IMPERSONATE_TARGET,
-    _SCRAPER_TIMEOUT,
     WebScraperStrategy,
     _extract_context_name,
     _extract_embedded_companies,
     _extract_name_from_img_src,
     extract_name_from_url,
-    fetch_page_html,
     normalize_url,
     scrape_url,
 )
@@ -110,36 +107,6 @@ class TestNormalizeUrl:
     def test_trailing_slash(self):
         result = normalize_url("https://example.com/")
         assert result == "https://example.com/"
-
-
-class TestFetchPageHtml:
-    @patch("src.data_strategies.web_scraper_strategy.curl_requests.get")
-    def test_impersonates_and_returns_text(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.text = "<html><body>hi</body></html>"
-        mock_get.return_value = mock_response
-
-        html = fetch_page_html("https://example.com")
-        assert html == "<html><body>hi</body></html>"
-        # Sole transport: curl_cffi with a browser impersonation target + redirects.
-        _args, kwargs = mock_get.call_args
-        assert kwargs["impersonate"] == _IMPERSONATE_TARGET
-        assert kwargs["timeout"] == _SCRAPER_TIMEOUT
-        assert kwargs["allow_redirects"] is True
-        mock_response.raise_for_status.assert_called_once()
-
-    @patch("src.data_strategies.web_scraper_strategy.curl_requests.get")
-    def test_raises_on_bad_status(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = _http_error(403)
-        mock_get.return_value = mock_response
-
-        try:
-            fetch_page_html("https://example.com")
-        except HTTPError as error:
-            assert error.response.status_code == 403
-        else:
-            raise AssertionError("expected HTTPError")
 
 
 def _patch_html(html: str):

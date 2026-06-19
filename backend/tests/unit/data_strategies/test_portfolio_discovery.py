@@ -1,7 +1,7 @@
 """Tests for portfolio discovery strategy."""
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
@@ -497,3 +497,33 @@ class TestLogoGridSeeds:
         # exact firm self-reference filtered out, substring match retained
         assert "VistaEquityPartners" not in seeds
         assert "Avista" in seeds
+
+
+def _http_error(status_code: int):
+    err = HTTPError(f"HTTP Error {status_code}")
+    err.response = MagicMock(status_code=status_code)
+    return err
+
+
+class TestSiteFetchFailed:
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_block_after_retries_flags_fetch_failure(self, mock_scrape):
+        # A non-404 error surviving the transport retries = a real block.
+        mock_scrape.side_effect = _http_error(403)
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["companies"] == []
+        assert meta["site_fetch_failed"] is True
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_not_found_is_not_a_fetch_failure(self, mock_scrape):
+        # 404 on every path = the firm just doesn't use those paths, not a block.
+        mock_scrape.side_effect = _http_error(404)
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["companies"] == []
+        assert meta["site_fetch_failed"] is False
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_successful_scrape_is_not_a_fetch_failure(self, mock_scrape):
+        mock_scrape.return_value = _empty_scrape_result()
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["site_fetch_failed"] is False

@@ -12,21 +12,17 @@ from typing import Any
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
-from curl_cffi import requests as curl_requests
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
 from src.data_strategies.logo_grid_extractor import extract_logo_companies
 
+# Re-exported: the browser-impersonating transport (with retry) lives in
+# scraper_transport; callers/tests still reference it via this module.
+from src.data_strategies.scraper_transport import fetch_page_html
+
 logger = logging.getLogger(__name__)
 
-# Browser fingerprint curl_cffi (libcurl + BoringSSL) impersonates so Cloudflare
-# JA3 bot management serves full content instead of a 403. MAINTENANCE: stale
-# targets (e.g. chrome120/124) get blocked — keep curl_cffi fresh and bump this.
-# Impersonation also sets a browser-consistent header set, so we add no custom
-# headers (that would break fingerprint coherence).
-_IMPERSONATE_TARGET = "chrome136"
-_SCRAPER_TIMEOUT = 15.0
 _MAX_TEXT_LENGTH = 20_000
 # Budget for data-bearing inline <script> JSON. Modern SSR sites (Next.js etc.)
 # embed page data — including portfolio company lists — as JSON inside <script>
@@ -230,25 +226,6 @@ def _extract_embedded_companies(soup: BeautifulSoup) -> list[dict[str, str]]:
             seen_slugs.add(slug)
             companies.append({"name": name, "slug": slug})
     return companies
-
-
-def fetch_page_html(url: str) -> str:
-    """GET a URL via the browser-impersonating transport and return its HTML.
-
-    Sole scraping transport: ``curl_cffi`` with browser impersonation so that
-    TLS-fingerprint bot protection serves full content. Raises ``curl_cffi``
-    ``RequestException`` subclasses on failure (``HTTPError`` on a bad status,
-    ``ConnectionError``/``Timeout`` on transport errors); callers translate
-    those into their existing error contracts.
-    """
-    response = curl_requests.get(
-        url,
-        impersonate=_IMPERSONATE_TARGET,
-        timeout=_SCRAPER_TIMEOUT,
-        allow_redirects=True,
-    )
-    response.raise_for_status()
-    return response.text
 
 
 def scrape_url(url: str) -> dict[str, Any]:

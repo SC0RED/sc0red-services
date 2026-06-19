@@ -142,6 +142,34 @@ class TestDiscoverPortfolio:
 
     @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_fallback_after_fetch_failure_still_recovers(self, mock_strategy_cls, mock_grounded):
+        # Site fetch failed (block) → 0 site companies → fallback fires as recovery
+        # (and logs the fetch-failure cause). Result is still populated.
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {
+                "companies": [],
+                "page_text": "",
+                "script_text": "",
+                "all_links": [],
+                "site_fetch_failed": True,
+            },
+        )
+        mock_strategy_cls.return_value = mock_strategy
+        mock_grounded.return_value = _grounded([{"name": "Jamf", "url": "https://jamf.com"}])
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        mock_grounded.assert_called_once()
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_count"] == 1
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_fallback_seeded_with_logo_names(self, mock_strategy_cls, mock_grounded):
         # Logo-grid site (Vista): site yields 0 companies but logo names exist →
         # the fallback is seeded with those names to resolve their URLs.
