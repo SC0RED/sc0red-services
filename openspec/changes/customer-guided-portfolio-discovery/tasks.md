@@ -2,9 +2,9 @@
 
 ## 1. Discovery verdict
 
-- [x] 1.1 In `DiscoverPortfolio`, build a `discovery_verdict` dict: `method` (site/web_search/upload), `count`, `completeness` (full_site_list / client_side_rendered / site_blocked / web_search_subset / genuinely_empty), `available_actions` (subset of search_deeper, render_site, upload_list). Derive from existing signals: which path produced candidates, `site_fetch_failed` (#425), and a thin/empty-listing-page detector.
+- [x] 1.1 In `DiscoverPortfolio`, build a `discovery_verdict` dict: `method` (site/web_search/upload), `count`, `completeness` (full_site_list / site_blocked / web_search_subset / genuinely_empty), `available_actions` (subset of search_deeper, render_site, upload_list). Derive from existing signals: which path produced candidates and `site_fetch_failed` (#425). (A CSR firm maps to web_search_subset — not a separate value.)
 - [x] 1.2 Persist the verdict on the scan record in the worker (alongside `portfolio_companies`, `status=awaiting_confirmation`); expose it via the scan read API + MCP `get_scan`.
-- [x] 1.3 Unit tests: verdict for CSR-thin (web_search_subset/client_side_rendered + search_deeper/upload), full-site (full_site_list), blocked (site_blocked), genuine-empty.
+- [x] 1.3 Unit tests: verdict for CSR-thin (web_search_subset + search_deeper/upload), full-site (full_site_list), blocked (site_blocked), genuine-empty.
 
 ## 2. Customer-facing message + action affordances (frontend)
 

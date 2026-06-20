@@ -6,7 +6,7 @@ The product answer (customer's direction): stop presenting a silent partial resu
 
 ## The escalation ladder
 
-```
+```text
  TIER       METHOD                            COST      TRIGGER
  0 site     embedded JSON / logo / anchors    ~free     auto
  1 quick    single web-search fallback        1 call    auto (site thin/blocked)
@@ -33,7 +33,7 @@ Tiers 0–1 run automatically (current behavior). The `awaiting_confirmation` pa
 ## Decisions
 
 **1. Discovery returns a structured verdict.**
-`DiscoverPortfolio` emits `discovery_verdict`: `method` (site / web_search / upload), `count`, `completeness` (one of `full_site_list`, `client_side_rendered`, `site_blocked`, `web_search_subset`, `genuinely_empty`), and `available_actions` (subset of `search_deeper`, `render_site`, `upload_list`). The UI maps `completeness` → a plain-language message and renders `available_actions` as buttons. Derived from signals we already have (`site_fetch_failed` #425, thin-page detection, which path produced candidates).
+`DiscoverPortfolio` emits `discovery_verdict`: `method` (site / web_search / upload), `count`, `completeness` (one of `full_site_list`, `site_blocked`, `web_search_subset`, `genuinely_empty`), and `available_actions` (subset of `search_deeper`, `render_site`, `upload_list`). The UI maps `completeness` → a plain-language message and renders `available_actions` as buttons. Derived from signals we already have (`site_fetch_failed` #425, which path produced candidates). A client-side-rendered firm (empty site scrape, web-search subset) maps to `web_search_subset` — we don't separately distinguish "CSR" from "genuinely few", as the message and next actions are the same.
 
 **2. Escalation re-enters discovery at a chosen tier (resumable, not one-shot).**
 `scan_core` gains an escalate entry (e.g. `deepen_scan(scan_id, tier)`) that re-runs discovery for an existing scan at the requested tier and merges new candidates into the existing set (deduped via the path-aware key from #422), returning to `awaiting_confirmation` with an updated verdict. Keeps the customer in control; no expensive work without a click. Same dispatch for UI and MCP (per the scan_core parity rule).

@@ -6,7 +6,7 @@ The fix is a product shift, not another parser: make discovery **transparent and
 
 ## What Changes
 
-- **Discovery verdict + meaningful messaging.** Discovery emits a structured outcome — the method that produced the result, the count, a completeness signal (full site list / client-side-rendered / site blocked / web-search subset), and the next actions available — which the UI renders as a clear message instead of a bare number. E.g. "This firm's site loads its portfolio dynamically, so we couldn't read it directly. A quick search found 3 well-known companies; this firm likely has more."
+- **Discovery verdict + meaningful messaging.** Discovery emits a structured outcome — the method that produced the result, the count, a completeness signal (full site list / site blocked / web-search subset / genuinely empty), and the next actions available — which the UI renders as a clear message instead of a bare number. E.g. "This firm's site loads its portfolio dynamically, so we couldn't read it directly. A quick search found 3 well-known companies; this firm likely has more."
 - **Customer-gated escalation ladder.** After the quick automatic pass, the confirmation screen offers explicit, cost-aware choices: **Search deeper** (a broader/multi-pass web search), and — as a documented opt-in rung — **Render the site** (headless browser; deferred implementation, surfaced as a choice). Expensive methods run only when the customer chooses them.
 - **Customer company-list upload (CSV/PDF).** The reliable correction path: the customer uploads a CSV or PDF listing the portfolio companies; we parse it into discovery candidates that flow through the existing validation → scan path. Works for any site we can't fully crack.
 

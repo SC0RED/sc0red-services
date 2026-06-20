@@ -663,6 +663,7 @@ class TestGetScan:
         assert "https://beta.com" in text
         assert "confirm_portfolio_scan" in text
 
+    @pytest.mark.asyncio
     async def test_get_scan_shows_verdict_message_for_incomplete_result(self):
         # An incomplete (web-search subset) discovery surfaces a meaningful
         # message + actionable next steps on the confirmation screen.
