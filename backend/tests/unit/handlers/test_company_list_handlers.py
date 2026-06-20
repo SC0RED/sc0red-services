@@ -33,6 +33,12 @@ class TestHandleParseCompanyList:
         assert result["statusCode"] == 400
         assert json.loads(result["body"])["code"] == "VALIDATION_ERROR"
 
+    def test_empty_string_fields_is_400(self):
+        event = {"body": json.dumps({"fileType": "", "fileContent": ""})}
+        result = handle_parse_company_list(event, _auth())
+        assert result["statusCode"] == 400
+        assert "required" in json.loads(result["body"])["error"]
+
     def test_unsupported_type_is_400(self):
         event = _event("exe", b"data")
         result = handle_parse_company_list(event, _auth())
@@ -47,6 +53,24 @@ class TestHandleParseCompanyList:
 
     def test_malformed_json_body_is_400(self):
         result = handle_parse_company_list({"body": "{not json"}, _auth())
+        assert result["statusCode"] == 400
+        assert json.loads(result["body"])["code"] == "VALIDATION_ERROR"
+
+    def test_non_object_json_body_is_400(self):
+        for raw_body in ("null", "[]", '"string"', "42"):
+            result = handle_parse_company_list({"body": raw_body}, _auth())
+            assert result["statusCode"] == 400, raw_body
+            assert "JSON object" in json.loads(result["body"])["error"]
+
+    def test_non_string_fields_is_400(self):
+        event = {"body": json.dumps({"fileType": 123, "fileContent": ["x"]})}
+        result = handle_parse_company_list(event, _auth())
+        assert result["statusCode"] == 400
+        assert "must be strings" in json.loads(result["body"])["error"]
+
+    def test_corrupt_pdf_is_400(self):
+        event = _event("pdf", b"%PDF-1.4 not really a pdf")
+        result = handle_parse_company_list(event, _auth())
         assert result["statusCode"] == 400
         assert json.loads(result["body"])["code"] == "VALIDATION_ERROR"
 

@@ -112,6 +112,26 @@ class TestParseDocument:
             {"name": "Beta Inc", "url": ""},
         ]
 
+    def test_scavenges_bare_domain_from_text(self):
+        content = b"Acme Corp acme.com\nBeta Inc, beta.io\n"
+        result = parse_company_list(content, "txt")
+        assert result == [
+            {"name": "Acme Corp", "url": "https://acme.com"},
+            {"name": "Beta Inc", "url": "https://beta.io"},
+        ]
+
+    def test_lone_domain_stays_as_name(self):
+        content = b"acme.com\n"
+        result = parse_company_list(content, "txt")
+        assert result == [{"name": "acme.com", "url": ""}]
+
+    def test_does_not_mistake_abbreviation_for_domain(self):
+        # "U.S." matches a loose domain pattern but has a 1-char TLD — it must
+        # stay part of the name, not be promoted to a URL.
+        content = b"Acme U.S. Holdings\n"
+        result = parse_company_list(content, "txt")
+        assert result == [{"name": "Acme U.S. Holdings", "url": ""}]
+
     def test_bare_url_only_line_is_skipped(self):
         content = b"https://acme.com\nBeta Inc\n"
         result = parse_company_list(content, "txt")

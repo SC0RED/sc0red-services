@@ -12,7 +12,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.documents.parse_company_list import SUPPORTED_LIST_TYPES, parse_company_list
 from src.handlers.api_gateway_handler import VALIDATION_ERROR, build_error, build_json_response
@@ -39,12 +39,17 @@ def handle_parse_company_list(
     URL before the scan can run.
     """
     try:
-        body = json.loads(event.get("body") or "{}")
-    except json.JSONDecodeError as error:
+        parsed_body = json.loads(event.get("body") or "{}")
+    except (TypeError, json.JSONDecodeError) as error:
         return build_error(f"Invalid JSON body: {error}", code=VALIDATION_ERROR)
-    file_type = body.get("fileType", "")
-    file_content_b64 = body.get("fileContent", "")
+    if not isinstance(parsed_body, dict):
+        return build_error("Request body must be a JSON object", code=VALIDATION_ERROR)
 
+    body = cast("dict[str, Any]", parsed_body)
+    file_type = body.get("fileType")
+    file_content_b64 = body.get("fileContent")
+    if not isinstance(file_type, str) or not isinstance(file_content_b64, str):
+        return build_error("fileType and fileContent must be strings", code=VALIDATION_ERROR)
     if not file_type or not file_content_b64:
         return build_error("fileType and fileContent required", code=VALIDATION_ERROR)
     if file_type.lower().strip(".") not in SUPPORTED_LIST_TYPES:

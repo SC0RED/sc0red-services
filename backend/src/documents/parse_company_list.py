@@ -35,6 +35,11 @@ _MAX_COMPANIES = 1000
 
 _URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
 _DOMAIN_PATTERN = re.compile(r"^[\w-]+(?:\.[\w-]+)+(?:/\S*)?$")
+# Stricter than _DOMAIN_PATTERN — requires a 2+ letter TLD so free-text tokens
+# like "U.S." or "Inc." aren't mistaken for a company URL when scavenging a
+# domain out of a document line. _DOMAIN_PATTERN stays loose for the CSV url
+# column, where the customer intentionally put a URL.
+_BARE_DOMAIN_PATTERN = re.compile(r"(?i)^[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}(?:/\S*)?$")
 # Leading bullet / list markers stripped from best-effort document lines.
 _LINE_NOISE = " \t•*–-—|,;:"  # noqa: RUF001  intentional unicode bullet/dash markers
 
@@ -106,14 +111,32 @@ def _parse_lines(text: str) -> list[dict[str, str]]:
         line = raw_line.strip().strip(_LINE_NOISE).strip()
         if not line:
             continue
-        url = ""
-        match = _URL_PATTERN.search(line)
-        if match:
-            url = match.group(0).rstrip(".,);")
-            line = line[: match.start()].strip().strip(_LINE_NOISE).strip()
-        if line:
-            parsed.append({"name": line, "url": url})
+        url, name = _extract_name_and_url(line)
+        if name:
+            parsed.append({"name": name, "url": url})
     return parsed
+
+
+def _extract_name_and_url(line: str) -> tuple[str, str]:
+    """Split a document line into ``(url, name)``.
+
+    Prefers an explicit ``http(s)://`` URL; otherwise scavenges a bare domain
+    token (e.g. ``Acme Corp acme.com`` → ``acme.com``). A lone ``acme.com`` (the
+    only token) stays the name — we only split out a domain when other tokens
+    remain to form the name, which the line-level noise strip guarantees here.
+    """
+    match = _URL_PATTERN.search(line)
+    if match:
+        url = match.group(0).rstrip(".,);")
+        return url, line[: match.start()].strip().strip(_LINE_NOISE).strip()
+
+    tokens = line.split()
+    if len(tokens) > 1:
+        for index, token in enumerate(tokens):
+            if _BARE_DOMAIN_PATTERN.match(token.rstrip(".,);")):
+                remaining = " ".join(tokens[:index] + tokens[index + 1 :])
+                return f"https://{token.rstrip('.,);')}", remaining.strip(_LINE_NOISE).strip()
+    return "", line
 
 
 def _find_column_index(header: list[str], candidates: frozenset[str]) -> int | None:
