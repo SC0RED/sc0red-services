@@ -8,14 +8,14 @@
 
 ## 2. Customer-facing message + action affordances (frontend)
 
-- [ ] 2.1 Confirmation screen renders the verdict as a plain-language message (cause + count) instead of a bare number.
-- [ ] 2.2 Render `available_actions` as explicit choices (Search deeper / Render the site / Upload a list) alongside a primary "Proceed with these N"; actions shown contextually (only when the result looks incomplete).
-- [ ] 2.3 Frontend tests: message rendering per completeness; actions appear/disappear correctly.
+- [x] 2.1 Confirmation screen renders the verdict as a plain-language message (cause + count) via `DiscoveryVerdictBanner`, keyed on `completeness`; falls back to the original "discovered N" banner for verdict-less (legacy) scans. The HTTP scan-status response now carries `discoveryVerdict` (camelCase mapping in `scan_handlers._verdict_response`), threaded through `useScanPolling`/realtime/direct paths into page state.
+- [x] 2.2 Renders `availableActions` as explicit choices. Only `upload_list` is live in Phase 1 (reveals the uploader); `search_deeper`/`render_site` are surfaced as disabled "soon" affordances (their backends are Phase 2/3). A `full_site_list` verdict shows a positive message and only the upload action.
+- [x] 2.3 Frontend tests: message rendering per completeness, action enable/disable, upload-widget reveal, verdict forwarding through the polling hook.
 
 ## 3. CSV/PDF company-list upload
 
 - [x] 3.1 Backend: parse an uploaded CSV (required `name`, optional `url`) and PDF/text (best-effort names via `src/documents/extract_text.py`) into `{name, url}` candidates in `src/documents/parse_company_list.py` — header-aware CSV, bare-domain → https normalization, dedup by name. `url` left "" when the source omits it (customer resolves it on the confirmation screen; AI URL-resolution is a later slice).
-- [x] 3.2 Stateless parse endpoint `POST /api/portfolio/parse-company-list` (`src/handlers/company_list_handlers.py`) — reuses the existing base64 upload transport, returns candidates + counts (`withUrl`/`needsUrl`). Chosen over a new `scan_core` dispatch entry: the parsed list flows into the editable confirmation list and scans through the **existing** confirm path, so no new scan-start surface or worker change is needed. (Frontend uploader + MCP paste-list reuse are the next slices.)
+- [x] 3.2 Stateless parse endpoint `POST /api/portfolio/parse-company-list` (`src/handlers/company_list_handlers.py`) — reuses the existing base64 upload transport, returns candidates + counts (`withUrl`/`needsUrl`). Chosen over a new `scan_core` dispatch entry: the parsed list flows into the editable confirmation list and scans through the **existing** confirm path, so no new scan-start surface or worker change is needed. Frontend uploader (`CompanyListUpload`) wired in the confirmation screen, gated behind the verdict's "Upload a list" action, bulk-merging into the editable list with URL/name dedup. (MCP paste-list reuse remains a later option.)
 - [x] 3.3 Tests: CSV name+url; CSV name-only (url ""); alternate headers; no-header rows; ragged rows; PDF/text best-effort + inline-url; dedup; max-cap; malformed/unsupported/empty handled gracefully; handler success + 400 paths.
 
 ## 4. Validation & verification (Phase 1)

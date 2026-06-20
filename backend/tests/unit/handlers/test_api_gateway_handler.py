@@ -168,6 +168,7 @@ class TestAPIGatewayHandler:
         assert user_record["created_at"]
         # The value parses as ISO 8601 (datetime.now(UTC).isoformat()).
         from datetime import datetime as _datetime
+
         _datetime.fromisoformat(user_record["created_at"])
 
     @patch.dict("os.environ", {"COGNITO_USER_POOL_ID": "us-east-1_TEST"})
@@ -411,6 +412,46 @@ class TestAPIGatewayHandler:
         assert body["status"] == "complete"
         assert len(body["analyses"]) == 1
         assert body["analyses"][0]["companyName"] == "Test"
+        # No verdict persisted on this scan → null in the response.
+        assert body["discoveryVerdict"] is None
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_status_maps_discovery_verdict_to_camel_case(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "status": "awaiting_confirmation",
+            "type": "portfolio",
+            "portfolio_companies": [{"name": "Acme", "url": "https://acme.com"}],
+            "discovery_verdict": {
+                "method": "web_search",
+                "count": 3,
+                "completeness": "web_search_subset",
+                "available_actions": ["search_deeper", "render_site", "upload_list"],
+            },
+        }
+        scan_repo.get_scan_companies.return_value = []
+        storage.create_scan_repository.return_value = scan_repo
+        storage.create_company_repository.return_value = MagicMock()
+
+        result = handler.handle(
+            {
+                "httpMethod": "GET",
+                "path": "/api/scan/scan-123",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 200
+        verdict = json.loads(result["body"])["discoveryVerdict"]
+        assert verdict == {
+            "method": "web_search",
+            "count": 3,
+            "completeness": "web_search_subset",
+            "availableActions": ["search_deeper", "render_site", "upload_list"],
+        }
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_confirm_no_companies(self, mock_authentication):
@@ -1062,13 +1103,11 @@ class TestAPIGatewayHandler:
         # paths must remain untouched.
         assert company_repo.tombstone.call_count == 3
         assert all(
-            call.kwargs == {"actor_id": "user-1"}
-            for call in company_repo.tombstone.mock_calls
+            call.kwargs == {"actor_id": "user-1"} for call in company_repo.tombstone.mock_calls
         )
         assert scan_repo.tombstone_link.call_count == 3
         assert all(
-            call.kwargs == {"actor_id": "user-1"}
-            for call in scan_repo.tombstone_link.mock_calls
+            call.kwargs == {"actor_id": "user-1"} for call in scan_repo.tombstone_link.mock_calls
         )
         scan_repo.tombstone.assert_called_once_with("scan-1", actor_id="user-1")
         company_repo.delete.assert_not_called()
@@ -1273,7 +1312,13 @@ class TestConfigEndpoint:
         return APIGatewayHandler(storage=storage), storage
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
-    @patch.dict("os.environ", {"APPSYNC_ENDPOINT": "https://appsync.example.com/graphql", "APPSYNC_API_KEY": "da2-fakekey123"})
+    @patch.dict(
+        "os.environ",
+        {
+            "APPSYNC_ENDPOINT": "https://appsync.example.com/graphql",
+            "APPSYNC_API_KEY": "da2-fakekey123",
+        },
+    )
     def test_returns_appsync_config_from_env(self, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, _ = self._make_handler()
@@ -1295,6 +1340,7 @@ class TestConfigEndpoint:
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         # Remove the env vars if they exist
         import os
+
         os.environ.pop("APPSYNC_ENDPOINT", None)
         os.environ.pop("APPSYNC_API_KEY", None)
 
@@ -1778,9 +1824,7 @@ class TestDocumentEndpoints:
         "os.environ",
         {"ANALYSIS_QUEUE_URL": "https://sqs.us-east-1.amazonaws.com/123/queue"},
     )
-    def test_reanalyze_with_no_pdf_export_skips_s3_delete(
-        self, mock_boto3, mock_authentication
-    ):
+    def test_reanalyze_with_no_pdf_export_skips_s3_delete(self, mock_boto3, mock_authentication):
         # Fresh analyses with no cached PDF: still call clear_pdf_export
         # (idempotent), but DO NOT call delete_cached_pdf — nothing to
         # delete, and we shouldn't waste an S3 round-trip.

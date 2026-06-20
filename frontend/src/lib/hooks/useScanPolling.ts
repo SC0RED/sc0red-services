@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react'
 
-import type { Company, ScanPollResponse } from '@/lib/types/scan'
+import type { Company, DiscoveryVerdict, ScanPollResponse } from '@/lib/types/scan'
 
 const MIN_INTERVAL_MS = 1000
 const MAX_INTERVAL_MS = 15000
@@ -8,7 +8,7 @@ const BACKOFF_FACTOR = 2
 
 interface DiscoveryCallbacks {
     mode: 'discovery'
-    onAwaitingConfirmation: (companies: Company[]) => void
+    onAwaitingConfirmation: (companies: Company[], verdict?: DiscoveryVerdict | null) => void
     onComplete: (data: ScanPollResponse) => void
     onFailed: (error: string) => void
     onProgress: (progress: number, label: string) => void
@@ -39,7 +39,7 @@ function handleDiscoveryPoll(
             ...c,
             selected: true,
         }))
-        callbacks.onAwaitingConfirmation(companies)
+        callbacks.onAwaitingConfirmation(companies, data.discoveryVerdict)
     } else if (data.status === 'complete') {
         stopPolling()
         callbacks.onComplete(data)
