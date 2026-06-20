@@ -48,11 +48,14 @@ class SQSHandler:
 
         Message discriminators (checked in order):
         - ``type == "portfolio_discovery"`` → portfolio-scan pipeline
+        - ``type == "portfolio_deepen"`` → customer-triggered deepen
         - ``reanalyze == True`` → company re-analysis
         - default → new company analysis
         """
         if message.get("type") == "portfolio_discovery":
             self._process_portfolio_discovery(message)
+        elif message.get("type") == "portfolio_deepen":
+            self._process_portfolio_deepen(message)
         elif message.get("reanalyze"):
             self._process_reanalysis(message)
         else:
@@ -227,11 +230,74 @@ class SQSHandler:
             return
         # Programming errors (AttributeError, KeyError, TypeError) propagate
         # to the outer SQS handler, triggering retry via batchItemFailures.
+        self._persist_discovery_result(scan_repo, scan_id, result)
 
-        # Bare key access — if the pipeline succeeds but omits this key it
-        # is a programming error (schema drift), not a user-visible state.
-        # Let KeyError propagate so SQS retries and CloudWatch captures it
-        # rather than silently stranding the user on an empty confirmation.
+    def _process_portfolio_deepen(self, message: dict[str, Any]) -> None:
+        """Re-run discovery deeper, seeded with the scan's current companies.
+
+        Customer-triggered escalation. The existing list is the seed and is
+        preserved — a deepen only ADDS companies. On a domain error the scan is
+        restored to ``awaiting_confirmation`` with the original list intact, so a
+        failed "search deeper" never destroys what the customer already had.
+        """
+        url = message["url"]
+        org_id = message["org_id"]
+        user_id = message["user_id"]
+        scan_id = message["scan_id"]
+
+        scan_repo = self._storage.create_scan_repository()
+        scan = scan_repo.get_by_id(scan_id)
+        if scan is None:
+            # Scan deleted between HTTP dispatch and worker pickup — don't run
+            # the (expensive) deepen pipeline against a phantom record.
+            logger.warning("Deepen for missing scan=%s — skipping", scan_id)
+            return
+        seed = scan.get("portfolio_companies", [])
+        logger.info("Deepening portfolio for %s (scan=%s, seed=%d)", url, scan_id, len(seed))
+
+        scan_repo.update(scan_id, {"status": "discovering", "progress": 5})
+        notify_progress(
+            scan_id=scan_id, progress=5, label="Searching deeper…", status="discovering"
+        )
+
+        try:
+            result = self._factory_manager.run_portfolio_deepen(
+                url=url,
+                org_id=org_id,
+                user_id=user_id,
+                scan_id=scan_id,
+                seed_companies=seed,
+            )
+        except (ValueError, RuntimeError):
+            # Deepen is additive — restore the prior list rather than failing the
+            # scan. The deeper web search is itself fail-soft, so only an
+            # unexpected ValueError/RuntimeError reaches here; programming errors
+            # still propagate for SQS retry.
+            logger.exception("Portfolio deepen failed for scan=%s — keeping prior list", scan_id)
+            scan_repo.update(
+                scan_id,
+                {"status": "awaiting_confirmation", "progress": 20, "portfolio_companies": seed},
+            )
+            notify_progress(
+                scan_id=scan_id,
+                progress=20,
+                label="Deeper search failed — keeping current list",
+                status="awaiting_confirmation",
+            )
+            return
+        self._persist_discovery_result(scan_repo, scan_id, result)
+
+    def _persist_discovery_result(
+        self, scan_repo: Any, scan_id: str, result: dict[str, Any]
+    ) -> None:
+        """Write a discovery/deepen pipeline result back to the scan record.
+
+        Transitions the scan to ``awaiting_confirmation`` with the final
+        post-validation company list and the verdict (count overridden to the
+        actual list length). Bare key access on ``portfolio_companies`` — a
+        missing key is schema drift (a bug), so let KeyError propagate to SQS
+        retry rather than silently stranding the user on an empty confirmation.
+        """
         companies = result["details"]["portfolio_companies"]
         update: dict[str, Any] = {
             "status": "awaiting_confirmation",

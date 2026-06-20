@@ -5,7 +5,10 @@ Runs two sequential discovery paths on the same scraped data:
 2. AI extraction: send page text to LLM for structured company extraction
 
 Results merged by normalized URL key (host + path): intersection auto-included,
-remainder passed to downstream validation step.
+remainder passed to downstream validation step. When the site yields too few
+companies, a web-search fallback recovers the portfolio. Merge/verdict logic
+lives in ``portfolio_merge`` and the web-search calls in ``portfolio_websearch``
+(both shared with the customer-triggered ``DeepenPortfolio`` step).
 """
 
 from __future__ import annotations
@@ -13,15 +16,13 @@ from __future__ import annotations
 import json
 import logging
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urlparse
 
-import jsonschema
-from signalfield_core.exceptions.base import EngineError
 from signalfield_core.pipeline.step import RequestStep
-from signalfield_core.utilities.future_manager import FutureManagerError
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
-from src.pipeline.pipeline_steps.ai_call import run_grounded_ai_call, run_structured_ai_call
+from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
+from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, merge_fallback, merge_results
+from src.pipeline.pipeline_steps.portfolio_websearch import run_web_search_discovery
 from src.pipeline.prompts.loader import load_schema, load_system_prompt, load_template
 
 if TYPE_CHECKING:
@@ -48,120 +49,6 @@ _AI_CONTENT_BUDGET = 200_000
 # / client-side-only / not embedding its list). Default 0 = rescue only total
 # failures; raise to also catch thin/partial scrapes once we've seen real data.
 _FALLBACK_THRESHOLD = 0
-
-
-def _normalize_url_key(url: str) -> str:
-    """Normalize a URL to a dedup key of ``host + path``.
-
-    Strips ``www.`` and trailing slash, lowercases the host, ignores query and
-    fragment. Path-aware on purpose: a firm's per-company detail pages
-    (``firm.com/portfolio/a``, ``firm.com/portfolio/b``) share a domain but are
-    distinct companies, so keying on the domain alone would collapse a whole
-    portfolio into one. ``www``/trailing-slash variants of the *same* URL still
-    map to the same key, and root-path company sites key to just the host — so
-    external-company matching (heuristic ∩ AI auto-include) is unchanged.
-    """
-    parsed = urlparse(url if url.startswith("http") else f"https://{url}")
-    host = (parsed.netloc or "").lower()
-    if host.startswith("www."):
-        host = host[4:]
-    # Lowercase the path too: detail-page slugs are case-insensitive in
-    # practice, so two sources emitting different casing dedup to one key.
-    path = parsed.path.lower().rstrip("/")
-    return f"{host}{path}"
-
-
-def _merge_results(
-    heuristic: list[dict[str, str]],
-    ai_extracted: list[dict[str, str]],
-) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    """Merge heuristic and AI results by normalized URL key (host + path).
-
-    Returns ``(auto_included, needs_validation)``:
-    - ``auto_included``: companies found by BOTH paths (high confidence, skip AI validation)
-    - ``needs_validation``: companies found by only one path (require AI validation)
-
-    Deduplicates by normalized URL key (host + path), so distinct same-domain
-    detail pages are kept as distinct companies.
-    """
-    heuristic_by_key = {_normalize_url_key(c["url"]): c for c in heuristic}
-    ai_by_key = {_normalize_url_key(c["url"]): c for c in ai_extracted}
-
-    intersection = set(heuristic_by_key) & set(ai_by_key)
-    remainder_keys = (set(heuristic_by_key) | set(ai_by_key)) - intersection
-
-    auto_included = [heuristic_by_key[k] for k in intersection]
-    needs_validation = [
-        (heuristic_by_key if k in heuristic_by_key else ai_by_key)[k] for k in remainder_keys
-    ]
-
-    logger.info(
-        "Merge: heuristic=%d, ai=%d, intersection=%d, remainder=%d, total=%d",
-        len(heuristic),
-        len(ai_extracted),
-        len(intersection),
-        len(needs_validation),
-        len(auto_included) + len(needs_validation),
-    )
-    return auto_included, needs_validation
-
-
-def _merge_fallback(
-    auto_included: list[dict[str, str]],
-    needs_validation: list[dict[str, str]],
-    fallback: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    """Union web-search fallback candidates into ``needs_validation`` only.
-
-    Model-sourced candidates always require validation (never ``auto_included``).
-    Deduplicated by normalized URL key against the existing site-derived results,
-    so the fallback only ADDS companies the site did not surface.
-    """
-    seen = {_normalize_url_key(c["url"]) for c in (*auto_included, *needs_validation)}
-    merged = list(needs_validation)
-    for company in fallback:
-        # ``name``/``url`` are schema-required on the web-search response, so
-        # access them directly — a missing key is a schema violation, not a
-        # default-to-empty case.
-        key = _normalize_url_key(company["url"])
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        merged.append({"name": company["name"], "url": company["url"], "description": ""})
-    return merged
-
-
-_ESCALATION_ACTIONS = ["search_deeper", "render_site", "upload_list"]
-
-
-def _build_verdict(
-    *, site_total: int, total: int, site_fetch_failed: bool, fallback_ran: bool
-) -> dict[str, Any]:
-    """Summarise how discovery went, for a customer-facing message + next actions.
-
-    ``completeness`` is the single signal the UI maps to a message:
-    - ``full_site_list`` — the firm's own site gave us its list (site_total > 0)
-    - ``site_blocked`` — the site couldn't be reached (fetch failed after retries)
-    - ``web_search_subset`` — the site exposed no readable list; web search found some
-    - ``genuinely_empty`` — nothing found anywhere
-    A full site list pushes no escalation (only the always-available upload); an
-    incomplete result offers the escalation rungs.
-    """
-    if site_total > 0:
-        completeness, method = "full_site_list", "site"
-    elif site_fetch_failed and fallback_ran:
-        completeness, method = "site_blocked", "web_search"
-    elif fallback_ran and total > 0:
-        completeness, method = "web_search_subset", "web_search"
-    else:
-        completeness, method = "genuinely_empty", ("web_search" if fallback_ran else "none")
-    actions = ["upload_list"] if completeness == "full_site_list" else list(_ESCALATION_ACTIONS)
-    return {
-        "method": method,
-        "count": total,
-        "completeness": completeness,
-        "available_actions": actions,
-    }
 
 
 class DiscoverPortfolio(RequestStep):
@@ -220,7 +107,7 @@ class DiscoverPortfolio(RequestStep):
         # Merge into auto-included (intersection, high confidence) and
         # needs-validation (remainder, only one path found it).
         if heuristic_companies or ai_companies:
-            auto_included, needs_validation = _merge_results(heuristic_companies, ai_companies)
+            auto_included, needs_validation = merge_results(heuristic_companies, ai_companies)
         else:
             auto_included, needs_validation = [], []
 
@@ -246,8 +133,10 @@ class DiscoverPortfolio(RequestStep):
             # Seed with on-site logo-grid names when present (e.g. Vista): the
             # site supplies the authoritative WHO, web search resolves the URLs.
             seed_names = metadata.get("logo_company_names", [])
-            fallback = self._run_web_search_fallback(url, seed_names)
-            needs_validation = _merge_fallback(auto_included, needs_validation, fallback)
+            fallback = run_web_search_discovery(
+                self._require_ai_factory(), url, seed_names, step_name="DiscoverPortfolio"
+            )
+            needs_validation = merge_fallback(auto_included, needs_validation, fallback)
 
         if not (auto_included or needs_validation) and not diagnostic:
             diagnostic = "Could not identify portfolio companies from this website."
@@ -267,7 +156,7 @@ class DiscoverPortfolio(RequestStep):
         # ``portfolio_companies`` carries only the remainder that needs AI
         # validation. ``portfolio_auto_included`` is merged back in by
         # ``ValidatePortfolioCompanies`` after validation completes.
-        verdict = _build_verdict(
+        verdict = build_verdict(
             site_total=site_total,
             total=total,
             site_fetch_failed=bool(metadata.get("site_fetch_failed")),
@@ -327,67 +216,3 @@ class DiscoverPortfolio(RequestStep):
             step_name="DiscoverPortfolio",
         )
         return result
-
-    def _run_web_search_fallback(
-        self,
-        firm_url: str,
-        seed_names: list[str] | None = None,
-    ) -> list[dict[str, str]]:
-        """Recover the firm's portfolio via web search when the site is opaque.
-
-        When ``seed_names`` is provided (e.g. names read from a logo grid), the
-        prompt is seeded with them so the model resolves their official URLs
-        rather than recalling the portfolio from scratch.
-
-        Fail-soft: a search/AI failure (or empty result) yields no candidates and
-        never crashes the scan — only programming errors propagate. Results are
-        model-sourced candidates that the downstream validation step confirms.
-        """
-        template = load_template("discover_portfolio_websearch")
-        schema = load_schema("discover_portfolio_websearch")
-        system_prompt = load_system_prompt("portfolio_validation")
-        if seed_names:
-            known = ", ".join(seed_names)
-            known_block = (
-                "The firm's portfolio is known to include these companies "
-                f"(found on its own site): {known}.\n"
-                "Return each of these companies' official website URL, and add "
-                "any other current holdings you find."
-            )
-        else:
-            known_block = ""
-        prompt = template.format(firm_url=firm_url, known_companies=known_block)
-        try:
-            _label, content, _elapsed, _tokens, _sources = run_grounded_ai_call(
-                ai_client_factory=self._require_ai_factory(),
-                user_prompt=prompt,
-                schema=schema,
-                system_prompt=system_prompt,
-                label="portfolio_web_fallback",
-                step_name="DiscoverPortfolio",
-            )
-        except (
-            EngineError,
-            FutureManagerError,
-            jsonschema.ValidationError,
-            ValueError,
-            RuntimeError,
-            KeyError,
-            TypeError,
-        ):
-            # Fail-soft: a search failure or a malformed (schema-invalid) AI
-            # response yields no extra candidates — the scan continues on the
-            # site-derived results rather than crashing.
-            logger.exception(
-                "[DiscoverPortfolio] web-search fallback failed for %s; "
-                "continuing with site results",
-                firm_url,
-            )
-            return []
-        companies = content["companies"]
-        logger.info(
-            "[DiscoverPortfolio] web-search fallback recovered %d candidate(s) for %s",
-            len(companies),
-            firm_url,
-        )
-        return companies

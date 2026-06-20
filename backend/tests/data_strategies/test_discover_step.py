@@ -129,7 +129,10 @@ class TestDiscoverPortfolioStep:
 
         with (
             patch.object(step, "_run_ai_extraction", return_value=ai_result),
-            patch.object(step, "_run_web_search_fallback", return_value=[]),
+            patch(
+                "src.pipeline.pipeline_steps.discover_portfolio.run_web_search_discovery",
+                return_value=[],
+            ),
             patch(
                 "src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy"
             ) as mock_strategy,
@@ -161,7 +164,10 @@ class TestDiscoverPortfolioStep:
 
         with (
             patch.object(step, "_run_ai_extraction", return_value=ai_result),
-            patch.object(step, "_run_web_search_fallback", return_value=[]),
+            patch(
+                "src.pipeline.pipeline_steps.discover_portfolio.run_web_search_discovery",
+                return_value=[],
+            ),
             patch(
                 "src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy"
             ) as mock_strategy,

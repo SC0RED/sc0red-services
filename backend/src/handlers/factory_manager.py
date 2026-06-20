@@ -86,3 +86,33 @@ class FactoryManager:
             "step_timings": executor.step_timings,
             "exceptions": [str(e) for e in executor.exceptions],
         }
+
+    def run_portfolio_deepen(
+        self,
+        url: str,
+        org_id: str,
+        user_id: str,
+        scan_id: str,
+        seed_companies: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        """Run the customer-triggered deepen pipeline, seeded with the current list."""
+        request_id = str(uuid.uuid4())
+        event = Sc0redServicesEvent(
+            request_id=request_id,
+            request_type="portfolio_deepen",
+            url=url,
+            org_id=org_id,
+            user_id=user_id,
+            scan_id=scan_id,
+            tenant_id=org_id,
+            extra={"seed_companies": seed_companies},
+        )
+
+        executor = self._factories_factory.create_and_execute(event)
+
+        return {
+            "request_id": request_id,
+            "details": executor.details,
+            "step_timings": executor.step_timings,
+            "exceptions": [str(e) for e in executor.exceptions],
+        }

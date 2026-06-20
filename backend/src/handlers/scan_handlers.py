@@ -18,7 +18,7 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
-from src.handlers.scan_core import ScanInputError, confirm_scan, start_scan
+from src.handlers.scan_core import ScanInputError, confirm_scan, deepen_scan, start_scan
 from src.utilities.scan_summary import (
     build_unified_analyses,
     compute_scan_progress,
@@ -28,9 +28,54 @@ from src.utilities.scan_summary import (
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
     from src.handlers.auth_middleware import AuthContext
+    from src.handlers.router import Router
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 
 logger = logging.getLogger(__name__)
+
+
+def register_routes(
+    router: Router,
+    storage: DynamoDBStorageProvider,
+    sqs: Any,
+    queue_url: str,
+) -> None:
+    """Register scan routes (start / status / confirm / deepen / delete)."""
+    router.protected(
+        "POST",
+        "/api/scan/start",
+        lambda event, authentication: handle_scan_start(
+            event, authentication, storage, sqs, queue_url
+        ),
+    )
+    router.protected(
+        "GET",
+        "/api/scan/{scan_id}",
+        lambda event, authentication, scan_id: handle_scan_status(
+            event, authentication, storage, scan_id
+        ),
+    )
+    router.protected(
+        "POST",
+        "/api/scan/{scan_id}/confirm",
+        lambda event, authentication, scan_id: handle_scan_confirm(
+            event, authentication, storage, sqs, queue_url, scan_id
+        ),
+    )
+    router.protected(
+        "POST",
+        "/api/scan/{scan_id}/deepen",
+        lambda event, authentication, scan_id: handle_scan_deepen(
+            event, authentication, storage, sqs, queue_url, scan_id
+        ),
+    )
+    router.protected(
+        "DELETE",
+        "/api/scan/{scan_id}",
+        lambda event, authentication, scan_id: handle_delete_scan(
+            event, authentication, storage, scan_id
+        ),
+    )
 
 
 def handle_scan_start(
@@ -134,7 +179,7 @@ def _verdict_response(verdict: dict[str, Any] | None) -> dict[str, Any] | None:
     """Map the persisted discovery verdict to the camelCase API shape.
 
     Returns ``None`` for scans created before the verdict existed. The four
-    keys are guaranteed by ``DiscoverPortfolio._build_verdict``, so they are
+    keys are guaranteed by ``portfolio_merge.build_verdict``, so they are
     accessed directly — a missing key is a bug, not a default-to-empty case.
     """
     if not verdict:
@@ -184,6 +229,38 @@ def handle_scan_confirm(
         return build_error(str(error), code=VALIDATION_ERROR)
 
     return build_json_response({"ok": True, "queued": result["queued"]}, 202)
+
+
+def handle_scan_deepen(
+    _event: dict[str, Any],
+    authentication: AuthContext,
+    storage: DynamoDBStorageProvider,
+    sqs: Any,
+    queue_url: str,
+    scan_id: str,
+) -> LambdaResponse:
+    """Handle POST /api/scan/{scan_id}/deepen.
+
+    Customer-triggered escalation: re-run discovery deeper for a scan that is
+    awaiting confirmation, seeded with its current companies. Only valid while
+    the scan is in ``awaiting_confirmation`` — see ``scan_core.deepen_scan``.
+    """
+    scan_repo = storage.create_scan_repository()
+    scan = scan_repo.get_by_id(scan_id)
+    if not scan or scan.get("org_id") != authentication.org_id:
+        return build_error("Scan not found", 404, NOT_FOUND)
+    if scan.get("status") != "awaiting_confirmation":
+        return build_error("Scan is not awaiting confirmation", code=VALIDATION_ERROR)
+
+    result = deepen_scan(
+        scan_repo,
+        scan_id=scan_id,
+        source_url=scan["source_url"],
+        authentication=authentication,
+        sqs=sqs,
+        queue_url=queue_url,
+    )
+    return build_json_response({"scanId": result["scan_id"], "status": result["status"]}, 202)
 
 
 def handle_delete_scan(

@@ -59,6 +59,29 @@ class TestFactoryManager:
         assert result["details"] == {"portfolio_companies": []}
 
     @patch("src.handlers.factory_manager.Sc0redServicesFactoriesFactory")
+    def test_run_portfolio_deepen(self, mock_factory_cls):
+        mock_executor = MagicMock()
+        mock_executor.details = {"portfolio_companies": []}
+        mock_executor.step_timings = {}
+        mock_executor.exceptions = []
+        mock_factory_cls.return_value.create_and_execute.return_value = mock_executor
+
+        manager = FactoryManager(storage=MagicMock())
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        result = manager.run_portfolio_deepen(
+            url="https://pefirm.com",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-1",
+            seed_companies=seed,
+        )
+        # The deepen event carries the seed via `extra` and the deepen type.
+        event = mock_factory_cls.return_value.create_and_execute.call_args.args[0]
+        assert event.request_type == "portfolio_deepen"
+        assert event.extra == {"seed_companies": seed}
+        assert "request_id" in result
+
+    @patch("src.handlers.factory_manager.Sc0redServicesFactoriesFactory")
     def test_run_company_analysis_with_exceptions(self, mock_factory_cls):
         mock_executor = MagicMock()
         mock_executor.details = {}
