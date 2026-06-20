@@ -807,6 +807,36 @@ class TestSQSHandlerPortfolioDeepen:
             {"status": "awaiting_confirmation", "progress": 20, "portfolio_companies": seed},
         )
 
+    def test_engine_error_restores_prior_list(self):
+        from signalfield_core.exceptions.base import EngineError
+
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_deepen.side_effect = EngineError("provider down")
+
+        # Provider failure must NOT strand the scan — restore the prior list.
+        handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1]
+        assert final_update == call(
+            "scan-d1",
+            {"status": "awaiting_confirmation", "progress": 20, "portfolio_companies": seed},
+        )
+
+    def test_missing_scan_is_skipped(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = None
+        storage.create_scan_repository.return_value = scan_repo
+
+        handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+        scan_repo.update.assert_not_called()
+        handler._factory_manager.run_portfolio_deepen.assert_not_called()
+
     def test_programming_error_propagates(self):
         handler, storage = self._make_handler()
         scan_repo = MagicMock()

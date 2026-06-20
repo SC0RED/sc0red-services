@@ -268,11 +268,11 @@ class SQSHandler:
                 scan_id=scan_id,
                 seed_companies=seed,
             )
-        except (ValueError, RuntimeError):
+        except (EngineError, ValueError, RuntimeError):
             # Deepen is additive — restore the prior list rather than failing the
-            # scan. The deeper web search is itself fail-soft, so only an
-            # unexpected ValueError/RuntimeError reaches here; programming errors
-            # still propagate for SQS retry.
+            # scan. Catch the same domain errors as discovery (incl. EngineError
+            # from a provider failure) so a deeper-search error can never strand
+            # the scan in an SQS retry loop; programming errors still propagate.
             logger.exception("Portfolio deepen failed for scan=%s — keeping prior list", scan_id)
             scan_repo.update(
                 scan_id,

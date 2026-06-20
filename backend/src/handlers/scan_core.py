@@ -172,7 +172,9 @@ def deepen_scan(  # noqa: NAMING001  deepen is a verb; not in the checker's heur
     Returns ``{"scan_id", "status"}``. Scan existence/org/status validation is
     the caller's job.
     """
-    scan_repo.update(scan_id, {"status": "discovering", "progress": 5})
+    # Enqueue first — only flip the scan to ``discovering`` once the work is
+    # safely on the queue, so a send failure leaves the scan in
+    # ``awaiting_confirmation`` (recoverable) rather than stranded mid-discovery.
     sqs.send_message(
         QueueUrl=queue_url,
         MessageBody=build_portfolio_deepen_message(
@@ -182,6 +184,7 @@ def deepen_scan(  # noqa: NAMING001  deepen is a verb; not in the checker's heur
             scan_id=scan_id,
         ),
     )
+    scan_repo.update(scan_id, {"status": "discovering", "progress": 5})
     return {"scan_id": scan_id, "status": "discovering"}
 
 

@@ -30,7 +30,7 @@ def normalize_url_key(url: str) -> str:
     map to the same key, and root-path company sites key to just the host — so
     external-company matching (heuristic ∩ AI auto-include) is unchanged.
     """
-    parsed = urlparse(url if url.startswith("http") else f"https://{url}")
+    parsed = urlparse(url if url.lower().startswith("http") else f"https://{url}")
     host = (parsed.netloc or "").lower()
     if host.startswith("www."):
         host = host[4:]
