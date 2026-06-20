@@ -14,9 +14,9 @@
 
 ## 3. CSV/PDF company-list upload
 
-- [ ] 3.1 Backend: parse an uploaded CSV (required `name`, optional `url`) and PDF (best-effort names via `src/documents/extract_text.py`) into `{name, url?}` candidates; feed into the existing validation → per-company scan path (resolve URL when absent); merge/dedup with any existing candidates.
-- [ ] 3.2 Wire an upload entry through `scan_core` (same dispatch for UI + MCP); reuse the existing document-upload UI from the report-data-integrity work.
-- [ ] 3.3 Tests: CSV name+url; CSV name-only (URL resolved downstream); PDF best-effort; merge/dedup with discovery candidates; malformed file handled gracefully.
+- [x] 3.1 Backend: parse an uploaded CSV (required `name`, optional `url`) and PDF/text (best-effort names via `src/documents/extract_text.py`) into `{name, url}` candidates in `src/documents/parse_company_list.py` — header-aware CSV, bare-domain → https normalization, dedup by name. `url` left "" when the source omits it (customer resolves it on the confirmation screen; AI URL-resolution is a later slice).
+- [x] 3.2 Stateless parse endpoint `POST /api/portfolio/parse-company-list` (`src/handlers/company_list_handlers.py`) — reuses the existing base64 upload transport, returns candidates + counts (`withUrl`/`needsUrl`). Chosen over a new `scan_core` dispatch entry: the parsed list flows into the editable confirmation list and scans through the **existing** confirm path, so no new scan-start surface or worker change is needed. (Frontend uploader + MCP paste-list reuse are the next slices.)
+- [x] 3.3 Tests: CSV name+url; CSV name-only (url ""); alternate headers; no-header rows; ragged rows; PDF/text best-effort + inline-url; dedup; max-cap; malformed/unsupported/empty handled gracefully; handler success + 400 paths.
 
 ## 4. Validation & verification (Phase 1)
 

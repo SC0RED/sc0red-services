@@ -32,6 +32,19 @@ class TestExtractText:
         with pytest.raises(ValueError, match="Unsupported file type: pptx"):
             extract_text(b"data", "pptx")
 
+    def test_corrupt_pdf_raises_value_error(self):
+        # A corrupt PDF must surface as a ValueError (→ 400), not a raw pypdf error.
+        with pytest.raises(ValueError, match="Could not read the PDF"):
+            extract_text(b"%PDF-1.4 garbage not a real pdf", "pdf")
+
+    def test_corrupt_docx_raises_value_error(self):
+        with pytest.raises(ValueError, match="Could not read the DOCX"):
+            extract_text(b"PK\x03\x04 not a real docx", "docx")
+
+    def test_corrupt_xlsx_raises_value_error(self):
+        with pytest.raises(ValueError, match="Could not read the spreadsheet"):
+            extract_text(b"not a real xlsx", "xlsx")
+
     def test_normalises_file_type(self):
         content = b"test content"
         result = extract_text(content, ".TXT")
