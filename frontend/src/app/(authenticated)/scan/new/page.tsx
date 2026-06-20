@@ -6,9 +6,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import ScanInputPhase from '@/components/scan/ScanInputPhase'
 import ScanProgressPhase from '@/components/scan/ScanProgressPhase'
 import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { useCompanyList } from '@/lib/hooks/useCompanyList'
 import { useScanPolling } from '@/lib/hooks/useScanPolling'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
-import type { Mode, Phase, Company, ScanPollResponse } from '@/lib/types/scan'
+import type { Mode, Phase, Company, ScanPollResponse, DiscoveryVerdict } from '@/lib/types/scan'
 import { normalizeUserUrl } from '@/lib/utils/url'
 
 function NewScanContent() {
@@ -23,7 +25,14 @@ function NewScanContent() {
     const [progress, setProgress] = useState(0)
     const [progressLabel, setProgressLabel] = useState('')
     const [scanId, setScanId] = useState('')
-    const [companies, setCompanies] = useState<Company[]>([])
+    const {
+        companies,
+        replace: replaceCompanies,
+        toggle: handleCompanyToggle,
+        addOne: handleAddCompany,
+        addMany: handleAddCompanies,
+    } = useCompanyList()
+    const [verdict, setVerdict] = useState<DiscoveryVerdict | null>(null)
     const scanIdRef = useRef('')
     const hasNavigatedToPortfolio = useRef(false)
     const phaseRef = useRef<Phase>('input')
@@ -74,10 +83,14 @@ function NewScanContent() {
         setPhase('input')
     }, [])
 
-    const handleAwaitingConfirmation = useCallback((discoveredCompanies: Company[]) => {
-        setCompanies(discoveredCompanies)
-        setPhase('portfolio_confirm')
-    }, [])
+    const handleAwaitingConfirmation = useCallback(
+        (discoveredCompanies: Company[], discoveredVerdict?: DiscoveryVerdict | null) => {
+            replaceCompanies(discoveredCompanies)
+            setVerdict(discoveredVerdict ?? null)
+            setPhase('portfolio_confirm')
+        },
+        [replaceCompanies]
+    )
 
     const discoveryPolling = useScanPolling({
         mode: 'discovery',
@@ -114,7 +127,7 @@ function NewScanContent() {
                         ...c,
                         selected: true,
                     }))
-                    handleAwaitingConfirmation(discoveredCompanies)
+                    handleAwaitingConfirmation(discoveredCompanies, data.discoveryVerdict)
                     return
                 }
             } catch {
@@ -236,8 +249,7 @@ function NewScanContent() {
                 const companiesWithSelect = (data.portfolioCompanies as Omit<Company, 'selected'>[]).map(
                     (c) => ({ ...c, selected: true })
                 )
-                setCompanies(companiesWithSelect)
-                setPhase('portfolio_confirm')
+                handleAwaitingConfirmation(companiesWithSelect, data.discoveryVerdict)
                 return
             }
 
@@ -295,14 +307,6 @@ function NewScanContent() {
         }
     }
 
-    function handleCompanyToggle(index: number, selected: boolean) {
-        setCompanies((prev) => prev.map((c, idx) => (idx === index ? { ...c, selected } : c)))
-    }
-
-    function handleAddCompany(name: string, url: string) {
-        setCompanies((prev) => [...prev, { name, url, description: '', selected: true }])
-    }
-
     return (
         <div style={{ width: '100%', maxWidth: '680px' }}>
             {/* Header */}
@@ -331,8 +335,10 @@ function NewScanContent() {
             {phase === 'portfolio_confirm' && (
                 <PortfolioConfirmPhase
                     companies={companies}
+                    verdict={verdict}
                     onCompanyToggle={handleCompanyToggle}
                     onAddCompany={handleAddCompany}
+                    onAddCompanies={handleAddCompanies}
                     onConfirm={confirmPortfolio}
                     onReset={() => setPhase('input')}
                 />
@@ -353,16 +359,7 @@ export default function NewScanPage() {
                         justifyContent: 'center',
                     }}
                 >
-                    <div
-                        style={{
-                            width: '32px',
-                            height: '32px',
-                            border: '3px solid var(--border)',
-                            borderTopColor: 'var(--accent-blue)',
-                            borderRadius: '50%',
-                            animation: 'spin 1s linear infinite',
-                        }}
-                    />
+                    <LoadingSpinner size="lg" />
                 </div>
             }
         >

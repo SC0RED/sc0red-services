@@ -123,10 +123,28 @@ def handle_scan_status(
             "type": scan.get("type"),
             "totalCompanies": total_companies,
             "portfolioCompanies": scan.get("portfolio_companies", []),
+            "discoveryVerdict": _verdict_response(scan.get("discovery_verdict")),
             "analyses": analyses,
             "error": scan.get("error", ""),
         }
     )
+
+
+def _verdict_response(verdict: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Map the persisted discovery verdict to the camelCase API shape.
+
+    Returns ``None`` for scans created before the verdict existed. The four
+    keys are guaranteed by ``DiscoverPortfolio._build_verdict``, so they are
+    accessed directly — a missing key is a bug, not a default-to-empty case.
+    """
+    if not verdict:
+        return None
+    return {
+        "method": verdict["method"],
+        "count": verdict["count"],
+        "completeness": verdict["completeness"],
+        "availableActions": verdict["available_actions"],
+    }
 
 
 def handle_scan_confirm(

@@ -96,9 +96,43 @@ describe('useScanPolling', () => {
 
             await advanceAndFlush(1000)
 
-            expect(callbacks.onAwaitingConfirmation).toHaveBeenCalledWith([
-                { name: 'Acme', url: 'https://acme.com', description: 'Corp', selected: true },
-            ])
+            expect(callbacks.onAwaitingConfirmation).toHaveBeenCalledWith(
+                [{ name: 'Acme', url: 'https://acme.com', description: 'Corp', selected: true }],
+                undefined
+            )
+        })
+
+        it('forwards the discovery verdict to onAwaitingConfirmation', async () => {
+            const callbacks = {
+                mode: 'discovery' as const,
+                onAwaitingConfirmation: vi.fn(),
+                onComplete: vi.fn(),
+                onFailed: vi.fn(),
+                onProgress: vi.fn(),
+            }
+            const verdict = {
+                method: 'web_search',
+                count: 3,
+                completeness: 'web_search_subset' as const,
+                availableActions: ['search_deeper', 'upload_list'] as const,
+            }
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'awaiting_confirmation',
+                        portfolioCompanies: [],
+                        discoveryVerdict: verdict,
+                    }),
+            })
+
+            const { result } = renderHook(() => useScanPolling(callbacks))
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
+            await advanceAndFlush(1000)
+
+            expect(callbacks.onAwaitingConfirmation).toHaveBeenCalledWith([], verdict)
         })
 
         it('calls onComplete when status is complete', async () => {

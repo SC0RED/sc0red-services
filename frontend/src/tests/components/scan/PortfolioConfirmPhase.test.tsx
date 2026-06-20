@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 
 import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
+import type { DiscoveryVerdict } from '@/lib/types/scan'
 
 const mockCompanies = [
     { name: 'Acme Corp', url: 'https://acme.com', description: 'A corp', selected: true },
@@ -14,6 +15,7 @@ describe('PortfolioConfirmPhase', () => {
         companies: mockCompanies,
         onCompanyToggle: vi.fn(),
         onAddCompany: vi.fn(),
+        onAddCompanies: vi.fn(() => 0),
         onConfirm: vi.fn(),
         onReset: vi.fn(),
     }
@@ -211,6 +213,52 @@ describe('PortfolioConfirmPhase', () => {
             // Form should collapse back to button
             expect(screen.getByText('+ Add Company Manually')).toBeInTheDocument()
             expect(screen.queryByLabelText('Company Name')).not.toBeInTheDocument()
+        })
+    })
+
+    describe('discovery verdict', () => {
+        const subsetVerdict: DiscoveryVerdict = {
+            method: 'web_search',
+            count: 3,
+            completeness: 'web_search_subset',
+            availableActions: ['search_deeper', 'render_site', 'upload_list'],
+        }
+
+        it('shows the fallback banner when no verdict is present', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            expect(screen.getByText('Portfolio companies discovered')).toBeInTheDocument()
+        })
+
+        it('renders the verdict message and action affordances', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} verdict={subsetVerdict} />)
+            expect(screen.getByText('This list is likely incomplete')).toBeInTheDocument()
+            // upload is live; deeper-search and render are surfaced but disabled
+            expect(screen.getByRole('button', { name: /Upload a list/ })).toBeEnabled()
+            expect(screen.getByRole('button', { name: /Search deeper/ })).toBeDisabled()
+            expect(screen.getByRole('button', { name: /Render the site/ })).toBeDisabled()
+        })
+
+        it('reveals the upload widget when "Upload a list" is clicked', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} verdict={subsetVerdict} />)
+            expect(screen.queryByLabelText('Company list file')).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole('button', { name: /Upload a list/ }))
+            expect(screen.getByLabelText('Company list file')).toBeInTheDocument()
+        })
+
+        it('renders a positive message for a full site list', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'site',
+                        count: 3,
+                        completeness: 'full_site_list',
+                        availableActions: ['upload_list'],
+                    }}
+                />
+            )
+            expect(screen.getByText('Portfolio read from the firm’s site')).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: /Search deeper/ })).not.toBeInTheDocument()
         })
     })
 })
