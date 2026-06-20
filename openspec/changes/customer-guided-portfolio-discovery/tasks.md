@@ -2,9 +2,9 @@
 
 ## 1. Discovery verdict
 
-- [ ] 1.1 In `DiscoverPortfolio`, build a `discovery_verdict` dict: `method` (site/web_search/upload), `count`, `completeness` (full_site_list / client_side_rendered / site_blocked / web_search_subset / genuinely_empty), `available_actions` (subset of search_deeper, render_site, upload_list). Derive from existing signals: which path produced candidates, `site_fetch_failed` (#425), and a thin/empty-listing-page detector.
-- [ ] 1.2 Persist the verdict on the scan record in the worker (alongside `portfolio_companies`, `status=awaiting_confirmation`); expose it via the scan read API + MCP `get_scan`.
-- [ ] 1.3 Unit tests: verdict for CSR-thin (web_search_subset/client_side_rendered + search_deeper/upload), full-site (full_site_list), blocked (site_blocked), genuine-empty.
+- [x] 1.1 In `DiscoverPortfolio`, build a `discovery_verdict` dict: `method` (site/web_search/upload), `count`, `completeness` (full_site_list / client_side_rendered / site_blocked / web_search_subset / genuinely_empty), `available_actions` (subset of search_deeper, render_site, upload_list). Derive from existing signals: which path produced candidates, `site_fetch_failed` (#425), and a thin/empty-listing-page detector.
+- [x] 1.2 Persist the verdict on the scan record in the worker (alongside `portfolio_companies`, `status=awaiting_confirmation`); expose it via the scan read API + MCP `get_scan`.
+- [x] 1.3 Unit tests: verdict for CSR-thin (web_search_subset/client_side_rendered + search_deeper/upload), full-site (full_site_list), blocked (site_blocked), genuine-empty.
 
 ## 2. Customer-facing message + action affordances (frontend)
 
@@ -20,10 +20,10 @@
 
 ## 4. Validation & verification (Phase 1)
 
-- [ ] 4.1 `ruff` + `ruff format` + naming + abbreviations clean (backend); `npm run lint` + `tsc` (frontend)
-- [ ] 4.2 `pyright src/` no new error category
-- [ ] 4.3 `pytest tests/ -q` ≥ 95% coverage; `cd frontend && npm test` passes
-- [ ] 4.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
+- [x] 4.1 `ruff` + `ruff format` + naming + abbreviations clean (backend); `npm run lint` + `tsc` (frontend)
+- [x] 4.2 `pyright src/` no new error category
+- [x] 4.3 `pytest tests/ -q` ≥ 95% coverage; `cd frontend && npm test` passes
+- [x] 4.4 Run the `architecture-reviewer` agent; resolve CRITICAL before commit
 - [ ] 4.5 E2E suite per CLAUDE.md before the PR (extend the mock if the verdict/upload path is exercised)
 
 # Phase 2 — Deeper web-search rung (follow-on; own PR)

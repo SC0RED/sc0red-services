@@ -131,6 +131,39 @@ def _merge_fallback(
     return merged
 
 
+_ESCALATION_ACTIONS = ["search_deeper", "render_site", "upload_list"]
+
+
+def _build_verdict(
+    *, site_total: int, total: int, site_fetch_failed: bool, fallback_ran: bool
+) -> dict[str, Any]:
+    """Summarise how discovery went, for a customer-facing message + next actions.
+
+    ``completeness`` is the single signal the UI maps to a message:
+    - ``full_site_list`` — the firm's own site gave us its list (site_total > 0)
+    - ``site_blocked`` — the site couldn't be reached (fetch failed after retries)
+    - ``web_search_subset`` — the site exposed no readable list; web search found some
+    - ``genuinely_empty`` — nothing found anywhere
+    A full site list pushes no escalation (only the always-available upload); an
+    incomplete result offers the escalation rungs.
+    """
+    if site_total > 0:
+        completeness, method = "full_site_list", "site"
+    elif site_fetch_failed and fallback_ran:
+        completeness, method = "site_blocked", "web_search"
+    elif fallback_ran and total > 0:
+        completeness, method = "web_search_subset", "web_search"
+    else:
+        completeness, method = "genuinely_empty", ("web_search" if fallback_ran else "none")
+    actions = ["upload_list"] if completeness == "full_site_list" else list(_ESCALATION_ACTIONS)
+    return {
+        "method": method,
+        "count": total,
+        "completeness": completeness,
+        "available_actions": actions,
+    }
+
+
 class DiscoverPortfolio(RequestStep):
     """Discovers portfolio companies using heuristic + AI extraction paths."""
 
@@ -196,7 +229,9 @@ class DiscoverPortfolio(RequestStep):
         # portfolio via web search. Strictly additive — fallback candidates enter
         # the needs-validation tier only, never auto-included.
         site_total = len(auto_included) + len(needs_validation)
+        fallback_ran = False
         if self._ai_client_factory and is_pe_firm and site_total <= _FALLBACK_THRESHOLD:
+            fallback_ran = True
             # Surface WHY we're falling back: a fetch failure means a scrapeable
             # site was unreachable this run (result may be incomplete), vs a
             # genuinely empty/opaque site where web search is the right recovery.
@@ -232,6 +267,12 @@ class DiscoverPortfolio(RequestStep):
         # ``portfolio_companies`` carries only the remainder that needs AI
         # validation. ``portfolio_auto_included`` is merged back in by
         # ``ValidatePortfolioCompanies`` after validation completes.
+        verdict = _build_verdict(
+            site_total=site_total,
+            total=total,
+            site_fetch_failed=bool(metadata.get("site_fetch_failed")),
+            fallback_ran=fallback_ran,
+        )
         self.request_executor.add_details(
             {
                 "portfolio_companies": needs_validation,
@@ -239,6 +280,7 @@ class DiscoverPortfolio(RequestStep):
                 "portfolio_companies_json": json.dumps(auto_included + needs_validation),
                 "portfolio_count": total,
                 "portfolio_diagnostic": diagnostic,
+                "discovery_verdict": verdict,
             }
         )
         self.request_executor.mark_question_complete("discover_portfolio")

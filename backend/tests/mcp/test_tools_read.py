@@ -663,6 +663,30 @@ class TestGetScan:
         assert "https://beta.com" in text
         assert "confirm_portfolio_scan" in text
 
+    async def test_get_scan_shows_verdict_message_for_incomplete_result(self):
+        # An incomplete (web-search subset) discovery surfaces a meaningful
+        # message + actionable next steps on the confirmation screen.
+        storage, _, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "awaiting_confirmation",
+            "type": "portfolio",
+            "progress": 20,
+            "org_id": "test-org",
+            "portfolio_companies": [{"name": "SentinelOne", "url": "https://www.sentinelone.com/"}],
+            "discovery_verdict": {
+                "method": "web_search",
+                "count": 1,
+                "completeness": "web_search_subset",
+                "available_actions": ["search_deeper", "upload_list", "render_site"],
+            },
+        }
+        scan_repo.get_scan_companies.return_value = []
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "quick web search" in text
+        assert "search deeper" in text and "upload a CSV/PDF list" in text
+
     @pytest.mark.asyncio
     async def test_not_found(self):
         storage, *_ = _make_storage()
@@ -884,3 +908,43 @@ class TestCompareAnalyses:
         server = _make_server(storage)
         text = (await server.call_tool("compare_analyses", {"analysis_ids": ["c1"]}))[0][0].text
         assert "at least 2" in text
+
+
+class TestVerdictMessage:
+    def test_subset_message_includes_cause_and_actions(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        msg = _verdict_message(
+            {
+                "completeness": "web_search_subset",
+                "available_actions": ["search_deeper", "upload_list", "render_site"],
+            }
+        )
+        assert "quick web search" in msg
+        assert "search deeper" in msg and "upload a CSV/PDF list" in msg
+
+    def test_full_site_list_has_no_caveat(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        verdict = {"completeness": "full_site_list", "available_actions": ["upload_list"]}
+        assert _verdict_message(verdict) == ""
+
+    def test_blocked_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        verdict = {"completeness": "site_blocked", "available_actions": ["search_deeper"]}
+        msg = _verdict_message(verdict)
+        assert "couldn't reach" in msg and "search deeper" in msg
+
+    def test_genuinely_empty_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        verdict = {
+            "completeness": "genuinely_empty",
+            "available_actions": ["search_deeper", "upload_list", "render_site"],
+        }
+        msg = _verdict_message(verdict)
+        assert "couldn't identify" in msg.lower()
+        # render_site is carried on the verdict but not phrased in the MCP message
+        assert "render" not in msg
+        assert "upload a CSV/PDF list" in msg

@@ -384,3 +384,53 @@ class TestDiscoverPortfolio:
         assert auto_urls == {"https://both.com"}
         assert candidate_urls == {"https://heur.com", "https://aionly.com"}
         assert details["portfolio_count"] == 3
+
+
+class TestBuildVerdict:
+    def test_full_site_list(self):
+        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
+
+        v = _build_verdict(site_total=151, total=151, site_fetch_failed=False, fallback_ran=False)
+        assert v["completeness"] == "full_site_list"
+        assert v["method"] == "site"
+        assert v["available_actions"] == ["upload_list"]  # no escalation pushed
+
+    def test_web_search_subset(self):
+        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
+
+        v = _build_verdict(site_total=0, total=3, site_fetch_failed=False, fallback_ran=True)
+        assert v["completeness"] == "web_search_subset"
+        assert "search_deeper" in v["available_actions"] and "upload_list" in v["available_actions"]
+
+    def test_site_blocked(self):
+        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
+
+        v = _build_verdict(site_total=0, total=2, site_fetch_failed=True, fallback_ran=True)
+        assert v["completeness"] == "site_blocked"
+
+    def test_genuinely_empty(self):
+        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
+
+        v = _build_verdict(site_total=0, total=0, site_fetch_failed=False, fallback_ran=True)
+        assert v["completeness"] == "genuinely_empty"
+        assert v["count"] == 0
+
+
+class TestDiscoveryVerdictEmitted:
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_execute_emits_verdict(self, mock_strategy_cls):
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {"companies": [{"name": "Co", "url": "https://co.com"}]},
+        )
+        mock_strategy_cls.return_value = mock_strategy
+
+        step = DiscoverPortfolio()  # no AI → heuristic only, full_site_list
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["discovery_verdict"]["completeness"] == "full_site_list"
+        assert details["discovery_verdict"]["count"] == 1

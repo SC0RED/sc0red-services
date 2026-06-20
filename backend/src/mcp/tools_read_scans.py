@@ -9,7 +9,7 @@ other read tools — explicit ``storage`` in, repos built once per registration.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from src.mcp._tools_read_helpers import (
     NO_SCANS_GUIDANCE,
@@ -27,6 +27,40 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
     from src.repositories.dynamodb.provider import DynamoDBStorageProvider
+
+# Customer-facing explanation per discovery completeness signal (verdict).
+_COMPLETENESS_MESSAGE = {
+    "site_blocked": (
+        "We couldn't reach the firm's site, so this list (from a quick web search) "
+        "may be incomplete."
+    ),
+    "web_search_subset": (
+        "The firm's site doesn't list its portfolio in a readable form, so we used a "
+        "quick web search — there may be more."
+    ),
+    "genuinely_empty": "We couldn't identify portfolio companies for this firm.",
+}
+# Only the actions a customer can take via this surface today. `render_site`
+# is carried on the verdict for the frontend (a deferred opt-in rung) but is
+# intentionally not phrased here, since it is not yet actionable.
+_ACTION_PHRASE = {
+    "search_deeper": "search deeper",
+    "upload_list": "upload a CSV/PDF list",
+}
+
+
+def _verdict_message(verdict: dict[str, object]) -> str:
+    """Render the discovery verdict as a customer-facing message + next actions."""
+    completeness = verdict.get("completeness")
+    base = _COMPLETENESS_MESSAGE.get(completeness if isinstance(completeness, str) else "")
+    if not base:
+        return ""  # full_site_list (or unknown) needs no caveat
+    raw_actions = verdict.get("available_actions")
+    actions = cast("list[object]", raw_actions) if isinstance(raw_actions, list) else []
+    phrases = [_ACTION_PHRASE[a] for a in actions if isinstance(a, str) and a in _ACTION_PHRASE]
+    if phrases:
+        return f"{base} You can: {', '.join(phrases)}."
+    return base
 
 
 def register_scan_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> None:
@@ -83,9 +117,14 @@ def register_scan_read_tools(mcp: FastMCP, storage: DynamoDBStorageProvider) -> 
         # the write tools point clients here to "review the discovered
         # companies".
         portfolio_companies = scan.get("portfolio_companies", [])
+        verdict = scan.get("discovery_verdict")
+        if status == "awaiting_confirmation" and verdict:
+            message = _verdict_message(verdict)
+            if message:
+                lines.append(f"\n{message}")
         if portfolio_companies:
             lines.append(f"\n### Discovered Companies ({len(portfolio_companies)})")
-            if scan.get("status") == "awaiting_confirmation":
+            if status == "awaiting_confirmation":
                 lines.append(
                     "Confirm the ones to analyze with "
                     "confirm_portfolio_scan(scan_id, [company URLs]):"
