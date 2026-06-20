@@ -117,7 +117,7 @@ class APIGatewayHandler:
         )
         from src.handlers.analytics_handlers import handle_post_event as handle_post_analytics_event
         from src.handlers.auth_handlers import handle_register
-        from src.handlers.company_list_handlers import handle_parse_company_list
+        from src.handlers.company_list_handlers import register_routes as register_company_routes
         from src.handlers.document_handlers import (
             handle_create_document,
             handle_delete_document,
@@ -230,11 +230,7 @@ class APIGatewayHandler:
                 event, authentication, self._storage, scan_id
             ),
         )
-        router.protected(
-            "POST",
-            "/api/portfolio/parse-company-list",
-            handle_parse_company_list,
-        )
+        register_company_routes(router)
 
         router.protected(
             "GET",

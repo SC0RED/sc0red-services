@@ -20,6 +20,12 @@ from src.handlers.api_gateway_handler import VALIDATION_ERROR, build_error, buil
 if TYPE_CHECKING:
     from src.handlers.api_gateway_handler import LambdaResponse
     from src.handlers.auth_middleware import AuthContext
+    from src.handlers.router import Router
+
+
+def register_routes(router: Router) -> None:
+    """Register company-list routes on the shared router."""
+    router.protected("POST", "/api/portfolio/parse-company-list", handle_parse_company_list)
 
 
 def handle_parse_company_list(
