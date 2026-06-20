@@ -233,14 +233,17 @@ class SQSHandler:
         # Let KeyError propagate so SQS retries and CloudWatch captures it
         # rather than silently stranding the user on an empty confirmation.
         companies = result["details"]["portfolio_companies"]
-        scan_repo.update(
-            scan_id,
-            {
-                "status": "awaiting_confirmation",
-                "progress": 20,
-                "portfolio_companies": companies,
-            },
-        )
+        update: dict[str, Any] = {
+            "status": "awaiting_confirmation",
+            "progress": 20,
+            "portfolio_companies": companies,
+        }
+        # Discovery verdict (method/completeness/next-actions) for a meaningful
+        # customer message. Its count is the final, post-validation list length.
+        verdict = result["details"].get("discovery_verdict")
+        if verdict is not None:
+            update["discovery_verdict"] = {**verdict, "count": len(companies)}
+        scan_repo.update(scan_id, update)
         notify_progress(
             scan_id=scan_id,
             progress=20,

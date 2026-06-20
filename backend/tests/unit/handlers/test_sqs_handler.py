@@ -1,8 +1,9 @@
 """Tests for SQSHandler."""
 
 import json
-import pytest
 from unittest.mock import MagicMock, call, patch
+
+import pytest
 
 from src.handlers.sqs_handler import SQSHandler
 
@@ -413,6 +414,31 @@ class TestSQSHandlerPortfolioDiscovery:
                 },
             ),
         ]
+
+    def test_success_persists_discovery_verdict_with_final_count(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        companies = [{"name": "Co1", "url": "https://co1.com"}]
+        handler._factory_manager.run_portfolio_discovery.return_value = {
+            "details": {
+                "portfolio_companies": companies,
+                # discovery-time count (3) differs from the final list (1)
+                "discovery_verdict": {
+                    "method": "web_search",
+                    "count": 3,
+                    "completeness": "web_search_subset",
+                    "available_actions": ["search_deeper", "upload_list"],
+                },
+            },
+        }
+
+        handler._process_message(dict(self._PORTFOLIO_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1][0][1]
+        verdict = final_update["discovery_verdict"]
+        assert verdict["completeness"] == "web_search_subset"
+        assert verdict["count"] == 1  # overridden to the final persisted count
 
     def test_domain_error_marks_scan_failed_and_does_not_retry(self):
         handler, storage = self._make_handler()
