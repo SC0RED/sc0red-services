@@ -6,6 +6,7 @@ interface DiscoveryVerdictBannerProps {
      *  after the customer edits/uploads), used in the plain-language message. */
     currentCount: number
     onUploadList: () => void
+    onSearchDeeper: () => void
     uploadOpen: boolean
 }
 
@@ -58,6 +59,7 @@ export default function DiscoveryVerdictBanner({
     verdict,
     currentCount,
     onUploadList,
+    onSearchDeeper,
     uploadOpen,
 }: DiscoveryVerdictBannerProps) {
     const presentation = PRESENTATION[verdict.completeness]
@@ -109,11 +111,15 @@ export default function DiscoveryVerdictBanner({
                     }}
                 >
                     {verdict.availableActions.map((action) => {
-                        // An action is live only if it has a wired handler. Only
-                        // upload_list is wired in Phase 1; search_deeper /
-                        // render_site (Phase 2/3) render disabled until a handler
-                        // is passed — so they can never become enabled-but-inert.
-                        const handler = action === 'upload_list' ? onUploadList : undefined
+                        // An action is live only if it has a wired handler.
+                        // upload_list and search_deeper are wired; render_site
+                        // (Phase 3) stays disabled until its handler exists — so
+                        // it can never become enabled-but-inert.
+                        const handlers: Partial<Record<DiscoveryAction, () => void>> = {
+                            upload_list: onUploadList,
+                            search_deeper: onSearchDeeper,
+                        }
+                        const handler = handlers[action]
                         const live = handler !== undefined
                         return (
                             <button
