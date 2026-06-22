@@ -101,27 +101,52 @@ def merge_fallback(
 
 
 def build_verdict(
-    *, site_total: int, total: int, site_fetch_failed: bool, fallback_ran: bool
+    *,
+    site_total: int,
+    total: int,
+    site_fetch_failed: bool,
+    fallback_ran: bool,
+    deepen_added: int | None = None,
 ) -> dict[str, Any]:
     """Summarise how discovery went, for a customer-facing message + next actions.
 
     ``completeness`` is the single signal the UI maps to a message:
-    - ``full_site_list`` — the firm's own site gave us its list (site_total > 0)
+    - ``partial_site_list`` — the site gave us a non-zero list, but we can't verify
+      it's complete (CSR shells, paginated JSON, and logo grids commonly surface
+      only a subset), so we never claim it's the full list
     - ``site_blocked`` — the site couldn't be reached (fetch failed after retries)
-    - ``web_search_subset`` — the site exposed no readable list; web search found some
+    - ``web_search_subset`` — web search contributed companies (site empty/thin)
+    - ``web_search_exhausted`` — a deepen round added nothing new; web search is
+      tapped out, so point the customer at upload for completeness
     - ``genuinely_empty`` — nothing found anywhere
-    A full site list pushes no escalation (only the always-available upload); an
-    incomplete result offers the escalation rungs.
+    - ``full_site_list`` — reserved for results we have positive reason to believe
+      are complete; not emitted by the current signals (kept for legacy verdicts)
+
+    A non-zero site scrape is NOT inferred to be complete — escalation
+    (search_deeper + upload_list) stays available for every completeness except a
+    believed-complete ``full_site_list`` and an exhausted search (upload only).
+
+    ``deepen_added`` is the count of NEW companies a deepen round added (``None``
+    for the initial discovery pass); ``0`` means web search is exhausted.
     """
-    if site_total > 0:
-        completeness, method = "full_site_list", "site"
-    elif site_fetch_failed and fallback_ran:
+    exhausted = deepen_added == 0
+    if site_fetch_failed and fallback_ran:
         completeness, method = "site_blocked", "web_search"
+    elif exhausted and total > 0:
+        completeness, method = "web_search_exhausted", "web_search"
     elif fallback_ran and total > 0:
         completeness, method = "web_search_subset", "web_search"
+    elif site_total > 0:
+        completeness, method = "partial_site_list", "site"
     else:
         completeness, method = "genuinely_empty", ("web_search" if fallback_ran else "none")
-    actions = ["upload_list"] if completeness == "full_site_list" else list(ESCALATION_ACTIONS)
+
+    # Escalation is hidden only when we believe we're done: a confirmed full list,
+    # or an exhausted web search (where digging more is unproductive → upload).
+    if completeness in ("full_site_list", "web_search_exhausted"):
+        actions = ["upload_list"]
+    else:
+        actions = list(ESCALATION_ACTIONS)
     return {
         "method": method,
         "count": total,

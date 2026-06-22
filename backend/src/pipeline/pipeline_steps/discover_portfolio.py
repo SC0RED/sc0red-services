@@ -45,10 +45,13 @@ _AI_LINK_COUNT_BUDGET = 300
 _AI_CONTENT_BUDGET = 200_000
 
 # Low-water mark: when site-derived discovery finds this many companies OR FEWER,
-# run the web-search fallback to recover the firm's portfolio (the site is opaque
-# / client-side-only / not embedding its list). Default 0 = rescue only total
-# failures; raise to also catch thin/partial scrapes once we've seen real data.
-_FALLBACK_THRESHOLD = 0
+# auto-run the web-search fallback to recover the firm's portfolio (the site is
+# opaque / client-side-only / paginated / a thin logo grid). Set above 0 because
+# a small non-zero scrape is almost always partial — e.g. dev verification saw
+# Audax=4, Alpine=3 of much larger portfolios. Kept small so genuinely-small
+# portfolios and clean full listings don't pay the web-search cost; everything
+# above this relies on the always-available customer-triggered "Search deeper".
+_FALLBACK_THRESHOLD = 5
 
 
 class DiscoverPortfolio(RequestStep):

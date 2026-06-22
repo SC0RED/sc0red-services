@@ -66,3 +66,30 @@ Deploy via branch promotion; each phase is its own PR. Rollback = revert the pha
 - Verdict `completeness` taxonomy — start with the five above; refine from real scans.
 - CSV schema — accept `name` only and resolve URLs, or `name,url`? (Lean: accept both; `name` required, `url` optional.)
 - Escalation surface — confirmation screen (recommended) vs a dedicated discovery panel.
+
+---
+
+## Correction — dev verification findings (2026-06-22)
+
+Verifying Phases 1+2 on dev against real firms (Insight Partners, General Atlantic, Summit, Alpine, Riverside, Audax) surfaced a design flaw in the verdict, plus a gap in the deepen flow. Captured here as decisions 6–8; supersedes the relevant parts of decisions 1, 2, and 4 and the first Open Question.
+
+**Real scraper output (heuristic path, measured against the live sites):** Audax 4, Alpine 3, General Atlantic 19, Summit 104, Insight 0 (147 KB JS island), Riverside 0 (1 KB shell). None failed to fetch. So most of these firms return a **small, non-zero** `site_total`.
+
+**6. The verdict must not infer completeness from a non-zero site count.**
+The shipped `build_verdict` rule `site_total > 0 → full_site_list` is wrong. A non-zero site scrape is frequently a *partial* result (CSR shells, paginated JSON, logo grids that surface a handful). Treating "we found ≥1" as "we found everything" causes two coupled failures:
+- the customer-facing message falsely claims "we read the firm's portfolio directly — N companies"; and
+- `full_site_list` sets `available_actions = ["upload_list"]`, **hiding Search deeper** — so the customer can't escalate a thin result.
+Ironically the #419–#425 scraper improvements *caused* this: firms that used to return 0 (→ web-search fallback → `web_search_subset` → Search deeper offered) now return a small N (→ `full_site_list` → escalation hidden). We made the scraper better and the verdict worse.
+**Decision:** the verdict SHALL NOT hide escalation based on a non-zero count. `search_deeper` + `upload_list` are offered whenever the result may be incomplete. A non-zero-but-uncertain scrape is classified `partial_site_list` (message: "Found N from the firm's site — if that looks short, search deeper or upload your list"), not `full_site_list`. `full_site_list` is reserved for results we have positive reason to believe are complete; absent such a signal, default to `partial_site_list`.
+
+**7. The thin-scrape auto-fallback gate is too strict.**
+The web-search fallback runs only when `site_total <= _FALLBACK_THRESHOLD` (= 0), so a scrape of 4-of-200 (Audax) never auto-augments. **Decision:** raise the low-water mark so clearly-thin scrapes (e.g. `site_total` below a small N) auto-run the fallback, *and* rely on the customer-triggered Search deeper (decision 6) for the rest — keeping expensive work customer-gated in the common case while rescuing obviously-broken scrapes. (Exact N to be tuned from real data; start conservative.)
+
+**8. Deepen must converge and report exhaustion so we can honestly redirect to upload.**
+Today `run_deep_web_search_discovery` runs a *fixed* 3 angled passes, does not surface how many were *new*, and `build_verdict` always re-emits `web_search_subset` ("this firm likely has more") — so the system can never honestly say "we've dug as deep as web search allows." **Decision:**
+- thread `added_this_round` (count of newly-found companies) out of `DeepenPortfolio` into the verdict;
+- deepen converges — either loop angled passes within one click until a round adds nothing new (safety-capped), or detect a zero-delta round across clicks;
+- on convergence, a new completeness tier `web_search_exhausted` whose message states web search found no more and directs the customer to **upload** for a guaranteed-complete list, and which stops presenting Search deeper as productive.
+**Honesty caveat (applies throughout):** web search is *recall, not enumeration* — even an exhausted deeper search is not guaranteed complete. Upload remains the only path to a complete list; the messaging must say so plainly.
+
+**Open question resolved:** the `completeness` taxonomy is extended with `partial_site_list` and `web_search_exhausted` (now six values: full_site_list, partial_site_list, site_blocked, web_search_subset, web_search_exhausted, genuinely_empty).

@@ -56,6 +56,10 @@ class TestDeepenPortfolio:
         assert details["portfolio_companies"] == []
         assert details["portfolio_auto_included"] == seed
         assert details["portfolio_count"] == 1
+        # Adding nothing new → web search exhausted → point to upload only.
+        verdict = details["discovery_verdict"]
+        assert verdict["completeness"] == "web_search_exhausted"
+        assert verdict["available_actions"] == ["upload_list"]
 
     def test_no_url_raises(self):
         step = _make_step([], url="")

@@ -25,11 +25,23 @@ const PRESENTATION: Record<DiscoveryCompleteness, VerdictPresentation> = {
         message: (count) =>
             `We read this firm’s portfolio directly from its website — ${count} ${plural(count)}. Review and deselect any you don’t want to analyze.`,
     },
+    partial_site_list: {
+        tone: 'caution',
+        title: 'This may not be the full list',
+        message: (count) =>
+            `We found ${count} ${plural(count)} on the firm’s website, but some firms list only part of their portfolio on-site. If this looks short, search deeper or upload your full list.`,
+    },
+    web_search_exhausted: {
+        tone: 'caution',
+        title: 'No more found via search',
+        message: (count) =>
+            `Searching deeper found no companies beyond these ${count}. Web search can’t guarantee a complete list — upload the firm’s list to be sure nothing’s missing.`,
+    },
     web_search_subset: {
         tone: 'caution',
         title: 'This list is likely incomplete',
         message: (count) =>
-            `This firm’s site loads its portfolio dynamically, so we couldn’t read it directly. A quick search found ${count} well-known ${plural(count)} — this firm likely has more.`,
+            `We couldn’t read this firm’s full portfolio from its site, so we used a quick web search — it found ${count} ${plural(count)} and this firm likely has more.`,
     },
     site_blocked: {
         tone: 'caution',
