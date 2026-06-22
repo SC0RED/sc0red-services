@@ -8,11 +8,15 @@ import type { Company, DiscoveryVerdict } from '@/lib/types/scan'
 interface PortfolioConfirmPhaseProps {
     companies: Company[]
     verdict?: DiscoveryVerdict | null
+    /** Error from a failed confirm/deepen attempt that returned the customer to
+     *  this screen — surfaced inline so a failure isn't silent. */
+    error?: string
     onCompanyToggle: (index: number, selected: boolean) => void
     onAddCompany: (name: string, url: string) => void
     /** Bulk-merge parsed uploads into the list; returns how many were newly
      *  added (the rest were dedup hits), so the uploader can report accurately. */
     onAddCompanies: (companies: Array<{ name: string; url: string }>) => number
+    onSearchDeeper: () => void
     onConfirm: () => void
     onReset: () => void
 }
@@ -20,9 +24,11 @@ interface PortfolioConfirmPhaseProps {
 export default function PortfolioConfirmPhase({
     companies,
     verdict,
+    error,
     onCompanyToggle,
     onAddCompany,
     onAddCompanies,
+    onSearchDeeper,
     onConfirm,
     onReset,
 }: PortfolioConfirmPhaseProps) {
@@ -31,11 +37,26 @@ export default function PortfolioConfirmPhase({
 
     return (
         <div>
+            {error && (
+                <div
+                    role="alert"
+                    className="card"
+                    style={{
+                        padding: '0.75rem 1rem',
+                        marginBottom: '1rem',
+                        color: 'var(--risk-high)',
+                        fontSize: '0.875rem',
+                    }}
+                >
+                    {error}
+                </div>
+            )}
             {verdict ? (
                 <DiscoveryVerdictBanner
                     verdict={verdict}
                     currentCount={companies.length}
                     onUploadList={() => setShowUpload((open) => !open)}
+                    onSearchDeeper={onSearchDeeper}
                     uploadOpen={showUpload}
                 />
             ) : (

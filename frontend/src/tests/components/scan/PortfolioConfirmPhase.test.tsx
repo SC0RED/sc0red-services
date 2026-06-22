@@ -16,6 +16,7 @@ describe('PortfolioConfirmPhase', () => {
         onCompanyToggle: vi.fn(),
         onAddCompany: vi.fn(),
         onAddCompanies: vi.fn(() => 0),
+        onSearchDeeper: vi.fn(),
         onConfirm: vi.fn(),
         onReset: vi.fn(),
     }
@@ -232,10 +233,23 @@ describe('PortfolioConfirmPhase', () => {
         it('renders the verdict message and action affordances', () => {
             render(<PortfolioConfirmPhase {...defaultProps} verdict={subsetVerdict} />)
             expect(screen.getByText('This list is likely incomplete')).toBeInTheDocument()
-            // upload is live; deeper-search and render are surfaced but disabled
+            // upload + search-deeper are live; render-the-site is still "soon"
             expect(screen.getByRole('button', { name: /Upload a list/ })).toBeEnabled()
-            expect(screen.getByRole('button', { name: /Search deeper/ })).toBeDisabled()
+            expect(screen.getByRole('button', { name: /Search deeper/ })).toBeEnabled()
             expect(screen.getByRole('button', { name: /Render the site/ })).toBeDisabled()
+        })
+
+        it('calls onSearchDeeper when "Search deeper" is clicked', () => {
+            const onSearchDeeper = vi.fn()
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={subsetVerdict}
+                    onSearchDeeper={onSearchDeeper}
+                />
+            )
+            fireEvent.click(screen.getByRole('button', { name: /Search deeper/ }))
+            expect(onSearchDeeper).toHaveBeenCalledOnce()
         })
 
         it('reveals the upload widget when "Upload a list" is clicked', () => {

@@ -348,6 +348,92 @@ describe('NewScanPage', () => {
             expect(checkboxes[1]).toBeChecked()
         })
 
+        it('triggers a deepen and re-enters discovery on "Search deeper"', async () => {
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        scanId: 's-1',
+                        status: 'awaiting_confirmation',
+                        portfolioCompanies: [{ name: 'Acme Corp', url: 'https://acme.com', description: '' }],
+                        discoveryVerdict: {
+                            method: 'web_search',
+                            count: 1,
+                            completeness: 'web_search_subset',
+                            availableActions: ['search_deeper', 'render_site', 'upload_list'],
+                        },
+                    }),
+            })
+            // /deepen POST and any subsequent poll both report discovering.
+            innerFetch.mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({ scanId: 's-1', status: 'discovering' }),
+            })
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
+
+            render(<NewScanPage />)
+            fireEvent.change(screen.getByLabelText('PE Firm Website URL'), {
+                target: { value: 'https://pe-firm.com' },
+            })
+            fireEvent.click(screen.getByText('Discover Portfolio & Analyze'))
+
+            await waitFor(() => {
+                expect(screen.getByText('This list is likely incomplete')).toBeInTheDocument()
+            })
+
+            fireEvent.click(screen.getByRole('button', { name: /Search deeper/ }))
+
+            await waitFor(() => {
+                expect(innerFetch).toHaveBeenCalledWith(
+                    '/api/scan/s-1/deepen',
+                    expect.objectContaining({ method: 'POST' })
+                )
+            })
+            expect(screen.getByText('Searching deeper for more companies…')).toBeInTheDocument()
+        })
+
+        it('shows an error and returns to confirm if deepen fails', async () => {
+            const innerFetch = vi.fn()
+            innerFetch.mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        scanId: 's-1',
+                        status: 'awaiting_confirmation',
+                        portfolioCompanies: [{ name: 'Acme Corp', url: 'https://acme.com', description: '' }],
+                        discoveryVerdict: {
+                            method: 'web_search',
+                            count: 1,
+                            completeness: 'web_search_subset',
+                            availableActions: ['search_deeper', 'upload_list'],
+                        },
+                    }),
+            })
+            innerFetch.mockResolvedValueOnce({
+                ok: false,
+                json: () => Promise.resolve({ error: 'Scan is not awaiting confirmation' }),
+            })
+            global.fetch = wrapFetchWithConfigStub(innerFetch)
+
+            render(<NewScanPage />)
+            fireEvent.change(screen.getByLabelText('PE Firm Website URL'), {
+                target: { value: 'https://pe-firm.com' },
+            })
+            fireEvent.click(screen.getByText('Discover Portfolio & Analyze'))
+            await waitFor(() => {
+                expect(screen.getByText('This list is likely incomplete')).toBeInTheDocument()
+            })
+
+            fireEvent.click(screen.getByRole('button', { name: /Search deeper/ }))
+
+            // Failure surfaces inline and the customer is back on the confirm screen.
+            await waitFor(() => {
+                expect(screen.getByText('Scan is not awaiting confirmation')).toBeInTheDocument()
+            })
+            expect(screen.getByRole('button', { name: /Analyze 1 Companies/ })).toBeInTheDocument()
+        })
+
         it('polls for portfolio progress after confirm', async () => {
             const innerFetch = vi.fn()
             innerFetch.mockResolvedValueOnce({

@@ -307,6 +307,34 @@ function NewScanContent() {
         }
     }
 
+    // Customer-triggered "Search deeper": kick off the deepen on the backend,
+    // then re-enter the discovery progress + polling loop. The worker runs the
+    // multi-pass search and transitions the scan back through `discovering` to
+    // `awaiting_confirmation`, where `handleAwaitingConfirmation` reloads the
+    // augmented list + updated verdict.
+    async function handleSearchDeeper() {
+        setError('')
+        setProgress(5)
+        setProgressLabel('Searching deeper for more companies…')
+        setPhase('analyzing')
+        try {
+            const res = await fetch(`/api/scan/${scanId}/deepen`, { method: 'POST' })
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}))
+                setError(data.error || 'Could not search deeper. Please try again.')
+                setPhase('portfolio_confirm')
+                return
+            }
+            const realtimeConnected = await discoveryRealtime.start(scanId)
+            if (!realtimeConnected) {
+                discoveryPolling.startPolling(scanId)
+            }
+        } catch {
+            setError('Network error — could not search deeper. Please try again.')
+            setPhase('portfolio_confirm')
+        }
+    }
+
     return (
         <div style={{ width: '100%', maxWidth: '680px' }}>
             {/* Header */}
@@ -336,9 +364,11 @@ function NewScanContent() {
                 <PortfolioConfirmPhase
                     companies={companies}
                     verdict={verdict}
+                    error={error}
                     onCompanyToggle={handleCompanyToggle}
                     onAddCompany={handleAddCompany}
                     onAddCompanies={handleAddCompanies}
+                    onSearchDeeper={handleSearchDeeper}
                     onConfirm={confirmPortfolio}
                     onReset={() => setPhase('input')}
                 />
