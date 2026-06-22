@@ -50,6 +50,30 @@ def build_portfolio_discovery_message(
     )
 
 
+def build_portfolio_deepen_message(
+    *,
+    url: str,
+    org_id: str,
+    user_id: str,
+    scan_id: str,
+) -> str:
+    """Build a JSON message to dispatch a customer-triggered deepen to the worker.
+
+    The worker reads the scan's current companies as the seed, runs the
+    ``DeepenPortfolio`` → ``ValidatePortfolioCompanies`` pipeline, and merges the
+    newly-recovered companies back into the awaiting-confirmation list.
+    """
+    return json.dumps(
+        {
+            "type": "portfolio_deepen",
+            "url": url,
+            "org_id": org_id,
+            "user_id": user_id,
+            "scan_id": scan_id,
+        }
+    )
+
+
 def build_reanalysis_message(
     *,
     analysis_id: str,

@@ -28,8 +28,8 @@
 
 # Phase 2 — Deeper web-search rung (follow-on; own PR)
 
-- [ ] 5.1 Add a "deeper" web-search mode (broader target / multi-pass) to the fallback; wire `scan_core` escalate entry (`deepen_scan(scan_id, tier="search_deeper")`) that re-runs discovery and merges/dedups into the existing set, returning an updated verdict.
-- [ ] 5.2 "Search deeper" action triggers it; tests + E2E.
+- [x] 5.1 Multi-pass deeper web search (`portfolio_websearch.run_deep_web_search_discovery`: 3 angled, seeded passes, deduped) driven by a new `DeepenPortfolio` step + `PortfolioDeepenFactory`, routed via `factories_factory` (`request_type="portfolio_deepen"`, seed in `event.extra`). `scan_core.deepen_scan` + worker `_process_portfolio_deepen` (seeds from the scan's current list, merges new candidates via the existing `ValidatePortfolioCompanies`, rebuilds the verdict; a deepen failure restores the prior list rather than failing the scan). Merge/verdict + web-search helpers extracted to shared `portfolio_merge` / `portfolio_websearch` modules (also drops `discover_portfolio.py` 393→218 lines, no behavior change).
+- [x] 5.2 (backend) `POST /api/scan/{scan_id}/deepen` (`scan_handlers.handle_scan_deepen`; 404 wrong-org, 400 unless awaiting_confirmation). Backend tests cover the step, multi-pass dedup/seeding, factory routing, worker (dispatch/success/restore-on-failure/propagate), message, and route. **Frontend wiring of the "Search deeper" button + E2E are the next slice** (the button currently renders as a disabled "soon" affordance from Phase 1).
 
 # Phase 3 — Headless render rung (DEFERRED — separate change)
 

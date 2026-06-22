@@ -7,7 +7,8 @@ import pytest
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_steps.ai_call import TokenCounts
-from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio, _merge_fallback
+from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
+from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, merge_fallback
 
 
 def _grounded(companies: list[dict[str, str]]):
@@ -22,7 +23,7 @@ def _grounded(companies: list[dict[str, str]]):
 
 class TestMergeFallback:
     def test_adds_new_candidates_to_needs_validation(self):
-        out = _merge_fallback(
+        out = merge_fallback(
             auto_included=[{"name": "A", "url": "https://a.com"}],
             needs_validation=[{"name": "B", "url": "https://b.com"}],
             fallback=[{"name": "C", "url": "https://c.com"}],
@@ -31,7 +32,7 @@ class TestMergeFallback:
         assert urls == {"https://b.com", "https://c.com"}  # A stays auto-included, C added
 
     def test_dedupes_against_site_results_by_domain(self):
-        out = _merge_fallback(
+        out = merge_fallback(
             auto_included=[{"name": "A", "url": "https://a.com"}],
             needs_validation=[],
             fallback=[
@@ -42,7 +43,7 @@ class TestMergeFallback:
         assert {c["url"] for c in out} == {"https://new.com"}
 
     def test_skips_candidates_without_a_domain(self):
-        out = _merge_fallback([], [], [{"name": "X", "url": ""}])
+        out = merge_fallback([], [], [{"name": "X", "url": ""}])
         assert out == []
 
 
@@ -116,7 +117,7 @@ class TestDiscoverPortfolio:
         details = step._request_executor.add_details.call_args[0][0]
         assert details["portfolio_count"] == 1
 
-    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_low_yield_triggers_web_search_fallback(self, mock_strategy_cls, mock_grounded):
         # Opaque site: no companies, no embedded data → fallback fires.
@@ -140,7 +141,7 @@ class TestDiscoverPortfolio:
         assert {c["url"] for c in details["portfolio_companies"]} == {"https://jamf.com"}
         assert details["portfolio_auto_included"] == []
 
-    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_fallback_after_fetch_failure_still_recovers(self, mock_strategy_cls, mock_grounded):
         # Site fetch failed (block) → 0 site companies → fallback fires as recovery
@@ -168,7 +169,7 @@ class TestDiscoverPortfolio:
         details = step._request_executor.add_details.call_args[0][0]
         assert details["portfolio_count"] == 1
 
-    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_fallback_seeded_with_logo_names(self, mock_strategy_cls, mock_grounded):
         # Logo-grid site (Vista): site yields 0 companies but logo names exist →
@@ -211,7 +212,7 @@ class TestDiscoverPortfolio:
             "https://datto.com",
         }
 
-    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_fallback_unseeded_when_no_logo_names(self, mock_strategy_cls, mock_grounded):
         # Opaque site with no logo grid → comprehensive (unseeded) prompt.
@@ -236,7 +237,7 @@ class TestDiscoverPortfolio:
 
         assert "known to include" not in captured["prompt"].lower()
 
-    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_healthy_site_skips_fallback(self, mock_strategy_cls, mock_grounded):
         mock_strategy = MagicMock()
@@ -259,7 +260,7 @@ class TestDiscoverPortfolio:
         mock_grounded.assert_not_called()
         assert step._request_executor.add_details.call_args[0][0]["portfolio_count"] == 1
 
-    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_fallback_fails_soft(self, mock_strategy_cls, mock_grounded):
         from signalfield_core.exceptions.base import EngineError
@@ -281,7 +282,7 @@ class TestDiscoverPortfolio:
         assert details["portfolio_count"] == 0
         assert details["portfolio_diagnostic"]
 
-    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_fallback_fails_soft_on_schema_violation(self, mock_strategy_cls, mock_grounded):
         # A malformed (schema-invalid) AI response must NOT crash the scan —
@@ -388,30 +389,26 @@ class TestDiscoverPortfolio:
 
 class TestBuildVerdict:
     def test_full_site_list(self):
-        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
 
-        v = _build_verdict(site_total=151, total=151, site_fetch_failed=False, fallback_ran=False)
+        v = build_verdict(site_total=151, total=151, site_fetch_failed=False, fallback_ran=False)
         assert v["completeness"] == "full_site_list"
         assert v["method"] == "site"
         assert v["available_actions"] == ["upload_list"]  # no escalation pushed
 
     def test_web_search_subset(self):
-        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
 
-        v = _build_verdict(site_total=0, total=3, site_fetch_failed=False, fallback_ran=True)
+        v = build_verdict(site_total=0, total=3, site_fetch_failed=False, fallback_ran=True)
         assert v["completeness"] == "web_search_subset"
         assert "search_deeper" in v["available_actions"] and "upload_list" in v["available_actions"]
 
     def test_site_blocked(self):
-        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
 
-        v = _build_verdict(site_total=0, total=2, site_fetch_failed=True, fallback_ran=True)
+        v = build_verdict(site_total=0, total=2, site_fetch_failed=True, fallback_ran=True)
         assert v["completeness"] == "site_blocked"
 
     def test_genuinely_empty(self):
-        from src.pipeline.pipeline_steps.discover_portfolio import _build_verdict
 
-        v = _build_verdict(site_total=0, total=0, site_fetch_failed=False, fallback_ran=True)
+        v = build_verdict(site_total=0, total=0, site_fetch_failed=False, fallback_ran=True)
         assert v["completeness"] == "genuinely_empty"
         assert v["count"] == 0
 

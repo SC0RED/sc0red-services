@@ -454,6 +454,72 @@ class TestAPIGatewayHandler:
         }
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_deepen_success(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "status": "awaiting_confirmation",
+            "source_url": "https://firm.com",
+        }
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/deepen",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 202
+        body = json.loads(result["body"])
+        assert body == {"scanId": "scan-123", "status": "discovering"}
+        # Optimistically flips the scan to discovering so polling re-engages.
+        scan_repo.update.assert_called_once_with(
+            "scan-123", {"status": "discovering", "progress": 5}
+        )
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_deepen_wrong_status_is_400(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {
+            "org_id": "org-1",
+            "status": "running",
+            "source_url": "https://firm.com",
+        }
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/deepen",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 400
+        scan_repo.update.assert_not_called()
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
+    def test_scan_deepen_wrong_org_is_404(self, mock_authentication):
+        mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"org_id": "other", "status": "awaiting_confirmation"}
+        storage.create_scan_repository.return_value = scan_repo
+
+        result = handler.handle(
+            {
+                "httpMethod": "POST",
+                "path": "/api/scan/scan-123/deepen",
+                "headers": {"Authorization": "Bearer token"},
+            }
+        )
+        assert result["statusCode"] == 404
+
+    @patch("src.handlers.api_gateway_handler.require_authentication")
     def test_scan_confirm_no_companies(self, mock_authentication):
         mock_authentication.return_value = MagicMock(org_id="org-1", user_id="user-1")
         handler, _ = self._make_handler()
