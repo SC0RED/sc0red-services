@@ -85,8 +85,14 @@ class DeepenPortfolio(RequestStep):
 
         # New (model-sourced) candidates need validation; the existing list is
         # trusted and skips it. ValidatePortfolioCompanies merges the two.
+        # ``deepen_added`` lets the verdict report exhaustion: when a deepen round
+        # adds nothing new, web search is tapped out → point the customer to upload.
         verdict = build_verdict(
-            site_total=0, total=total, site_fetch_failed=False, fallback_ran=True
+            site_total=0,
+            total=total,
+            site_fetch_failed=False,
+            fallback_ran=True,
+            deepen_added=len(fresh),
         )
         self.request_executor.add_details(
             {

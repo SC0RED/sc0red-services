@@ -30,6 +30,10 @@ if TYPE_CHECKING:
 
 # Customer-facing explanation per discovery completeness signal (verdict).
 _COMPLETENESS_MESSAGE = {
+    "partial_site_list": (
+        "We found these on the firm's site, but some firms list only part of their "
+        "portfolio there — this may be incomplete."
+    ),
     "site_blocked": (
         "We couldn't reach the firm's site, so this list (from a quick web search) "
         "may be incomplete."
@@ -37,6 +41,10 @@ _COMPLETENESS_MESSAGE = {
     "web_search_subset": (
         "The firm's site doesn't list its portfolio in a readable form, so we used a "
         "quick web search — there may be more."
+    ),
+    "web_search_exhausted": (
+        "Searching deeper found no more companies. Web search can't guarantee a "
+        "complete list — upload the firm's list to be sure nothing's missing."
     ),
     "genuinely_empty": "We couldn't identify portfolio companies for this firm.",
 }

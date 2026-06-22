@@ -34,3 +34,15 @@
 # Phase 3 — Headless render rung (DEFERRED — separate change)
 
 - [ ] 6.1 Do NOT implement here. `render_site` is surfaced as an opt-in action; until the engine exists, selecting it tells the customer it is not yet available and points to deeper-search/upload. The Playwright (chromium-in-Lambda) engine is its own change with its own infra review.
+
+# Phase 4 — Verdict-completeness correction + deepen exhaustion (dev-verification findings, 2026-06-22)
+
+Found while verifying Phases 1+2 on dev: partial scrapes (Audax 4, Alpine 3, GA 19…) are mislabeled `full_site_list`, which hides "Search deeper" and falsely claims completeness; and deepen can't signal exhaustion so we can't honestly redirect to upload. See design.md "Correction" (decisions 6–8).
+
+- [x] 7.1 `build_verdict`: stop inferring completeness from a non-zero count. Add `partial_site_list` (non-zero-but-uncertain) — message conveys the list may be incomplete. `available_actions` ALWAYS includes `upload_list`, and includes `search_deeper` for every completeness except `full_site_list`. Reserve `full_site_list` for results with a positive completeness signal (default uncertain non-zero → `partial_site_list`).
+- [x] 7.2 Raise the thin-scrape auto-fallback gate: run the web-search fallback when `site_total` is below a small low-water mark (not only `== 0`), so clearly-broken scrapes (≤ a few) auto-augment; tune N conservatively from real data. Keep expensive work customer-gated otherwise.
+- [x] 7.3 Deepen exhaustion: thread `added_this_round` out of `DeepenPortfolio` into the verdict; converge (loop angled passes until a round adds nothing new, safety-capped, OR detect a zero-delta round); add `web_search_exhausted` completeness whose message states no more were found and directs to upload, and stop presenting search-deeper as productive.
+- [x] 7.4 Frontend: render `partial_site_list` and `web_search_exhausted` messages in `DiscoveryVerdictBanner`; surface "added N" after a deepen; when exhausted, point to Upload and de-emphasize/disable Search deeper.
+- [x] 7.5 Honesty: messaging makes clear web search is recall, not enumeration — upload is the only complete path. Update existing `web_search_subset`/`full_site_list` copy if it over-claims.
+- [x] 7.6 Tests: verdict matrix (partial vs full vs exhausted; actions always include escalation except full); deepen added-count + exhaustion convergence; frontend banner per new completeness. E2E.
+- [ ] 7.7 Open (needs AI key / dev MCP): confirm whether Insight's 147 KB JSON island yields the full portfolio or a page — determines whether Insight is genuinely `full_site_list` or `partial_site_list`. Does not block 7.1 (always-offer-escalation is correct either way).

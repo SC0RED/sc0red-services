@@ -259,6 +259,40 @@ describe('PortfolioConfirmPhase', () => {
             expect(screen.getByLabelText('Company list file')).toBeInTheDocument()
         })
 
+        it('renders the partial-site-list message with escalation', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'site',
+                        count: 4,
+                        completeness: 'partial_site_list',
+                        availableActions: ['search_deeper', 'render_site', 'upload_list'],
+                    }}
+                />
+            )
+            expect(screen.getByText('This may not be the full list')).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /Search deeper/ })).toBeEnabled()
+        })
+
+        it('renders the exhausted message and points to upload only', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'web_search',
+                        count: 10,
+                        completeness: 'web_search_exhausted',
+                        availableActions: ['upload_list'],
+                    }}
+                />
+            )
+            expect(screen.getByText('No more found via search')).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /Upload a list/ })).toBeInTheDocument()
+            // exhausted → digging more is unproductive, so no Search-deeper button
+            expect(screen.queryByRole('button', { name: /Search deeper/ })).not.toBeInTheDocument()
+        })
+
         it('renders a positive message for a full site list', () => {
             render(
                 <PortfolioConfirmPhase

@@ -930,6 +930,28 @@ class TestVerdictMessage:
         verdict = {"completeness": "full_site_list", "available_actions": ["upload_list"]}
         assert _verdict_message(verdict) == ""
 
+    def test_partial_site_list_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        msg = _verdict_message(
+            {
+                "completeness": "partial_site_list",
+                "available_actions": ["search_deeper", "render_site", "upload_list"],
+            }
+        )
+        assert "may be incomplete" in msg
+        assert "search deeper" in msg and "upload a CSV/PDF list" in msg
+
+    def test_web_search_exhausted_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        msg = _verdict_message(
+            {"completeness": "web_search_exhausted", "available_actions": ["upload_list"]}
+        )
+        assert "no more" in msg.lower()
+        assert "upload a CSV/PDF list" in msg
+        assert "search deeper" not in msg  # exhausted → digging is unproductive
+
     def test_blocked_message(self):
         from src.mcp.tools_read_scans import _verdict_message
 

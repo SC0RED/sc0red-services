@@ -24,8 +24,10 @@ export interface AnalysisSummary {
  */
 export type DiscoveryCompleteness =
     | 'full_site_list'
+    | 'partial_site_list'
     | 'site_blocked'
     | 'web_search_subset'
+    | 'web_search_exhausted'
     | 'genuinely_empty'
 
 export type DiscoveryAction = 'search_deeper' | 'render_site' | 'upload_list'

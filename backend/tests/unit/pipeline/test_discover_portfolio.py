@@ -240,11 +240,14 @@ class TestDiscoverPortfolio:
     @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
     def test_healthy_site_skips_fallback(self, mock_strategy_cls, mock_grounded):
+        # A "healthy" site must exceed _FALLBACK_THRESHOLD (5) to skip the
+        # web-search fallback — thin scrapes (≤5) now auto-augment.
+        companies = [{"name": f"Co{i}", "url": f"https://co{i}.com"} for i in range(6)]
         mock_strategy = MagicMock()
         mock_strategy.execute.return_value = (
             "x",
             {
-                "companies": [{"name": "Co", "url": "https://co.com"}],
+                "companies": companies,
                 "page_text": "",
                 "script_text": "",
                 "all_links": [],
@@ -258,7 +261,7 @@ class TestDiscoverPortfolio:
         step.execute()
 
         mock_grounded.assert_not_called()
-        assert step._request_executor.add_details.call_args[0][0]["portfolio_count"] == 1
+        assert step._request_executor.add_details.call_args[0][0]["portfolio_count"] == 6
 
     @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
@@ -388,12 +391,14 @@ class TestDiscoverPortfolio:
 
 
 class TestBuildVerdict:
-    def test_full_site_list(self):
-
+    def test_non_zero_site_is_partial_not_full(self):
+        # A non-zero site scrape is NOT inferred complete — even a large count is
+        # partial_site_list, and escalation stays available.
         v = build_verdict(site_total=151, total=151, site_fetch_failed=False, fallback_ran=False)
-        assert v["completeness"] == "full_site_list"
+        assert v["completeness"] == "partial_site_list"
         assert v["method"] == "site"
-        assert v["available_actions"] == ["upload_list"]  # no escalation pushed
+        assert "search_deeper" in v["available_actions"]
+        assert "upload_list" in v["available_actions"]
 
     def test_web_search_subset(self):
 
@@ -401,10 +406,32 @@ class TestBuildVerdict:
         assert v["completeness"] == "web_search_subset"
         assert "search_deeper" in v["available_actions"] and "upload_list" in v["available_actions"]
 
+    def test_web_search_exhausted_when_deepen_adds_nothing(self):
+        # A deepen round that added 0 new → exhausted; point to upload only.
+        v = build_verdict(
+            site_total=0, total=10, site_fetch_failed=False, fallback_ran=True, deepen_added=0
+        )
+        assert v["completeness"] == "web_search_exhausted"
+        assert v["available_actions"] == ["upload_list"]
+
+    def test_deepen_with_new_companies_stays_subset(self):
+        v = build_verdict(
+            site_total=0, total=12, site_fetch_failed=False, fallback_ran=True, deepen_added=2
+        )
+        assert v["completeness"] == "web_search_subset"
+        assert "search_deeper" in v["available_actions"]
+
     def test_site_blocked(self):
 
         v = build_verdict(site_total=0, total=2, site_fetch_failed=True, fallback_ran=True)
         assert v["completeness"] == "site_blocked"
+
+    def test_partial_when_fetch_failed_but_no_fallback(self):
+        # Fetch partially failed and no fallback ran (e.g. non-PE firm) but the
+        # site still yielded links → partial, not blocked (blocked needs fallback).
+        v = build_verdict(site_total=8, total=8, site_fetch_failed=True, fallback_ran=False)
+        assert v["completeness"] == "partial_site_list"
+        assert "search_deeper" in v["available_actions"]
 
     def test_genuinely_empty(self):
 
@@ -423,11 +450,12 @@ class TestDiscoveryVerdictEmitted:
         )
         mock_strategy_cls.return_value = mock_strategy
 
-        step = DiscoverPortfolio()  # no AI → heuristic only, full_site_list
+        step = DiscoverPortfolio()  # no AI → heuristic only, no fallback
         step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
         step._request_executor = MagicMock()
         step.execute()
 
         details = step._request_executor.add_details.call_args[0][0]
-        assert details["discovery_verdict"]["completeness"] == "full_site_list"
+        # Non-zero site scrape is partial (never inferred complete).
+        assert details["discovery_verdict"]["completeness"] == "partial_site_list"
         assert details["discovery_verdict"]["count"] == 1
