@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
+from src.data_strategies.url_safety import UnsafeUrlError
 from src.data_strategies.web_scraper_strategy import (
     MAX_NAME_LENGTH,
     MIN_NAME_LENGTH,
@@ -158,6 +159,10 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 if getattr(error.response, "status_code", None) not in (404, 410):
                     site_fetch_failed = True
                 logger.info("Failed to scrape %s", page_url, exc_info=True)
+                continue
+            except UnsafeUrlError:  # SSRF guard refused the URL — unreachable for us
+                site_fetch_failed = True
+                logger.info("Refused to scrape %s (SSRF guard)", page_url, exc_info=True)
                 continue
             except RequestException:  # connection/timeout surviving retries — a real failure
                 site_fetch_failed = True
@@ -313,7 +318,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                         companies.append({"name": name, "url": url, "description": ""})
             except ImpersonateError:
                 raise  # misconfigured _IMPERSONATE_TARGET — a bug, not a per-path failure
-            except RequestException:  # transport/HTTP error — skip this path, fail-soft
+            except (RequestException, UnsafeUrlError):  # transport error or refused URL — skip
                 logger.debug("Skipping fallback path %s", page_url, exc_info=True)
                 continue
 
