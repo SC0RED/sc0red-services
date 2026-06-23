@@ -79,7 +79,15 @@ def assert_public_url(url: str) -> None:  # noqa: NAMING001  assert is the verb 
     if _private_hosts_allowed():
         return
 
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    # ``parsed.port`` raises a plain ValueError on a malformed/out-of-range port
+    # (e.g. 'https://x:abc'); normalise it to UnsafeUrlError so it rides the same
+    # fail-soft handlers as every other refusal rather than escaping as a bare
+    # ValueError.
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError as error:
+        message = f"URL has an invalid port: '{url}'"
+        raise UnsafeUrlError(message) from error
     try:
         address_infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror as error:

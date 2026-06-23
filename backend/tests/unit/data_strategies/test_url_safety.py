@@ -30,6 +30,12 @@ class TestSchemeAndHost:
         with pytest.raises(UnsafeUrlError, match="no host"):
             assert_public_url("http://")
 
+    def test_malformed_port_rejected_as_unsafe_url_error(self):
+        # A bad port raises a plain ValueError from urlparse.port; the guard must
+        # normalise it to UnsafeUrlError so fail-soft handlers catch it.
+        with pytest.raises(UnsafeUrlError, match="invalid port"):
+            assert_public_url("https://example.com:notaport")
+
 
 class TestBlockedAddresses:
     @pytest.mark.parametrize(

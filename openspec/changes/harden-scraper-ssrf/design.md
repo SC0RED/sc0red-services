@@ -5,7 +5,7 @@
 All server-side scrapes bottom out at `fetch_page_html` in
 `scraper_transport.py`:
 
-```
+```text
 scan/start → DiscoverPortfolio → PortfolioDiscoveryStrategy ─┐
 scan/{id}/source-url → FetchProvidedSource ─────────────────┼─→ scrape_url ─→ fetch_page_html ─→ curl_requests.get
 single-scan → scrape_and_resolve → scrape_url ──────────────┘                 (also called directly by
@@ -64,10 +64,19 @@ the rebinding window is narrow and noted for a future transport change.
 
 ## Error contract
 
-`UnsafeUrlError` subclasses `ValueError`, so it rides the existing fail-fast
-paths: the worker's `except (EngineError, ValueError, RuntimeError)` records a
-clean scan failure, and the scraper's own `RequestException` handling is
-untouched. No silent fallback — a blocked URL fails loudly.
+`UnsafeUrlError` subclasses `ValueError`, and a malformed-port `ValueError` from
+`urlparse` is normalised to `UnsafeUrlError` so the whole refusal surface is one
+exception type. Consumers then choose their response explicitly:
+
+- The discovery strategy treats a refusal as an **unreachable site** —
+  fail-soft: the main scrape loop sets `site_fetch_failed=True` (→ `site_blocked`
+  verdict) and the speculative fallback skips the path; `scrape_and_resolve`
+  degrades to the original content. This matches how those paths already handle
+  `RequestException`, so an internal/blocked URL behaves like any unreachable one
+  rather than crashing the scan.
+- Anything that does NOT catch it (e.g. a future direct caller) still fails
+  loudly via the worker's `except (EngineError, ValueError, RuntimeError)`, which
+  records a clean failure. No silent pass — a blocked URL is never fetched.
 
 ## Tests
 
