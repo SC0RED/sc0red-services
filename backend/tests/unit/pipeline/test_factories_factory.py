@@ -4,7 +4,10 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from src.models.model_event import Sc0redServicesEvent
-from src.pipeline.factories_factory import Sc0redServicesFactoriesFactory, _initialize_ai_client_factory
+from src.pipeline.factories_factory import (
+    Sc0redServicesFactoriesFactory,
+    _initialize_ai_client_factory,
+)
 
 
 class TestSc0redServicesFactoriesFactory:
@@ -66,6 +69,27 @@ class TestSc0redServicesFactoriesFactory:
         result = ff.create_and_execute(event)
         assert result is mock_executor
         # The seed is threaded from event.extra into the deepen factory.
+        assert mock_factory_cls.call_args.kwargs["seed_companies"] == seed
+
+    @patch("src.pipeline.factories_factory._initialize_ai_client_factory")
+    @patch("src.pipeline.factories_factory.PortfolioSourceUrlFactory")
+    def test_create_portfolio_source_url(self, mock_factory_cls, mock_init_ai):
+        mock_init_ai.return_value = MagicMock()
+        mock_executor = MagicMock()
+        mock_factory_cls.return_value.execute_pipeline.return_value = mock_executor
+
+        ff = Sc0redServicesFactoriesFactory()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        event = Sc0redServicesEvent(
+            request_id="req-1",
+            request_type="portfolio_source_url",
+            url="https://pefirm.com/portfolio",
+            tenant_id="tenant-1",
+            extra={"seed_companies": seed},
+        )
+        result = ff.create_and_execute(event)
+        assert result is mock_executor
+        # The seed is threaded from event.extra into the source-url factory.
         assert mock_factory_cls.call_args.kwargs["seed_companies"] == seed
 
     @patch("src.pipeline.factories_factory._initialize_ai_client_factory")

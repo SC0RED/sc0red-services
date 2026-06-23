@@ -18,7 +18,13 @@ from src.handlers.api_gateway_handler import (
     build_json_response,
     check_org_access,
 )
-from src.handlers.scan_core import ScanInputError, confirm_scan, deepen_scan, start_scan
+from src.handlers.scan_core import (
+    ScanInputError,
+    confirm_scan,
+    deepen_scan,
+    fetch_source_url,
+    start_scan,
+)
 from src.utilities.scan_summary import (
     build_unified_analyses,
     compute_scan_progress,
@@ -66,6 +72,13 @@ def register_routes(
         "POST",
         "/api/scan/{scan_id}/deepen",
         lambda event, authentication, scan_id: handle_scan_deepen(
+            event, authentication, storage, sqs, queue_url, scan_id
+        ),
+    )
+    router.protected(
+        "POST",
+        "/api/scan/{scan_id}/source-url",
+        lambda event, authentication, scan_id: handle_scan_source_url(
             event, authentication, storage, sqs, queue_url, scan_id
         ),
     )
@@ -259,6 +272,43 @@ def handle_scan_deepen(
         scan_repo,
         scan_id=scan_id,
         source_url=scan["source_url"],
+        authentication=authentication,
+        sqs=sqs,
+        queue_url=queue_url,
+    )
+    return build_json_response({"scanId": result["scan_id"], "status": result["status"]}, 202)
+
+
+def handle_scan_source_url(
+    event: dict[str, Any],
+    authentication: AuthContext,
+    storage: DynamoDBStorageProvider,
+    sqs: Any,
+    queue_url: str,
+    scan_id: str,
+) -> LambdaResponse:
+    """Handle POST /api/scan/{scan_id}/source-url.
+
+    Customer provides the URL of a page that lists the portfolio; we fetch it
+    server-side and merge its companies in. Only valid while the scan is
+    ``awaiting_confirmation`` — see ``scan_core.fetch_source_url``.
+    """
+    body = json.loads(event.get("body") or "{}")
+    source_url = body.get("sourceUrl", "")
+    if not isinstance(source_url, str) or not source_url.startswith(("http://", "https://")):
+        return build_error("A valid http(s) sourceUrl is required", code=VALIDATION_ERROR)
+
+    scan_repo = storage.create_scan_repository()
+    scan = scan_repo.get_by_id(scan_id)
+    if not scan or scan.get("org_id") != authentication.org_id:
+        return build_error("Scan not found", 404, NOT_FOUND)
+    if scan.get("status") != "awaiting_confirmation":
+        return build_error("Scan is not awaiting confirmation", code=VALIDATION_ERROR)
+
+    result = fetch_source_url(
+        scan_repo,
+        scan_id=scan_id,
+        source_url=source_url,
         authentication=authentication,
         sqs=sqs,
         queue_url=queue_url,

@@ -154,7 +154,7 @@ class TestDiscoverPortfolio:
             )
 
         with patch(
-            "src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call",
+            "src.pipeline.pipeline_steps.portfolio_extract.run_structured_ai_call",
             side_effect=_fake_call,
         ):
             step.execute()
@@ -420,7 +420,7 @@ class TestDiscoverPortfolio:
             ],
         }
         with patch(
-            "src.pipeline.pipeline_steps.discover_portfolio.run_structured_ai_call",
+            "src.pipeline.pipeline_steps.portfolio_extract.run_structured_ai_call",
             return_value=(
                 "extract_portfolio",
                 ai_result,

@@ -19,6 +19,7 @@ from src.models.model_company import Company
 from src.pipeline.pipeline_factories.company_analysis_factory import CompanyAnalysisFactory
 from src.pipeline.pipeline_factories.portfolio_deepen_factory import PortfolioDeepenFactory
 from src.pipeline.pipeline_factories.portfolio_scan_factory import PortfolioScanFactory
+from src.pipeline.pipeline_factories.portfolio_source_url_factory import PortfolioSourceUrlFactory
 
 if TYPE_CHECKING:
     from src.models.model_event import Sc0redServicesEvent
@@ -94,6 +95,15 @@ class Sc0redServicesFactoriesFactory:
                 scan_id=event.scan_id,
                 # Schema-required for a deepen event — direct access so a missing
                 # key fails loudly rather than silently running an unseeded search.
+                seed_companies=event.extra["seed_companies"],
+            )
+        elif event.request_type == "portfolio_source_url":
+            factory = PortfolioSourceUrlFactory(
+                entity_accessor=accessor,
+                ai_client_factory=self._ai_client_factory,
+                tenant_id=event.tenant_id,
+                request_id=event.request_id,
+                scan_id=event.scan_id,
                 seed_companies=event.extra["seed_companies"],
             )
         else:
