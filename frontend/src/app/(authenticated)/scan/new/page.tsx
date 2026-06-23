@@ -1,307 +1,15 @@
 'use client'
 
-import { useState, useRef, Suspense, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
 import ScanInputPhase from '@/components/scan/ScanInputPhase'
 import ScanProgressPhase from '@/components/scan/ScanProgressPhase'
 import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
-import { useScanPolling } from '@/lib/hooks/useScanPolling'
-import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
-import type { Mode, Phase, Company, ScanPollResponse } from '@/lib/types/scan'
-import { normalizeUserUrl } from '@/lib/utils/url'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { usePortfolioScanFlow } from '@/lib/hooks/usePortfolioScanFlow'
 
 function NewScanContent() {
-    const router = useRouter()
-    const searchParams = useSearchParams()
-    const initialMode = (searchParams.get('type') as Mode) || 'portfolio'
-
-    const [mode, setMode] = useState<Mode>(initialMode)
-    const [url, setUrl] = useState('')
-    const [phase, setPhase] = useState<Phase>('input')
-    const [error, setError] = useState('')
-    const [progress, setProgress] = useState(0)
-    const [progressLabel, setProgressLabel] = useState('')
-    const [scanId, setScanId] = useState('')
-    const [companies, setCompanies] = useState<Company[]>([])
-    const scanIdRef = useRef('')
-    const hasNavigatedToPortfolio = useRef(false)
-    const phaseRef = useRef<Phase>('input')
-
-    const handleProgress = useCallback((newProgress: number, label: string) => {
-        setProgress((prev) => Math.max(prev, newProgress))
-        if (label) setProgressLabel(label)
-    }, [])
-
-    const handleDiscoveryComplete = useCallback(
-        (data: ScanPollResponse) => {
-            setProgress(100)
-            setProgressLabel('Analysis complete!')
-            // Guard: if backend skips awaiting_confirmation and completes a portfolio scan directly
-            if (mode === 'portfolio') {
-                router.push(`/portfolio/${scanId}`)
-            } else if (data.analyses?.[0]?.id) {
-                if (data.analyses[0].error) {
-                    setError(`Analysis failed: ${data.analyses[0].error}`)
-                    setPhase('input')
-                } else {
-                    router.push(`/analysis/${data.analyses[0].id}`)
-                }
-            } else if (data.analyses?.[0]?.error) {
-                setError(`Analysis failed: ${data.analyses[0].error}`)
-                setPhase('input')
-            } else {
-                setError('Analysis completed but no results were returned.')
-                setPhase('input')
-            }
-        },
-        [mode, scanId, router]
-    )
-
-    const handlePortfolioComplete = useCallback(
-        (_data: ScanPollResponse) => {
-            if (hasNavigatedToPortfolio.current) return
-            hasNavigatedToPortfolio.current = true
-            setProgress(100)
-            setProgressLabel('Portfolio analysis complete!')
-            router.push(`/portfolio/${scanId}`)
-        },
-        [scanId, router]
-    )
-
-    const handleFailed = useCallback((errorMessage: string) => {
-        setError(errorMessage)
-        setPhase('input')
-    }, [])
-
-    const handleAwaitingConfirmation = useCallback((discoveredCompanies: Company[]) => {
-        setCompanies(discoveredCompanies)
-        setPhase('portfolio_confirm')
-    }, [])
-
-    const discoveryPolling = useScanPolling({
-        mode: 'discovery',
-        onAwaitingConfirmation: handleAwaitingConfirmation,
-        onComplete: handleDiscoveryComplete,
-        onFailed: handleFailed,
-        onProgress: handleProgress,
-    })
-
-    const discoveryRealtime = useScanRealtime({
-        onProgress: handleProgress,
-        onComplete: async () => {
-            // AppSync told us it's complete — fetch full data for navigation
-            try {
-                const response = await fetch(`/api/scan/${scanIdRef.current}`)
-                if (response.ok) {
-                    const data = (await response.json()) as ScanPollResponse
-                    handleDiscoveryComplete(data)
-                    return
-                }
-            } catch {
-                // Fetch failed — fall through to minimal data
-            }
-            handleDiscoveryComplete({ status: 'complete' })
-        },
-        onAwaitingConfirmation: async () => {
-            // Worker finished discovery — fetch the scan record to read the
-            // companies list and transition to the confirmation screen.
-            try {
-                const response = await fetch(`/api/scan/${scanIdRef.current}`)
-                if (response.ok) {
-                    const data = (await response.json()) as ScanPollResponse
-                    const discoveredCompanies = (data.portfolioCompanies ?? []).map((c) => ({
-                        ...c,
-                        selected: true,
-                    }))
-                    handleAwaitingConfirmation(discoveredCompanies)
-                    return
-                }
-            } catch {
-                // Fetch failed — fall back to polling which will re-fetch and transition
-            }
-            discoveryPolling.startPolling(scanIdRef.current)
-        },
-        onFailed: handleFailed,
-    })
-
-    const selectedCount = companies.filter((c) => c.selected).length
-
-    const handlePortfolioProgress = useCallback(
-        (newProgress: number, label: string, rawData?: ScanPollResponse) => {
-            handleProgress(newProgress, label)
-
-            // Navigate to the portfolio page as soon as the first company
-            // completes — user can start reviewing results immediately
-            // instead of staring at the progress bar for 10-20 minutes.
-            // Uses phaseRef (not phase state) to avoid stale closure — state
-            // updates are async so the callback could fire before the next
-            // render delivers the updated phase.
-            if (
-                !hasNavigatedToPortfolio.current &&
-                phaseRef.current === 'running' &&
-                rawData?.analyses?.some((a) => a.analyzedAt)
-            ) {
-                hasNavigatedToPortfolio.current = true
-                router.push(`/portfolio/${scanIdRef.current}`)
-            }
-        },
-        [handleProgress, router]
-    )
-
-    const portfolioPolling = useScanPolling({
-        mode: 'portfolio',
-        totalCompanies: selectedCount,
-        onComplete: handlePortfolioComplete,
-        onFailed: handleFailed,
-        onProgress: handlePortfolioProgress,
-    })
-
-    const portfolioRealtime = useScanRealtime({
-        totalCompanies: selectedCount,
-        onProgress: handleProgress,
-        onFirstComplete: () => {
-            // First company done via AppSync — navigate to portfolio page
-            // immediately so the user can start reviewing results.
-            if (!hasNavigatedToPortfolio.current && phaseRef.current === 'running') {
-                hasNavigatedToPortfolio.current = true
-                router.push(`/portfolio/${scanIdRef.current}`)
-            }
-        },
-        onComplete: async () => {
-            // All companies done via AppSync — fetch full data for navigation
-            if (hasNavigatedToPortfolio.current) return
-            try {
-                const response = await fetch(`/api/scan/${scanIdRef.current}`)
-                if (response.ok) {
-                    const data = (await response.json()) as ScanPollResponse
-                    handlePortfolioComplete(data)
-                    return
-                }
-            } catch {
-                // Fetch failed — fall through to minimal data
-            }
-            handlePortfolioComplete({ status: 'complete' })
-        },
-        onFailed: handleFailed,
-    })
-
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault()
-        setError('')
-
-        // Normalise + shape-check the URL BEFORE flipping the phase to
-        // `analyzing`. Two reasons: (1) lets us keep the user on the form
-        // with an inline error rather than briefly flashing the progress
-        // UI, (2) auto-prepends `https://` so `www.foo.com` and
-        // `foo.com` work — see Diagnostic Tool Feedback #1.
-        const normalized = normalizeUserUrl(url)
-        if ('error' in normalized) {
-            setError(normalized.error)
-            return
-        }
-
-        setPhase('analyzing')
-        setProgress(5)
-        setProgressLabel(mode === 'portfolio' ? 'Finding portfolio companies...' : 'Starting analysis...')
-
-        try {
-            const res = await fetch('/api/scan/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: normalized.url, type: mode }),
-            })
-
-            const data = await res.json()
-            if (!res.ok) {
-                setError(data.error || 'Analysis failed. Please try again.')
-                setPhase('input')
-                return
-            }
-            setScanId(data.scanId)
-            scanIdRef.current = data.scanId
-
-            if (data.status === 'complete') {
-                setProgress(100)
-                setProgressLabel('Analysis complete!')
-                if (mode === 'standalone' && data.analysisId) {
-                    router.push(`/analysis/${data.analysisId}`)
-                } else {
-                    router.push(`/portfolio/${data.scanId}`)
-                }
-                return
-            }
-
-            if (data.status === 'awaiting_confirmation' && data.portfolioCompanies) {
-                const companiesWithSelect = (data.portfolioCompanies as Omit<Company, 'selected'>[]).map(
-                    (c) => ({ ...c, selected: true })
-                )
-                setCompanies(companiesWithSelect)
-                setPhase('portfolio_confirm')
-                return
-            }
-
-            const realtimeConnected = await discoveryRealtime.start(data.scanId)
-            if (!realtimeConnected) {
-                discoveryPolling.startPolling(data.scanId)
-            }
-        } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : 'Network error — please check your connection and try again.'
-            )
-            setPhase('input')
-        }
-    }
-
-    async function confirmPortfolio() {
-        // Stop discovery hooks before starting company analyses. They share
-        // the same scanId subscription — if left running, per-company
-        // status=failed events trigger discoveryRealtime's standalone branch,
-        // firing handleFailed and resetting the page to input.
-        discoveryPolling.stopPolling()
-        discoveryRealtime.stop()
-
-        const selected = companies.filter((c) => c.selected)
-        phaseRef.current = 'running'
-        setPhase('running')
-        setProgress(5)
-        setProgressLabel('Queuing company analyses...')
-
-        try {
-            const res = await fetch(`/api/scan/${scanId}/confirm`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ companies: selected }),
-            })
-
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}))
-                setError(data.error || 'Failed to start portfolio analysis')
-                setPhase('portfolio_confirm')
-                return
-            }
-
-            setProgress(10)
-            setProgressLabel(`Analyzing companies... (0/${selected.length} complete)`)
-            const realtimeConnected = await portfolioRealtime.start(scanId)
-            if (!realtimeConnected) {
-                portfolioPolling.startPolling(scanId)
-            }
-        } catch {
-            setError('Network error — could not start portfolio analysis. Please try again.')
-            setPhase('portfolio_confirm')
-        }
-    }
-
-    function handleCompanyToggle(index: number, selected: boolean) {
-        setCompanies((prev) => prev.map((c, idx) => (idx === index ? { ...c, selected } : c)))
-    }
-
-    function handleAddCompany(name: string, url: string) {
-        setCompanies((prev) => [...prev, { name, url, description: '', selected: true }])
-    }
+    const flow = usePortfolioScanFlow()
 
     return (
         <div style={{ width: '100%', maxWidth: '680px' }}>
@@ -313,28 +21,37 @@ function NewScanContent() {
                 </p>
             </div>
 
-            {phase === 'input' && (
+            {flow.phase === 'input' && (
                 <ScanInputPhase
-                    mode={mode}
-                    url={url}
-                    error={error}
-                    onModeChange={setMode}
-                    onUrlChange={setUrl}
-                    onSubmit={handleSubmit}
+                    mode={flow.mode}
+                    url={flow.url}
+                    error={flow.error}
+                    onModeChange={flow.setMode}
+                    onUrlChange={flow.setUrl}
+                    onSubmit={flow.handleSubmit}
                 />
             )}
 
-            {(phase === 'analyzing' || phase === 'running') && (
-                <ScanProgressPhase phase={phase} progress={progress} progressLabel={progressLabel} />
+            {(flow.phase === 'analyzing' || flow.phase === 'running') && (
+                <ScanProgressPhase
+                    phase={flow.phase}
+                    progress={flow.progress}
+                    progressLabel={flow.progressLabel}
+                />
             )}
 
-            {phase === 'portfolio_confirm' && (
+            {flow.phase === 'portfolio_confirm' && (
                 <PortfolioConfirmPhase
-                    companies={companies}
-                    onCompanyToggle={handleCompanyToggle}
-                    onAddCompany={handleAddCompany}
-                    onConfirm={confirmPortfolio}
-                    onReset={() => setPhase('input')}
+                    companies={flow.companies}
+                    verdict={flow.verdict}
+                    error={flow.error}
+                    onCompanyToggle={flow.handleCompanyToggle}
+                    onAddCompany={flow.handleAddCompany}
+                    onAddCompanies={flow.handleAddCompanies}
+                    onSearchDeeper={flow.handleSearchDeeper}
+                    onProvideSourceUrl={flow.handleProvideSourceUrl}
+                    onConfirm={flow.confirmPortfolio}
+                    onReset={flow.resetToInput}
                 />
             )}
         </div>
@@ -353,16 +70,7 @@ export default function NewScanPage() {
                         justifyContent: 'center',
                     }}
                 >
-                    <div
-                        style={{
-                            width: '32px',
-                            height: '32px',
-                            border: '3px solid var(--border)',
-                            borderTopColor: 'var(--accent-blue)',
-                            borderRadius: '50%',
-                            animation: 'spin 1s linear infinite',
-                        }}
-                    />
+                    <LoadingSpinner size="lg" />
                 </div>
             }
         >

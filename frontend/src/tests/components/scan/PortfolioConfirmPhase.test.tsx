@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 
 import PortfolioConfirmPhase from '@/components/scan/PortfolioConfirmPhase'
+import type { DiscoveryVerdict } from '@/lib/types/scan'
 
 const mockCompanies = [
     { name: 'Acme Corp', url: 'https://acme.com', description: 'A corp', selected: true },
@@ -14,6 +15,9 @@ describe('PortfolioConfirmPhase', () => {
         companies: mockCompanies,
         onCompanyToggle: vi.fn(),
         onAddCompany: vi.fn(),
+        onAddCompanies: vi.fn(() => 0),
+        onSearchDeeper: vi.fn(),
+        onProvideSourceUrl: vi.fn(),
         onConfirm: vi.fn(),
         onReset: vi.fn(),
     }
@@ -211,6 +215,158 @@ describe('PortfolioConfirmPhase', () => {
             // Form should collapse back to button
             expect(screen.getByText('+ Add Company Manually')).toBeInTheDocument()
             expect(screen.queryByLabelText('Company Name')).not.toBeInTheDocument()
+        })
+    })
+
+    describe('provide a page URL', () => {
+        it('renders the provide-a-page-URL affordance', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            expect(screen.getByText('+ Provide a page URL')).toBeInTheDocument()
+        })
+
+        it('calls onProvideSourceUrl with the normalized URL', () => {
+            const onProvideSourceUrl = vi.fn()
+            render(<PortfolioConfirmPhase {...defaultProps} onProvideSourceUrl={onProvideSourceUrl} />)
+            fireEvent.click(screen.getByText('+ Provide a page URL'))
+            fireEvent.change(screen.getByLabelText('Portfolio page URL'), {
+                target: { value: 'firm.com/portfolio' },
+            })
+            fireEvent.click(screen.getByText('Fetch from this page'))
+
+            expect(onProvideSourceUrl).toHaveBeenCalledWith('https://firm.com/portfolio')
+        })
+    })
+
+    describe('discovery verdict', () => {
+        const subsetVerdict: DiscoveryVerdict = {
+            method: 'web_search',
+            count: 3,
+            completeness: 'web_search_subset',
+            availableActions: ['search_deeper', 'render_site', 'upload_list'],
+        }
+
+        it('shows the fallback banner when no verdict is present', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            expect(screen.getByText('Portfolio companies discovered')).toBeInTheDocument()
+        })
+
+        it('renders the verdict message and action affordances', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} verdict={subsetVerdict} />)
+            expect(screen.getByText('This list is likely incomplete')).toBeInTheDocument()
+            // upload + search-deeper are live; render-the-site is still "soon"
+            expect(screen.getByRole('button', { name: /Upload a list/ })).toBeEnabled()
+            expect(screen.getByRole('button', { name: /Search deeper/ })).toBeEnabled()
+            expect(screen.getByRole('button', { name: /Render the site/ })).toBeDisabled()
+        })
+
+        it('calls onSearchDeeper when "Search deeper" is clicked', () => {
+            const onSearchDeeper = vi.fn()
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={subsetVerdict}
+                    onSearchDeeper={onSearchDeeper}
+                />
+            )
+            fireEvent.click(screen.getByRole('button', { name: /Search deeper/ }))
+            expect(onSearchDeeper).toHaveBeenCalledOnce()
+        })
+
+        it('reveals the upload widget when "Upload a list" is clicked', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} verdict={subsetVerdict} />)
+            expect(screen.queryByLabelText('Company list file')).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole('button', { name: /Upload a list/ }))
+            expect(screen.getByLabelText('Company list file')).toBeInTheDocument()
+        })
+
+        it('renders the partial-site-list message with escalation', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'site',
+                        count: 4,
+                        completeness: 'partial_site_list',
+                        availableActions: ['search_deeper', 'render_site', 'upload_list'],
+                    }}
+                />
+            )
+            expect(screen.getByText('This may not be the full list')).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /Search deeper/ })).toBeEnabled()
+        })
+
+        it('renders the exhausted message and points to upload only', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'web_search',
+                        count: 10,
+                        completeness: 'web_search_exhausted',
+                        availableActions: ['upload_list'],
+                    }}
+                />
+            )
+            expect(screen.getByText('No more found via search')).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: /Upload a list/ })).toBeInTheDocument()
+            // exhausted → digging more is unproductive, so no Search-deeper button
+            expect(screen.queryByRole('button', { name: /Search deeper/ })).not.toBeInTheDocument()
+        })
+
+        it('renders a positive message for a full site list', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'site',
+                        count: 3,
+                        completeness: 'full_site_list',
+                        availableActions: ['upload_list'],
+                    }}
+                />
+            )
+            expect(screen.getByText('Portfolio read from the firm’s site')).toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: /Search deeper/ })).not.toBeInTheDocument()
+        })
+
+        it('shows the site source anchor when present', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'site',
+                        count: 4,
+                        completeness: 'partial_site_list',
+                        availableActions: ['search_deeper', 'upload_list'],
+                        siteSourceUrl: 'https://insightpartners.com/portfolio',
+                    }}
+                />
+            )
+            expect(screen.getByText(/Read from insightpartners\.com\/portfolio/)).toBeInTheDocument()
+        })
+    })
+
+    describe('per-row provenance badges', () => {
+        it('flags web-search rows for verification and marks site rows reliable', () => {
+            const companies = [
+                {
+                    name: 'SiteCo',
+                    url: 'https://siteco.com',
+                    description: '',
+                    selected: true,
+                    source: 'site' as const,
+                },
+                {
+                    name: 'WebCo',
+                    url: 'https://webco.com',
+                    description: '',
+                    selected: false,
+                    source: 'web_search' as const,
+                },
+            ]
+            render(<PortfolioConfirmPhase {...defaultProps} companies={companies} />)
+            expect(screen.getByText('via web search — verify')).toBeInTheDocument()
+            expect(screen.getByText(/from firm’s site/)).toBeInTheDocument()
         })
     })
 })

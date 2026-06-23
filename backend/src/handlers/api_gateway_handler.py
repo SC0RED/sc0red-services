@@ -117,6 +117,7 @@ class APIGatewayHandler:
         )
         from src.handlers.analytics_handlers import handle_post_event as handle_post_analytics_event
         from src.handlers.auth_handlers import handle_register
+        from src.handlers.company_list_handlers import register_routes as register_company_routes
         from src.handlers.document_handlers import (
             handle_create_document,
             handle_delete_document,
@@ -136,12 +137,7 @@ class APIGatewayHandler:
             handle_revoke_connected_app,
         )
         from src.handlers.pdf_export_handlers import register_routes as register_pdf_export_routes
-        from src.handlers.scan_handlers import (
-            handle_delete_scan,
-            handle_scan_confirm,
-            handle_scan_start,
-            handle_scan_status,
-        )
+        from src.handlers.scan_handlers import register_routes as register_scan_routes
 
         router = Router()
 
@@ -197,38 +193,8 @@ class APIGatewayHandler:
             ),
         )
 
-        router.protected(
-            "POST",
-            "/api/scan/start",
-            lambda event, authentication: handle_scan_start(
-                event,
-                authentication,
-                self._storage,
-                self._sqs,
-                self._queue_url,
-            ),
-        )
-        router.protected(
-            "GET",
-            "/api/scan/{scan_id}",
-            lambda event, authentication, scan_id: handle_scan_status(
-                event, authentication, self._storage, scan_id
-            ),
-        )
-        router.protected(
-            "POST",
-            "/api/scan/{scan_id}/confirm",
-            lambda event, authentication, scan_id: handle_scan_confirm(
-                event, authentication, self._storage, self._sqs, self._queue_url, scan_id
-            ),
-        )
-        router.protected(
-            "DELETE",
-            "/api/scan/{scan_id}",
-            lambda event, authentication, scan_id: handle_delete_scan(
-                event, authentication, self._storage, scan_id
-            ),
-        )
+        register_scan_routes(router, self._storage, self._sqs, self._queue_url)
+        register_company_routes(router)
 
         router.protected(
             "GET",

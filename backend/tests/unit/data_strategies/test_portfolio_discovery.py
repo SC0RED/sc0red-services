@@ -3,12 +3,17 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError
+
 from src.data_strategies.portfolio_discovery_strategy import (
     _GENERIC_CTA_PATTERNS,
-    PORTFOLIO_PATHS,
     _SOCIAL_DOMAINS,
+    PORTFOLIO_PATHS,
     PortfolioDiscoveryStrategy,
 )
+from src.data_strategies.url_safety import UnsafeUrlError
 
 
 class TestPortfolioDiscoveryConstants:
@@ -140,13 +145,26 @@ class TestPortfolioDiscoveryStrategy:
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     def test_execute_scrape_failure_skips_page(self, mock_scrape):
-        mock_scrape.side_effect = RuntimeError("Connection error")
+        # Transport/HTTP errors are the fail-soft contract — skip the page.
+        mock_scrape.side_effect = CurlConnectionError("Connection error")
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _raw_json, meta = strategy.execute()
 
-        # Should not raise, just returns empty
+        # Should not raise, just returns empty — and it kept trying every path
+        # rather than aborting on the first transport error.
         assert meta["companies"] == []
+        assert mock_scrape.call_count == len(PORTFOLIO_PATHS)
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_impersonation_misconfig_propagates(self, mock_scrape):
+        # A bad _IMPERSONATE_TARGET is a programming error — it must NOT be
+        # swallowed by the fail-soft transport handler as "no companies".
+        mock_scrape.side_effect = ImpersonateError("bad target")
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        with pytest.raises(ImpersonateError):
+            strategy.execute()
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
     def test_execute_internal_portfolio_links(self, mock_scrape):
@@ -311,8 +329,8 @@ class TestPortfolioDiscoveryStrategy:
         assert len(meta["companies"]) == 50
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
-    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
-    def test_fallback_data_attributes(self, mock_httpx_client, mock_scrape):
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    def test_fallback_data_attributes(self, mock_fetch, mock_scrape):
         """When no links found, fallback to data-company-name/data-company-link attributes."""
         mock_scrape.return_value = {
             "text": "content",
@@ -322,18 +340,12 @@ class TestPortfolioDiscoveryStrategy:
             "meta_keywords": "",
         }
 
-        html = """
+        mock_fetch.return_value = """
         <html><body>
             <div data-company-name="DataCo" data-company-link="https://dataco.com"></div>
             <div data-company-name="BetaInc" data-company-link="https://betainc.com"></div>
         </body></html>
         """
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = html
-        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _, meta = strategy.execute()
@@ -343,8 +355,8 @@ class TestPortfolioDiscoveryStrategy:
         assert "BetaInc" in names
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
-    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
-    def test_fallback_invalid_data_attributes(self, mock_httpx_client, mock_scrape):
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    def test_fallback_invalid_data_attributes(self, mock_fetch, mock_scrape):
         """Fallback skips: empty name, non-http URL, duplicate URLs."""
         mock_scrape.return_value = {
             "text": "content",
@@ -354,7 +366,7 @@ class TestPortfolioDiscoveryStrategy:
             "meta_keywords": "",
         }
 
-        html = """
+        mock_fetch.return_value = """
         <html><body>
             <div data-company-name="" data-company-link="https://empty.com"></div>
             <div data-company-name="NoHttp" data-company-link="ftp://nohttp.com"></div>
@@ -362,12 +374,6 @@ class TestPortfolioDiscoveryStrategy:
             <div data-company-name="DupeCo" data-company-link="https://valid.com"></div>
         </body></html>
         """
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = html
-        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _, meta = strategy.execute()
@@ -380,9 +386,9 @@ class TestPortfolioDiscoveryStrategy:
         assert len([c for c in meta["companies"] if c["url"] == "https://valid.com"]) == 1
 
     @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
-    @patch("src.data_strategies.portfolio_discovery_strategy.httpx.Client")
-    def test_fallback_http_error(self, mock_httpx_client, mock_scrape):
-        """HTTP error during fallback path is handled gracefully."""
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    def test_fallback_http_error(self, mock_fetch, mock_scrape):
+        """HTTP error during fallback path is handled gracefully (fail-soft)."""
         mock_scrape.return_value = {
             "text": "content",
             "title": "title",
@@ -391,13 +397,145 @@ class TestPortfolioDiscoveryStrategy:
             "meta_keywords": "",
         }
 
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_client = MagicMock(get=MagicMock(return_value=mock_response))
-        mock_httpx_client.return_value.__enter__ = MagicMock(return_value=mock_client)
-        mock_httpx_client.return_value.__exit__ = MagicMock(return_value=False)
+        # The impersonating transport raises HTTPError on a bad status (e.g. 500).
+        mock_fetch.side_effect = HTTPError("HTTP Error 500")
 
         strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
         _, meta = strategy.execute()
 
         assert meta["companies"] == []
+
+
+def _empty_scrape_result():
+    return {
+        "title": "",
+        "description": "",
+        "text": "",
+        "links": [],
+        "meta_keywords": "",
+        "script_text": "",
+        "embedded_companies": [],
+        "logo_company_names": [],
+    }
+
+
+class TestEmbeddedStructuredCandidates:
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_embedded_records_become_detail_page_candidates(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/").endswith("/portfolio"):
+                result["embedded_companies"] = [
+                    {"name": "Calabrio", "slug": "calabrio"},
+                    {"name": "Dynatrace", "slug": "dynatrace"},
+                ]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://www.thomabravo.com"}).execute()
+
+        urls = {c["url"] for c in meta["companies"]}
+        assert "https://www.thomabravo.com/portfolio/calabrio" in urls
+        assert "https://www.thomabravo.com/portfolio/dynatrace" in urls
+        assert {"Calabrio", "Dynatrace"} <= {c["name"] for c in meta["companies"]}
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_root_only_records_do_not_create_root_urls(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/") == "https://www.thomabravo.com":  # root only
+                result["embedded_companies"] = [{"name": "Acme", "slug": "acme"}]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://www.thomabravo.com"}).execute()
+
+        # No detail-page parent for the root, so no candidate is fabricated.
+        urls = {c["url"] for c in meta["companies"]}
+        assert not any(u.endswith("/acme") for u in urls)
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_dedupes_structured_against_heuristic_link(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/").endswith("/portfolio"):
+                result["links"] = [
+                    {"text": "Calabrio", "href": "https://www.thomabravo.com/portfolio/calabrio"}
+                ]
+                result["embedded_companies"] = [{"name": "Calabrio", "slug": "calabrio"}]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://www.thomabravo.com"}).execute()
+
+        calabrio = [
+            c
+            for c in meta["companies"]
+            if c["url"] == "https://www.thomabravo.com/portfolio/calabrio"
+        ]
+        assert len(calabrio) == 1
+
+
+class TestLogoGridSeeds:
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_logo_names_collected_and_firm_excluded(self, mock_scrape):
+        def fake(url):
+            result = _empty_scrape_result()
+            if url.rstrip("/").endswith("/companies"):
+                # "VistaEquityPartners" == the firm stem (self-reference); "Avista"
+                # merely contains it as a substring and must be kept.
+                result["logo_company_names"] = ["Jamf", "Datto", "VistaEquityPartners", "Avista"]
+            return result
+
+        mock_scrape.side_effect = fake
+        _raw, meta = PortfolioDiscoveryStrategy(
+            {"url": "https://www.vistaequitypartners.com"}
+        ).execute()
+        # logo names surface as seeds; site companies stay 0 (names have no URL)
+        assert meta["count"] == 0
+        seeds = meta["logo_company_names"]
+        assert "Jamf" in seeds and "Datto" in seeds
+        # exact firm self-reference filtered out, substring match retained
+        assert "VistaEquityPartners" not in seeds
+        assert "Avista" in seeds
+
+
+def _http_error(status_code: int):
+    err = HTTPError(f"HTTP Error {status_code}")
+    err.response = MagicMock(status_code=status_code)
+    return err
+
+
+class TestSiteFetchFailed:
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_block_after_retries_flags_fetch_failure(self, mock_scrape):
+        # A non-404 error surviving the transport retries = a real block.
+        mock_scrape.side_effect = _http_error(403)
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["companies"] == []
+        assert meta["site_fetch_failed"] is True
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_not_found_is_not_a_fetch_failure(self, mock_scrape):
+        # 404 on every path = the firm just doesn't use those paths, not a block.
+        mock_scrape.side_effect = _http_error(404)
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["companies"] == []
+        assert meta["site_fetch_failed"] is False
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_successful_scrape_is_not_a_fetch_failure(self, mock_scrape):
+        mock_scrape.return_value = _empty_scrape_result()
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["site_fetch_failed"] is False
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_ssrf_refused_url_flags_fetch_failure(self, mock_scrape, mock_fetch):
+        # A URL the SSRF guard refuses (e.g. resolves to a private host) is
+        # treated like an unreachable site — flagged, not crashed.
+        mock_scrape.side_effect = UnsafeUrlError("resolves to non-public address")
+        mock_fetch.side_effect = UnsafeUrlError("resolves to non-public address")
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["companies"] == []
+        assert meta["site_fetch_failed"] is True

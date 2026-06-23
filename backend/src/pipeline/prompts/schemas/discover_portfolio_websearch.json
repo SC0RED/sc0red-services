@@ -1,0 +1,20 @@
+{
+    "type": "object",
+    "properties": {
+        "companies": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Portfolio company name"},
+                    "url": {"type": "string", "description": "Company official website URL"}
+                },
+                "required": ["name", "url"],
+                "additionalProperties": false
+            },
+            "description": "Current notable portfolio companies of the firm"
+        }
+    },
+    "required": ["companies"],
+    "additionalProperties": false
+}
