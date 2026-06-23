@@ -46,6 +46,55 @@ class TestMergeFallback:
         out = merge_fallback([], [], [{"name": "X", "url": ""}])
         assert out == []
 
+    def test_site_company_not_repeated_by_web_search_different_tld(self):
+        # The firm's site has Acme(acme.com); web search returns Acme(acme.in) —
+        # the trusted site entry wins, the web-search twin is dropped.
+        out = merge_fallback(
+            auto_included=[{"name": "Acme", "url": "https://acme.com"}],
+            needs_validation=[],
+            fallback=[
+                {"name": "Acme, Inc.", "url": "https://acme.in"},
+                {"name": "Beta", "url": "https://beta.com"},
+            ],
+        )
+        assert {c["url"] for c in out} == {"https://beta.com"}
+
+    def test_web_search_tld_duplicates_collapse_by_name(self):
+        out = merge_fallback(
+            auto_included=[],
+            needs_validation=[],
+            fallback=[
+                {"name": "Acme", "url": "https://acme.com"},
+                {"name": "Acme LLC", "url": "https://acme.in"},
+            ],
+        )
+        assert len(out) == 1
+        assert out[0]["name"] == "Acme"  # first-encountered wins
+
+    def test_distinct_names_preserved(self):
+        out = merge_fallback(
+            auto_included=[{"name": "Acme", "url": "https://acme.com"}],
+            needs_validation=[],
+            fallback=[{"name": "Acme Health", "url": "https://acmehealth.com"}],
+        )
+        assert {c["url"] for c in out} == {"https://acmehealth.com"}
+
+
+class TestNormalizeCompanyName:
+    def test_strips_suffixes_and_punctuation(self):
+        from src.pipeline.pipeline_steps.portfolio_merge import normalize_company_name
+
+        assert normalize_company_name("Acme, Inc.") == "acme"
+        assert normalize_company_name("Acme LLC") == "acme"
+        assert normalize_company_name("Acme Corp") == "acme"
+        assert normalize_company_name("Acme Health") == "acme health"
+
+    def test_keeps_tokens_when_all_suffixes(self):
+        from src.pipeline.pipeline_steps.portfolio_merge import normalize_company_name
+
+        # Stripping everything would empty it → keep the un-stripped tokens.
+        assert normalize_company_name("Holdings Group") == "holdings group"
+
 
 class TestDiscoverPortfolio:
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
