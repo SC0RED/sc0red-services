@@ -308,5 +308,45 @@ describe('PortfolioConfirmPhase', () => {
             expect(screen.getByText('Portfolio read from the firm’s site')).toBeInTheDocument()
             expect(screen.queryByRole('button', { name: /Search deeper/ })).not.toBeInTheDocument()
         })
+
+        it('shows the site source anchor when present', () => {
+            render(
+                <PortfolioConfirmPhase
+                    {...defaultProps}
+                    verdict={{
+                        method: 'site',
+                        count: 4,
+                        completeness: 'partial_site_list',
+                        availableActions: ['search_deeper', 'upload_list'],
+                        siteSourceUrl: 'https://insightpartners.com/portfolio',
+                    }}
+                />
+            )
+            expect(screen.getByText(/Read from insightpartners\.com\/portfolio/)).toBeInTheDocument()
+        })
+    })
+
+    describe('per-row provenance badges', () => {
+        it('flags web-search rows for verification and marks site rows reliable', () => {
+            const companies = [
+                {
+                    name: 'SiteCo',
+                    url: 'https://siteco.com',
+                    description: '',
+                    selected: true,
+                    source: 'site' as const,
+                },
+                {
+                    name: 'WebCo',
+                    url: 'https://webco.com',
+                    description: '',
+                    selected: false,
+                    source: 'web_search' as const,
+                },
+            ]
+            render(<PortfolioConfirmPhase {...defaultProps} companies={companies} />)
+            expect(screen.getByText('via web search — verify')).toBeInTheDocument()
+            expect(screen.getByText(/from firm’s site/)).toBeInTheDocument()
+        })
     })
 })

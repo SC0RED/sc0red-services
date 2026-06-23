@@ -508,3 +508,29 @@ class TestDiscoveryVerdictEmitted:
         # Non-zero site scrape is partial (never inferred complete).
         assert details["discovery_verdict"]["completeness"] == "partial_site_list"
         assert details["discovery_verdict"]["count"] == 1
+        # Provenance: site-derived companies are tagged `site`, and the verdict
+        # anchors to the page we read.
+        assert details["portfolio_companies"][0]["source"] == "site"
+        assert details["discovery_verdict"]["site_source_url"] == "https://firm.com"
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.run_web_search_discovery")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_fallback_companies_tagged_web_search(self, mock_strategy_cls, mock_fallback):
+        # Empty site → web-search fallback; recovered companies are tagged
+        # `web_search` and the verdict has no site source.
+        mock_strategy = MagicMock()
+        mock_strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = mock_strategy
+        mock_fallback.return_value = [{"name": "WebCo", "url": "https://webco.com"}]
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_companies"][0]["source"] == "web_search"
+        assert details["discovery_verdict"]["site_source_url"] == ""

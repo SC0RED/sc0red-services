@@ -44,7 +44,7 @@ export function useCompanyList(): UseCompanyList {
 
     const addOne = useCallback(
         (name: string, url: string) => {
-            commit([...ref.current, { name, url, description: '', selected: true }])
+            commit([...ref.current, { name, url, description: '', selected: true, source: 'upload' }])
         },
         [commit]
     )
@@ -59,7 +59,13 @@ export function useCompanyList(): UseCompanyList {
                     (company.url && existingUrls.has(company.url)) ||
                     existingNames.has(company.name.toLowerCase())
                 if (duplicate) continue
-                fresh.push({ name: company.name, url: company.url, description: '', selected: true })
+                fresh.push({
+                    name: company.name,
+                    url: company.url,
+                    description: '',
+                    selected: true,
+                    source: 'upload',
+                })
                 if (company.url) existingUrls.add(company.url)
                 existingNames.add(company.name.toLowerCase())
             }

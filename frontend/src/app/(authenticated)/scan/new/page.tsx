@@ -11,6 +11,7 @@ import { useCompanyList } from '@/lib/hooks/useCompanyList'
 import { useScanPolling } from '@/lib/hooks/useScanPolling'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import type { Mode, Phase, Company, ScanPollResponse, DiscoveryVerdict } from '@/lib/types/scan'
+import { withDefaultSelection } from '@/lib/types/scan'
 import { normalizeUserUrl } from '@/lib/utils/url'
 
 function NewScanContent() {
@@ -123,10 +124,7 @@ function NewScanContent() {
                 const response = await fetch(`/api/scan/${scanIdRef.current}`)
                 if (response.ok) {
                     const data = (await response.json()) as ScanPollResponse
-                    const discoveredCompanies = (data.portfolioCompanies ?? []).map((c) => ({
-                        ...c,
-                        selected: true,
-                    }))
+                    const discoveredCompanies = (data.portfolioCompanies ?? []).map(withDefaultSelection)
                     handleAwaitingConfirmation(discoveredCompanies, data.discoveryVerdict)
                     return
                 }
@@ -247,7 +245,7 @@ function NewScanContent() {
 
             if (data.status === 'awaiting_confirmation' && data.portfolioCompanies) {
                 const companiesWithSelect = (data.portfolioCompanies as Omit<Company, 'selected'>[]).map(
-                    (c) => ({ ...c, selected: true })
+                    withDefaultSelection
                 )
                 handleAwaitingConfirmation(companiesWithSelect, data.discoveryVerdict)
                 return

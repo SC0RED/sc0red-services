@@ -1,11 +1,25 @@
 export type Mode = 'portfolio' | 'standalone'
 export type Phase = 'input' | 'analyzing' | 'portfolio_confirm' | 'running'
 
+/** Where a candidate came from — drives the reliable (site/upload/provided_url)
+ *  vs best-effort (web_search) trust marking. Absent on legacy scans.
+ *  `site`/`web_search` come from the backend; `upload` is set client-side when
+ *  the customer adds/uploads companies; `provided_url` is reserved for Phase 4
+ *  (provide-a-reliable-URL) and not yet emitted. */
+export type CompanySource = 'site' | 'web_search' | 'upload' | 'provided_url'
+
 export interface Company {
     name: string
     url: string
     description: string
     selected: boolean
+    source?: CompanySource
+}
+
+/** Map a discovered company to the editable list, pre-selecting it UNLESS it
+ *  came from web search — those are best-effort, so the customer opts in. */
+export function withDefaultSelection(company: Omit<Company, 'selected'>): Company {
+    return { ...company, selected: company.source !== 'web_search' }
 }
 
 export interface AnalysisSummary {
@@ -39,6 +53,9 @@ export interface DiscoveryVerdict {
     count: number
     completeness: DiscoveryCompleteness
     availableActions: DiscoveryAction[]
+    /** The firm page site-derived companies were read from — the reliable-source
+     *  anchor shown in the banner. "" when nothing came from the site. */
+    siteSourceUrl?: string
 }
 
 export interface ScanPollResponse {

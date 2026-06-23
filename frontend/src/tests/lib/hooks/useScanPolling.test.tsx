@@ -102,6 +102,37 @@ describe('useScanPolling', () => {
             )
         })
 
+        it('does not pre-select web-search companies', async () => {
+            const callbacks = {
+                mode: 'discovery' as const,
+                onAwaitingConfirmation: vi.fn(),
+                onComplete: vi.fn(),
+                onFailed: vi.fn(),
+                onProgress: vi.fn(),
+            }
+            ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        status: 'awaiting_confirmation',
+                        portfolioCompanies: [
+                            { name: 'Site', url: 'https://site.com', description: '', source: 'site' },
+                            { name: 'Web', url: 'https://web.com', description: '', source: 'web_search' },
+                        ],
+                    }),
+            })
+
+            const { result } = renderHook(() => useScanPolling(callbacks))
+            act(() => {
+                result.current.startPolling('scan-1')
+            })
+            await advanceAndFlush(1000)
+
+            const companies = callbacks.onAwaitingConfirmation.mock.calls[0][0]
+            expect(companies.find((c: { name: string }) => c.name === 'Site').selected).toBe(true)
+            expect(companies.find((c: { name: string }) => c.name === 'Web').selected).toBe(false)
+        })
+
         it('forwards the discovery verdict to onAwaitingConfirmation', async () => {
             const callbacks = {
                 mode: 'discovery' as const,

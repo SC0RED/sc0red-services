@@ -3,7 +3,7 @@ import { useState } from 'react'
 import AddCompanyForm from '@/components/scan/AddCompanyForm'
 import CompanyListUpload from '@/components/scan/CompanyListUpload'
 import DiscoveryVerdictBanner from '@/components/scan/DiscoveryVerdictBanner'
-import type { Company, DiscoveryVerdict } from '@/lib/types/scan'
+import type { Company, CompanySource, DiscoveryVerdict } from '@/lib/types/scan'
 
 interface PortfolioConfirmPhaseProps {
     companies: Company[]
@@ -103,7 +103,19 @@ export default function PortfolioConfirmPhase({
                             }}
                         />
                         <label htmlFor={`company-${i}`} style={{ flex: 1, cursor: 'pointer' }}>
-                            <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{company.name}</div>
+                            <div
+                                style={{
+                                    fontWeight: 500,
+                                    fontSize: '0.9rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    flexWrap: 'wrap',
+                                }}
+                            >
+                                {company.name}
+                                <SourceBadge source={company.source} />
+                            </div>
                             <div style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>
                                 {company.url || 'No URL — add one to include this company'}
                             </div>
@@ -135,6 +147,42 @@ export default function PortfolioConfirmPhase({
             </div>
         </div>
     )
+}
+
+// Per-row provenance marker: web-search rows are flagged best-effort ("verify"),
+// site/provided-url rows are marked reliable. Upload/manual (untagged) get no
+// badge — they're customer-supplied and trusted by default.
+function SourceBadge({ source }: { source?: CompanySource }) {
+    if (source === 'web_search') {
+        return (
+            <span
+                style={{
+                    fontSize: '0.6875rem',
+                    color: 'var(--risk-medium)',
+                    border: '1px solid var(--risk-medium)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0 0.375rem',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                via web search — verify
+            </span>
+        )
+    }
+    const reliableLabel: Partial<Record<CompanySource, string>> = {
+        site: 'from firm’s site',
+        provided_url: 'from your source',
+        upload: 'from your list',
+    }
+    const label = source && reliableLabel[source]
+    if (label) {
+        return (
+            <span style={{ fontSize: '0.6875rem', color: 'var(--risk-low)', whiteSpace: 'nowrap' }}>
+                ✓ {label}
+            </span>
+        )
+    }
+    return null
 }
 
 // Shown for scans with no persisted verdict (e.g. records created before the
