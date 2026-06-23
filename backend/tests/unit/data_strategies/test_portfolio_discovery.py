@@ -13,6 +13,7 @@ from src.data_strategies.portfolio_discovery_strategy import (
     PORTFOLIO_PATHS,
     PortfolioDiscoveryStrategy,
 )
+from src.data_strategies.url_safety import UnsafeUrlError
 
 
 class TestPortfolioDiscoveryConstants:
@@ -527,3 +528,14 @@ class TestSiteFetchFailed:
         mock_scrape.return_value = _empty_scrape_result()
         _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
         assert meta["site_fetch_failed"] is False
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.fetch_page_html")
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_ssrf_refused_url_flags_fetch_failure(self, mock_scrape, mock_fetch):
+        # A URL the SSRF guard refuses (e.g. resolves to a private host) is
+        # treated like an unreachable site — flagged, not crashed.
+        mock_scrape.side_effect = UnsafeUrlError("resolves to non-public address")
+        mock_fetch.side_effect = UnsafeUrlError("resolves to non-public address")
+        _raw, meta = PortfolioDiscoveryStrategy({"url": "https://firm.com"}).execute()
+        assert meta["companies"] == []
+        assert meta["site_fetch_failed"] is True

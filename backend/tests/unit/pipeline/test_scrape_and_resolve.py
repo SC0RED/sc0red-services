@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
 
+from src.data_strategies.url_safety import UnsafeUrlError
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
@@ -151,6 +152,39 @@ class TestScrapeAndResolveURL:
         step.execute()
 
         # Falls back to original URL on resolution scrape failure
+        assert accessor.company.actual_url == "https://original.com"
+
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.URLResolutionStrategy")
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
+    def test_execute_resolution_ssrf_refused_falls_back(
+        self,
+        mock_scraper_cls,
+        mock_resolver_cls,
+        mock_scrape_url,
+    ):
+        # An AI-resolved URL that the SSRF guard refuses (e.g. a private host)
+        # degrades to the original content rather than failing the analysis.
+        mock_scraper = MagicMock()
+        mock_scraper.execute.return_value = (
+            "Original content that is long enough for the validation check here",
+            {"title": "Test", "links": []},
+        )
+        mock_scraper_cls.return_value = mock_scraper
+
+        mock_resolver = MagicMock()
+        mock_resolver.execute.return_value = ("https://resolved.com", {"resolved": True})
+        mock_resolver_cls.return_value = mock_resolver
+
+        mock_scrape_url.side_effect = UnsafeUrlError("resolves to non-public address")
+
+        accessor = CompanyAccessor(Company(url="https://original.com"))
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
         assert accessor.company.actual_url == "https://original.com"
 
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")

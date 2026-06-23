@@ -26,6 +26,9 @@ x-shared-env: &shared-env
   OPENAI_BASE_URL: http://ai-mock:8080/v1/
   ANALYSIS_QUEUE_URL: http://localstack:4566/000000000000/sc0red-services-analysis-e2e
   DOCUMENTS_BUCKET: sc0red-services-documents-e2e
+  # The scan target in E2E is the internal ``ai-mock`` host (a private docker
+  # address); disable the SSRF IP-range guard so the scraper can reach it.
+  SCRAPER_ALLOW_PRIVATE_HOSTS: "true"
 
 services:
 
