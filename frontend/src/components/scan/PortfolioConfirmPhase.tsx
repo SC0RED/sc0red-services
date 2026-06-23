@@ -3,6 +3,7 @@ import { useState } from 'react'
 import AddCompanyForm from '@/components/scan/AddCompanyForm'
 import CompanyListUpload from '@/components/scan/CompanyListUpload'
 import DiscoveryVerdictBanner from '@/components/scan/DiscoveryVerdictBanner'
+import ProvideSourceUrlForm from '@/components/scan/ProvideSourceUrlForm'
 import type { Company, CompanySource, DiscoveryVerdict } from '@/lib/types/scan'
 
 interface PortfolioConfirmPhaseProps {
@@ -17,6 +18,8 @@ interface PortfolioConfirmPhaseProps {
      *  added (the rest were dedup hits), so the uploader can report accurately. */
     onAddCompanies: (companies: Array<{ name: string; url: string }>) => number
     onSearchDeeper: () => void
+    /** Fetch a customer-provided page server-side and merge its companies in. */
+    onProvideSourceUrl: (url: string) => void
     onConfirm: () => void
     onReset: () => void
 }
@@ -29,6 +32,7 @@ export default function PortfolioConfirmPhase({
     onAddCompany,
     onAddCompanies,
     onSearchDeeper,
+    onProvideSourceUrl,
     onConfirm,
     onReset,
 }: PortfolioConfirmPhaseProps) {
@@ -124,8 +128,11 @@ export default function PortfolioConfirmPhase({
                 ))}
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: '0.5rem' }}>
                 <AddCompanyForm existingUrls={companies.map((c) => c.url)} onAdd={onAddCompany} />
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+                <ProvideSourceUrlForm onProvideSourceUrl={onProvideSourceUrl} />
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>

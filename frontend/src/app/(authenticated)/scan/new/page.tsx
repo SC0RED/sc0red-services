@@ -333,6 +333,37 @@ function NewScanContent() {
         }
     }
 
+    // Customer-provided reliable source: the customer points us at a page that
+    // lists the portfolio. We fetch it server-side (no web search) and merge its
+    // companies in. Same re-enter-discovery loop as "Search deeper" — the worker
+    // transitions the scan back through `discovering` to `awaiting_confirmation`.
+    async function handleProvideSourceUrl(sourceUrl: string) {
+        setError('')
+        setProgress(5)
+        setProgressLabel('Reading the page you provided…')
+        setPhase('analyzing')
+        try {
+            const res = await fetch(`/api/scan/${scanId}/source-url`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sourceUrl }),
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}))
+                setError(data.error || 'Could not read that page. Please try again.')
+                setPhase('portfolio_confirm')
+                return
+            }
+            const realtimeConnected = await discoveryRealtime.start(scanId)
+            if (!realtimeConnected) {
+                discoveryPolling.startPolling(scanId)
+            }
+        } catch {
+            setError('Network error — could not read that page. Please try again.')
+            setPhase('portfolio_confirm')
+        }
+    }
+
     return (
         <div style={{ width: '100%', maxWidth: '680px' }}>
             {/* Header */}
@@ -367,6 +398,7 @@ function NewScanContent() {
                     onAddCompany={handleAddCompany}
                     onAddCompanies={handleAddCompanies}
                     onSearchDeeper={handleSearchDeeper}
+                    onProvideSourceUrl={handleProvideSourceUrl}
                     onConfirm={confirmPortfolio}
                     onReset={() => setPhase('input')}
                 />

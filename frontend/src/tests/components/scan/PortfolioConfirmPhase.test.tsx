@@ -17,6 +17,7 @@ describe('PortfolioConfirmPhase', () => {
         onAddCompany: vi.fn(),
         onAddCompanies: vi.fn(() => 0),
         onSearchDeeper: vi.fn(),
+        onProvideSourceUrl: vi.fn(),
         onConfirm: vi.fn(),
         onReset: vi.fn(),
     }
@@ -214,6 +215,25 @@ describe('PortfolioConfirmPhase', () => {
             // Form should collapse back to button
             expect(screen.getByText('+ Add Company Manually')).toBeInTheDocument()
             expect(screen.queryByLabelText('Company Name')).not.toBeInTheDocument()
+        })
+    })
+
+    describe('provide a page URL', () => {
+        it('renders the provide-a-page-URL affordance', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} />)
+            expect(screen.getByText('+ Provide a page URL')).toBeInTheDocument()
+        })
+
+        it('calls onProvideSourceUrl with the normalized URL', () => {
+            const onProvideSourceUrl = vi.fn()
+            render(<PortfolioConfirmPhase {...defaultProps} onProvideSourceUrl={onProvideSourceUrl} />)
+            fireEvent.click(screen.getByText('+ Provide a page URL'))
+            fireEvent.change(screen.getByLabelText('Portfolio page URL'), {
+                target: { value: 'firm.com/portfolio' },
+            })
+            fireEvent.click(screen.getByText('Fetch from this page'))
+
+            expect(onProvideSourceUrl).toHaveBeenCalledWith('https://firm.com/portfolio')
         })
     })
 
