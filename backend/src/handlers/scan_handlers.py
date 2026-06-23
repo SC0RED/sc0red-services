@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.handlers.api_gateway_handler import (
     NOT_FOUND,
@@ -293,7 +293,14 @@ def handle_scan_source_url(
     server-side and merge its companies in. Only valid while the scan is
     ``awaiting_confirmation`` — see ``scan_core.fetch_source_url``.
     """
-    body = json.loads(event.get("body") or "{}")
+    try:
+        parsed_body = json.loads(event.get("body") or "{}")
+    except (TypeError, json.JSONDecodeError) as error:
+        return build_error(f"Invalid JSON body: {error}", code=VALIDATION_ERROR)
+    if not isinstance(parsed_body, dict):
+        return build_error("Request body must be a JSON object", code=VALIDATION_ERROR)
+
+    body = cast("dict[str, Any]", parsed_body)
     source_url = body.get("sourceUrl", "")
     if not isinstance(source_url, str) or not source_url.startswith(("http://", "https://")):
         return build_error("A valid http(s) sourceUrl is required", code=VALIDATION_ERROR)
