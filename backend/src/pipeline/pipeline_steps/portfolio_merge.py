@@ -1,14 +1,16 @@
 """Shared portfolio-discovery merge + verdict helpers.
 
 Pure functions used by both the initial discovery step (``DiscoverPortfolio``)
-and the customer-triggered deepen step (``DeepenPortfolio``): URL-keyed dedup,
-fallback merging, and the structured discovery verdict. Kept here so the two
-steps share one definition rather than duplicating it.
+and the customer-triggered deepen step (``DeepenPortfolio``): URL- and
+name-keyed dedup, confidence-aware fallback merging (trusted source wins), and
+the structured discovery verdict. Kept here so the two steps share one
+definition rather than duplicating it.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -17,6 +19,48 @@ logger = logging.getLogger(__name__)
 # The escalation rungs offered when a result looks incomplete. Mirrors the
 # frontend `DiscoveryAction` union.
 ESCALATION_ACTIONS = ["search_deeper", "render_site", "upload_list"]
+
+# Trailing legal/common suffix tokens stripped when normalizing a company name
+# for dedup. Conservative — only trailing tokens are removed, so distinct firms
+# aren't accidentally merged.
+_NAME_SUFFIXES = frozenset(
+    {
+        "inc",
+        "llc",
+        "ltd",
+        "limited",
+        "corp",
+        "corporation",
+        "co",
+        "company",
+        "gmbh",
+        "sa",
+        "ag",
+        "plc",
+        "lp",
+        "llp",
+        "group",
+        "holdings",
+        "holding",
+    }
+)
+
+
+def normalize_company_name(name: str) -> str:
+    """Normalize a company name to a dedup key.
+
+    Lowercases, replaces punctuation with spaces, and strips trailing legal/
+    common suffixes (``Acme, Inc.`` / ``Acme LLC`` / ``Acme Corp`` → ``acme``).
+    Used to suppress web-search duplicates of a company already found reliably
+    (e.g. the same firm under ``acme.com`` and ``acme.in``). Conservative: if
+    stripping suffixes would empty the name, the un-stripped tokens are kept.
+    """
+    cleaned = re.sub(r"[^\w\s]", " ", name.lower())
+    tokens = cleaned.split()
+    stripped = list(tokens)
+    while stripped and stripped[-1] in _NAME_SUFFIXES:
+        stripped.pop()
+    return " ".join(stripped or tokens)
 
 
 def normalize_url_key(url: str) -> str:
@@ -83,21 +127,49 @@ def merge_fallback(
     """Union web-search fallback candidates into ``needs_validation`` only.
 
     Model-sourced candidates always require validation (never ``auto_included``).
-    Deduplicated by normalized URL key against the existing site-derived results,
-    so the fallback only ADDS companies the site did not surface.
+    Confidence-aware dedup (see :func:`find_new_candidates`): the trusted
+    (site-derived) set wins, so a company already found reliably on the firm's
+    site never reappears as a web-search row and TLD duplicates collapse.
     """
-    seen = {normalize_url_key(c["url"]) for c in (*auto_included, *needs_validation)}
-    merged = list(needs_validation)
-    for company in fallback:
-        # ``name``/``url`` are schema-required on the web-search response, so
-        # access them directly — a missing key is a schema violation, not a
-        # default-to-empty case.
+    trusted = [*auto_included, *needs_validation]
+    return [*needs_validation, *find_new_candidates(fallback, trusted)]
+
+
+def find_new_candidates(
+    candidates: list[dict[str, str]],
+    trusted: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Return the ``candidates`` not already present in ``trusted``.
+
+    Confidence-aware dedup shared by the initial web-search fallback and the
+    customer-triggered deepen: a candidate is dropped if its normalized URL key
+    OR its normalized name already appears in ``trusted`` (or earlier in
+    ``candidates``), so the trusted source wins and ``acme.com`` / ``acme.in``
+    twins collapse. A trusted entry is never dropped — only lower-confidence
+    candidates are filtered. Each kept entry is normalized to
+    ``{name, url, description}``.
+
+    The trusted index uses ``.get`` (a malformed trusted entry just doesn't
+    contribute to dedup — graceful, never crashes the merge), while candidates
+    use direct access since ``name``/``url`` are schema-required on them.
+
+    NOTE: name dedup strips legal suffixes, so two genuinely-distinct firms with
+    the same single-word stem (e.g. "Data Corp" vs "Data Inc") would collapse.
+    Rare in one portfolio, and upload remains the exact-list correction.
+    """
+    seen_urls = {normalize_url_key(c.get("url", "")) for c in trusted}
+    seen_names = {normalize_company_name(c["name"]) for c in trusted if c.get("name")}
+    fresh: list[dict[str, str]] = []
+    for company in candidates:
         key = normalize_url_key(company["url"])
-        if not key or key in seen:
+        name_key = normalize_company_name(company["name"])
+        if not key or key in seen_urls or (name_key and name_key in seen_names):
             continue
-        seen.add(key)
-        merged.append({"name": company["name"], "url": company["url"], "description": ""})
-    return merged
+        seen_urls.add(key)
+        if name_key:
+            seen_names.add(name_key)
+        fresh.append({"name": company["name"], "url": company["url"], "description": ""})
+    return fresh
 
 
 def build_verdict(

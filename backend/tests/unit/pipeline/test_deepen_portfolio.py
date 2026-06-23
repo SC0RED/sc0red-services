@@ -39,6 +39,23 @@ class TestDeepenPortfolio:
         assert details["discovery_verdict"]["completeness"] == "web_search_subset"
         assert "search_deeper" in details["discovery_verdict"]["available_actions"]
 
+    def test_drops_web_search_dupes_of_seed_by_name(self):
+        # Seed has Known(known.com); deepen finds it again under .in (dropped)
+        # plus a genuinely new company (kept).
+        seed = [{"name": "Known", "url": "https://known.com", "description": ""}]
+        recovered = [
+            {"name": "Known, Inc.", "url": "https://known.in"},
+            {"name": "Fresh", "url": "https://fresh.com"},
+        ]
+        step = _make_step(seed)
+        with patch(_PATCH, return_value=recovered):
+            step.execute()
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_companies"] == [
+            {"name": "Fresh", "url": "https://fresh.com", "description": ""}
+        ]
+        assert details["portfolio_count"] == 2
+
     def test_seed_names_passed_to_search(self):
         seed = [{"name": "Known", "url": "https://known.com"}]
         step = _make_step(seed)

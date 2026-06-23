@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
-from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, normalize_url_key
+from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, find_new_candidates
 from src.pipeline.pipeline_steps.portfolio_websearch import run_deep_web_search_discovery
 
 if TYPE_CHECKING:
@@ -64,15 +64,11 @@ class DeepenPortfolio(RequestStep):
             self._require_ai_factory(), url, seed_names, step_name="DeepenPortfolio"
         )
 
-        # Keep only candidates not already on the scan (dedup by URL key).
-        seen = {normalize_url_key(c["url"]) for c in seed if c.get("url")}
-        fresh: list[dict[str, str]] = []
-        for company in recovered:
-            key = normalize_url_key(company["url"])
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            fresh.append({"name": company["name"], "url": company["url"], "description": ""})
+        # Keep only candidates not already on the scan. Confidence-aware dedup
+        # (shared with the initial fallback): the existing trusted list wins, so
+        # a web-search find never repeats a company we already have and TLD
+        # duplicates (acme.com / acme.in) collapse.
+        fresh = find_new_candidates(recovered, seed)
 
         total = len(seed) + len(fresh)
         logger.info(
