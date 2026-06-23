@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
-from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
+from src.pipeline.pipeline_steps.portfolio_extract import extract_companies_from_scrape
 from src.pipeline.pipeline_steps.portfolio_merge import (
     build_verdict,
     merge_fallback,
@@ -28,7 +28,6 @@ from src.pipeline.pipeline_steps.portfolio_merge import (
     sanitize_candidates,
 )
 from src.pipeline.pipeline_steps.portfolio_websearch import run_web_search_discovery
-from src.pipeline.prompts.loader import load_schema, load_system_prompt, load_template
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
@@ -36,18 +35,6 @@ if TYPE_CHECKING:
     from src.facades.company_accessor import CompanyAccessor
 
 logger = logging.getLogger(__name__)
-
-# Truncation budgets for the AI extraction prompt. These govern how much of
-# the scraped page is visible to the LLM — too small and large portfolios
-# (70+ companies) get truncated mid-list. Well under GPT-4o's 128k context.
-_AI_LINKS_TEXT_BUDGET = 10_000
-_AI_LINK_COUNT_BUDGET = 300
-# Combined content budget for the AI extraction prompt. Larger than the visible
-# page-text budget because embedded-JSON portfolios live in a dense ~200K script
-# island (script_text is prioritised ahead of the page skeleton). Only bites for
-# script-embedded sites; plain-text pages stay well under it. ~50K tokens — fine
-# for the once-per-firm discovery call.
-_AI_CONTENT_BUDGET = 200_000
 
 # Low-water mark: when site-derived discovery finds this many companies OR FEWER,
 # auto-run the web-search fallback to recover the firm's portfolio (the site is
@@ -103,7 +90,14 @@ class DiscoverPortfolio(RequestStep):
             script_text = metadata.get("script_text", "")
             page_links = metadata.get("all_links", [])
             if page_text or script_text:
-                ai_result = self._run_ai_extraction(url, page_text, script_text, page_links)
+                ai_result = extract_companies_from_scrape(
+                    self._require_ai_factory(),
+                    url,
+                    page_text,
+                    script_text,
+                    page_links,
+                    step_name="DiscoverPortfolio",
+                )
                 ai_companies = ai_result.get("companies", [])
                 is_pe_firm = ai_result.get("is_pe_firm", True)
                 if not is_pe_firm:
@@ -197,46 +191,3 @@ class DiscoverPortfolio(RequestStep):
             }
         )
         self.request_executor.mark_question_complete("discover_portfolio")
-
-    def _run_ai_extraction(
-        self,
-        firm_url: str,
-        page_text: str,
-        script_text: str,
-        links: list[dict[str, str]],
-    ) -> dict[str, Any]:
-        """Send scraped content to AI for structured company extraction.
-
-        Prioritises ``script_text`` (the data-bearing inline JSON where SSR sites
-        embed the portfolio) ahead of the visible ``page_text`` skeleton, within
-        the same budget — so embedded-JSON portfolios are extractable while
-        anchor/text portfolios still work.
-        """
-        if script_text and page_text:
-            content = f"{script_text}\n\n{page_text}"
-        else:
-            content = script_text or page_text
-        links_text = "\n".join(
-            f"- {link['text']}: {link['href']}" for link in links[:_AI_LINK_COUNT_BUDGET]
-        )
-        template = load_template("extract_portfolio_companies")
-        schema = load_schema("extract_portfolio_companies")
-        system_prompt = load_system_prompt("portfolio_validation")
-
-        prompt = template.format(
-            firm_url=firm_url,
-            page_text=content[:_AI_CONTENT_BUDGET],
-            links_text=links_text[:_AI_LINKS_TEXT_BUDGET],
-        )
-        # ``_tokens`` is the 4th tuple element from run_structured_ai_call
-        # (added 2026-05-15). DiscoverPortfolio doesn't surface token
-        # telemetry yet; opt-in later if needed.
-        _label, result, _elapsed, _tokens = run_structured_ai_call(
-            ai_client_factory=self._require_ai_factory(),
-            user_prompt=prompt,
-            schema=schema,
-            system_prompt=system_prompt,
-            label="extract_portfolio",
-            step_name="DiscoverPortfolio",
-        )
-        return result

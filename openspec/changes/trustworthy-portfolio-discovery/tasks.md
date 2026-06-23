@@ -18,9 +18,9 @@
 
 # Phase 4 — Provide-a-reliable-URL correction path
 
-- [ ] 4.1 `scan_core` entry (mirror deepen/upload) that fetches a customer-provided URL server-side via the existing scraper + extraction → `provided_url` candidates, merged trusted-wins. Worker + message + `POST /api/scan/{id}/source-url` (+ MCP option).
+- [x] 4.1 `scan_core` entry (mirror deepen/upload) that fetches a customer-provided URL server-side via the existing scraper + extraction → `provided_url` candidates, merged trusted-wins. Worker + message + `POST /api/scan/{id}/source-url`. (`FetchProvidedSource` step, `PortfolioSourceUrlFactory`, `build_portfolio_source_url_message`, shared `_process_additive_merge` worker path, `scan_core.fetch_source_url`, `handle_scan_source_url` route. `extract_companies_from_scrape` extracted from `DiscoverPortfolio` for reuse — no web-search fallback so the provided source stays reliable.) MCP option deferred.
 - [ ] 4.2 Frontend "Paste a page URL" affordance beside Upload; expectation-setting if the provided page is CSR / unreachable.
-- [ ] 4.3 Tests: provided URL merges high-confidence; CSR provided page → graceful "came up short → upload"; fetch failure leaves list intact.
+- [x] 4.3 Tests (backend): provided URL merges high-confidence `provided_url`; a page that adds nothing new leaves the scan's prior verdict + list intact (no relabelling to site-derived); fetch failure restores prior list; dedup against seed; heuristic-only (no-AI) path; route 202/400/404.
 
 # Validation (each phase)
 
