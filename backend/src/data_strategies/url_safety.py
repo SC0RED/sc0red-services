@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Truthy → skip the IP-range checks (scheme/host checks still apply). Off by
 # default so production Lambda is guarded with no extra config; set only in the
 # E2E / local docker stacks, which scrape an internal ``ai-mock`` host.
-_ALLOW_PRIVATE_HOSTS_ENV = "SCRAPER_ALLOW_PRIVATE_HOSTS"
+_ALLOW_PRIVATE_HOSTS_ENVIRONMENT = "SCRAPER_ALLOW_PRIVATE_HOSTS"
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
@@ -36,7 +36,7 @@ class UnsafeUrlError(ValueError):
 
 
 def _private_hosts_allowed() -> bool:  # noqa: NAMING001  private predicate; env opt-out
-    return os.environ.get(_ALLOW_PRIVATE_HOSTS_ENV, "").strip().lower() in _TRUTHY
+    return os.environ.get(_ALLOW_PRIVATE_HOSTS_ENVIRONMENT, "").strip().lower() in _TRUTHY
 
 
 def _is_blocked_address(  # noqa: NAMING001  is_-prefixed predicate (checker counts the leading _)
@@ -81,14 +81,14 @@ def assert_public_url(url: str) -> None:  # noqa: NAMING001  assert is the verb 
 
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     try:
-        addr_infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+        address_infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror as error:
         message = f"Could not resolve host '{host}'"
         raise UnsafeUrlError(message) from error
 
     # getaddrinfo may return scoped IPv6 ('fe80::1%eth0'); strip the zone id.
     # ``str(...)`` pins the loosely-typed sockaddr element to a string.
-    resolved = {str(info[4][0]).split("%")[0] for info in addr_infos}
+    resolved = {str(info[4][0]).split("%")[0] for info in address_infos}
     if not resolved:
         message = f"Could not resolve host '{host}'"
         raise UnsafeUrlError(message)
