@@ -54,8 +54,8 @@ _CMS_ID_PREFIX_RE = re.compile(r"^[0-9a-f]{24}\b")
 _NAV_SEGMENTS = frozenset(
     {"portfolio", "companies", "investments", "our-companies", "our-portfolio", "our-investments"}
 )
-# Shortest acceptable cleaned name; below this we fall back to the URL. Mirrors
-# MIN_NAME_LENGTH in web_scraper_strategy (kept local to avoid a circular import).
+# 2-char minimum: a single letter surviving logo stripping is not a usable name,
+# so we fall back to the URL-derived name instead.
 _MIN_NAME_LENGTH = 2
 # Logo-grid pages name companies via image alt text / filenames
 # ("Gatik-Logo", "Renaissant Logo Green Orange"), which AI extraction carries
@@ -117,6 +117,12 @@ def _strip_logo_cruft(name: str) -> str:
     Returns the cleaned name, or "" if nothing usable remains. A name without a
     standalone 'logo' token is returned unchanged — so "Wireless Logic" (no
     word-bounded 'logo') and a company literally called "Orange" are untouched.
+
+    Only TRAILING descriptors are stripped, never leading/embedded ones: a real
+    firm name can start with a colour word ("Silver Lake", "Orange Theory"), so
+    "Silver Lake Logo" → "Silver Lake", not "Lake". The trade-off is that the
+    rare "<colour> Logo <Name>" alt-text form keeps its leading descriptor — an
+    acceptable miss versus mangling a legitimate name.
     """
     normalized = name.replace("-", " ").replace("_", " ")
     if not _LOGO_TOKEN_RE.search(normalized):

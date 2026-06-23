@@ -104,6 +104,14 @@ class TestSanitizeCandidates:
         out = sanitize_candidates([{"name": "Orange", "url": "https://orange.com/"}])
         assert out[0]["name"] == "Orange"
 
+    def test_leading_color_word_in_real_name_is_preserved(self):
+        # Only TRAILING descriptors are stripped — a real firm whose name starts
+        # with a colour word ("Silver Lake") must survive logo cleanup intact.
+        out = sanitize_candidates(
+            [{"name": "Silver Lake Logo", "url": "https://www.silverlake.com/"}]
+        )
+        assert out[0]["name"] == "Silver Lake"
+
     def test_non_string_fields_do_not_crash(self):
         # Malformed extraction (None values) must be handled gracefully, not crash.
         out = sanitize_candidates(
