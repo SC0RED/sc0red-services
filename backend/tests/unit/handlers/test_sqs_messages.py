@@ -6,7 +6,9 @@ import json
 
 from src.handlers.sqs_messages import (
     build_analysis_message,
+    build_portfolio_deepen_message,
     build_portfolio_discovery_message,
+    build_portfolio_source_url_message,
     build_reanalysis_message,
 )
 
@@ -89,3 +91,33 @@ class TestBuildPortfolioDiscoveryMessage:
         )
         # Round-trip through JSON to confirm no non-serializable values
         assert json.loads(payload)["type"] == "portfolio_discovery"
+
+    def test_sets_portfolio_deepen_type(self) -> None:
+        payload = build_portfolio_deepen_message(
+            url="https://pefirm.com",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-1",
+        )
+        assert json.loads(payload) == {
+            "type": "portfolio_deepen",
+            "url": "https://pefirm.com",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+        }
+
+    def test_sets_portfolio_source_url_type(self) -> None:
+        payload = build_portfolio_source_url_message(
+            source_url="https://pefirm.com/portfolio",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-1",
+        )
+        assert json.loads(payload) == {
+            "type": "portfolio_source_url",
+            "source_url": "https://pefirm.com/portfolio",
+            "org_id": "org-1",
+            "user_id": "user-1",
+            "scan_id": "scan-1",
+        }

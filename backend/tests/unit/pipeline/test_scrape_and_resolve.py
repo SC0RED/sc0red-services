@@ -2,9 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
+from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
 
+from src.data_strategies.url_safety import UnsafeUrlError
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_steps.scrape_and_resolve import ScrapeAndResolveURL
@@ -81,6 +82,7 @@ class TestScrapeAndResolveURL:
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
     def test_execute_insufficient_content(self, mock_scraper_cls, mock_resolver_cls):
         mock_scraper = MagicMock()
+        # Genuine thin-but-OK page: no transport error → plain message, no HTTP status.
         mock_scraper.execute.return_value = ("short", {})
         mock_scraper_cls.return_value = mock_scraper
 
@@ -91,7 +93,28 @@ class TestScrapeAndResolveURL:
         step._entity_accessor = accessor
         step._request_executor = MagicMock()
 
-        with pytest.raises(ValueError, match="Insufficient content"):
+        with pytest.raises(
+            ValueError, match=r"Insufficient content scraped from https://example.com$"
+        ):
+            step.execute()
+
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.URLResolutionStrategy")
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
+    def test_execute_surfaces_bot_block_status(self, mock_scraper_cls, mock_resolver_cls):
+        mock_scraper = MagicMock()
+        # Bot block: WebScraperStrategy returns empty text + the HTTP status.
+        mock_scraper.execute.return_value = ("", {"error": "HTTP 403"})
+        mock_scraper_cls.return_value = mock_scraper
+
+        company = Company(url="https://blocked.com")
+        accessor = CompanyAccessor(company)
+
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        # The real cause (HTTP 403) is surfaced, not masked as generic insufficient content.
+        with pytest.raises(ValueError, match=r"HTTP 403"):
             step.execute()
 
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")
@@ -117,7 +140,7 @@ class TestScrapeAndResolveURL:
         )
         mock_resolver_cls.return_value = mock_resolver
 
-        mock_scrape_url.side_effect = httpx.RequestError("Connection error")
+        mock_scrape_url.side_effect = CurlConnectionError("Connection error")
 
         company = Company(url="https://original.com")
         accessor = CompanyAccessor(company)
@@ -129,6 +152,39 @@ class TestScrapeAndResolveURL:
         step.execute()
 
         # Falls back to original URL on resolution scrape failure
+        assert accessor.company.actual_url == "https://original.com"
+
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.URLResolutionStrategy")
+    @patch("src.pipeline.pipeline_steps.scrape_and_resolve.WebScraperStrategy")
+    def test_execute_resolution_ssrf_refused_falls_back(
+        self,
+        mock_scraper_cls,
+        mock_resolver_cls,
+        mock_scrape_url,
+    ):
+        # An AI-resolved URL that the SSRF guard refuses (e.g. a private host)
+        # degrades to the original content rather than failing the analysis.
+        mock_scraper = MagicMock()
+        mock_scraper.execute.return_value = (
+            "Original content that is long enough for the validation check here",
+            {"title": "Test", "links": []},
+        )
+        mock_scraper_cls.return_value = mock_scraper
+
+        mock_resolver = MagicMock()
+        mock_resolver.execute.return_value = ("https://resolved.com", {"resolved": True})
+        mock_resolver_cls.return_value = mock_resolver
+
+        mock_scrape_url.side_effect = UnsafeUrlError("resolves to non-public address")
+
+        accessor = CompanyAccessor(Company(url="https://original.com"))
+        step = ScrapeAndResolveURL(ai_client_factory=MagicMock())
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
         assert accessor.company.actual_url == "https://original.com"
 
     @patch("src.pipeline.pipeline_steps.scrape_and_resolve.scrape_url")

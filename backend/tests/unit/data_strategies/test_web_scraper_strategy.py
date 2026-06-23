@@ -3,18 +3,91 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import httpx
-
+import pytest
 from bs4 import BeautifulSoup
+from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
+from curl_cffi.requests.exceptions import HTTPError, ImpersonateError
 
 from src.data_strategies.web_scraper_strategy import (
     WebScraperStrategy,
     _extract_context_name,
+    _extract_embedded_companies,
     _extract_name_from_img_src,
     extract_name_from_url,
     normalize_url,
     scrape_url,
 )
+
+
+def _soup(html: str) -> BeautifulSoup:
+    return BeautifulSoup(html, "html.parser")
+
+
+def _http_error(status_code: int) -> HTTPError:
+    """Build a curl_cffi HTTPError whose .response carries a status code."""
+    error = HTTPError(f"HTTP Error {status_code}")
+    error.response = MagicMock(status_code=status_code)
+    return error
+
+
+class TestExtractEmbeddedCompanies:
+    def test_extracts_escaped_json_records(self):
+        # SSR/headless-CMS shape: stringified JSON with escaped quotes, each
+        # company record large with logo/timestamp noise around name+slug.
+        html = (
+            "<html><head><script>"
+            'self.__next_f.push([1,"{\\"items\\":['
+            r"{\"name\":\"Calabrio\",\"slug\":\"calabrio\","
+            r"\"logoSolidBlack\":{\"alt\":\"Calabrio logo\",\"filename\":\"x.svg\"}},"
+            r"{\"name\":\"ABC Fitness Solutions\",\"slug\":\"abc\",\"updatedAt\":\"2025-11-19\"},"
+            r"{\"name\":\"Dynatrace\",\"slug\":\"dynatrace\"}"
+            ']}"])</script></head><body></body></html>'
+        )
+        out = _extract_embedded_companies(_soup(html))
+        names = {c["name"] for c in out}
+        slugs = {c["slug"] for c in out}
+        assert names == {"Calabrio", "ABC Fitness Solutions", "Dynatrace"}
+        assert slugs == {"calabrio", "abc", "dynatrace"}
+
+    def test_extracts_plain_json_records(self):
+        html = (
+            "<html><head><script>"
+            'window.__DATA__ = {"companies":['
+            '{"name":"Acme Corp","slug":"acme"},'
+            '{"name":"Globex","slug":"globex"}]}'
+            "</script></head><body></body></html>"
+        )
+        out = _extract_embedded_companies(_soup(html))
+        assert {c["slug"] for c in out} == {"acme", "globex"}
+
+    def test_excludes_name_without_adjacent_slug(self):
+        # Logo asset (name but no slug) and searchableNormalized (name, no slug)
+        # must NOT be mistaken for companies.
+        html = (
+            "<html><head><script>"
+            r"{\"logo\":{\"name\":\"some-logo\",\"filename\":\"logo.svg\"},"
+            r"\"searchableNormalized\":{\"name\":\"bottomline\"}}"
+            "</script></head><body></body></html>"
+        )
+        assert _extract_embedded_companies(_soup(html)) == []
+
+    def test_dedupes_by_slug(self):
+        html = (
+            "<html><head><script>"
+            '{"a":{"name":"Acme","slug":"acme"},"b":{"name":"Acme Dup","slug":"acme"}}'
+            "</script></head><body></body></html>"
+        )
+        out = _extract_embedded_companies(_soup(html))
+        assert len(out) == 1
+        assert out[0]["slug"] == "acme"
+
+    def test_no_records_returns_empty(self):
+        html = "<html><head><script>console.log('hi')</script></head><body><p>x</p></body></html>"
+        assert _extract_embedded_companies(_soup(html)) == []
+
+    def test_skips_external_scripts(self):
+        html = '<html><head><script src="https://cdn/app.js"></script></head><body></body></html>'
+        assert _extract_embedded_companies(_soup(html)) == []
 
 
 class TestNormalizeUrl:
@@ -36,11 +109,17 @@ class TestNormalizeUrl:
         assert result == "https://example.com/"
 
 
+def _patch_html(html: str):
+    """Patch the transport so scrape_url parses the given HTML."""
+    return patch(
+        "src.data_strategies.web_scraper_strategy.fetch_page_html",
+        return_value=html,
+    )
+
+
 class TestScrapeUrl:
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_success(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = """
+    def test_scrape_success(self):
+        html = """
         <html>
         <head>
             <title>Test Page</title>
@@ -54,55 +133,31 @@ class TestScrapeUrl:
         </body>
         </html>
         """
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert result["title"] == "Test Page"
         assert result["description"] == "A test page"
         assert result["meta_keywords"] == "test,page"
         assert "content about a company" in result["text"]
         assert any(link["text"] == "Link Text" for link in result["links"])
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_fallback_h1_title(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = "<html><body><h1>Fallback Title</h1><p>content here</p></body></html>"
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+    def test_scrape_fallback_h1_title(self):
+        html = "<html><body><h1>Fallback Title</h1><p>content here</p></body></html>"
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert result["title"] == "Fallback Title"
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_og_description_fallback(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
+    def test_scrape_og_description_fallback(self):
+        html = (
             '<html><head><meta property="og:description" content="OG Desc"></head>'
             "<body><p>body</p></body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert result["description"] == "OG Desc"
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_removes_clutter(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
+    def test_scrape_removes_clutter(self):
+        html = (
             "<html><body>"
             "<nav>Navigation</nav>"
             "<footer>Footer</footer>"
@@ -110,127 +165,89 @@ class TestScrapeUrl:
             "<p>Real content here</p>"
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Navigation" not in result["text"]
         assert "var x" not in result["text"]
         assert "Real content" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_removes_element_with_exact_clutter_class(self, mock_client_cls):
+    def test_scrape_removes_element_with_exact_clutter_class(self):
         """Element with class exactly matching 'sidebar' is removed."""
-        mock_response = MagicMock()
-        mock_response.text = (
-            "<html><body>"
-            '<div class="sidebar">Sidebar junk</div>'
-            "<p>Main content</p>"
-            "</body></html>"
+        html = (
+            '<html><body><div class="sidebar">Sidebar junk</div><p>Main content</p></body></html>'
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Sidebar junk" not in result["text"]
         assert "Main content" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_preserves_compound_class_with_clutter_substring(self, mock_client_cls):
+    def test_scrape_preserves_compound_class_with_clutter_substring(self):
         """Element with class 'no-sidebar' is NOT removed — token matching, not substring."""
-        mock_response = MagicMock()
-        mock_response.text = (
+        html = (
             '<html><body class="home no-sidebar wp-theme">'
             "<p>Important content about the company</p>"
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Important content" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_never_removes_body_element(self, mock_client_cls):
+    def test_scrape_never_removes_body_element(self):
         """<body> is never decomposed even if its class matches a clutter keyword."""
-        mock_response = MagicMock()
-        mock_response.text = (
+        html = (
             '<html><body class="sidebar">'
             "<p>Content inside body with sidebar class</p>"
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert "Content inside body" in result["text"]
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_image_link_fallback(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
-            '<html><body><a href="https://co.com"><img alt="Company Logo"></a></body></html>'
-        )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+    def test_scrape_image_link_fallback(self):
+        html = '<html><body><a href="https://co.com"><img alt="Company Logo"></a></body></html>'
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert any(link["text"] == "Company Logo" for link in result["links"])
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_aria_label_fallback(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
-            '<html><body><a href="https://co.com" aria-label="Visit Company"></a></body></html>'
-        )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+    def test_scrape_aria_label_fallback(self):
+        html = '<html><body><a href="https://co.com" aria-label="Visit Company"></a></body></html>'
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert any(link["text"] == "Visit Company" for link in result["links"])
 
-    @patch("src.data_strategies.web_scraper_strategy.httpx.Client")
-    def test_scrape_skips_hash_and_mailto_links(self, mock_client_cls):
-        mock_response = MagicMock()
-        mock_response.text = (
+    def test_scrape_returns_embedded_companies(self):
+        html = (
+            "<html><head><script>"
+            '{"items":[{"name":"Acme Corp","slug":"acme"},{"name":"Globex","slug":"globex"}]}'
+            "</script></head><body><p>skeleton</p></body></html>"
+        )
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
+        assert {c["slug"] for c in result["embedded_companies"]} == {"acme", "globex"}
+        # existing keys still present
+        assert "text" in result and "links" in result and "script_text" in result
+
+    def test_scrape_returns_logo_company_names(self):
+        html = (
+            "<html><body>"
+            '<img alt="Logo of software company Jamf">'
+            '<img alt="Logo of software company Datto">'
+            "<p>skeleton</p></body></html>"
+        )
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
+        assert result["logo_company_names"] == ["Jamf", "Datto"]
+
+    def test_scrape_skips_hash_and_mailto_links(self):
+        html = (
             "<html><body>"
             '<a href="#section">Anchor</a>'
             '<a href="mailto:test@test.com">Email</a>'
             '<a href="https://good.com">Good Link</a>'
             "</body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.get.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = scrape_url("https://example.com")
+        with _patch_html(html):
+            result = scrape_url("https://example.com")
         assert len(result["links"]) == 1
         assert result["links"][0]["text"] == "Good Link"
 
@@ -259,30 +276,47 @@ class TestWebScraperStrategy:
 
     @patch("src.data_strategies.web_scraper_strategy.scrape_url")
     def test_execute_http_error(self, mock_scrape):
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        mock_scrape.side_effect = httpx.HTTPStatusError(
-            "Not found",
-            request=MagicMock(),
-            response=mock_response,
-        )
+        mock_scrape.side_effect = _http_error(404)
         strategy = WebScraperStrategy(config={"url": "https://example.com"})
         text, meta = strategy.execute()
         assert text == ""
         assert "404" in meta["error"]
 
     @patch("src.data_strategies.web_scraper_strategy.scrape_url")
+    def test_execute_http_error_without_response(self, mock_scrape):
+        # Defensive branch: HTTPError with no .response → degrade to the error
+        # string rather than crash on "HTTP None".
+        error = HTTPError("boom")
+        error.response = None
+        mock_scrape.side_effect = error
+        strategy = WebScraperStrategy(config={"url": "https://example.com"})
+        text, meta = strategy.execute()
+        assert text == ""
+        assert meta["error"] == "boom"
+
+    @patch("src.data_strategies.web_scraper_strategy.scrape_url")
     def test_execute_request_error(self, mock_scrape):
-        mock_scrape.side_effect = httpx.RequestError("Connection refused", request=MagicMock())
+        mock_scrape.side_effect = CurlConnectionError("Connection refused")
         strategy = WebScraperStrategy(config={"url": "https://example.com"})
         text, meta = strategy.execute()
         assert text == ""
         assert "error" in meta
 
+    @patch("src.data_strategies.web_scraper_strategy.scrape_url")
+    def test_execute_impersonation_misconfig_propagates(self, mock_scrape):
+        # A bad _IMPERSONATE_TARGET is a programming/config error — it must crash
+        # loudly, not be swallowed into the ("", {"error": ...}) transport contract.
+        mock_scrape.side_effect = ImpersonateError("bad target")
+        strategy = WebScraperStrategy(config={"url": "https://example.com"})
+        with pytest.raises(ImpersonateError):
+            strategy.execute()
+
 
 class TestNameFromImgSrc:
     def test_hyphenated_filename(self):
-        assert _extract_name_from_img_src("https://cdn/access-healthcare.png") == "Access Healthcare"
+        assert (
+            _extract_name_from_img_src("https://cdn/access-healthcare.png") == "Access Healthcare"
+        )
 
     def test_underscored_filename(self):
         assert _extract_name_from_img_src("access_healthcare.png") == "Access Healthcare"
@@ -305,7 +339,9 @@ class TestNameFromImgSrc:
 
     def test_handles_query_string_and_fragment(self):
         assert _extract_name_from_img_src("/img/access-healthcare.png?v=2") == "Access Healthcare"
-        assert _extract_name_from_img_src("/img/access-healthcare.png#anchor") == "Access Healthcare"
+        assert (
+            _extract_name_from_img_src("/img/access-healthcare.png#anchor") == "Access Healthcare"
+        )
 
     def test_no_extension(self):
         assert _extract_name_from_img_src("/img/access-healthcare") == "Access Healthcare"
@@ -339,7 +375,10 @@ class TestNameFromUrl:
 
     def test_subdomain_stripped_only_if_www(self):
         # Non-www subdomain is kept as part of the hostname stem
-        assert extract_name_from_url("https://portfolio.endurancelift.com") == "Portfolio Endurancelift"
+        assert (
+            extract_name_from_url("https://portfolio.endurancelift.com")
+            == "Portfolio Endurancelift"
+        )
 
     def test_empty_returns_empty(self):
         assert extract_name_from_url("") == ""

@@ -409,3 +409,11 @@ class TestScanRepository:
 
         assert repo.get_scan_companies(scan_id) == []
         assert repo.get_scan_companies_with_deleted(scan_id) == []
+
+
+def test_deserialize_parses_discovery_verdict():
+    from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
+
+    item = {"discovery_verdict": '{"completeness": "web_search_subset", "count": 3}'}
+    DynamoDBScanRepository._deserialize(item)
+    assert item["discovery_verdict"] == {"completeness": "web_search_subset", "count": 3}

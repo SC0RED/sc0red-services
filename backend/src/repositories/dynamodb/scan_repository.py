@@ -334,3 +334,5 @@ class DynamoDBScanRepository:
     def _deserialize(item: dict[str, Any]) -> None:
         if "portfolio_companies" in item and isinstance(item["portfolio_companies"], str):
             item["portfolio_companies"] = json.loads(item["portfolio_companies"])
+        if "discovery_verdict" in item and isinstance(item["discovery_verdict"], str):
+            item["discovery_verdict"] = json.loads(item["discovery_verdict"])

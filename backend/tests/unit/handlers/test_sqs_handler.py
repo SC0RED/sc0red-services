@@ -1,8 +1,9 @@
 """Tests for SQSHandler."""
 
 import json
-import pytest
 from unittest.mock import MagicMock, call, patch
+
+import pytest
 
 from src.handlers.sqs_handler import SQSHandler
 
@@ -126,7 +127,9 @@ class TestSQSHandler:
         company_repo.update.assert_any_call(
             "analysis-id-1", {"id": "analysis-id-1", "error": "timeout"}
         )
-        scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100, "completed_count": 1})
+        scan_repo.update.assert_called_once_with(
+            "scan-1", {"status": "complete", "progress": 100, "completed_count": 1}
+        )
 
     def test_identity_written_before_pipeline_survives_failure(self):
         """Company name + URL are persisted before the pipeline runs, so failures
@@ -218,7 +221,9 @@ class TestSQSHandler:
         handler._process_message({**_BASE_MESSAGE, "scan_id": "scan-1"})
 
         scan_repo = storage.create_scan_repository.return_value
-        scan_repo.update.assert_called_once_with("scan-1", {"status": "complete", "progress": 100, "completed_count": 2})
+        scan_repo.update.assert_called_once_with(
+            "scan-1", {"status": "complete", "progress": 100, "completed_count": 2}
+        )
 
     def test_process_message_updates_progress_when_not_all_resolved(self):
         handler, storage = self._make_handler()
@@ -414,6 +419,31 @@ class TestSQSHandlerPortfolioDiscovery:
             ),
         ]
 
+    def test_success_persists_discovery_verdict_with_final_count(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        storage.create_scan_repository.return_value = scan_repo
+        companies = [{"name": "Co1", "url": "https://co1.com"}]
+        handler._factory_manager.run_portfolio_discovery.return_value = {
+            "details": {
+                "portfolio_companies": companies,
+                # discovery-time count (3) differs from the final list (1)
+                "discovery_verdict": {
+                    "method": "web_search",
+                    "count": 3,
+                    "completeness": "web_search_subset",
+                    "available_actions": ["search_deeper", "upload_list"],
+                },
+            },
+        }
+
+        handler._process_message(dict(self._PORTFOLIO_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1][0][1]
+        verdict = final_update["discovery_verdict"]
+        assert verdict["completeness"] == "web_search_subset"
+        assert verdict["count"] == 1  # overridden to the final persisted count
+
     def test_domain_error_marks_scan_failed_and_does_not_retry(self):
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
@@ -436,17 +466,13 @@ class TestSQSHandlerPortfolioDiscovery:
         # Message consumed, not retried — domain errors are user-visible, not bugs.
         assert result == {"batchItemFailures": []}
         # Final state is failed with error surfaced on the scan record.
-        scan_repo.update.assert_any_call(
-            "scan-p1", {"status": "failed", "error": "scrape blocked"}
-        )
+        scan_repo.update.assert_any_call("scan-p1", {"status": "failed", "error": "scrape blocked"})
 
     def test_value_error_is_caught_as_domain_error(self):
         handler, storage = self._make_handler()
         scan_repo = MagicMock()
         storage.create_scan_repository.return_value = scan_repo
-        handler._factory_manager.run_portfolio_discovery.side_effect = ValueError(
-            "No URL provided"
-        )
+        handler._factory_manager.run_portfolio_discovery.side_effect = ValueError("No URL provided")
 
         handler._process_message(dict(self._PORTFOLIO_MESSAGE))
 
@@ -701,3 +727,223 @@ class TestSQSHandlerReanalysis:
         handler._process_message(message)
 
         company_repo.update.assert_called_once_with("a-1", {"error": "broken"})
+
+
+class TestSQSHandlerPortfolioDeepen:
+    """Customer-triggered deepen dispatch path."""
+
+    _DEEPEN_MESSAGE = {
+        "type": "portfolio_deepen",
+        "url": "https://perotjain.com",
+        "org_id": "org-1",
+        "user_id": "user-1",
+        "scan_id": "scan-d1",
+    }
+
+    def _make_handler(self):
+        storage = MagicMock()
+        handler = SQSHandler(storage=storage)
+        handler._factory_manager = MagicMock()
+        return handler, storage
+
+    def test_dispatch_seeds_from_scan_and_runs_deepen(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_deepen.return_value = {
+            "details": {"portfolio_companies": seed},
+        }
+
+        handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+        handler._factory_manager.run_portfolio_deepen.assert_called_once_with(
+            url="https://perotjain.com",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-d1",
+            seed_companies=seed,
+        )
+        handler._factory_manager.run_portfolio_discovery.assert_not_called()
+
+    def test_success_writes_augmented_list(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        augmented = seed + [{"name": "Fresh", "url": "https://fresh.com"}]
+        handler._factory_manager.run_portfolio_deepen.return_value = {
+            "details": {"portfolio_companies": augmented},
+        }
+
+        handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1]
+        assert final_update == call(
+            "scan-d1",
+            {
+                "status": "awaiting_confirmation",
+                "progress": 20,
+                "portfolio_companies": augmented,
+            },
+        )
+
+    def test_domain_error_restores_prior_list(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_deepen.side_effect = RuntimeError("search down")
+
+        # Must NOT raise — deepen failure is a no-op that keeps the prior list.
+        handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1]
+        assert final_update == call(
+            "scan-d1",
+            {"status": "awaiting_confirmation", "progress": 20, "portfolio_companies": seed},
+        )
+
+    def test_engine_error_restores_prior_list(self):
+        from signalfield_core.exceptions.base import EngineError
+
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_deepen.side_effect = EngineError("provider down")
+
+        # Provider failure must NOT strand the scan — restore the prior list.
+        handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1]
+        assert final_update == call(
+            "scan-d1",
+            {"status": "awaiting_confirmation", "progress": 20, "portfolio_companies": seed},
+        )
+
+    def test_missing_scan_is_skipped(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = None
+        storage.create_scan_repository.return_value = scan_repo
+
+        handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+        scan_repo.update.assert_not_called()
+        handler._factory_manager.run_portfolio_deepen.assert_not_called()
+
+    def test_programming_error_propagates(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"portfolio_companies": []}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_deepen.side_effect = KeyError("boom")
+
+        with pytest.raises(KeyError):
+            handler._process_message(dict(self._DEEPEN_MESSAGE))
+
+
+class TestSQSHandlerPortfolioSourceUrl:
+    """Customer-provided reliable-source-URL dispatch path."""
+
+    _SOURCE_URL_MESSAGE = {
+        "type": "portfolio_source_url",
+        "source_url": "https://perotjain.com/portfolio",
+        "org_id": "org-1",
+        "user_id": "user-1",
+        "scan_id": "scan-s1",
+    }
+
+    def _make_handler(self):
+        storage = MagicMock()
+        handler = SQSHandler(storage=storage)
+        handler._factory_manager = MagicMock()
+        return handler, storage
+
+    def test_dispatch_seeds_from_scan_and_fetches_source(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_source_url.return_value = {
+            "details": {"portfolio_companies": seed},
+        }
+
+        handler._process_message(dict(self._SOURCE_URL_MESSAGE))
+
+        handler._factory_manager.run_portfolio_source_url.assert_called_once_with(
+            url="https://perotjain.com/portfolio",
+            org_id="org-1",
+            user_id="user-1",
+            scan_id="scan-s1",
+            seed_companies=seed,
+        )
+        handler._factory_manager.run_portfolio_deepen.assert_not_called()
+        handler._factory_manager.run_portfolio_discovery.assert_not_called()
+
+    def test_success_writes_augmented_list(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        augmented = seed + [{"name": "Fresh", "url": "https://fresh.com"}]
+        handler._factory_manager.run_portfolio_source_url.return_value = {
+            "details": {"portfolio_companies": augmented},
+        }
+
+        handler._process_message(dict(self._SOURCE_URL_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1]
+        assert final_update == call(
+            "scan-s1",
+            {
+                "status": "awaiting_confirmation",
+                "progress": 20,
+                "portfolio_companies": augmented,
+            },
+        )
+
+    def test_domain_error_restores_prior_list(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        seed = [{"name": "Known", "url": "https://known.com"}]
+        scan_repo.get_by_id.return_value = {"portfolio_companies": seed}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_source_url.side_effect = RuntimeError("fetch down")
+
+        # Must NOT raise — a failed fetch keeps the prior list intact.
+        handler._process_message(dict(self._SOURCE_URL_MESSAGE))
+
+        final_update = scan_repo.update.call_args_list[-1]
+        assert final_update == call(
+            "scan-s1",
+            {"status": "awaiting_confirmation", "progress": 20, "portfolio_companies": seed},
+        )
+
+    def test_missing_scan_is_skipped(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = None
+        storage.create_scan_repository.return_value = scan_repo
+
+        handler._process_message(dict(self._SOURCE_URL_MESSAGE))
+
+        scan_repo.update.assert_not_called()
+        handler._factory_manager.run_portfolio_source_url.assert_not_called()
+
+    def test_programming_error_propagates(self):
+        handler, storage = self._make_handler()
+        scan_repo = MagicMock()
+        scan_repo.get_by_id.return_value = {"portfolio_companies": []}
+        storage.create_scan_repository.return_value = scan_repo
+        handler._factory_manager.run_portfolio_source_url.side_effect = KeyError("boom")
+
+        with pytest.raises(KeyError):
+            handler._process_message(dict(self._SOURCE_URL_MESSAGE))

@@ -21,7 +21,9 @@ import boto3
 
 from src.handlers.sqs_messages import (
     build_analysis_message,
+    build_portfolio_deepen_message,
     build_portfolio_discovery_message,
+    build_portfolio_source_url_message,
 )
 
 if TYPE_CHECKING:
@@ -152,6 +154,68 @@ def _start_single_scan(
     )
 
     return {"scan_id": scan_id, "status": "running", "analysis_id": analysis_id}
+
+
+def deepen_scan(  # noqa: NAMING001  deepen is a verb; not in the checker's heuristic list
+    scan_repo: DynamoDBScanRepository,
+    *,
+    scan_id: str,
+    source_url: str,
+    authentication: ScanActor,
+    sqs: Any,
+    queue_url: str,
+) -> dict[str, Any]:
+    """Dispatch a customer-triggered deepen of an awaiting-confirmation scan.
+
+    Marks the scan ``discovering`` (so clients re-enter the polling/realtime
+    loop immediately) and dispatches a deepen message; the worker seeds from the
+    scan's current companies, runs the deeper search, and merges results back.
+    Returns ``{"scan_id", "status"}``. Scan existence/org/status validation is
+    the caller's job.
+    """
+    # Enqueue first — only flip the scan to ``discovering`` once the work is
+    # safely on the queue, so a send failure leaves the scan in
+    # ``awaiting_confirmation`` (recoverable) rather than stranded mid-discovery.
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=build_portfolio_deepen_message(
+            url=source_url,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
+        ),
+    )
+    scan_repo.update(scan_id, {"status": "discovering", "progress": 5})
+    return {"scan_id": scan_id, "status": "discovering"}
+
+
+def fetch_source_url(
+    scan_repo: DynamoDBScanRepository,
+    *,
+    scan_id: str,
+    source_url: str,
+    authentication: ScanActor,
+    sqs: Any,
+    queue_url: str,
+) -> dict[str, Any]:
+    """Dispatch a customer-provided source-URL fetch for an awaiting scan.
+
+    ``source_url`` is the page the customer says lists the portfolio. Enqueues
+    the fetch, marks the scan ``discovering``, and returns ``{"scan_id",
+    "status"}``. The worker scrapes that page and merges new companies in. Scan
+    existence/org/status and URL presence validation are the caller's job.
+    """
+    sqs.send_message(
+        QueueUrl=queue_url,
+        MessageBody=build_portfolio_source_url_message(
+            source_url=source_url,
+            org_id=authentication.org_id,
+            user_id=authentication.user_id,
+            scan_id=scan_id,
+        ),
+    )
+    scan_repo.update(scan_id, {"status": "discovering", "progress": 5})
+    return {"scan_id": scan_id, "status": "discovering"}
 
 
 def confirm_scan(  # noqa: NAMING001  confirm is a verb; not in the checker's heuristic list
