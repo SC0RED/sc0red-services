@@ -3,8 +3,8 @@
 from src.pipeline.pipeline_steps.portfolio_merge import (
     merge_results,
     normalize_url_key,
-    sanitize_candidates,
 )
+from src.pipeline.pipeline_steps.portfolio_names import sanitize_candidates
 
 
 class TestNormalizeUrlKeyWhitespace:

@@ -23,8 +23,8 @@ from signalfield_core.pipeline.step import RequestStep
 from src.pipeline.pipeline_steps.portfolio_merge import (
     build_verdict,
     find_new_candidates,
-    sanitize_candidates,
 )
+from src.pipeline.pipeline_steps.portfolio_names import sanitize_candidates
 from src.pipeline.pipeline_steps.portfolio_websearch import run_deep_web_search_discovery
 
 if TYPE_CHECKING:

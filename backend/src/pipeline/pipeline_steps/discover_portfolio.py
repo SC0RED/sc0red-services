@@ -25,8 +25,8 @@ from src.pipeline.pipeline_steps.portfolio_merge import (
     build_verdict,
     merge_fallback,
     merge_results,
-    sanitize_candidates,
 )
+from src.pipeline.pipeline_steps.portfolio_names import sanitize_candidates
 from src.pipeline.pipeline_steps.portfolio_websearch import run_web_search_discovery
 
 if TYPE_CHECKING:

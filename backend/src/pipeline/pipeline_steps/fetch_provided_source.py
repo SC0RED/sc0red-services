@@ -21,8 +21,8 @@ from src.pipeline.pipeline_steps.portfolio_merge import (
     build_verdict,
     find_new_candidates,
     merge_results,
-    sanitize_candidates,
 )
+from src.pipeline.pipeline_steps.portfolio_names import sanitize_candidates
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
