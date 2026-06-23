@@ -33,7 +33,7 @@ class TestDeepenPortfolio:
         # Existing list is trusted (auto_included); only the fresh one validates.
         assert details["portfolio_auto_included"] == seed
         assert details["portfolio_companies"] == [
-            {"name": "Fresh", "url": "https://fresh.com", "description": ""}
+            {"name": "Fresh", "url": "https://fresh.com", "description": "", "source": "web_search"}
         ]
         assert details["portfolio_count"] == 2
         assert details["discovery_verdict"]["completeness"] == "web_search_subset"
@@ -52,7 +52,7 @@ class TestDeepenPortfolio:
             step.execute()
         details = step._request_executor.add_details.call_args[0][0]
         assert details["portfolio_companies"] == [
-            {"name": "Fresh", "url": "https://fresh.com", "description": ""}
+            {"name": "Fresh", "url": "https://fresh.com", "description": "", "source": "web_search"}
         ]
         assert details["portfolio_count"] == 2
 

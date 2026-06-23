@@ -83,6 +83,9 @@ class DeepenPortfolio(RequestStep):
         # trusted and skips it. ValidatePortfolioCompanies merges the two.
         # ``deepen_added`` lets the verdict report exhaustion: when a deepen round
         # adds nothing new, web search is tapped out → point the customer to upload.
+        # No ``site_source_url``: the deepen verdict is web-search-derived, so the
+        # group-level site anchor is intentionally dropped — the original site
+        # companies still carry their per-row ``source="site"`` provenance.
         verdict = build_verdict(
             site_total=0,
             total=total,

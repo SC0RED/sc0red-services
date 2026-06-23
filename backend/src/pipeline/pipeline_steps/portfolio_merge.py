@@ -103,9 +103,10 @@ def merge_results(
     intersection = set(heuristic_by_key) & set(ai_by_key)
     remainder_keys = (set(heuristic_by_key) | set(ai_by_key)) - intersection
 
-    auto_included = [heuristic_by_key[k] for k in intersection]
+    auto_included = [{**heuristic_by_key[k], "source": "site"} for k in intersection]
     needs_validation = [
-        (heuristic_by_key if k in heuristic_by_key else ai_by_key)[k] for k in remainder_keys
+        {**(heuristic_by_key if k in heuristic_by_key else ai_by_key)[k], "source": "site"}
+        for k in remainder_keys
     ]
 
     logger.info(
@@ -138,6 +139,8 @@ def merge_fallback(
 def find_new_candidates(
     candidates: list[dict[str, str]],
     trusted: list[dict[str, str]],
+    *,
+    source: str = "web_search",
 ) -> list[dict[str, str]]:
     """Return the ``candidates`` not already present in ``trusted``.
 
@@ -146,8 +149,8 @@ def find_new_candidates(
     OR its normalized name already appears in ``trusted`` (or earlier in
     ``candidates``), so the trusted source wins and ``acme.com`` / ``acme.in``
     twins collapse. A trusted entry is never dropped — only lower-confidence
-    candidates are filtered. Each kept entry is normalized to
-    ``{name, url, description}``.
+    candidates are filtered. Each kept entry is emitted as
+    ``{name, url, description, source}``.
 
     The trusted index uses ``.get`` (a malformed trusted entry just doesn't
     contribute to dedup — graceful, never crashes the merge), while candidates
@@ -178,7 +181,9 @@ def find_new_candidates(
         seen_urls.add(key)
         if name_key:
             seen_names.add(name_key)
-        fresh.append({"name": company["name"], "url": company["url"], "description": ""})
+        fresh.append(
+            {"name": company["name"], "url": company["url"], "description": "", "source": source}
+        )
     return fresh
 
 
@@ -189,6 +194,7 @@ def build_verdict(
     site_fetch_failed: bool,
     fallback_ran: bool,
     deepen_added: int | None = None,
+    site_source_url: str = "",
 ) -> dict[str, Any]:
     """Summarise how discovery went, for a customer-facing message + next actions.
 
@@ -234,4 +240,7 @@ def build_verdict(
         "count": total,
         "completeness": completeness,
         "available_actions": actions,
+        # The firm page we read site-derived companies from — the group-level
+        # trust anchor the UI shows ("read from <site_source_url>").
+        "site_source_url": site_source_url,
     }

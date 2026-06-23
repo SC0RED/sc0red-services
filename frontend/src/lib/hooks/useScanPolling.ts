@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react'
 
 import type { Company, DiscoveryVerdict, ScanPollResponse } from '@/lib/types/scan'
+import { withDefaultSelection } from '@/lib/types/scan'
 
 const MIN_INTERVAL_MS = 1000
 const MAX_INTERVAL_MS = 15000
@@ -35,10 +36,7 @@ function handleDiscoveryPoll(
 
     if (data.status === 'awaiting_confirmation') {
         stopPolling()
-        const companies = (data.portfolioCompanies ?? []).map((c) => ({
-            ...c,
-            selected: true,
-        }))
+        const companies = (data.portfolioCompanies ?? []).map(withDefaultSelection)
         callbacks.onAwaitingConfirmation(companies, data.discoveryVerdict)
     } else if (data.status === 'complete') {
         stopPolling()

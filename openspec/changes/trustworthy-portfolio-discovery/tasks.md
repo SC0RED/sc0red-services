@@ -6,15 +6,15 @@
 
 # Phase 2 — Provenance + confidence (backend → UI)
 
-- [ ] 2.1 Add `source` to each candidate (`site`/`web_search`/`upload`/`provided_url`) through the merge in `DiscoverPortfolio`/`DeepenPortfolio`; capture the scraped firm page URL in strategy metadata and carry it onto the verdict as `site_source_url`. Persist; expose via scan read API (camelCase) + MCP.
-- [ ] 2.2 Frontend: `DiscoveryVerdictBanner`/confirm screen group reliable (site/upload/provided_url) vs best-effort (web_search), show the site source line, reuse `ProvenanceMarker` (`from-scrape`/`from-upload`). Web-search rows unchecked + "verify" subhead + unverified-URL flag; reliable rows pre-selected.
-- [ ] 2.3 Tests: backend source-tagging + verdict source counts; frontend grouping/pre-selection/badges.
+- [x] 2.1 Add `source` to each candidate (`site`/`web_search`/`upload`/`provided_url`) through the merge in `DiscoverPortfolio`/`DeepenPortfolio`; capture the scraped firm page URL in strategy metadata and carry it onto the verdict as `site_source_url`. Persist; expose via scan read API (camelCase) + MCP.
+- [x] 2.2 Frontend: `DiscoveryVerdictBanner`/confirm screen group reliable (site/upload/provided_url) vs best-effort (web_search), show the site source line, reuse `ProvenanceMarker` (`from-scrape`/`from-upload`). Web-search rows unchecked + "verify" subhead + unverified-URL flag; reliable rows pre-selected.
+- [x] 2.3 Tests: backend source-tagging + verdict source counts; frontend grouping/pre-selection/badges.
 
 # Phase 3 — Honest incompleteness messaging
 
-- [ ] 3.1 Enrich the verdict with a reliability `reason` from existing signals (big script_text + tiny page_text ⇒ dynamic; site_fetch_failed ⇒ blocked); reliable-first message copy (lead with "read N from <firm page>").
-- [ ] 3.2 Remove/avoid any "cross-origin" phrasing; client-side-rendering described as "builds its list in the browser after load". Backend (MCP) + frontend copy.
-- [ ] 3.3 Tests: message per reason; no false cross-origin claim.
+- [x] 3.1 Enrich the verdict with a reliability `reason` from existing signals (big script_text + tiny page_text ⇒ dynamic; site_fetch_failed ⇒ blocked); reliable-first message copy (lead with "read N from <firm page>").
+- [x] 3.2 Remove/avoid any "cross-origin" phrasing; client-side-rendering described as "builds its list in the browser after load". Backend (MCP) + frontend copy.
+- [x] 3.3 Tests: message per reason; no false cross-origin claim.
 
 # Phase 4 — Provide-a-reliable-URL correction path
 

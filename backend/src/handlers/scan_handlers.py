@@ -178,9 +178,11 @@ def handle_scan_status(
 def _verdict_response(verdict: dict[str, Any] | None) -> dict[str, Any] | None:
     """Map the persisted discovery verdict to the camelCase API shape.
 
-    Returns ``None`` for scans created before the verdict existed. The four
-    keys are guaranteed by ``portfolio_merge.build_verdict``, so they are
+    Returns ``None`` for scans created before the verdict existed. The first
+    four keys are guaranteed by ``portfolio_merge.build_verdict``, so they are
     accessed directly — a missing key is a bug, not a default-to-empty case.
+    ``site_source_url`` is newer, so it is read with a default for verdicts
+    persisted before it existed.
     """
     if not verdict:
         return None
@@ -189,6 +191,7 @@ def _verdict_response(verdict: dict[str, Any] | None) -> dict[str, Any] | None:
         "count": verdict["count"],
         "completeness": verdict["completeness"],
         "availableActions": verdict["available_actions"],
+        "siteSourceUrl": verdict.get("site_source_url", ""),
     }
 
 

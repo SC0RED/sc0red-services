@@ -451,6 +451,7 @@ class TestAPIGatewayHandler:
             "count": 3,
             "completeness": "web_search_subset",
             "availableActions": ["search_deeper", "render_site", "upload_list"],
+            "siteSourceUrl": "",
         }
 
     @patch("src.handlers.api_gateway_handler.require_authentication")

@@ -164,6 +164,9 @@ class DiscoverPortfolio(RequestStep):
             total=total,
             site_fetch_failed=bool(metadata.get("site_fetch_failed")),
             fallback_ran=fallback_ran,
+            # The page we read — only meaningful when the site actually yielded
+            # companies; the UI shows it as the reliable-source anchor.
+            site_source_url=url if site_total > 0 else "",
         )
         self.request_executor.add_details(
             {

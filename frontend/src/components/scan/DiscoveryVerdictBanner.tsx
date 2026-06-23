@@ -110,6 +110,17 @@ export default function DiscoveryVerdictBanner({
                     >
                         {presentation.message(currentCount)}
                     </div>
+                    {verdict.siteSourceUrl && (
+                        <div
+                            style={{
+                                color: 'var(--text-tertiary)',
+                                fontSize: '0.8125rem',
+                                marginTop: '0.375rem',
+                            }}
+                        >
+                            ✓ Read from {verdict.siteSourceUrl.replace(/^https?:\/\//, '')}
+                        </div>
+                    )}
                 </div>
             </div>
 
