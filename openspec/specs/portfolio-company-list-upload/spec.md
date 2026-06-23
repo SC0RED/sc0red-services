@@ -1,7 +1,7 @@
 # portfolio-company-list-upload Specification
 
 ## Purpose
-TBD - created by archiving change customer-guided-portfolio-discovery. Update Purpose after archive.
+Lets a customer upload a CSV/PDF company list when automatic discovery under-returns; the parsed companies are merged into the scan as a reliable, customer-supplied source.
 ## Requirements
 ### Requirement: Customer can supply a portfolio company list by upload
 

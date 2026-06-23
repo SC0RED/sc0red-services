@@ -1,7 +1,7 @@
 # scraper-url-safety Specification
 
 ## Purpose
-TBD - created by archiving change harden-scraper-ssrf. Update Purpose after archive.
+Guards every server-side URL fetch (the `fetch_page_html` chokepoint) against SSRF — rejecting non-public targets and re-validating each redirect hop — so a customer-supplied URL can't coerce requests to internal/loopback/metadata hosts.
 ## Requirements
 ### Requirement: Server-side fetches reject non-public targets
 

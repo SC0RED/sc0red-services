@@ -1,7 +1,7 @@
 # portfolio-discovery-escalation Specification
 
 ## Purpose
-TBD - created by archiving change customer-guided-portfolio-discovery. Update Purpose after archive.
+Defines the customer-gated escalation ladder (search deeper / render site / upload a list) offered on the confirmation screen, so expensive recovery methods run only on explicit customer request.
 ## Requirements
 ### Requirement: Customer-triggered discovery escalation
 

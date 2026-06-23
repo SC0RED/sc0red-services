@@ -1,7 +1,7 @@
 # portfolio-source-url Specification
 
 ## Purpose
-TBD - created by archiving change trustworthy-portfolio-discovery. Update Purpose after archive.
+Lets a customer point discovery at a reliable page that lists the portfolio; that page is fetched server-side (no web-search fallback, so it stays reliable) and its companies merged into the scan.
 ## Requirements
 ### Requirement: Customer can supply a reliable source URL to fetch from
 

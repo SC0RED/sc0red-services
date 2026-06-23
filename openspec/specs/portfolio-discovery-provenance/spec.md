@@ -1,7 +1,7 @@
 # portfolio-discovery-provenance Specification
 
 ## Purpose
-TBD - created by archiving change trustworthy-portfolio-discovery. Update Purpose after archive.
+Defines per-candidate source/confidence provenance for discovered portfolio companies (site / web_search / upload / provided_url) and how the verdict surfaces the firm page that site-derived companies were read from as a group-level trust anchor.
 ## Requirements
 ### Requirement: Each discovered company carries its source
 

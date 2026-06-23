@@ -1,7 +1,7 @@
 # portfolio-discovery-verdict Specification
 
 ## Purpose
-TBD - created by archiving change customer-guided-portfolio-discovery. Update Purpose after archive.
+Defines the structured discovery verdict (method, count, completeness, available next-actions) returned alongside the candidate list, and how completeness maps to the customer-facing message.
 ## Requirements
 ### Requirement: Discovery returns a structured verdict
 
