@@ -106,6 +106,77 @@ _CMS_ID_PREFIX_RE = re.compile(r"^[0-9a-f]{24}\b")
 _NAV_SEGMENTS = frozenset(
     {"portfolio", "companies", "investments", "our-companies", "our-portfolio", "our-investments"}
 )
+# Shortest acceptable cleaned name; below this we fall back to the URL. Mirrors
+# MIN_NAME_LENGTH in web_scraper_strategy (kept local to avoid a circular import).
+_MIN_NAME_LENGTH = 2
+# Logo-grid pages name companies via image alt text / filenames
+# ("Gatik-Logo", "Renaissant Logo Green Orange"), which AI extraction carries
+# through verbatim. A standalone "logo" token marks the name as logo-derived;
+# once flagged, the trailing colour/style descriptors (also from the filename)
+# are stripped. Only stripped alongside "logo", so a real "Orange"/"Black" stays.
+_LOGO_TOKEN_RE = re.compile(r"\blogo\b", re.IGNORECASE)
+_LOGO_DESCRIPTORS = frozenset(
+    {
+        "green",
+        "orange",
+        "black",
+        "white",
+        "red",
+        "blue",
+        "yellow",
+        "purple",
+        "pink",
+        "grey",
+        "gray",
+        "gold",
+        "silver",
+        "dark",
+        "light",
+        "color",
+        "colour",
+        "colored",
+        "transparent",
+        "full",
+        "horizontal",
+        "vertical",
+        "stacked",
+        "square",
+        "round",
+        "icon",
+        "mark",
+        "wordmark",
+        "primary",
+        "secondary",
+        "alt",
+        "rgb",
+        "cmyk",
+        "png",
+        "svg",
+        "jpg",
+        "jpeg",
+        "web",
+        "small",
+        "large",
+        "final",
+        "copy",
+    }
+)
+
+
+def _strip_logo_cruft(name: str) -> str:
+    """Strip a 'logo' token + trailing presentation descriptors from a name.
+
+    Returns the cleaned name, or "" if nothing usable remains. A name without a
+    standalone 'logo' token is returned unchanged — so "Wireless Logic" (no
+    word-bounded 'logo') and a company literally called "Orange" are untouched.
+    """
+    normalized = name.replace("-", " ").replace("_", " ")
+    if not _LOGO_TOKEN_RE.search(normalized):
+        return name
+    tokens = [token for token in normalized.split() if token.lower() != "logo"]
+    while tokens and tokens[-1].lower() in _LOGO_DESCRIPTORS:
+        tokens.pop()
+    return " ".join(tokens)
 
 
 def sanitize_company_name(name: str, url: str) -> str:
@@ -124,7 +195,12 @@ def sanitize_company_name(name: str, url: str) -> str:
         return ""
     if not cleaned or low in _GENERIC_NAME_LABELS or _CMS_ID_PREFIX_RE.match(low):
         return build_name_from_url(url)
-    return cleaned
+    # Logo-grid cruft ("Gatik-Logo", "Renaissant Logo Green Orange") → strip it;
+    # if nothing meaningful survives, derive the name from the URL instead.
+    de_logoed = _strip_logo_cruft(cleaned)
+    if len(de_logoed) < _MIN_NAME_LENGTH:
+        return build_name_from_url(url)
+    return de_logoed
 
 
 def build_name_from_url(url: str) -> str:
