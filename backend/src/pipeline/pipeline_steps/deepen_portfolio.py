@@ -72,7 +72,9 @@ class DeepenPortfolio(RequestStep):
         # (shared with the initial fallback): the existing trusted list wins, so
         # a web-search find never repeats a company we already have and TLD
         # duplicates (acme.com / acme.in) collapse.
-        fresh = sanitize_candidates(find_new_candidates(recovered, seed))
+        # Sanitize the recovered rows BEFORE dedup so cleaned names/URLs dedup
+        # correctly against the existing (already-clean) seed.
+        fresh = find_new_candidates(sanitize_candidates(recovered), seed)
 
         total = len(seed) + len(fresh)
         logger.info(

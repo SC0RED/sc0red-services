@@ -157,8 +157,10 @@ def sanitize_candidates(companies: list[dict[str, str]]) -> list[dict[str, str]]
     """
     cleaned: list[dict[str, str]] = []
     for company in companies:
-        url = company.get("url", "").strip()
-        name = sanitize_company_name(company.get("name", ""), url)
+        raw_url = company.get("url")
+        raw_name = company.get("name")
+        url = raw_url.strip() if isinstance(raw_url, str) else ""
+        name = sanitize_company_name(raw_name if isinstance(raw_name, str) else "", url)
         if not name:
             continue
         cleaned.append({**company, "name": name, "url": url})

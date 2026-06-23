@@ -56,6 +56,17 @@ class TestDeepenPortfolio:
         ]
         assert details["portfolio_count"] == 2
 
+    def test_sanitized_recovered_dedupes_against_seed_by_name(self):
+        # Recovered row has junk name + a DIFFERENT url than seed; after sanitize
+        # it resolves to the seed company's name and must be deduped (ordering fix).
+        seed = [{"name": "Anthropic", "url": "https://anthropic.com", "description": ""}]
+        recovered = [{"name": "View Site", "url": "https://anthropic.io"}]
+        step = _make_step(seed)
+        with patch(_PATCH, return_value=recovered):
+            step.execute()
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_companies"] == []  # sanitized → "Anthropic" → deduped
+
     def test_seed_names_passed_to_search(self):
         seed = [{"name": "Known", "url": "https://known.com"}]
         step = _make_step(seed)

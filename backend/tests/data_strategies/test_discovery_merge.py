@@ -64,6 +64,16 @@ class TestSanitizeCandidates:
         out = sanitize_candidates([{"name": "View Site", "url": "https://kkr.com/portfolio"}])
         assert out[0]["name"] == "Kkr"
 
+    def test_non_string_fields_do_not_crash(self):
+        # Malformed extraction (None values) must be handled gracefully, not crash.
+        out = sanitize_candidates(
+            [
+                {"name": None, "url": None},  # type: ignore[dict-item]
+                {"name": "Acme", "url": "https://acme.com"},
+            ]
+        )
+        assert {c["name"] for c in out} == {"Acme"}
+
 
 class TestNormalizeUrlKey:
     def test_strips_www(self):

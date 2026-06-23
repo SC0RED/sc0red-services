@@ -119,6 +119,13 @@ class DiscoverPortfolio(RequestStep):
         else:
             auto_included, needs_validation = [], []
 
+        # Sanitize site results BEFORE counting/dedup so the fallback gate and the
+        # web-search dedup work on clean names+URLs (a "View Site" row that
+        # re-derives to a real company must dedup against the fallback correctly,
+        # and login-junk shouldn't count toward site_total).
+        auto_included = sanitize_candidates(auto_included)
+        needs_validation = sanitize_candidates(needs_validation)
+
         # Site-first, fallback-on-low-yield: when the firm's own site yields too
         # few companies (opaque / client-side-only / non-embedding), recover the
         # portfolio via web search. Strictly additive — fallback candidates enter
@@ -141,14 +148,12 @@ class DiscoverPortfolio(RequestStep):
             # Seed with on-site logo-grid names when present (e.g. Vista): the
             # site supplies the authoritative WHO, web search resolves the URLs.
             seed_names = metadata.get("logo_company_names", [])
-            fallback = run_web_search_discovery(
-                self._require_ai_factory(), url, seed_names, step_name="DiscoverPortfolio"
+            fallback = sanitize_candidates(
+                run_web_search_discovery(
+                    self._require_ai_factory(), url, seed_names, step_name="DiscoverPortfolio"
+                )
             )
             needs_validation = merge_fallback(auto_included, needs_validation, fallback)
-
-        # Clean leaked CTA/CMS names and strip URLs; drop login/account rows.
-        auto_included = sanitize_candidates(auto_included)
-        needs_validation = sanitize_candidates(needs_validation)
 
         if not (auto_included or needs_validation) and not diagnostic:
             diagnostic = "Could not identify portfolio companies from this website."
