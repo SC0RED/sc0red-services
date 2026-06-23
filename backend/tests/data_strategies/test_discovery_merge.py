@@ -3,8 +3,8 @@
 from src.pipeline.pipeline_steps.portfolio_merge import (
     merge_results,
     normalize_url_key,
-    sanitize_candidates,
 )
+from src.pipeline.pipeline_steps.portfolio_names import sanitize_candidates
 
 
 class TestNormalizeUrlKeyWhitespace:
@@ -63,6 +63,54 @@ class TestSanitizeCandidates:
         # A firm nav page ("/portfolio") is not a company name → use the host.
         out = sanitize_candidates([{"name": "View Site", "url": "https://kkr.com/portfolio"}])
         assert out[0]["name"] == "Kkr"
+
+    def test_logo_suffix_stripped(self):
+        # Logo-grid alt/filename cruft → clean company name.
+        out = sanitize_candidates([{"name": "Gatik-Logo", "url": "https://gatik.ai/"}])
+        assert out[0]["name"] == "Gatik"
+
+    def test_logo_with_trailing_color_descriptors_stripped(self):
+        out = sanitize_candidates(
+            [{"name": "Renaissant Logo Green Orange", "url": "https://renaissant.com/"}]
+        )
+        assert out[0]["name"] == "Renaissant"
+
+    def test_logo_mid_string_and_trailing_style_stripped(self):
+        out = sanitize_candidates(
+            [{"name": "Cecilian Logo Black", "url": "https://cecilianpartners.com/"}]
+        )
+        assert out[0]["name"] == "Cecilian"
+
+    def test_multiword_name_with_logo_keeps_all_real_tokens(self):
+        out = sanitize_candidates(
+            [{"name": "Collateral Edge Logo", "url": "https://www.collateraledge.com/"}]
+        )
+        assert out[0]["name"] == "Collateral Edge"
+
+    def test_logo_only_name_falls_back_to_url(self):
+        # Nothing real survives stripping → derive from the URL host.
+        out = sanitize_candidates([{"name": "Logo", "url": "https://acme.com/"}])
+        assert out[0]["name"] == "Acme"
+
+    def test_logic_in_name_is_not_treated_as_logo(self):
+        # "Logic" must NOT trip the word-bounded `logo` match (regression guard).
+        out = sanitize_candidates(
+            [{"name": "Wireless Logic", "url": "https://wirelesslogic.com/"}]
+        )
+        assert out[0]["name"] == "Wireless Logic"
+
+    def test_company_literally_named_orange_is_untouched(self):
+        # No `logo` token → descriptor stripping never runs; the name stays.
+        out = sanitize_candidates([{"name": "Orange", "url": "https://orange.com/"}])
+        assert out[0]["name"] == "Orange"
+
+    def test_leading_color_word_in_real_name_is_preserved(self):
+        # Only TRAILING descriptors are stripped — a real firm whose name starts
+        # with a colour word ("Silver Lake") must survive logo cleanup intact.
+        out = sanitize_candidates(
+            [{"name": "Silver Lake Logo", "url": "https://www.silverlake.com/"}]
+        )
+        assert out[0]["name"] == "Silver Lake"
 
     def test_non_string_fields_do_not_crash(self):
         # Malformed extraction (None values) must be handled gracefully, not crash.
