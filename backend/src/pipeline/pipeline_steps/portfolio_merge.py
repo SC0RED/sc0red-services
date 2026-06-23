@@ -157,8 +157,18 @@ def find_new_candidates(
     the same single-word stem (e.g. "Data Corp" vs "Data Inc") would collapse.
     Rare in one portfolio, and upload remains the exact-list correction.
     """
-    seen_urls = {normalize_url_key(c.get("url", "")) for c in trusted}
-    seen_names = {normalize_company_name(c["name"]) for c in trusted if c.get("name")}
+    # Build the trusted index defensively: `trusted` may include a seed loaded
+    # from DynamoDB, so a non-string url/name shouldn't crash the merge — it just
+    # doesn't contribute to dedup (graceful, per this function's contract).
+    seen_urls: set[str] = set()
+    seen_names: set[str] = set()
+    for entry in trusted:
+        trusted_url = entry.get("url")
+        if isinstance(trusted_url, str):
+            seen_urls.add(normalize_url_key(trusted_url))
+        trusted_name = entry.get("name")
+        if isinstance(trusted_name, str) and trusted_name:
+            seen_names.add(normalize_company_name(trusted_name))
     fresh: list[dict[str, str]] = []
     for company in candidates:
         key = normalize_url_key(company["url"])
