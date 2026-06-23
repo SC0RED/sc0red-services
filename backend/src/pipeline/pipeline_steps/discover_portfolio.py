@@ -21,7 +21,12 @@ from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
 from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
-from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, merge_fallback, merge_results
+from src.pipeline.pipeline_steps.portfolio_merge import (
+    build_verdict,
+    merge_fallback,
+    merge_results,
+    sanitize_candidates,
+)
 from src.pipeline.pipeline_steps.portfolio_websearch import run_web_search_discovery
 from src.pipeline.prompts.loader import load_schema, load_system_prompt, load_template
 
@@ -114,6 +119,13 @@ class DiscoverPortfolio(RequestStep):
         else:
             auto_included, needs_validation = [], []
 
+        # Sanitize site results BEFORE counting/dedup so the fallback gate and the
+        # web-search dedup work on clean names+URLs (a "View Site" row that
+        # re-derives to a real company must dedup against the fallback correctly,
+        # and login-junk shouldn't count toward site_total).
+        auto_included = sanitize_candidates(auto_included)
+        needs_validation = sanitize_candidates(needs_validation)
+
         # Site-first, fallback-on-low-yield: when the firm's own site yields too
         # few companies (opaque / client-side-only / non-embedding), recover the
         # portfolio via web search. Strictly additive — fallback candidates enter
@@ -136,8 +148,10 @@ class DiscoverPortfolio(RequestStep):
             # Seed with on-site logo-grid names when present (e.g. Vista): the
             # site supplies the authoritative WHO, web search resolves the URLs.
             seed_names = metadata.get("logo_company_names", [])
-            fallback = run_web_search_discovery(
-                self._require_ai_factory(), url, seed_names, step_name="DiscoverPortfolio"
+            fallback = sanitize_candidates(
+                run_web_search_discovery(
+                    self._require_ai_factory(), url, seed_names, step_name="DiscoverPortfolio"
+                )
             )
             needs_validation = merge_fallback(auto_included, needs_validation, fallback)
 
@@ -166,7 +180,11 @@ class DiscoverPortfolio(RequestStep):
             fallback_ran=fallback_ran,
             # The page we read — only meaningful when the site actually yielded
             # companies; the UI shows it as the reliable-source anchor.
-            site_source_url=url if site_total > 0 else "",
+            # Anchor to the page only if site-derived companies actually survived
+            # sanitization (not just the pre-sanitize site_total).
+            site_source_url=url
+            if any(c.get("source") == "site" for c in (*auto_included, *needs_validation))
+            else "",
         )
         self.request_executor.add_details(
             {
