@@ -21,7 +21,12 @@ from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
 from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
-from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, merge_fallback, merge_results
+from src.pipeline.pipeline_steps.portfolio_merge import (
+    build_verdict,
+    merge_fallback,
+    merge_results,
+    sanitize_candidates,
+)
 from src.pipeline.pipeline_steps.portfolio_websearch import run_web_search_discovery
 from src.pipeline.prompts.loader import load_schema, load_system_prompt, load_template
 
@@ -141,6 +146,10 @@ class DiscoverPortfolio(RequestStep):
             )
             needs_validation = merge_fallback(auto_included, needs_validation, fallback)
 
+        # Clean leaked CTA/CMS names and strip URLs; drop login/account rows.
+        auto_included = sanitize_candidates(auto_included)
+        needs_validation = sanitize_candidates(needs_validation)
+
         if not (auto_included or needs_validation) and not diagnostic:
             diagnostic = "Could not identify portfolio companies from this website."
 
@@ -166,7 +175,11 @@ class DiscoverPortfolio(RequestStep):
             fallback_ran=fallback_ran,
             # The page we read — only meaningful when the site actually yielded
             # companies; the UI shows it as the reliable-source anchor.
-            site_source_url=url if site_total > 0 else "",
+            # Anchor to the page only if site-derived companies actually survived
+            # sanitization (not just the pre-sanitize site_total).
+            site_source_url=url
+            if any(c.get("source") == "site" for c in (*auto_included, *needs_validation))
+            else "",
         )
         self.request_executor.add_details(
             {

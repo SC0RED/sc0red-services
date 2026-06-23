@@ -20,7 +20,11 @@ from typing import TYPE_CHECKING, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
-from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, find_new_candidates
+from src.pipeline.pipeline_steps.portfolio_merge import (
+    build_verdict,
+    find_new_candidates,
+    sanitize_candidates,
+)
 from src.pipeline.pipeline_steps.portfolio_websearch import run_deep_web_search_discovery
 
 if TYPE_CHECKING:
@@ -68,7 +72,7 @@ class DeepenPortfolio(RequestStep):
         # (shared with the initial fallback): the existing trusted list wins, so
         # a web-search find never repeats a company we already have and TLD
         # duplicates (acme.com / acme.in) collapse.
-        fresh = find_new_candidates(recovered, seed)
+        fresh = sanitize_candidates(find_new_candidates(recovered, seed))
 
         total = len(seed) + len(fresh)
         logger.info(

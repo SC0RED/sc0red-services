@@ -1,6 +1,68 @@
 """Tests for portfolio discovery merge logic."""
 
-from src.pipeline.pipeline_steps.portfolio_merge import merge_results, normalize_url_key
+from src.pipeline.pipeline_steps.portfolio_merge import (
+    merge_results,
+    normalize_url_key,
+    sanitize_candidates,
+)
+
+
+class TestNormalizeUrlKeyWhitespace:
+    def test_trailing_space_keys_same_as_clean(self):
+        assert normalize_url_key("https://acme.com/ ") == normalize_url_key("https://acme.com/")
+
+    def test_whitespace_variants_dedupe_in_merge(self):
+        # The bug from dev: oseamalibu.com and "oseamalibu.com/ " (trailing space)
+        # are the same company and must collapse to one.
+        heuristic = [
+            {"name": "OSEA", "url": "https://oseamalibu.com/"},
+            {"name": "View Site", "url": "https://oseamalibu.com/ "},
+        ]
+        auto, needs = merge_results(heuristic, [])
+        assert len(auto) + len(needs) == 1
+
+
+class TestSanitizeCandidates:
+    def test_generic_cta_name_derived_from_host(self):
+        out = sanitize_candidates([{"name": "View Site", "url": "https://www.anthropic.com/"}])
+        assert out[0]["name"] == "Anthropic"
+
+    def test_cms_id_name_derived_from_slug(self):
+        out = sanitize_candidates(
+            [
+                {
+                    "name": "697777298512fb18e44dc499 Blue Pearl Module",
+                    "url": "https://x.com/companies/bluepearl-veterinary-services",
+                }
+            ]
+        )
+        assert out[0]["name"] == "Bluepearl Veterinary Services"
+
+    def test_login_rows_dropped(self):
+        out = sanitize_candidates(
+            [
+                {"name": "Investor Login", "url": "https://dynamo.dynamosoftware.com/"},
+                {"name": "Acme", "url": "https://acme.com"},
+            ]
+        )
+        assert {c["name"] for c in out} == {"Acme"}
+
+    def test_real_name_kept_and_url_stripped_and_source_preserved(self):
+        out = sanitize_candidates(
+            [{"name": "Wireless Logic", "url": "https://wirelesslogic.com/ ", "source": "site"}]
+        )
+        assert out[0]["name"] == "Wireless Logic"
+        assert out[0]["url"] == "https://wirelesslogic.com/"
+        assert out[0]["source"] == "site"
+
+    def test_empty_name_derived_not_dropped_when_url_present(self):
+        out = sanitize_candidates([{"name": "", "url": "https://stripe.com"}])
+        assert out[0]["name"] == "Stripe"
+
+    def test_nav_segment_url_falls_back_to_host(self):
+        # A firm nav page ("/portfolio") is not a company name → use the host.
+        out = sanitize_candidates([{"name": "View Site", "url": "https://kkr.com/portfolio"}])
+        assert out[0]["name"] == "Kkr"
 
 
 class TestNormalizeUrlKey:
