@@ -38,4 +38,7 @@ name-only uploads become analyzable, delivering on the "URL optional" promise.
 - Affected spec: `portfolio-company-list-upload` (adds name→URL resolution).
 - Affected code (when built): a resolution step/handler + a confirm-screen
   affordance; reuses the existing grounded-search + needs-validation merge path.
-- Status: **backlog / not scheduled.** Companion to the now-shipped honest fix.
+- Status: **on hold pending customer signal.** The UI now makes the URL
+  mandatory (it no longer advertises it as optional), so name-only uploads are
+  handled honestly today (flagged + excluded). Build this only if customers ask
+  to upload name-only lists and have them auto-resolved.
