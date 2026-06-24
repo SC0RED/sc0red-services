@@ -1,6 +1,7 @@
 # Tasks — Resolve URLs for name-only uploaded companies
 
-**Status: backlog / not scheduled.** Companion to the shipped honest fix
+**Status: on hold pending customer signal** (URL is now mandatory in the UI, so
+name-only uploads are handled honestly today). Companion to the shipped honest fix
 (url-less rows unselectable + exclusion note, no silent drop). This change makes
 name-only uploads actually analyzable.
 
