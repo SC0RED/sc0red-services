@@ -5,7 +5,7 @@ Lets a customer upload a CSV/PDF company list when automatic discovery under-ret
 ## Requirements
 ### Requirement: Customer can supply a portfolio company list by upload
 
-The customer SHALL be able to upload a CSV or PDF listing a firm's portfolio companies for a portfolio scan. A CSV SHALL be parsed with a required company-name column and an optional URL column; a PDF SHALL be parsed best-effort into company names. The parsed entries become discovery candidates that enter the existing validation and per-company scan path; when a URL is absent it is resolved by the existing per-company URL resolution.
+The customer SHALL be able to upload a CSV or PDF listing a firm's portfolio companies for a portfolio scan. A CSV SHALL be parsed with a required company-name column and a URL column; a PDF SHALL be parsed best-effort into company names. The parsed entries become discovery candidates that enter the existing validation and per-company scan path. A company can only be analyzed with a website URL, so entries lacking one are added to the list but flagged and excluded from analysis (surfaced, not silently dropped) — the upload UI SHALL set this expectation rather than presenting the URL as optional. Automatically resolving a URL from a name alone is future work (see the `resolve-uploaded-company-urls` change).
 
 #### Scenario: CSV with names and URLs
 
@@ -14,8 +14,10 @@ The customer SHALL be able to upload a CSV or PDF listing a firm's portfolio com
 
 #### Scenario: CSV with names only
 
-- **WHEN** the customer uploads a CSV with only a name column
-- **THEN** each name becomes a candidate whose URL is resolved downstream
+- **WHEN** the customer uploads a CSV with only a name column (no URLs)
+- **THEN** each name is added to the list but flagged as needing a URL and excluded
+  from analysis until one is supplied — it is not silently dropped, and the upload
+  does not present the URL as optional
 
 #### Scenario: PDF best-effort
 
