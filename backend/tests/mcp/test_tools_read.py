@@ -12,8 +12,12 @@ from src.mcp.auth_context import AuthenticatedUser, set_authenticated_user
 def _set_auth_context():
     set_authenticated_user(
         AuthenticatedUser(
-            user_id="test-user", org_id="test-org", email="test@test.com",
-            role="admin", client_id="test-client", scopes=["read", "write"],
+            user_id="test-user",
+            org_id="test-org",
+            email="test@test.com",
+            role="admin",
+            client_id="test-client",
+            scopes=["read", "write"],
         )
     )
 
@@ -49,17 +53,26 @@ def _make_storage():
 def _make_server(storage):
     server = FastMCP("test")
     from src.mcp.tools_read import register_read_tools
+    from src.mcp.tools_read_scans import register_scan_read_tools
     from src.mcp.tools_search import register_search_tools
+
     register_read_tools(server, storage)
+    register_scan_read_tools(server, storage)
     register_search_tools(server, storage)
     return server
 
 
 def _make_company(**overrides):
     defaults = {
-        "id": "c1", "company_name": "Acme", "company_url": "https://acme.com",
-        "industry": "Tech", "overall_risk_score": 5.0, "risk_tier": "moderate",
-        "analyzed_at": "2026-01-01", "org_id": "test-org", "scan_id": "s1",
+        "id": "c1",
+        "company_name": "Acme",
+        "company_url": "https://acme.com",
+        "industry": "Tech",
+        "overall_risk_score": 5.0,
+        "risk_tier": "moderate",
+        "analyzed_at": "2026-01-01",
+        "org_id": "test-org",
+        "scan_id": "s1",
         "metadata_json": '{"analysis_summary": "Good company", "top_actions": ["Act 1"]}',
     }
     defaults.update(overrides)
@@ -108,7 +121,10 @@ class TestListAnalyses:
     @pytest.mark.asyncio
     async def test_returns_list(self):
         storage, company_repo, *_ = _make_storage()
-        company_repo.find_by_org.return_value = ([_make_company(), _make_company(id="c2", company_name="Beta")], None)
+        company_repo.find_by_org.return_value = (
+            [_make_company(), _make_company(id="c2", company_name="Beta")],
+            None,
+        )
         server = _make_server(storage)
         text = (await server.call_tool("list_analyses", {}))[0][0].text
         assert "2 Analyses" in text
@@ -126,10 +142,16 @@ class TestGetAnalysis:
     async def test_full(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
-        _setup_assessment(assessment_repo,
-            get_opportunities=[{"title": "AI Sales", "value_lever": "revenue", "impact_rating": "High"}],
+        _setup_assessment(
+            assessment_repo,
+            get_opportunities=[
+                {"title": "AI Sales", "value_lever": "revenue", "impact_rating": "High"}
+            ],
             get_ebitda_tree={"revenueEstimate": "$5B", "ebitdaEstimate": "$1B", "treeData": []},
-            get_value_chain={"summary": "Strong", "steps": [{"name": "Sales", "category": "primary"}]},
+            get_value_chain={
+                "summary": "Strong",
+                "steps": [{"label": "Sales", "category": "primary"}],
+            },
         )
         server = _make_server(storage)
         text = (await server.call_tool("get_analysis", {"analysis_id": "c1"}))[0][0].text
@@ -175,7 +197,8 @@ class TestGetAnalysis:
     async def test_with_documents(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
-        _setup_assessment(assessment_repo,
+        _setup_assessment(
+            assessment_repo,
             get_documents=[{"filename": "memo.pdf", "fileType": "pdf"}],
         )
         server = _make_server(storage)
@@ -216,10 +239,55 @@ class TestGetOpportunities:
     async def test_returns(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
-        _setup_assessment(assessment_repo, get_opportunities=[{"title": "AI X", "value_lever": "cost", "impact_rating": "High", "description": "D"}])
+        _setup_assessment(
+            assessment_repo,
+            get_opportunities=[
+                {
+                    "title": "AI X",
+                    "value_lever": "cost",
+                    "impact_rating": "High",
+                    "description": "D",
+                }
+            ],
+        )
         server = _make_server(storage)
         text = (await server.call_tool("get_opportunities", {"analysis_id": "c1"}))[0][0].text
         assert "AI X" in text
+
+    @pytest.mark.asyncio
+    async def test_surfaces_full_opportunity_contract(self):
+        # Drift guard: the formatter must surface strategic_category, timeline,
+        # investment (range + numeric estimate), ROI (narrative + numeric %),
+        # and implementation_steps — not just title/lever/impact (Bug E).
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_opportunities=[
+                {
+                    "title": "Automate support",
+                    "strategic_category": "Cost Side",
+                    "impact_rating": "High",
+                    "value_lever": "Cost Side",
+                    "timeline": "Quick Win (1-3 months)",
+                    "investment_range": "$100K-$500K",
+                    "investment_value_usd": 300000,
+                    "roi_estimate": "30% deflection",
+                    "roi_estimate_pct": 30,
+                    "implementation_steps": ["Pilot a bot", "Roll out"],
+                }
+            ],
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_opportunities", {"analysis_id": "c1"}))[0][0].text
+        assert "Category: Cost Side" in text
+        assert "Timeline: Quick Win (1-3 months)" in text
+        assert "$100K-$500K" in text
+        assert "$300,000" in text
+        assert "30% deflection" in text
+        assert "30%)" in text
+        assert "1. Pilot a bot" in text
+        assert "2. Roll out" in text
 
     @pytest.mark.asyncio
     async def test_not_found(self):
@@ -350,16 +418,86 @@ class TestGetEbitdaTree:
         # confidence_* fields flow through harmlessly (the tool ignores them).
         assert "Revenue: $5B" in text
 
+    @pytest.mark.asyncio
+    async def test_node_links_resolve_to_opportunity_titles(self):
+        # Bug E: a node's linked_opportunity_indices should render as the
+        # opportunity titles, not raw indices.
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_opportunities=[{"title": "Automate support"}, {"title": "Upsell engine"}],
+            get_ebitda_tree={
+                "revenueEstimate": "$5B",
+                "ebitdaEstimate": "$1B",
+                "treeData": [
+                    {
+                        "label": "Support Cost",
+                        "value_range": "$2M",
+                        "linked_opportunity_indices": [0],
+                    },
+                ],
+            },
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_ebitda_tree", {"analysis_id": "c1"}))[0][0].text
+        assert "addresses: Automate support" in text
+
 
 class TestGetValueChain:
     @pytest.mark.asyncio
     async def test_returns(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
-        _setup_assessment(assessment_repo, get_value_chain={"summary": "Strong", "steps": [{"name": "Logistics", "category": "primary"}]})
+        # Production steps are ValueChainStep.model_dump() — the activity name is
+        # `label` (the formatter previously read `name` and rendered every step
+        # as "?"; the fixture wrongly used `name` too, masking the bug).
+        _setup_assessment(
+            assessment_repo,
+            get_value_chain={
+                "summary": "Strong",
+                "steps": [{"label": "Logistics", "category": "primary"}],
+            },
+        )
         server = _make_server(storage)
         text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
         assert "Logistics" in text
+
+    @pytest.mark.asyncio
+    async def test_surfaces_enriched_step_fields(self):
+        # Bug E: surface risk areas, opportunity linkage (resolved to titles),
+        # confidence, and the chain-level provenance basis.
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        _setup_assessment(
+            assessment_repo,
+            get_opportunities=[{"title": "Automate support"}, {"title": "Upsell engine"}],
+            get_value_chain={
+                "summary": "Strong",
+                # camelCase: this is the container-level key the repo returns
+                # (get_value_chain → "provenanceBasis"), unlike the snake_case
+                # per-step keys below.
+                "provenanceBasis": "Operating model researched for a SaaS company",
+                "steps": [
+                    {
+                        "label": "Customer Service",
+                        "category": "primary",
+                        "description": "Support ops",
+                        "risk_categories": ["automation", "data_ip"],
+                        "opportunity_indices": [0],
+                        "confidence_level": "high",
+                        "confidence_basis": "Disclosed on the company site",
+                    }
+                ],
+            },
+        )
+        server = _make_server(storage)
+        text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
+        assert "Customer Service" in text
+        assert "Operating model researched for a SaaS company" in text
+        assert "automation, data_ip" in text
+        assert "Automate support" in text  # opportunity_indices[0] resolved to title
+        assert "high — Disclosed on the company site" in text
 
     @pytest.mark.asyncio
     async def test_no_chain(self):
@@ -373,7 +511,9 @@ class TestGetValueChain:
     async def test_chain_no_summary(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
-        _setup_assessment(assessment_repo, get_value_chain={"steps": [{"name": "Ops", "category": "support"}]})
+        _setup_assessment(
+            assessment_repo, get_value_chain={"steps": [{"label": "Ops", "category": "support"}]}
+        )
         server = _make_server(storage)
         text = (await server.call_tool("get_value_chain", {"analysis_id": "c1"}))[0][0].text
         assert "Ops" in text
@@ -403,7 +543,13 @@ class TestGetScan:
     @pytest.mark.asyncio
     async def test_returns(self):
         storage, company_repo, _, scan_repo, *_ = _make_storage()
-        scan_repo.get_by_id.return_value = {"id": "s1", "status": "complete", "type": "single", "progress": 100, "org_id": "test-org"}
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "complete",
+            "type": "standalone",
+            "progress": 100,
+            "org_id": "test-org",
+        }
         scan_repo.get_scan_companies.return_value = [{"company_id": "c1"}]
         company_repo.get_by_ids.return_value = [_make_company()]
         server = _make_server(storage)
@@ -412,12 +558,135 @@ class TestGetScan:
         assert "Acme" in text
 
     @pytest.mark.asyncio
+    async def test_running_scan_reports_live_computed_progress(self):
+        # Regression: workers update the company's pipeline_progress mid-run but
+        # NOT the scan record's progress (stuck at the kickoff 10%). get_scan
+        # must compute live progress from the company, like GET /scan/{id} —
+        # otherwise it sits at 10% until the scan flips to complete.
+        storage, company_repo, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "running",
+            "type": "standalone",
+            "progress": 10,  # stale kickoff value on the record
+            "total_companies": 1,
+            "org_id": "test-org",
+        }
+        scan_repo.get_scan_companies.return_value = [{"company_id": "c1"}]
+        company_repo.get_by_ids.return_value = [
+            _make_company(
+                overall_risk_score=None,
+                analyzed_at=None,
+                pipeline_progress=60,
+                pipeline_label="Analyzing value chain",
+            )
+        ]
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "Progress: 60%" in text
+        assert "10%" not in text
+        assert "Analyzing value chain" in text
+        assert "in progress" in text  # no score yet
+
+    @pytest.mark.asyncio
+    async def test_running_portfolio_scan_reports_live_progress(self):
+        # Same bug affects portfolio scans (stored progress stuck at 10% until
+        # complete). Progress must be computed from per-company state across all
+        # companies: 8 done + 2 scanning@50% over 10 → (8*100 + 2*50)//10 = 90%.
+        storage, company_repo, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "running",
+            "type": "portfolio",
+            "progress": 10,
+            "total_companies": 10,
+            "org_id": "test-org",
+        }
+        scan_repo.get_scan_companies.return_value = [
+            {"company_id": f"c{i}", "order_index": i} for i in range(10)
+        ]
+        companies = [
+            _make_company(id=f"c{i}", company_name=f"Co{i}", analyzed_at="2026-01-01")
+            for i in range(8)
+        ]
+        companies += [
+            _make_company(
+                id=f"c{i}",
+                company_name=f"Co{i}",
+                overall_risk_score=None,
+                analyzed_at=None,
+                pipeline_progress=50,
+            )
+            for i in range(8, 10)
+        ]
+        company_repo.get_by_ids.return_value = companies
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "Progress: 90%" in text
+        assert "Progress: 10%" not in text
+
+    @pytest.mark.asyncio
     async def test_scan_no_companies(self):
         storage, _, _, scan_repo, *_ = _make_storage()
-        scan_repo.get_by_id.return_value = {"id": "s1", "status": "running", "type": "portfolio", "progress": 50, "org_id": "test-org"}
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "running",
+            "type": "portfolio",
+            "progress": 50,
+            "org_id": "test-org",
+        }
         server = _make_server(storage)
         text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
         assert "running" in text
+
+    @pytest.mark.asyncio
+    async def test_lists_discovered_companies_for_confirmation(self):
+        # A portfolio scan awaiting confirmation must surface the discovered
+        # companies WITH urls so confirm_portfolio_scan has something to pass.
+        storage, _, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "awaiting_confirmation",
+            "type": "portfolio",
+            "progress": 20,
+            "org_id": "test-org",
+            "portfolio_companies": [
+                {"name": "Acme", "url": "https://acme.com"},
+                {"name": "Beta", "url": "https://beta.com"},
+            ],
+        }
+        scan_repo.get_scan_companies.return_value = []
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "Discovered Companies (2)" in text
+        assert "https://acme.com" in text
+        assert "https://beta.com" in text
+        assert "confirm_portfolio_scan" in text
+
+    @pytest.mark.asyncio
+    async def test_get_scan_shows_verdict_message_for_incomplete_result(self):
+        # An incomplete (web-search subset) discovery surfaces a meaningful
+        # message + actionable next steps on the confirmation screen.
+        storage, _, _, scan_repo, *_ = _make_storage()
+        scan_repo.get_by_id.return_value = {
+            "id": "s1",
+            "status": "awaiting_confirmation",
+            "type": "portfolio",
+            "progress": 20,
+            "org_id": "test-org",
+            "portfolio_companies": [{"name": "SentinelOne", "url": "https://www.sentinelone.com/"}],
+            "discovery_verdict": {
+                "method": "web_search",
+                "count": 1,
+                "completeness": "web_search_subset",
+                "available_actions": ["search_deeper", "upload_list", "render_site"],
+            },
+        }
+        scan_repo.get_scan_companies.return_value = []
+        server = _make_server(storage)
+        text = (await server.call_tool("get_scan", {"scan_id": "s1"}))[0][0].text
+        assert "quick web search" in text
+        assert "search deeper" in text and "upload a CSV/PDF list" in text
 
     @pytest.mark.asyncio
     async def test_not_found(self):
@@ -427,11 +696,138 @@ class TestGetScan:
         assert "not found" in text
 
 
+def _strategy_map_fixture():
+    """A minimal camelCase strategy map matching the persisted wire shape
+    (model_dump(by_alias=True))."""
+    objective = {
+        "id": "F1",
+        "title": "Grow recurring revenue",
+        "definition": "Expand ARR via land-and-expand. Second sentence ignored.",
+        "confidence": "HIGH",
+        "linked_opportunity_indices": [0],
+    }
+    return {
+        "vision": {"statement": "Be the category leader", "synthesised": True},
+        "mission": {"statement": "Help PE firms see AI risk"},
+        "valueProposition": {"primary": "product_leadership"},
+        "strategicPriorities": [{"name": "Expand", "result": "Double ARR"}],
+        "financial": {"objectives": [objective]},
+        "customer": {
+            "objectives": [
+                {"id": "C1", "title": "I trust the data", "definition": "Customers rely on us."}
+            ]
+        },
+        "internalProcesses": {
+            "themes": [
+                {
+                    "name": "Data quality",
+                    "objectives": [
+                        {"id": "I1.1", "title": "Clean pipelines", "definition": "Keep data fresh."}
+                    ],
+                }
+            ]
+        },
+        "organizationalCapacity": {
+            "people": {"id": "O.P", "title": "Hire experts", "definition": "Recruit ML talent."},
+            "technology": {
+                "id": "O.T",
+                "title": "Scale infra",
+                "definition": "Invest in platform.",
+            },
+            "culture": {"id": "O.C", "title": "Ship fast", "definition": "Bias to action."},
+        },
+        "coreValues": {"values": ["Rigor", "Speed", "Trust"], "synthesised": True},
+    }
+
+
+class TestGetStrategyMap:
+    @pytest.mark.asyncio
+    async def test_returns_perspectives_and_objectives(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        assessment_repo.find_by_company.return_value = [{"id": "a1", "created_at": "2026-01-01"}]
+        assessment_repo.get_strategy_map.return_value = _strategy_map_fixture()
+        assessment_repo.get_opportunities.return_value = [{"title": "Automate support"}]
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "Strategy Map — Acme" in text
+        assert "Be the category leader (synthesised)" in text
+        assert "### Financial" in text
+        assert "Grow recurring revenue" in text
+        # First sentence only — the second sentence must be dropped.
+        assert "Expand ARR via land-and-expand." in text
+        assert "Second sentence ignored" not in text
+        # linked_opportunity_indices resolved to the opportunity title.
+        assert "opportunities: Automate support" in text
+        assert "Core Values (inferred)" in text
+
+    @pytest.mark.asyncio
+    async def test_no_strategy_map(self):
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        assessment_repo.find_by_company.return_value = [{"id": "a1", "created_at": "2026-01-01"}]
+        assessment_repo.get_strategy_map.return_value = None
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "No strategy map" in text
+
+    @pytest.mark.asyncio
+    async def test_no_assessment_at_all(self):
+        # No assessment for the company → _latest_assessment_id returns None →
+        # get_strategy_map is never called. Covers the `aid is None` guard.
+        storage, company_repo, assessment_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company()
+        assessment_repo.find_by_company.return_value = []
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "No strategy map" in text
+        assessment_repo.get_strategy_map.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cross_org_denied(self):
+        storage, company_repo, *_ = _make_storage()
+        company_repo.get_by_id.return_value = _make_company(org_id="other-org")
+        server = _make_server(storage)
+        text = (await server.call_tool("get_strategy_map", {"analysis_id": "c1"}))[0][0].text
+        assert "not found" in text
+
+
+class TestListScans:
+    @pytest.mark.asyncio
+    async def test_returns_scans(self):
+        storage, _, _, scan_repo, *_ = _make_storage()
+        scan_repo.find_recent_by_org.return_value = [
+            {
+                "id": "s1",
+                "status": "complete",
+                "type": "standalone",
+                "progress": 100,
+                "created_at": "2026-01-02",
+            },
+            {"id": "s2", "status": "running", "type": "portfolio", "progress": 40},
+        ]
+        server = _make_server(storage)
+        text = (await server.call_tool("list_scans", {}))[0][0].text
+        assert "Scans (2)" in text
+        assert "s1 — complete (standalone, 100%)" in text
+        assert "2026-01-02" in text
+        assert "s2 — running (portfolio, 40%)" in text
+
+    @pytest.mark.asyncio
+    async def test_empty(self):
+        storage, *_ = _make_storage()
+        server = _make_server(storage)
+        text = (await server.call_tool("list_scans", {}))[0][0].text
+        assert "No scans found" in text
+
+
 class TestListTeamMembers:
     @pytest.mark.asyncio
     async def test_returns(self):
         storage, _, _, _, user_repo, invitation_repo = _make_storage()
-        user_repo.find_by_org.return_value = [{"name": "Alice", "email": "a@t.com", "role": "admin"}]
+        user_repo.find_by_org.return_value = [
+            {"name": "Alice", "email": "a@t.com", "role": "admin"}
+        ]
         invitation_repo.find_by_org.return_value = [{"email": "bob@t.com", "role": "analyst"}]
         server = _make_server(storage)
         text = (await server.call_tool("list_team_members", {}))[0][0].text
@@ -444,7 +840,12 @@ class TestListDocuments:
     async def test_returns(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.return_value = _make_company()
-        _setup_assessment(assessment_repo, get_documents=[{"id": "d1", "filename": "report.pdf", "fileType": "pdf", "charCount": 5000}])
+        _setup_assessment(
+            assessment_repo,
+            get_documents=[
+                {"id": "d1", "filename": "report.pdf", "fileType": "pdf", "charCount": 5000}
+            ],
+        )
         server = _make_server(storage)
         text = (await server.call_tool("list_documents", {"analysis_id": "c1"}))[0][0].text
         assert "report.pdf" in text
@@ -462,7 +863,13 @@ class TestSearchAnalyses:
     @pytest.mark.asyncio
     async def test_by_name(self):
         storage, company_repo, *_ = _make_storage()
-        company_repo.find_by_org.return_value = ([_make_company(company_name="Stripe Inc"), _make_company(id="c2", company_name="Plaid")], None)
+        company_repo.find_by_org.return_value = (
+            [
+                _make_company(company_name="Stripe Inc"),
+                _make_company(id="c2", company_name="Plaid"),
+            ],
+            None,
+        )
         server = _make_server(storage)
         text = (await server.call_tool("search_analyses", {"query": "stripe"}))[0][0].text
         assert "Stripe" in text
@@ -481,12 +888,17 @@ class TestCompareAnalyses:
     async def test_compare_two(self):
         storage, company_repo, assessment_repo, *_ = _make_storage()
         company_repo.get_by_id.side_effect = lambda cid: (
-            _make_company(company_name="Stripe", overall_risk_score=4.5) if cid == "c1"
-            else _make_company(id="c2", company_name="Plaid", overall_risk_score=6.0, risk_tier="high")
+            _make_company(company_name="Stripe", overall_risk_score=4.5)
+            if cid == "c1"
+            else _make_company(
+                id="c2", company_name="Plaid", overall_risk_score=6.0, risk_tier="high"
+            )
         )
         _setup_assessment(assessment_repo)
         server = _make_server(storage)
-        text = (await server.call_tool("compare_analyses", {"analysis_ids": ["c1", "c2"]}))[0][0].text
+        text = (await server.call_tool("compare_analyses", {"analysis_ids": ["c1", "c2"]}))[0][
+            0
+        ].text
         assert "Stripe" in text
         assert "Plaid" in text
         assert "Comparison" in text
@@ -497,3 +909,65 @@ class TestCompareAnalyses:
         server = _make_server(storage)
         text = (await server.call_tool("compare_analyses", {"analysis_ids": ["c1"]}))[0][0].text
         assert "at least 2" in text
+
+
+class TestVerdictMessage:
+    def test_subset_message_includes_cause_and_actions(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        msg = _verdict_message(
+            {
+                "completeness": "web_search_subset",
+                "available_actions": ["search_deeper", "upload_list", "render_site"],
+            }
+        )
+        assert "quick web search" in msg
+        assert "search deeper" in msg and "upload a CSV/PDF list" in msg
+
+    def test_full_site_list_has_no_caveat(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        verdict = {"completeness": "full_site_list", "available_actions": ["upload_list"]}
+        assert _verdict_message(verdict) == ""
+
+    def test_partial_site_list_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        msg = _verdict_message(
+            {
+                "completeness": "partial_site_list",
+                "available_actions": ["search_deeper", "render_site", "upload_list"],
+            }
+        )
+        assert "may be incomplete" in msg
+        assert "search deeper" in msg and "upload a CSV/PDF list" in msg
+
+    def test_web_search_exhausted_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        msg = _verdict_message(
+            {"completeness": "web_search_exhausted", "available_actions": ["upload_list"]}
+        )
+        assert "no more" in msg.lower()
+        assert "upload a CSV/PDF list" in msg
+        assert "search deeper" not in msg  # exhausted → digging is unproductive
+
+    def test_blocked_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        verdict = {"completeness": "site_blocked", "available_actions": ["search_deeper"]}
+        msg = _verdict_message(verdict)
+        assert "couldn't reach" in msg and "search deeper" in msg
+
+    def test_genuinely_empty_message(self):
+        from src.mcp.tools_read_scans import _verdict_message
+
+        verdict = {
+            "completeness": "genuinely_empty",
+            "available_actions": ["search_deeper", "upload_list", "render_site"],
+        }
+        msg = _verdict_message(verdict)
+        assert "couldn't identify" in msg.lower()
+        # render_site is carried on the verdict but not phrased in the MCP message
+        assert "render" not in msg
+        assert "upload a CSV/PDF list" in msg

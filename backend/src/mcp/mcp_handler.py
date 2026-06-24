@@ -46,18 +46,17 @@ def _load_signing_keys() -> tuple[str, str]:
             SecretId=OAUTH_SIGNING_KEY_SECRET_ARN,
         )
         secret: dict[str, str] = json.loads(response["SecretString"])  # type: ignore[arg-type]
-        # The CDK construct currently creates this secret with a placeholder
-        # body and never populates the RSA keypair (Bug X — full auto-generation
-        # fix tracked as a follow-up). A missing key here means the secret was
-        # never populated post-deploy; fail with an actionable message instead
-        # of an opaque KeyError so the operator knows exactly what to run.
+        # The secret is auto-populated at deploy time by the SigningKeyGenerator
+        # custom resource (Bug X fixed — see infrastructure/stacks/mcp_construct.py
+        # `_add_signing_key_generator`). If the keypair is missing here, that
+        # custom resource failed during the stack deploy; fail with an actionable
+        # message instead of an opaque KeyError.
         if "private_key" not in secret or "public_key" not in secret:
             raise RuntimeError(
                 f"OAuth signing-key secret {OAUTH_SIGNING_KEY_SECRET_ARN} is missing "
-                "'private_key'/'public_key' — the CDK construct creates it empty "
-                "and it was never populated. Populate it with an RSA keypair "
-                "(private_key + public_key PEM); see design.md Decision 8 / the "
-                "migration doc for the exact put-secret-value command."
+                "'private_key'/'public_key' — the SigningKeyGenerator custom resource "
+                "did not populate it. Check the CloudFormation stack events for the "
+                "'SigningKeyPopulate' resource (and the generator Lambda's logs)."
             )
         return secret["private_key"], secret["public_key"]
 
@@ -115,9 +114,19 @@ _oauth_provider = Sc0redServicesOAuthProvider(
     consent_base_url=_consent_base_url,
 )
 
+# The protected RESOURCE is the ``/mcp`` transport endpoint, not the Function
+# URL root. RFC 9728 §3.1 inserts ``/.well-known/oauth-protected-resource``
+# between host and the resource path, so the metadata for a resource at
+# ``…/mcp`` lives at ``…/.well-known/oauth-protected-resource/mcp`` (Bug H).
+# Previously ``resource_server_url`` was the root (path ``/``), which the SDK
+# treats as empty → it served + advertised the BARE ``…/oauth-protected-resource``
+# and the path-suffixed location 404'd for spec-strict clients (mcp-inspector
+# probes it). The issuer (authorization server) stays the root.
+_resource_server_url = f"{_issuer_url.rstrip('/')}/mcp"
+
 _authentication_settings = AuthSettings(
     issuer_url=_issuer_url,  # type: ignore[arg-type]
-    resource_server_url=_issuer_url,  # type: ignore[arg-type]
+    resource_server_url=_resource_server_url,  # type: ignore[arg-type]
     client_registration_options=ClientRegistrationOptions(
         enabled=True,
         valid_scopes=["read", "write"],
@@ -166,13 +175,29 @@ mcp = FastMCP(
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 
+from src.mcp.scan_rate_limiter import ScanRateLimiter  # noqa: E402
 from src.mcp.tools_read import register_read_tools  # noqa: E402
+from src.mcp.tools_read_scans import register_scan_read_tools  # noqa: E402
 from src.mcp.tools_search import register_search_tools  # noqa: E402
+from src.mcp.tools_write import register_write_tools  # noqa: E402
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider  # noqa: E402
 
 _storage = DynamoDBStorageProvider()
 register_read_tools(mcp, _storage)
+register_scan_read_tools(mcp, _storage)
 register_search_tools(mcp, _storage)
+# Write tools dispatch scan work to the analysis queue. ANALYSIS_QUEUE_URL is
+# set by MCPConstruct in deployed environments (and passed explicitly for local
+# runs). Hard env access — a missing queue is a deploy bug and must crash the
+# Lambda at cold start, not orphan scan records mid-dispatch (mirrors
+# api_gateway_handler).
+register_write_tools(
+    mcp,
+    _storage,
+    sqs_client=boto3.client("sqs"),  # type: ignore[reportUnknownMemberType]
+    queue_url=os.environ["ANALYSIS_QUEUE_URL"],
+    rate_limiter=ScanRateLimiter(DYNAMODB_TABLE),
+)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

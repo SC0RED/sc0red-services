@@ -1,7 +1,7 @@
 """Tests for MCP OAuth DynamoDB repository."""
 
 import os
-import time
+from unittest.mock import patch
 
 import boto3
 import pytest
@@ -13,7 +13,7 @@ from src.mcp.oauth_repository import OAuthRepository
 @pytest.fixture(autouse=True)
 def _aws_credentials():
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"  # noqa: S105
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
@@ -38,7 +38,9 @@ def repository():
 
 class TestClientCRUD:
     def test_save_and_get_client(self, repository):
-        repository.save_client("client-1", {"client_name": "Test App", "redirect_uris": ["http://localhost"]})
+        repository.save_client(
+            "client-1", {"client_name": "Test App", "redirect_uris": ["http://localhost"]}
+        )
         result = repository.get_client("client-1")
         assert result is not None
         assert result["client_name"] == "Test App"
@@ -117,7 +119,9 @@ class TestAccessTokenCRUD:
         assert repository.get_access_token("nonexistent") is None
 
     def test_delete_token(self, repository):
-        repository.save_access_token("del-hash", user_id="u1", org_id="o1", client_id="c1", scopes=["read"])
+        repository.save_access_token(
+            "del-hash", user_id="u1", org_id="o1", client_id="c1", scopes=["read"]
+        )
         repository.delete_access_token("del-hash")
         assert repository.get_access_token("del-hash") is None
 
@@ -142,7 +146,13 @@ class TestRefreshTokenCRUD:
 
     def test_delete_refresh(self, repository):
         repository.save_refresh_token(
-            "del-ref", user_id="u1", org_id="o1", email="t@t.com", role="admin", client_id="c1", scopes=["read"]
+            "del-ref",
+            user_id="u1",
+            org_id="o1",
+            email="t@t.com",
+            role="admin",
+            client_id="c1",
+            scopes=["read"],
         )
         repository.delete_refresh_token("del-ref")
         assert repository.get_refresh_token("del-ref") is None
@@ -158,3 +168,28 @@ class TestConsentCRUD:
         repository.save_consent("user-1", "client-1")
         repository.revoke_consent("user-1", "client-1")
         assert repository.has_consent("user-1", "client-1") is False
+
+    def test_list_consents_by_user_returns_only_that_user(self, repository):
+        repository.save_consent("user-1", "client-a", "App A")
+        repository.save_consent("user-1", "client-b", "App B")
+        repository.save_consent("user-2", "client-c", "App C")
+        consents = repository.list_consents_by_user("user-1")
+        assert len(consents) == 2
+        client_ids = {c["sk"].removeprefix("CLIENT#") for c in consents}
+        assert client_ids == {"client-a", "client-b"}
+        # Name is denormalized on the record (no per-client lookup needed).
+        assert {c["client_name"] for c in consents} == {"App A", "App B"}
+
+    def test_list_consents_by_user_empty(self, repository):
+        assert repository.list_consents_by_user("nobody") == []
+
+    def test_list_consents_by_user_paginates(self, repository):
+        # DynamoDB truncates at 1MB — the loop must follow LastEvaluatedKey.
+        page1 = {"Items": [{"sk": "CLIENT#a", "client_name": "A"}], "LastEvaluatedKey": {"pk": "k"}}
+        page2 = {"Items": [{"sk": "CLIENT#b", "client_name": "B"}]}
+        with patch.object(repository._table, "query", side_effect=[page1, page2]) as query:
+            consents = repository.list_consents_by_user("user-1")
+        assert query.call_count == 2
+        assert {c["sk"] for c in consents} == {"CLIENT#a", "CLIENT#b"}
+        # The second page request carried the cursor from the first.
+        assert query.call_args_list[1].kwargs["ExclusiveStartKey"] == {"pk": "k"}

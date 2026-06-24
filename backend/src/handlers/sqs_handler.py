@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from signalfield_core.exceptions.base import EngineError
 
 from src.handlers.factory_manager import FactoryManager
 from src.pipeline.appsync_notifier import notify_progress
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +51,16 @@ class SQSHandler:
 
         Message discriminators (checked in order):
         - ``type == "portfolio_discovery"`` → portfolio-scan pipeline
+        - ``type == "portfolio_deepen"`` → customer-triggered deepen
         - ``reanalyze == True`` → company re-analysis
         - default → new company analysis
         """
         if message.get("type") == "portfolio_discovery":
             self._process_portfolio_discovery(message)
+        elif message.get("type") == "portfolio_deepen":
+            self._process_portfolio_deepen(message)
+        elif message.get("type") == "portfolio_source_url":
+            self._process_portfolio_source_url(message)
         elif message.get("reanalyze"):
             self._process_reanalysis(message)
         else:
@@ -227,20 +235,100 @@ class SQSHandler:
             return
         # Programming errors (AttributeError, KeyError, TypeError) propagate
         # to the outer SQS handler, triggering retry via batchItemFailures.
+        self._persist_discovery_result(scan_repo, scan_id, result)
 
-        # Bare key access — if the pipeline succeeds but omits this key it
-        # is a programming error (schema drift), not a user-visible state.
-        # Let KeyError propagate so SQS retries and CloudWatch captures it
-        # rather than silently stranding the user on an empty confirmation.
-        companies = result["details"]["portfolio_companies"]
-        scan_repo.update(
-            scan_id,
-            {
-                "status": "awaiting_confirmation",
-                "progress": 20,
-                "portfolio_companies": companies,
-            },
+    def _process_portfolio_deepen(self, message: dict[str, Any]) -> None:
+        """Re-run discovery deeper (web search), seeded with the scan's list."""
+        self._process_additive_merge(
+            message,
+            runner=self._factory_manager.run_portfolio_deepen,
+            source_url=message["url"],
+            start_label="Searching deeper…",
+            fail_label="Deeper search failed — keeping current list",
         )
+
+    def _process_portfolio_source_url(self, message: dict[str, Any]) -> None:
+        """Scrape a customer-provided URL and merge its companies into the scan."""
+        self._process_additive_merge(
+            message,
+            runner=self._factory_manager.run_portfolio_source_url,
+            source_url=message["source_url"],
+            start_label="Reading the page you provided…",
+            fail_label="Couldn't read that page — keeping current list",
+        )
+
+    def _process_additive_merge(
+        self,
+        message: dict[str, Any],
+        *,
+        runner: Callable[..., dict[str, Any]],
+        source_url: str,
+        start_label: str,
+        fail_label: str,
+    ) -> None:
+        """Shared body for the additive escalations (deepen / provided source).
+
+        Both seed from the scan's current companies, run an additive pipeline,
+        and merge results back. On a domain error the prior list is RESTORED
+        (the escalation only ever ADDS — a failure never destroys what the
+        customer had); programming errors propagate to SQS retry. A scan deleted
+        between dispatch and pickup is skipped (no phantom-record work).
+        """
+        scan_id = message["scan_id"]
+        scan_repo = self._storage.create_scan_repository()
+        scan = scan_repo.get_by_id(scan_id)
+        if scan is None:
+            logger.warning("Additive merge for missing scan=%s — skipping", scan_id)
+            return
+        seed = scan.get("portfolio_companies", [])
+        logger.info("Additive merge %s (scan=%s, seed=%d)", source_url, scan_id, len(seed))
+
+        scan_repo.update(scan_id, {"status": "discovering", "progress": 5})
+        notify_progress(scan_id=scan_id, progress=5, label=start_label, status="discovering")
+
+        try:
+            result = runner(
+                url=source_url,
+                org_id=message["org_id"],
+                user_id=message["user_id"],
+                scan_id=scan_id,
+                seed_companies=seed,
+            )
+        except (EngineError, ValueError, RuntimeError):
+            logger.exception("Additive merge failed for scan=%s — keeping prior list", scan_id)
+            scan_repo.update(
+                scan_id,
+                {"status": "awaiting_confirmation", "progress": 20, "portfolio_companies": seed},
+            )
+            notify_progress(
+                scan_id=scan_id, progress=20, label=fail_label, status="awaiting_confirmation"
+            )
+            return
+        self._persist_discovery_result(scan_repo, scan_id, result)
+
+    def _persist_discovery_result(
+        self, scan_repo: Any, scan_id: str, result: dict[str, Any]
+    ) -> None:
+        """Write a discovery/deepen pipeline result back to the scan record.
+
+        Transitions the scan to ``awaiting_confirmation`` with the final
+        post-validation company list and the verdict (count overridden to the
+        actual list length). Bare key access on ``portfolio_companies`` — a
+        missing key is schema drift (a bug), so let KeyError propagate to SQS
+        retry rather than silently stranding the user on an empty confirmation.
+        """
+        companies = result["details"]["portfolio_companies"]
+        update: dict[str, Any] = {
+            "status": "awaiting_confirmation",
+            "progress": 20,
+            "portfolio_companies": companies,
+        }
+        # Discovery verdict (method/completeness/next-actions) for a meaningful
+        # customer message. Its count is the final, post-validation list length.
+        verdict = result["details"].get("discovery_verdict")
+        if verdict is not None:
+            update["discovery_verdict"] = {**verdict, "count": len(companies)}
+        scan_repo.update(scan_id, update)
         notify_progress(
             scan_id=scan_id,
             progress=20,
