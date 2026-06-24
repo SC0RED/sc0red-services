@@ -112,6 +112,34 @@ class TestSanitizeCandidates:
         )
         assert out[0]["name"] == "Silver Lake"
 
+    def test_press_domain_rows_dropped(self):
+        # "Company X in the news →" links to press/PR/aggregator sites are not
+        # portfolio companies and must be dropped; real companies survive.
+        out = sanitize_candidates(
+            [
+                # Regional outlet NOT in the denylist (long-tail; see assertion below).
+                {"name": "Grocery Store View", "url": "https://dallasinnovates.com/article"},
+                {"name": "Acme", "url": "https://acme.com"},
+                {"name": "Spacee on TechCrunch", "url": "https://techcrunch.com/2024/spacee"},
+                {"name": "PR Newswire item", "url": "https://www.prnewswire.com/news/x"},
+                {"name": "On Crunchbase", "url": "https://crunchbase.com/organization/acme"},
+            ]
+        )
+        names = {c["name"] for c in out}
+        # Common press/PR/aggregator domains are dropped.
+        assert "Spacee on TechCrunch" not in names
+        assert "PR Newswire item" not in names
+        assert "On Crunchbase" not in names
+        # Real company kept.
+        assert "Acme" in names
+        # KNOWN LIMITATION (Option A): an obscure regional outlet not in the
+        # denylist still passes — the long tail is left to semantic validation.
+        assert "Grocery Store View" in names
+
+    def test_press_subdomain_dropped(self):
+        out = sanitize_candidates([{"name": "X", "url": "https://feeds.reuters.com/x"}])
+        assert out == []
+
     def test_non_string_fields_do_not_crash(self):
         # Malformed extraction (None values) must be handled gracefully, not crash.
         out = sanitize_candidates(

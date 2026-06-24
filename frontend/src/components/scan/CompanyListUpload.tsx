@@ -95,8 +95,9 @@ export default function CompanyListUpload({ onCompaniesParsed }: CompanyListUplo
             }}
         >
             <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                Upload a CSV (a <code>name</code> column, optional <code>url</code>) or a PDF/DOCX/TXT list of
-                the firm’s companies. We’ll add them to the list below.
+                Upload a CSV with <code>name</code> and <code>url</code> columns (or a PDF/DOCX/TXT/MD list of
+                the firm’s companies). A company needs its website URL to be analyzed — any without one are
+                added to the list but flagged so you can fill them in.
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <button

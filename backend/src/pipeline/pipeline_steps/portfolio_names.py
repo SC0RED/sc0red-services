@@ -11,6 +11,54 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
+# Press / PR-wire / data-aggregator domains a firm's portfolio page links out to
+# ("Company X in the news →") which extraction otherwise mistakes for a portfolio
+# company. Conservative on purpose — only domains that are clearly never a
+# portfolio company's own site. This catches the common offenders; obscure
+# regional outlets are a long-tail miss left to semantic validation (a future
+# tightening of ValidatePortfolioCompanies), not an ever-growing denylist.
+_NEWS_DOMAINS = frozenset(
+    {
+        # PR wires
+        "businesswire.com",
+        "prnewswire.com",
+        "globenewswire.com",
+        "prweb.com",
+        "newswire.com",
+        "einnews.com",
+        # Major business / tech press
+        "techcrunch.com",
+        "forbes.com",
+        "bloomberg.com",
+        "reuters.com",
+        "wsj.com",
+        "ft.com",
+        "cnbc.com",
+        "businessinsider.com",
+        "venturebeat.com",
+        "axios.com",
+        "fortune.com",
+        "theinformation.com",
+        "fastcompany.com",
+        "wired.com",
+        "inc.com",
+        "entrepreneur.com",
+        # VC / startup data aggregators (not the company's own site)
+        "crunchbase.com",
+        "pitchbook.com",
+    }
+)
+
+
+def _is_news_domain(url: str) -> bool:  # noqa: NAMING001  is_-prefixed predicate (checker counts the leading _)
+    """True if the URL points at a press/PR/aggregator domain (not a company)."""
+    if not url:
+        return False
+    parsed = urlparse(url if url.lower().startswith("http") else f"https://{url}")
+    host = (parsed.netloc or "").lower().removeprefix("www.")
+    return any(host == domain or host.endswith(f".{domain}") for domain in _NEWS_DOMAINS)
+
+
 # Generic card CTA / link labels that extraction sometimes captures instead of
 # the company name → re-derive the name from the URL.
 _GENERIC_NAME_LABELS = frozenset(
@@ -190,6 +238,10 @@ def sanitize_candidates(companies: list[dict[str, str]]) -> list[dict[str, str]]
         raw_url = company.get("url")
         raw_name = company.get("name")
         url = raw_url.strip() if isinstance(raw_url, str) else ""
+        # Press/PR/aggregator links are not portfolio companies — drop the row
+        # (a firm page's "in the news" links otherwise leak in as candidates).
+        if _is_news_domain(url):
+            continue
         name = sanitize_company_name(raw_name if isinstance(raw_name, str) else "", url)
         if not name:
             continue
