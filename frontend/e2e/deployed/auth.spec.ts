@@ -17,6 +17,9 @@ test.describe('authentication', () => {
     test('user name appears in sidebar', async ({ page }) => {
         await page.goto('/dashboard')
         const sidebar = page.getByRole('complementary')
-        await expect(sidebar.getByText('E2E Test User')).toBeVisible({ timeout: 15000 })
+        // `.first()` guards a strict-mode flake: during hydration the name text
+        // can momentarily match more than one node, which fails strict mode
+        // instantly. We only need to confirm the name renders in the sidebar.
+        await expect(sidebar.getByText('E2E Test User').first()).toBeVisible({ timeout: 15000 })
     })
 })
