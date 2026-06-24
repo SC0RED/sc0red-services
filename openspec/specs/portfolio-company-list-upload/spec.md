@@ -5,7 +5,7 @@ Lets a customer upload a CSV/PDF company list when automatic discovery under-ret
 ## Requirements
 ### Requirement: Customer can supply a portfolio company list by upload
 
-The customer SHALL be able to upload a CSV or PDF listing a firm's portfolio companies for a portfolio scan. A CSV SHALL be parsed with a required company-name column and a URL column; a PDF SHALL be parsed best-effort into company names. The parsed entries become discovery candidates that enter the existing validation and per-company scan path. A company can only be analyzed with a website URL, so entries lacking one are added to the list but flagged and excluded from analysis (surfaced, not silently dropped) — the upload UI SHALL set this expectation rather than presenting the URL as optional. Automatically resolving a URL from a name alone is future work (see the `resolve-uploaded-company-urls` change).
+The customer SHALL be able to upload a company list for a portfolio scan as a CSV or a text document (PDF/DOCX/TXT/MD). A CSV SHALL be parsed with a required company-name column and a URL column; a text document SHALL be parsed best-effort into company names. (Spreadsheets — XLSX/XLS — are intentionally rejected, since their extracted text yields junk candidates.) The parsed entries become discovery candidates that enter the existing validation and per-company scan path. A company can only be analyzed with a website URL, so entries lacking one are added to the list but flagged and excluded from analysis (surfaced, not silently dropped) — the upload UI SHALL set this expectation rather than presenting the URL as optional. Automatically resolving a URL from a name alone is future work (see the `resolve-uploaded-company-urls` change).
 
 #### Scenario: CSV with names and URLs
 
