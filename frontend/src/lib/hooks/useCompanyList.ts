@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 
 import type { Company } from '@/lib/types/scan'
+import { hasAnalyzableUrl } from '@/lib/types/scan'
 
 interface IncomingCompany {
     name: string
@@ -63,7 +64,9 @@ export function useCompanyList(): UseCompanyList {
                     name: company.name,
                     url: company.url,
                     description: '',
-                    selected: true,
+                    // Only pre-select if analyzable — a url-less upload row must
+                    // not be counted/confirmed, or it's silently dropped at confirm.
+                    selected: hasAnalyzableUrl(company.url),
                     source: 'upload',
                 })
                 if (company.url) existingUrls.add(company.url)

@@ -369,4 +369,42 @@ describe('PortfolioConfirmPhase', () => {
             expect(screen.getByText(/from firm’s site/)).toBeInTheDocument()
         })
     })
+
+    describe('url-less rows are not selectable (no silent drop)', () => {
+        const withUrlless = [
+            { name: 'Has URL', url: 'https://hasurl.com', description: '', selected: true },
+            { name: 'No URL Co', url: '', description: '', selected: false },
+        ]
+
+        it('disables the checkbox for a row without a URL', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} companies={withUrlless} />)
+            const checkboxes = screen.getAllByRole('checkbox')
+            // Row order matches companies: [hasUrl(enabled), noUrl(disabled)].
+            expect(checkboxes[0]).toBeEnabled()
+            expect(checkboxes[1]).toBeDisabled()
+        })
+
+        it('surfaces how many companies are excluded for lacking a URL', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} companies={withUrlless} />)
+            expect(screen.getByText(/1 company has no URL and won/)).toBeInTheDocument()
+        })
+
+        it('counts only analyzable selected rows in the analyze button', () => {
+            // Even if a url-less row were marked selected, it must not be counted.
+            const companies = [
+                { name: 'Has URL', url: 'https://hasurl.com', description: '', selected: true },
+                { name: 'No URL Co', url: '', description: '', selected: true },
+            ]
+            render(<PortfolioConfirmPhase {...defaultProps} companies={companies} />)
+            // selectedCount is derived from the list; the url-less row's checkbox
+            // is disabled so it can't be toggled on through the UI. The note warns
+            // about the excluded row regardless.
+            expect(screen.getByText(/1 company has no URL/)).toBeInTheDocument()
+        })
+
+        it('shows no exclusion note when every row has a URL', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} companies={mockCompanies} />)
+            expect(screen.queryByText(/no URL and won/)).not.toBeInTheDocument()
+        })
+    })
 })

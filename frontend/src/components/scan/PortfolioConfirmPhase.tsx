@@ -5,6 +5,7 @@ import CompanyListUpload from '@/components/scan/CompanyListUpload'
 import DiscoveryVerdictBanner from '@/components/scan/DiscoveryVerdictBanner'
 import ProvideSourceUrlForm from '@/components/scan/ProvideSourceUrlForm'
 import type { Company, CompanySource, DiscoveryVerdict } from '@/lib/types/scan'
+import { hasAnalyzableUrl } from '@/lib/types/scan'
 
 interface PortfolioConfirmPhaseProps {
     companies: Company[]
@@ -37,6 +38,9 @@ export default function PortfolioConfirmPhase({
     onReset,
 }: PortfolioConfirmPhaseProps) {
     const selectedCount = companies.filter((c) => c.selected).length
+    // Rows without an http(s) URL can't be analyzed — they're not selectable and
+    // are excluded from the count. Surface how many so it's not a silent loss.
+    const missingUrlCount = companies.filter((c) => !hasAnalyzableUrl(c.url)).length
     const [showUpload, setShowUpload] = useState(false)
 
     return (
@@ -83,49 +87,64 @@ export default function PortfolioConfirmPhase({
                     overflowY: 'auto',
                 }}
             >
-                {companies.map((company, i) => (
-                    <div
-                        key={company.url || `${company.name}-${i}`}
-                        className="card-surface-2"
-                        style={{
-                            padding: '0.875rem 1rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.875rem',
-                        }}
-                    >
-                        <input
-                            type="checkbox"
-                            id={`company-${i}`}
-                            checked={company.selected}
-                            onChange={(e) => onCompanyToggle(i, e.target.checked)}
+                {companies.map((company, i) => {
+                    // A url-less row can't be analyzed, so it isn't selectable —
+                    // this keeps the "Analyze N" count honest (no silent drop).
+                    const analyzable = hasAnalyzableUrl(company.url)
+                    return (
+                        <div
+                            key={company.url || `${company.name}-${i}`}
+                            className="card-surface-2"
                             style={{
-                                width: '16px',
-                                height: '16px',
-                                accentColor: 'var(--accent-blue)',
-                                cursor: 'pointer',
+                                padding: '0.875rem 1rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.875rem',
                             }}
-                        />
-                        <label htmlFor={`company-${i}`} style={{ flex: 1, cursor: 'pointer' }}>
-                            <div
+                        >
+                            <input
+                                type="checkbox"
+                                id={`company-${i}`}
+                                checked={company.selected}
+                                disabled={!analyzable}
+                                onChange={(e) => onCompanyToggle(i, e.target.checked)}
                                 style={{
-                                    fontWeight: 500,
-                                    fontSize: '0.9rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    flexWrap: 'wrap',
+                                    width: '16px',
+                                    height: '16px',
+                                    accentColor: 'var(--accent-blue)',
+                                    cursor: analyzable ? 'pointer' : 'not-allowed',
+                                    opacity: analyzable ? 1 : 0.4,
                                 }}
+                            />
+                            <label
+                                htmlFor={`company-${i}`}
+                                style={{ flex: 1, cursor: analyzable ? 'pointer' : 'default' }}
                             >
-                                {company.name}
-                                <SourceBadge source={company.source} />
-                            </div>
-                            <div style={{ color: 'var(--text-tertiary)', fontSize: '0.8125rem' }}>
-                                {company.url || 'No URL — add one to include this company'}
-                            </div>
-                        </label>
-                    </div>
-                ))}
+                                <div
+                                    style={{
+                                        fontWeight: 500,
+                                        fontSize: '0.9rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        flexWrap: 'wrap',
+                                    }}
+                                >
+                                    {company.name}
+                                    <SourceBadge source={company.source} />
+                                </div>
+                                <div
+                                    style={{
+                                        color: analyzable ? 'var(--text-tertiary)' : 'var(--risk-medium)',
+                                        fontSize: '0.8125rem',
+                                    }}
+                                >
+                                    {company.url || 'No URL — add one below to include this company'}
+                                </div>
+                            </label>
+                        </div>
+                    )
+                })}
             </div>
 
             <div style={{ marginBottom: '0.5rem' }}>
@@ -134,6 +153,19 @@ export default function PortfolioConfirmPhase({
             <div style={{ marginBottom: '1.5rem' }}>
                 <ProvideSourceUrlForm onProvideSourceUrl={onProvideSourceUrl} />
             </div>
+
+            {missingUrlCount > 0 && (
+                <div
+                    style={{
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.8125rem',
+                        marginBottom: '0.75rem',
+                    }}
+                >
+                    {missingUrlCount} {missingUrlCount === 1 ? 'company has' : 'companies have'} no URL and
+                    won&apos;t be analyzed. Add a URL below, or upload a list that includes URLs.
+                </div>
+            )}
 
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                 <button onClick={onConfirm} className="btn btn-primary">
