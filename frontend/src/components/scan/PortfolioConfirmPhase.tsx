@@ -37,7 +37,11 @@ export default function PortfolioConfirmPhase({
     onConfirm,
     onReset,
 }: PortfolioConfirmPhaseProps) {
-    const selectedCount = companies.filter((c) => c.selected).length
+    // Count only rows that are BOTH selected and analyzable — gating on
+    // analyzability too keeps "Analyze N" honest even if a url-less row arrives
+    // pre-selected (restored state / a path that skips withDefaultSelection),
+    // which is exactly the silent-drop mismatch this guards against.
+    const selectedCount = companies.filter((c) => c.selected && hasAnalyzableUrl(c.url)).length
     // Rows without an http(s) URL can't be analyzed — they're not selectable and
     // are excluded from the count. Surface how many so it's not a silent loss.
     const missingUrlCount = companies.filter((c) => !hasAnalyzableUrl(c.url)).length

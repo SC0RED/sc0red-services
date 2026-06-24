@@ -390,15 +390,16 @@ describe('PortfolioConfirmPhase', () => {
         })
 
         it('counts only analyzable selected rows in the analyze button', () => {
-            // Even if a url-less row were marked selected, it must not be counted.
+            // A url-less row marked selected (e.g. restored state) must NOT be
+            // counted in "Analyze N" — only selected AND analyzable rows count.
             const companies = [
                 { name: 'Has URL', url: 'https://hasurl.com', description: '', selected: true },
                 { name: 'No URL Co', url: '', description: '', selected: true },
             ]
             render(<PortfolioConfirmPhase {...defaultProps} companies={companies} />)
-            // selectedCount is derived from the list; the url-less row's checkbox
-            // is disabled so it can't be toggled on through the UI. The note warns
-            // about the excluded row regardless.
+            // 2 selected, but only 1 analyzable → button counts 1, not 2.
+            expect(screen.getByText('Analyze 1 Companies')).toBeInTheDocument()
+            expect(screen.queryByText('Analyze 2 Companies')).not.toBeInTheDocument()
             expect(screen.getByText(/1 company has no URL/)).toBeInTheDocument()
         })
 
