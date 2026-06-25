@@ -23,10 +23,7 @@ jobs:
   deploy:
     name: Deploy to Staging
     needs: ci
-    # arm64 runner so the CDK Docker bundling builds aarch64 wheels natively,
-    # matching the arm64 Lambdas (arm64-lambda-fleet). Smoke/cleanup jobs below
-    # don't bundle, so they stay on x86_64 ubuntu-latest.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     # Typical run is ~7 min (CDK bootstrap + deploy + outputs). 20-min
     # ceiling gives ~3× headroom and fails fast if a runner gets stuck
     # in the queue (default would be 6h, which can silently hang a deploy).
