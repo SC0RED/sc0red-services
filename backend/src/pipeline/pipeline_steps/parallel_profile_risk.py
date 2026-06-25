@@ -22,6 +22,7 @@ from src.documents.extract_text import MAX_CHARS_COMBINED, MAX_SCRAPED_TEXT_CHAR
 from src.models.model_company import CompanyProfile, RiskAssessment, RiskScore
 from src.pipeline.ai_guides.ideation_guide import IDEATION_GUIDE
 from src.pipeline.ai_guides.risk_scoring_guide import RISK_SCORING_GUIDE
+from src.pipeline.company_name import resolve_company_name
 from src.pipeline.pipeline_steps.ai_call import run_structured_ai_call
 from src.pipeline.pipeline_steps.assess_risk import (
     RISK_ASSESSMENT_QUESTIONS,
@@ -257,11 +258,20 @@ class ParallelProfileRiskAndIdeation(RequestStep):
 
         # Build and validate profile
         profile = CompanyProfile(**profile_data)
-        if not profile.company_name or not profile.industry:
-            message = (
-                "Profile extraction returned incomplete data — company_name or industry missing"
-            )
+        if not profile.industry:
+            message = "Profile extraction returned incomplete data — industry missing"
             raise ValueError(message)
+        # ``company_name`` is an identity label, not a grounded fact: extraction
+        # occasionally returns blank/"unknown" when the name lives in stripped
+        # markup. Normalise it once here (seed name → domain) so every
+        # downstream step — financials, EBITDA tree, value chain, strategy map,
+        # and persistence — uses the clean name rather than the literal
+        # "unknown" (the millerenv.com regression).
+        profile.company_name = resolve_company_name(
+            profile.company_name,
+            accessor.company.company_name,
+            actual_url,
+        )
         accessor.set_profile(profile)
 
         # Merge risk scores from both batches, deduplicating by category

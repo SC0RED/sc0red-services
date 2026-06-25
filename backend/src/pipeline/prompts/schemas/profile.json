@@ -1,7 +1,7 @@
 {
     "type": "object",
     "properties": {
-        "company_name": {"type": "string", "description": "Official company name"},
+        "company_name": {"type": "string", "description": "Official company name as a clean proper noun, with no qualifiers or parentheticals. If the content does not state it explicitly, infer it from the page title or the domain in the URL. Never 'unknown', empty, or a placeholder."},
         "industry": {
             "type": "string",
             "description": "Primary industry (be specific, e.g. 'B2B SaaS - HR Technology' not just 'Software')"
