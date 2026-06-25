@@ -15,6 +15,8 @@ from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct
 
+from stacks.lambda_factory import build_backend_code
+
 
 class StepFunctionsConstruct(Construct):
     """Portfolio batch coordinator using Step Functions."""
@@ -203,7 +205,7 @@ class StepFunctionsConstruct(Construct):
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=architecture,
             handler=handler,
-            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            code=build_backend_code(bundling, architecture),
             timeout=Duration.seconds(timeout_seconds),
             memory_size=memory_size,
             environment=environment,

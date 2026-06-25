@@ -291,3 +291,26 @@ class TestPersistResults:
 
         mock_assessment_repo.save.assert_not_called()
         mock_assessment_repo.batch_save_opportunities.assert_not_called()
+
+    def test_persist_falls_back_when_profile_name_is_unknown(self):
+        """Regression (millerenv.com portfolio analysis): profile extraction
+        punted `company_name` to "unknown"; it must not reach the record.
+        Falls back to the discovered seed name carried on the company.
+        """
+        company = self._make_full_company()
+        company.company_name = "Miller Environmental Group"  # discovered seed name
+        company.profile.company_name = "unknown"
+        accessor = CompanyAccessor(company)
+
+        mock_company_repo = MagicMock()
+        step = PersistResults(
+            company_repo=mock_company_repo,
+            assessment_repo=MagicMock(),
+        )
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        saved_doc = mock_company_repo.save.call_args[0][0]
+        assert saved_doc["company_name"] == "Miller Environmental Group"

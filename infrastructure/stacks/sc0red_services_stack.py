@@ -73,7 +73,7 @@ class Sc0redServicesStack(Stack):
             removal_policy=config["removal_policy"],
         )
 
-        bundling = build_bundling_options()
+        bundling = build_bundling_options(lambda_architecture)
 
         cognito = CognitoConstruct(
             self,

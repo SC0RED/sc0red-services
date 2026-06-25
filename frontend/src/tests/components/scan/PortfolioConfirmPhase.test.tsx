@@ -369,4 +369,43 @@ describe('PortfolioConfirmPhase', () => {
             expect(screen.getByText(/from firm’s site/)).toBeInTheDocument()
         })
     })
+
+    describe('url-less rows are not selectable (no silent drop)', () => {
+        const withUrlless = [
+            { name: 'Has URL', url: 'https://hasurl.com', description: '', selected: true },
+            { name: 'No URL Co', url: '', description: '', selected: false },
+        ]
+
+        it('disables the checkbox for a row without a URL', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} companies={withUrlless} />)
+            const checkboxes = screen.getAllByRole('checkbox')
+            // Row order matches companies: [hasUrl(enabled), noUrl(disabled)].
+            expect(checkboxes[0]).toBeEnabled()
+            expect(checkboxes[1]).toBeDisabled()
+        })
+
+        it('surfaces how many companies are excluded for lacking a URL', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} companies={withUrlless} />)
+            expect(screen.getByText(/1 company has no URL and won/)).toBeInTheDocument()
+        })
+
+        it('counts only analyzable selected rows in the analyze button', () => {
+            // A url-less row marked selected (e.g. restored state) must NOT be
+            // counted in "Analyze N" — only selected AND analyzable rows count.
+            const companies = [
+                { name: 'Has URL', url: 'https://hasurl.com', description: '', selected: true },
+                { name: 'No URL Co', url: '', description: '', selected: true },
+            ]
+            render(<PortfolioConfirmPhase {...defaultProps} companies={companies} />)
+            // 2 selected, but only 1 analyzable → button counts 1, not 2.
+            expect(screen.getByText('Analyze 1 Companies')).toBeInTheDocument()
+            expect(screen.queryByText('Analyze 2 Companies')).not.toBeInTheDocument()
+            expect(screen.getByText(/1 company has no URL/)).toBeInTheDocument()
+        })
+
+        it('shows no exclusion note when every row has a URL', () => {
+            render(<PortfolioConfirmPhase {...defaultProps} companies={mockCompanies} />)
+            expect(screen.queryByText(/no URL and won/)).not.toBeInTheDocument()
+        })
+    })
 })

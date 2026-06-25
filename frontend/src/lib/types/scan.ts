@@ -16,10 +16,21 @@ export interface Company {
     source?: CompanySource
 }
 
+/** A company can only be analyzed if it has an http(s) URL — mirrors the
+ *  backend's confirm-scan check. URL-less rows must not be selectable, or they'd
+ *  be counted in "Analyze N" and then silently dropped at confirm. */
+export function hasAnalyzableUrl(url: string): boolean {
+    return url.startsWith('http://') || url.startsWith('https://')
+}
+
 /** Map a discovered company to the editable list, pre-selecting it UNLESS it
- *  came from web search — those are best-effort, so the customer opts in. */
+ *  came from web search (best-effort → customer opts in) or it has no URL to
+ *  analyze (selecting it would silently drop at confirm). */
 export function withDefaultSelection(company: Omit<Company, 'selected'>): Company {
-    return { ...company, selected: company.source !== 'web_search' }
+    return {
+        ...company,
+        selected: company.source !== 'web_search' && hasAnalyzableUrl(company.url),
+    }
 }
 
 export interface AnalysisSummary {

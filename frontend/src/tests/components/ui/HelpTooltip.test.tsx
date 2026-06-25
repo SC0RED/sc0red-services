@@ -181,6 +181,17 @@ describe('HelpTooltip', () => {
         expect(getTooltip()).toHaveAttribute('data-state', 'closed')
     })
 
+    it.each(['scan', 'analysis', 'scan_type'] as const)(
+        'renders the dashboard term %s with its registry title and body',
+        (term) => {
+            render(<HelpTooltip term={term} />)
+            const tooltip = getTooltip()
+            const expected = HELP_CONTENT[term]
+            expect(tooltip).toHaveTextContent(expected.title)
+            expect(tooltip).toHaveTextContent(expected.body)
+        }
+    )
+
     it('renders all registry terms without crashing', () => {
         // Smoke test — guards against an enum/registry mismatch breaking
         // any wired surface. If a key in HELP_CONTENT renders to a missing

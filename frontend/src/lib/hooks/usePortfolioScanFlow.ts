@@ -7,7 +7,7 @@ import { useCompanyList } from '@/lib/hooks/useCompanyList'
 import { useScanPolling } from '@/lib/hooks/useScanPolling'
 import { useScanRealtime } from '@/lib/hooks/useScanRealtime'
 import type { Mode, Phase, Company, ScanPollResponse, DiscoveryVerdict } from '@/lib/types/scan'
-import { withDefaultSelection } from '@/lib/types/scan'
+import { hasAnalyzableUrl, withDefaultSelection } from '@/lib/types/scan'
 import { normalizeUserUrl } from '@/lib/utils/url'
 
 /** Fetch a scan record for navigation/transition; null on any failure so
@@ -248,7 +248,10 @@ export function usePortfolioScanFlow() {
         discoveryPolling.stopPolling()
         discoveryRealtime.stop()
 
-        const selected = companies.filter((c) => c.selected)
+        // Gate on analyzability too: only send rows that are selected AND have a
+        // URL, so what we dispatch matches the "Analyze N" count and the backend
+        // never silently drops a selected-but-url-less row.
+        const selected = companies.filter((c) => c.selected && hasAnalyzableUrl(c.url))
         phaseRef.current = 'running'
         setPhase('running')
         setProgress(5)

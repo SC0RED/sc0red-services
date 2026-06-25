@@ -1,9 +1,9 @@
 """Tests for ParallelProfileRiskAndIdeation composite pipeline step."""
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
-from signalfield_core.models.enums import Precision, ReasoningEffort, Verbosity
+from signalfield_core.models.enums import Precision
 
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company, RiskScore
@@ -139,10 +139,14 @@ class TestParallelProfileRiskAndIdeation:
         def ideation_query_side_effect(*, input_text, json_schema):
             # Extract category from prompt text (e.g., "RISK CATEGORY: competitive_displacement")
             for cat in [
-                "competitive_displacement", "technology_obsolescence",
-                "customer_behavior", "margin_compression",
-                "talent_workforce", "regulatory_compliance",
-                "supply_chain", "data_ip",
+                "competitive_displacement",
+                "technology_obsolescence",
+                "customer_behavior",
+                "margin_compression",
+                "talent_workforce",
+                "regulatory_compliance",
+                "supply_chain",
+                "data_ip",
             ]:
                 if f"RISK CATEGORY: {cat}" in input_text:
                     response = MagicMock()
@@ -294,7 +298,9 @@ class TestParallelProfileRiskAndIdeation:
 
         assert instructions.count(PROFILE_SYSTEM_PROMPT) == 1
 
-        risk_instructions = [i for i in instructions if RISK_SYSTEM_PROMPT in i and i != PROFILE_SYSTEM_PROMPT]
+        risk_instructions = [
+            i for i in instructions if RISK_SYSTEM_PROMPT in i and i != PROFILE_SYSTEM_PROMPT
+        ]
         assert len(risk_instructions) == 2
         for instruction in risk_instructions:
             assert RISK_SCORING_GUIDE in instruction
@@ -324,14 +330,14 @@ class TestParallelProfileRiskAndIdeation:
         # The profile schema requires all 13 fields structurally; the
         # ``run_structured_ai_call`` boundary validator (added 2026-05-15)
         # will reject a response missing any of them at the call site. The
-        # pipeline's OWN "incomplete data" check guards against the case
-        # where every field is present but the two anchor fields
-        # (``company_name`` / ``industry``) are semantically empty. This
-        # test exercises that second layer.
+        # pipeline's OWN "incomplete data" check guards against a semantically
+        # empty ``industry`` (the remaining anchor fact field). ``company_name``
+        # is no longer part of this guard — it is normalised, not failed on
+        # (see ``test_normalizes_unknown_company_name``).
         mock_factory = self._make_mock_factory(
             profile_data={
                 **_PROFILE_RESPONSE,
-                "company_name": "",
+                "company_name": "Acme Corp",
                 "industry": "",
             }
         )
@@ -343,6 +349,25 @@ class TestParallelProfileRiskAndIdeation:
 
         with pytest.raises(ValueError, match="incomplete data"):
             step.execute()
+
+    def test_normalizes_unknown_company_name(self):
+        """Regression (millerenv.com): extraction returned ``company_name``
+        "unknown". It must be normalised in place (here, derived from the
+        domain) before any downstream step or persistence sees it, instead of
+        propagating the literal "unknown".
+        """
+        mock_factory = self._make_mock_factory(
+            profile_data={**_PROFILE_RESPONSE, "company_name": "unknown"}
+        )
+        accessor = self._make_accessor(url="https://www.millerenv.com/")
+
+        step = ParallelProfileRiskAndIdeation(ai_client_factory=mock_factory)
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        assert accessor.company.profile.company_name == "Millerenv"
 
     def test_empty_risk_scores_raises(self):
         mock_factory = self._make_mock_factory(
@@ -417,10 +442,12 @@ class TestParallelProfileRiskAndIdeation:
         def capture_risk_query(**kwargs):
             risk_prompts.append(kwargs.get("input_text", ""))
             response = MagicMock()
-            response.content = {"risk_scores": [
-                {"category": f"cat_{len(risk_prompts)}_a", "score": 5, "rationale": "r"},
-                {"category": f"cat_{len(risk_prompts)}_b", "score": 4, "rationale": "r"},
-            ]}
+            response.content = {
+                "risk_scores": [
+                    {"category": f"cat_{len(risk_prompts)}_a", "score": 5, "rationale": "r"},
+                    {"category": f"cat_{len(risk_prompts)}_b", "score": 4, "rationale": "r"},
+                ]
+            }
             response.metadata = {"tokens": 80}
             return response
 

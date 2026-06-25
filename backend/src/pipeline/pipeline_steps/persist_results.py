@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
+from src.pipeline.company_name import resolve_company_name
 from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
@@ -49,8 +50,15 @@ class PersistResults(RequestStep):
         risk_assessment = company.risk_assessment
         opportunity_result = company.opportunity_result
 
+        # Safety net: profile.company_name is already normalised upstream in
+        # ParallelProfileRiskAndIdeation, but resolve again here so a record is
+        # never written with a blank/"unknown" name regardless of entry path.
         company_doc: dict[str, Any] = {
-            "company_name": profile.company_name if profile else "",
+            "company_name": resolve_company_name(
+                profile.company_name if profile else "",
+                company.company_name,
+                company.actual_url or company.url,
+            ),
             "company_url": company.actual_url or company.url,
             "industry": profile.industry if profile else "",
             "description": profile.description if profile else "",
