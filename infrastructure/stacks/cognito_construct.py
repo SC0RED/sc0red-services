@@ -15,6 +15,8 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from constructs import Construct
 
+from stacks.lambda_factory import build_backend_code
+
 
 class CognitoConstruct(Construct):
     """Cognito User Pool and App Client for sc0red Services authentication."""
@@ -81,7 +83,7 @@ class CognitoConstruct(Construct):
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=architecture,
             handler="src.handlers.cognito_custom_message.handle_custom_message",
-            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            code=build_backend_code(bundling, architecture),
             timeout=Duration.seconds(5),
             memory_size=128,
             log_group=log_group,

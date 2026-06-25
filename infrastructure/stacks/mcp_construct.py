@@ -29,6 +29,8 @@ from aws_cdk import aws_ssm as ssm
 from aws_cdk import custom_resources as cr
 from constructs import Construct
 
+from stacks.lambda_factory import build_backend_code
+
 if TYPE_CHECKING:
     from aws_cdk import aws_dynamodb as dynamodb
     from aws_cdk import aws_sqs as sqs
@@ -287,7 +289,7 @@ class MCPConstruct(Construct):
             handler="src.mcp.signing_key_provider.handle",
             # Reuses the MCP Lambda's backend bundle (cryptography + token_utils).
             # CDK dedups the identical asset, so this does not re-bundle.
-            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            code=build_backend_code(bundling, architecture),
             timeout=Duration.seconds(60),
             memory_size=256,
             log_group=generator_logs,
@@ -331,9 +333,14 @@ class MCPConstruct(Construct):
         # real uvicorn server inside the Lambda container, so the ASGI lifespan
         # runs once per cold start (fixing the Mangum run-once 502 — design.md
         # Decision 8). The layer name is architecture-specific.
+        #
+        # Compare on ``architecture.name``, NOT ``architecture == Architecture.ARM_64``:
+        # jsii ``Architecture`` objects have no value equality, so the ``==`` form
+        # is always False and would silently attach the x86 adapter to an arm64
+        # function — an exec-format crash ("cannot execute binary file") at init.
         lwa_layer_name = (
             "LambdaAdapterLayerArm64"
-            if architecture == lambda_.Architecture.ARM_64
+            if architecture.name == lambda_.Architecture.ARM_64.name
             else "LambdaAdapterLayerX86"
         )
         lwa_layer = lambda_.LayerVersion.from_layer_version_arn(
@@ -352,7 +359,7 @@ class MCPConstruct(Construct):
             # (``run_mcp.sh`` execs uvicorn), invoked because
             # ``AWS_LAMBDA_EXEC_WRAPPER`` points at LWA's ``/opt/bootstrap``.
             handler="run_mcp.sh",
-            code=lambda_.Code.from_asset("../backend", bundling=bundling),
+            code=build_backend_code(bundling, architecture),
             layers=[lwa_layer],
             timeout=Duration.seconds(900),
             memory_size=512,

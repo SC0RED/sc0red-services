@@ -10,6 +10,7 @@ redeploy.
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 import aws_cdk as cdk
 from aws_cdk import Duration
@@ -20,7 +21,12 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_sqs as sqs
 from constructs import Construct
 
-from stacks.cognito_construct import CognitoConstruct
+if TYPE_CHECKING:
+    # Type-only import: ``build_common_environment`` annotates a
+    # ``CognitoConstruct`` parameter but never constructs one. Keeping this under
+    # TYPE_CHECKING avoids a circular import now that ``cognito_construct``
+    # imports ``build_backend_code`` from this module.
+    from stacks.cognito_construct import CognitoConstruct
 
 _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
     7: logs.RetentionDays.ONE_WEEK,
@@ -28,13 +34,57 @@ _LOG_RETENTION_MAP: dict[int, logs.RetentionDays] = {
     90: logs.RetentionDays.THREE_MONTHS,
 }
 
+# Single source of truth for the backend package directory bundled into every
+# Python Lambda. Used by both the bundling builder and the asset-hash helper.
+_BACKEND_ASSET_PATH = "../backend"
 
-def build_bundling_options() -> cdk.BundlingOptions:
+
+def build_backend_code(
+    bundling: cdk.BundlingOptions,
+    architecture: lambda_.Architecture,
+) -> lambda_.Code:
+    """Package ``../backend`` with an architecture-aware asset hash.
+
+    CDK's default ``AssetHashType.SOURCE`` hashes only the source directory, not
+    the bundle architecture, and the architecture comes from the build host (the
+    runner) rather than any CDK input — so it is invisible to the hash. Flipping
+    ``lambda_architecture`` without touching ``backend/`` therefore leaves the
+    source hash unchanged, and CDK reuses the previously published (wrong-arch)
+    zip, pushing it onto the now-different-arch functions. That is exactly what
+    broke the arm64 fleet switch (#449): x86_64 binaries deployed onto arm64
+    functions, failing to load at init (``_rust.abi3.so``/LWA adapter).
+
+    Mixing the architecture into the asset hash makes an arch flip republish the
+    correct bundle while preserving normal source-change detection. A custom
+    ``asset_hash`` (not ``AssetHashType.OUTPUT``) is used so ``cdk synth`` does
+    not have to bundle just to compute the hash — bundling stays lazy, at
+    deploy/publish time.
+
+    ``architecture.name`` (``arm64``/``x86_64``) is used rather than comparing
+    ``Architecture`` instances — jsii ``Architecture`` objects do not implement
+    value equality (``Architecture.ARM_64 == Architecture.ARM_64`` is ``False``),
+    so an ``==`` check would silently misbehave.
+    """
+    source_fingerprint = cdk.FileSystem.fingerprint(_BACKEND_ASSET_PATH)
+    return lambda_.Code.from_asset(
+        _BACKEND_ASSET_PATH,
+        bundling=bundling,
+        asset_hash=f"{source_fingerprint}-{architecture.name}",
+    )
+
+
+def build_bundling_options(architecture: lambda_.Architecture) -> cdk.BundlingOptions:
     """Build the Docker bundling config shared by the API, worker, and MCP Lambdas.
 
     Reads ``DEPLOY_KEY_B64`` from the deploy environment and, when set,
     wires git-over-SSH so ``pip install`` can resolve the private
     ``signalfield-core`` dependency.
+
+    ``platform`` is pinned to the target architecture so the bundle is built for
+    the Lambda's architecture explicitly, rather than implicitly inheriting the
+    build host's architecture. On a matching runner this is a native no-op; it
+    guards against a runner/target mismatch silently producing a wrong-arch
+    package (see ``build_backend_code``).
 
     NOTE (temporary coupling — see janus-mcp-server tasks.md 2.5.13): the final
     step copies the MCP Lambda's ``run_mcp.sh`` LWA startup script into the
@@ -47,6 +97,7 @@ def build_bundling_options() -> cdk.BundlingOptions:
 
     return cdk.BundlingOptions(
         image=cdk.DockerImage.from_registry("python:3.12-slim"),
+        platform=architecture.docker_platform,
         user="root",
         environment={"DEPLOY_KEY_B64": deploy_key_b64},
         command=[
@@ -151,7 +202,7 @@ def create_lambda(
         runtime=lambda_.Runtime.PYTHON_3_12,
         architecture=architecture,
         handler=handler,
-        code=lambda_.Code.from_asset("../backend", bundling=bundling),
+        code=build_backend_code(bundling, architecture),
         timeout=Duration.seconds(timeout_seconds),
         memory_size=memory_size,
         reserved_concurrent_executions=reserved_concurrency,
