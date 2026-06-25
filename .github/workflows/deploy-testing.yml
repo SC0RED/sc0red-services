@@ -23,7 +23,10 @@ jobs:
   deploy:
     name: Deploy to Testing
     needs: ci
-    runs-on: ubuntu-latest
+    # arm64 runner so CDK's Docker bundling builds aarch64 wheels natively for
+    # the arm64 testing Lambdas (testing lambda_architecture=arm64). The bundle
+    # platform is also pinned in build_bundling_options. E2E/cleanup don't bundle.
+    runs-on: ubuntu-24.04-arm
     # Typical run is ~7 min. 20-min ceiling matches deploy-backend.yml
     # so a stuck-queued runner fails fast instead of leaving the job
     # hanging for 6h (GitHub Actions default).
