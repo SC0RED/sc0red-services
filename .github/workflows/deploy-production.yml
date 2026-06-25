@@ -20,10 +20,7 @@ jobs:
   deploy:
     name: Deploy to Production
     needs: ci
-    # arm64 runner so the CDK Docker bundling builds aarch64 wheels natively,
-    # matching the arm64 Lambdas (arm64-lambda-fleet). Smoke/cleanup jobs don't
-    # bundle, so they stay on x86_64 ubuntu-latest.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     # Typical run is ~10 min. 25-min ceiling matches deploy-backend.yml /
     # deploy-testing.yml proportions; production CDK deploys are slightly
     # heavier so we add 5 min headroom. Fails fast if a runner gets stuck
