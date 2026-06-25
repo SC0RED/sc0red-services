@@ -15,7 +15,10 @@ from src.models.model_company import (
     RiskAssessment,
     RiskScore,
 )
-from src.pipeline.pipeline_steps.persist_results import PersistResults
+from src.pipeline.pipeline_steps.persist_results import (
+    PersistResults,
+    _resolve_display_name,
+)
 
 
 class TestPersistResults:
@@ -291,3 +294,71 @@ class TestPersistResults:
 
         mock_assessment_repo.save.assert_not_called()
         mock_assessment_repo.batch_save_opportunities.assert_not_called()
+
+    def test_persist_falls_back_when_profile_name_is_unknown(self):
+        """Regression (millerenv.com portfolio analysis): profile extraction
+        punted `company_name` to "unknown"; it must not reach the record.
+        Falls back to the discovered seed name carried on the company.
+        """
+        company = self._make_full_company()
+        company.company_name = "Miller Environmental Group"  # discovered seed name
+        company.profile.company_name = "unknown"
+        accessor = CompanyAccessor(company)
+
+        mock_company_repo = MagicMock()
+        step = PersistResults(
+            company_repo=mock_company_repo,
+            assessment_repo=MagicMock(),
+        )
+        step._entity_accessor = accessor
+        step._request_executor = MagicMock()
+
+        step.execute()
+
+        saved_doc = mock_company_repo.save.call_args[0][0]
+        assert saved_doc["company_name"] == "Miller Environmental Group"
+
+
+class TestResolveDisplayName:
+    """Unit tests for the never-blank company-name resolver.
+
+    Imports the module-private ``_resolve_display_name`` deliberately: it is a
+    pure function whose full fallback matrix is far cheaper to pin here than
+    through repeated ``execute()`` integration runs.
+    """
+
+    def _company(self, *, seed="", url="", actual_url="", profile_name=None):
+        profile = (
+            CompanyProfile(company_name=profile_name, industry="X")
+            if profile_name is not None
+            else None
+        )
+        return Company(
+            id="c-1",
+            url=url,
+            actual_url=actual_url,
+            org_id="o-1",
+            company_name=seed,
+            profile=profile,
+        )
+
+    def test_prefers_clean_profile_name(self):
+        company = self._company(profile_name="Acme Corp", seed="Seed Co", url="https://acme.com")
+        assert _resolve_display_name(company.profile, company) == "Acme Corp"
+
+    @pytest.mark.parametrize("placeholder", ["unknown", "Unknown", "  UNKNOWN ", "n/a", "none", ""])
+    def test_falls_back_to_seed_when_profile_name_is_placeholder(self, placeholder):
+        company = self._company(profile_name=placeholder, seed="Miller Environmental Group")
+        assert _resolve_display_name(company.profile, company) == "Miller Environmental Group"
+
+    def test_falls_back_to_domain_when_profile_and_seed_blank(self):
+        company = self._company(
+            profile_name="unknown", seed="", actual_url="https://www.millerenv.com/"
+        )
+        assert _resolve_display_name(company.profile, company) == "Millerenv"
+
+    def test_last_resort_returns_url_not_unknown(self):
+        # No profile, no seed, and a host ("a.io") whose stem is too short to
+        # derive a name — falls through to the bare URL, never "unknown".
+        company = self._company(profile_name=None, seed="", url="https://a.io")
+        assert _resolve_display_name(None, company) == "https://a.io"
