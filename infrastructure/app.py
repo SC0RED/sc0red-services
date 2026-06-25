@@ -71,7 +71,10 @@ environment_config: dict[str, object] = {
         "log_retention_days": 30,
         "enable_monitoring": True,
         "point_in_time_recovery": False,
-        "lambda_architecture": "x86_64",
+        # arm64 (Graviton) — promoted from staging after staging was validated
+        # healthy on arm64 (#451). The arch-aware asset hash + pinned bundle
+        # platform make the flip safe; production stays x86_64 until testing bakes.
+        "lambda_architecture": "arm64",
         "api_rate_limit": 50,
         "api_burst_limit": 100,
         "github_repository": "https://github.com/SC0RED/sc0red-services",
