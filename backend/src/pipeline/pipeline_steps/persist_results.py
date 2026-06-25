@@ -12,44 +12,15 @@ from typing import TYPE_CHECKING, Any, cast
 
 from signalfield_core.pipeline.step import RequestStep
 
-from src.data_strategies.web_scraper_strategy import extract_name_from_url
+from src.pipeline.company_name import resolve_company_name
 from src.pipeline.step_timer import StepTimer
 
 if TYPE_CHECKING:
     from src.facades.company_accessor import CompanyAccessor
-    from src.models.model_company import Company, CompanyProfile
     from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
     from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
 
 logger = logging.getLogger(__name__)
-
-# Names that must never reach the stored record / analysis page. Profile
-# extraction occasionally emits these for ``company_name`` when the scraped
-# page carries no explicit name (the page title/logo lives in stripped markup).
-_PLACEHOLDER_NAMES = frozenset({"unknown", "n/a", "none", "null", "untitled"})
-
-
-def _resolve_display_name(profile: CompanyProfile | None, company: Company) -> str:
-    """Resolve a clean, never-blank display name for the analysis record.
-
-    Prefers the AI-extracted ``profile.company_name``, then the discovered seed
-    name carried on the company (portfolio candidate name), then a name derived
-    from the domain. This guarantees the stored record never shows the literal
-    ``"unknown"`` — the regression a millerenv.com portfolio analysis surfaced,
-    where extraction punted ``company_name`` to ``"unknown"`` and it was
-    persisted raw.
-    """
-    candidates = (
-        profile.company_name if profile else "",
-        company.company_name,
-        extract_name_from_url(company.actual_url or company.url),
-    )
-    for candidate in candidates:
-        cleaned = (candidate or "").strip()
-        if cleaned and cleaned.lower() not in _PLACEHOLDER_NAMES:
-            return cleaned
-    # Last resort: the bare host/url still beats showing "unknown".
-    return (company.actual_url or company.url or "").strip() or "Unnamed company"
 
 
 class PersistResults(RequestStep):
@@ -79,8 +50,15 @@ class PersistResults(RequestStep):
         risk_assessment = company.risk_assessment
         opportunity_result = company.opportunity_result
 
+        # Safety net: profile.company_name is already normalised upstream in
+        # ParallelProfileRiskAndIdeation, but resolve again here so a record is
+        # never written with a blank/"unknown" name regardless of entry path.
         company_doc: dict[str, Any] = {
-            "company_name": _resolve_display_name(profile, company),
+            "company_name": resolve_company_name(
+                profile.company_name if profile else "",
+                company.company_name,
+                company.actual_url or company.url,
+            ),
             "company_url": company.actual_url or company.url,
             "industry": profile.industry if profile else "",
             "description": profile.description if profile else "",
