@@ -9,7 +9,7 @@ page.
 `render` is another additive escalation, identical in shape to `deepen` and
 `source-url`:
 
-```
+```text
 Confirm screen → POST /api/scan/{id}/render → SQS → worker _process_additive_merge
    → RenderSiteStep:  assert_public_url → <render to post-JS HTML> → extract_companies_from_scrape
                       → find_new_candidates / merge / build_verdict (source="render", needs_validation)
@@ -47,27 +47,28 @@ pipeline, Chromium upkeep, cold-start/`/tmp` tuning); migrate to self-hosted lat
 if volume/cost/data-residency demands. The escalation plumbing is identical either
 way, so it's not a lock-in.
 
-## Architecture: cloud is uniformly x86_64
+## Architecture: cloud is uniformly arm64
 
-Investigated during the explore session — corrects an earlier assumption:
+**Updated for the `arm64-lambda-fleet` change** (the fleet moved to arm64). The
+explore session originally found the cloud on x86_64 (the `development` *branch*
+deploys the `staging` *config*); `arm64-lambda-fleet` then flipped all cloud
+configs to arm64 and moved the bundling `deploy` jobs to `ubuntu-24.04-arm` so the
+aarch64 bundle is built natively.
 
 | config key | arch | deployed by |
 |---|---|---|
-| `development` | arm64 | **local `cdk deploy` only** (no workflow) — matches an Apple-Silicon Mac |
-| `staging` (the cloud "dev") | x86_64 | deploy-backend.yml (push `development`), CI x86_64 |
-| `testing` | x86_64 | deploy-testing.yml, CI x86_64 |
-| `production` | x86_64 | deploy-production.yml, CI x86_64 |
+| `development` | arm64 | local `cdk deploy` (Apple-Silicon Mac) |
+| `staging` (the cloud "dev") | arm64 | deploy-backend.yml on `ubuntu-24.04-arm` |
+| `testing` | arm64 | deploy-testing.yml on `ubuntu-24.04-arm` |
+| `production` | arm64 | deploy-production.yml on `ubuntu-24.04-arm` |
 
-The `development` *branch* deploys the `staging` *config*, so every **cloud** env
-is **x86_64**, built by x86_64 CI runners. Bundling does NOT pin a wheel platform
-(`pip install .` in `python:3.12-slim` → host-arch wheels), so the Lambda arch
-implicitly tracks the build-host arch — consistent today because arm64 only ever
-builds locally and x86_64 only ever builds in CI.
+So local + all cloud envs are now **arm64**, built on arm64 runners — the
+former implicit bundle↔runner-arch coupling is resolved (the runner arch is
+pinned in the workflows).
 
 Implications for render-site:
-- The Chromium image (or any arch-specific binary) targets **x86_64** for all
-  cloud envs — a **single image**, platform-pinned to `linux/amd64`. No per-env
-  split. (The local arm64 `development` stack isn't a render target.)
+- The Chromium image (or any arch-specific binary) targets **arm64** for all
+  envs — a **single image**, platform-pinned to `linux/arm64`. No per-env split.
 - Pin the image platform explicitly regardless — don't inherit "whatever the
   runner is."
 
@@ -84,6 +85,7 @@ Implications for render-site:
 
 ## Related, separate
 
-The unpinned-bundling fragility (bundle arch coupled to runner arch) is a small
-optional hardening — pin `--platform`/`--only-binary` — independent of render-site
-but on the critical path for any future native-binary Lambda.
+The bundle↔runner-arch coupling has since been addressed by `arm64-lambda-fleet`
+(deploy jobs pinned to arm64 runners, fleet on arm64). A future `--platform`/
+`--only-binary` pin would make it robust against a runner-arch change, but it's no
+longer load-bearing for render-site — the Chromium image just targets arm64.
