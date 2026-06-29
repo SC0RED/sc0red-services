@@ -66,6 +66,21 @@ export type DiscoveryCompleteness =
 
 export type DiscoveryAction = 'search_deeper' | 'render_site' | 'upload_list'
 
+/** Which source actually produced the list — a post-discovery label from the
+ *  backend `classify_delivery_mechanism`. Orthogonal to `completeness`: it
+ *  explains the *why* behind a thin/empty result (e.g. `opaque_shell` ⇒ the
+ *  firm renders its list client-side and we couldn't read it). "" for verdicts
+ *  persisted before the field existed. */
+export type DeliveryMechanism =
+    | 'unreachable'
+    | 'static_listing'
+    | 'structured_endpoint'
+    | 'embedded_json'
+    | 'ai_extracted'
+    | 'opaque_shell'
+    | 'no_portfolio_found'
+    | 'site_listing'
+
 export interface DiscoveryVerdict {
     /** How the result was produced (site / web_search / none). Carried for
      *  parity with the backend + future analytics; not rendered today. */
@@ -76,6 +91,9 @@ export interface DiscoveryVerdict {
     /** The firm page site-derived companies were read from — the reliable-source
      *  anchor shown in the banner. "" when nothing came from the site. */
     siteSourceUrl?: string
+    /** Post-discovery delivery-mechanism label; drives the optional "why" hint
+     *  in the banner for thin/empty results. "" for older verdicts. */
+    deliveryMechanism?: DeliveryMechanism | ''
 }
 
 export interface ScanPollResponse {
