@@ -38,8 +38,19 @@ if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
+    from src.pipeline.request_executor import Sc0redServicesRequestExecutor
 
 logger = logging.getLogger(__name__)
+
+# Background progress messages narrated to the customer as discovery climbs the
+# ladder (Task 7 of adaptive-portfolio-discovery). Mechanism routing is never a
+# customer choice — they only see transparency as progress. Percentages sit in
+# the 5%→10% discovery window (5% start, 10% discover_portfolio complete) and
+# rise monotonically so the bar never jumps backwards. Real-time only (AppSync);
+# polling clients see the coarse phase boundaries.
+_PHASE_READING = (6, "Reading the firm's portfolio page…")
+_PHASE_STRUCTURED = (8, "Querying the firm's data sources…")
+_PHASE_WEB_SEARCH = (9, "Searching public sources…")
 
 # Low-water mark: when site-derived discovery finds this many companies OR FEWER,
 # auto-run the web-search fallback to recover the firm's portfolio (the site is
@@ -81,6 +92,12 @@ class DiscoverPortfolio(RequestStep):
             raise RuntimeError(message)
         return self._ai_client_factory
 
+    def _report_phase(self, phase: tuple[int, str]) -> None:
+        """Narrate a discovery sub-phase on the scan's real-time progress channel."""
+        executor = cast("Sc0redServicesRequestExecutor", self.request_executor)
+        progress, label = phase
+        executor.report_progress(progress, label)
+
     def execute(self) -> None:
         """Run heuristic + AI discovery and merge results."""
         accessor = cast("CompanyAccessor", self.entity_accessor)
@@ -91,6 +108,7 @@ class DiscoverPortfolio(RequestStep):
             raise ValueError(message)
 
         # Path 1: Heuristic discovery (also captures page text + links)
+        self._report_phase(_PHASE_READING)
         strategy = PortfolioDiscoveryStrategy({"url": url})
         _raw, metadata = strategy.execute()
         heuristic_companies = metadata["companies"]
@@ -144,6 +162,7 @@ class DiscoverPortfolio(RequestStep):
         in_html_total = len(auto_included) + len(needs_validation)
         rung_count = 0  # companies the deterministic rungs contributed (for mechanism)
         if is_pe_firm and in_html_total <= _DETERMINISTIC_RUNG_THRESHOLD:
+            self._report_phase(_PHASE_STRUCTURED)
             parsed = urlparse(url if url.startswith("http") else f"https://{url}")
             base_origin = f"{parsed.scheme}://{parsed.netloc}"
             rung_candidates = sanitize_candidates(
@@ -165,6 +184,7 @@ class DiscoverPortfolio(RequestStep):
         fallback_ran = False
         if self._ai_client_factory and is_pe_firm and site_total <= _FALLBACK_THRESHOLD:
             fallback_ran = True
+            self._report_phase(_PHASE_WEB_SEARCH)
             # Surface WHY we're falling back: a fetch failure means a scrapeable
             # site was unreachable this run (result may be incomplete), vs a
             # genuinely empty/opaque site where web search is the right recovery.
