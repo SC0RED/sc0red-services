@@ -409,3 +409,48 @@ describe('PortfolioConfirmPhase', () => {
         })
     })
 })
+
+describe('PortfolioConfirmPhase — realized holdings', () => {
+    const baseProps = {
+        onCompanyToggle: vi.fn(),
+        onAddCompany: vi.fn(),
+        onAddCompanies: vi.fn(() => 0),
+        onSearchDeeper: vi.fn(),
+        onProvideSourceUrl: vi.fn(),
+        onConfirm: vi.fn(),
+        onReset: vi.fn(),
+    }
+
+    it('shows a "realized" badge on an exited holding and leaves it unchecked', () => {
+        render(
+            <PortfolioConfirmPhase
+                {...baseProps}
+                companies={[
+                    {
+                        name: 'Exited Co',
+                        url: 'https://exited.com',
+                        description: '',
+                        selected: false,
+                        source: 'site',
+                        status: 'realized',
+                    },
+                    {
+                        name: 'Active Co',
+                        url: 'https://active.com',
+                        description: '',
+                        selected: true,
+                        source: 'site',
+                        status: 'current',
+                    },
+                ]}
+            />
+        )
+        expect(screen.getByText(/realized/i)).toBeInTheDocument()
+        const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+        // Exited Co (first row) unchecked, Active Co checked.
+        expect(checkboxes[0].checked).toBe(false)
+        expect(checkboxes[1].checked).toBe(true)
+        // Only the current company counts toward the analyze action.
+        expect(screen.getByText('Analyze 1 Companies')).toBeInTheDocument()
+    })
+})
