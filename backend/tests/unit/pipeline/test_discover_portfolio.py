@@ -579,6 +579,8 @@ class TestDeterministicRungs:
         assert details["portfolio_count"] == 2
         # Site-derived → verdict anchors to the firm page.
         assert details["discovery_verdict"]["site_source_url"] == "https://firm.com/portfolio"
+        # Recovered by the deterministic rungs (no heuristic/AI) → structured_endpoint.
+        assert details["discovery_verdict"]["delivery_mechanism"] == "structured_endpoint"
 
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")

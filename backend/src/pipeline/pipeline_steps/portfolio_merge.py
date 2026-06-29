@@ -209,6 +209,7 @@ def build_verdict(
     fallback_ran: bool,
     deepen_added: int | None = None,
     site_source_url: str = "",
+    mechanism: str = "",
 ) -> dict[str, Any]:
     """Summarise how discovery went, for a customer-facing message + next actions.
 
@@ -257,4 +258,8 @@ def build_verdict(
         # The firm page we read site-derived companies from — the group-level
         # trust anchor the UI shows ("read from <site_source_url>").
         "site_source_url": site_source_url,
+        # How the firm delivered its list (see classify_delivery_mechanism) — lets
+        # the UI explain a thin/empty result (e.g. "renders client-side"). "" on
+        # deepen verdicts and legacy records.
+        "delivery_mechanism": mechanism,
     }
