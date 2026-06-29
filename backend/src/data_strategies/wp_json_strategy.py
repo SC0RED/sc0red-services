@@ -86,21 +86,28 @@ def _classify_status_term(name: str) -> str:
     return ""
 
 
-def _candidate_taxonomies(item: dict[str, Any]) -> list[str]:
-    """Taxonomy REST bases on an item (top-level keys holding term-id lists).
+def _candidate_taxonomies(items: list[Any]) -> list[str]:
+    """Taxonomy REST bases seen across a page of items (term-id list keys).
 
-    Status-named taxonomies are probed first so the common case costs one fetch.
+    Scans ALL items, not just the first: a first-page company can legitimately be
+    untagged (empty/absent term list) while later rows carry the status taxonomy,
+    so keying off only ``items[0]`` would miss it. A key qualifies if it is a
+    non-empty list of ints in at least one item. Status-named taxonomies are
+    probed first so the common case costs one fetch.
     """
-    keys = [
-        key
-        for key, value in item.items()
-        if isinstance(value, list) and value and all(isinstance(term_id, int) for term_id in value)
-    ]
-    keys.sort(key=lambda k: 0 if any(h in k.lower() for h in _STATUS_TAXONOMY_NAME_HINTS) else 1)
-    return keys[:_MAX_TAXONOMY_PROBES]
+    keys: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for key, value in item.items():
+            if isinstance(value, list) and value and all(isinstance(tid, int) for tid in value):
+                keys.add(key)
+    ordered = sorted(keys)  # deterministic before the status-hint sort
+    ordered.sort(key=lambda k: 0 if any(h in k.lower() for h in _STATUS_TAXONOMY_NAME_HINTS) else 1)
+    return ordered[:_MAX_TAXONOMY_PROBES]
 
 
-def _build_status_map(base_origin: str, sample_item: dict[str, Any]) -> tuple[str, dict[int, str]]:
+def _build_status_map(base_origin: str, items: list[Any]) -> tuple[str, dict[int, str]]:
     """Locate the firm's current/realized taxonomy and map its term ids → status.
 
     Returns ``(taxonomy_rest_base, {term_id: status})``, or ``("", {})`` when the
@@ -110,7 +117,7 @@ def _build_status_map(base_origin: str, sample_item: dict[str, Any]) -> tuple[st
     taxonomy that happens to contain one stray word (e.g. a "Former Industries"
     sector) won't have both, so it's correctly rejected.
     """
-    for taxonomy in _candidate_taxonomies(sample_item):
+    for taxonomy in _candidate_taxonomies(items):
         try:
             terms = json.loads(
                 fetch_page_html(f"{base_origin}/wp-json/wp/v2/{taxonomy}?per_page=100")
@@ -210,8 +217,8 @@ def _fetch_cpt(base_origin: str, rest_base: str, seen: set[str]) -> list[dict[st
             break
         if not isinstance(items, list) or not items:
             break
-        if not probed and isinstance(items[0], dict):
-            taxonomy, status_map = _build_status_map(base_origin, items[0])
+        if not probed:
+            taxonomy, status_map = _build_status_map(base_origin, items)
             probed = True
         for item in items:
             record = _to_company(item, taxonomy, status_map)

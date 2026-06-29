@@ -244,3 +244,35 @@ class TestStatusTagging:
         ):
             discover_via_wp_json("https://firm.com")
         assert calls["sector"] == 1
+
+    def test_detects_status_when_first_item_untagged(self):
+        # Regression (CodeRabbit): items[0] has no status terms but items[1] does
+        # → the taxonomy is still detected (scan all page items, not just the first).
+        def fake(url):
+            if url.endswith("/wp-json/wp/v2/types"):
+                return json.dumps(_TYPES_WITH_COMPANY)
+            if "/wp-json/wp/v2/status-company?" in url:
+                return json.dumps([{"id": 25, "name": "Current"}, {"id": 26, "name": "Realized"}])
+            if "/wp-json/wp/v2/company?" in url:
+                page = int(url.split("&page=")[1])
+                if page == 1:
+                    return json.dumps(
+                        [
+                            {
+                                "title": {"rendered": "Untagged"},
+                                "link": "https://untagged.com",
+                                "status-company": [],
+                            },
+                            {
+                                "title": {"rendered": "OldCo"},
+                                "link": "https://oldco.com",
+                                "status-company": [26],
+                            },
+                        ]
+                    )
+                return json.dumps([])
+            return json.dumps([])
+
+        with patch.object(wp_json_strategy, "fetch_page_html", side_effect=fake):
+            out = discover_via_wp_json("https://firm.com")
+        assert {c["name"]: c["status"] for c in out} == {"Untagged": "", "OldCo": "realized"}
