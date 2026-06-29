@@ -1,7 +1,12 @@
 # Tasks — Render-the-site headless-render rung
 
-**Status: backlog / not scheduled.** Kept alive as the live home for the deferred
-escalation rung. Do not start without an infra review (the reason it was deferred).
+**Status: backlog / not scheduled — DEPRIORITIZED.** A Task-0 spike in
+`adaptive-portfolio-discovery` (n=19 PE/VC firms) found **0/17 reachable firms
+needed a headless browser** — `wp-json` CPT discovery + `sitemap.xml` enumeration +
+in-HTML extraction covered everything. Do not schedule render until
+`adaptive-portfolio-discovery` ships and real traffic surfaces firms those cheaper
+rungs miss. If ever built, the lesson is "render once to discover the endpoint /
+read the sitemap," not "render and scrape the DOM." Still needs an infra review.
 
 - [ ] 0. Infra spike/decision: chromium-in-Lambda (size, cold-start, 15-min cap)
   vs. separate render service vs. managed browser API. Output: an ADR.
