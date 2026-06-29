@@ -23,7 +23,7 @@ by attempting them.
 
 So the shape is **triage + self-classifying escalation ladder**:
 
-```
+```text
 GET html (once)
    │
    ▼ TRIAGE on the HTML we already have (signatures below)
@@ -53,7 +53,7 @@ mechanism proves hidden data exists**.
 
 ## Full taxonomy of how an investor site displays its portfolio
 
-```
+```text
 A. ALREADY IN THE FIRST HTTP RESPONSE  (one GET; no JS needed to GET data)
    A1  Server-rendered HTML — visible <a>/<li>/cards
    A2  Embedded hydration JSON in <script>  (the data is shipped, JS only renders it
@@ -88,7 +88,7 @@ F. CROSS-CUTTING COMPLICATIONS (layer on ANY of A–E)
 
 ### Collapse to 5 fetchability tiers (this is the routing target)
 
-```
+```text
 TIER 1  plain GET + deterministic parse        A1 A2 A3 E1 E2        no browser, no AI   ★★★★★
 TIER 2  plain GET to a *discovered* endpoint    B1 B2 B4 B5 (B3 hard) find URL → fetch    ★★★★★
 TIER 3  needs JS exec, no interaction           CSR paint-on-load     headless render      ★★★
@@ -142,7 +142,7 @@ explainable, zero token cost for the common cases.
 Mechanism selection is **automatic and invisible as a choice**. The customer is not
 asked to pick a fetch method. They see **transparency as scan progress**:
 
-```
+```text
 "Inspecting how this firm publishes its portfolio…"     (triage)
 "Reading the portfolio list…"                           (Tier 1)
 "Querying the site's data source…"                      (Tier 2)
@@ -162,7 +162,7 @@ A routine at the front of `DiscoverPortfolio` (or a thin `ClassifyDeliveryStep`
 that annotates the company), running on the HTML the existing scrape already pulls
 — not a separate fetch pass:
 
-```
+```text
 PortfolioScan → DiscoverPortfolio
    ├─ fetch firm HTML (existing curl)
    ├─ TRIAGE(html) → delivery_mechanism + confidence          (new)
@@ -229,7 +229,7 @@ likely defeats, so **this spike under-counts reachability**.
 **0 of 17 reachable firms genuinely required a headless browser.** Every one fell
 to a deterministic/plain-GET rung:
 
-```
+```text
    Tier-1 in-HTML (anchors / embedded data / RSC)  ███████████  Thoma Bravo, Silver Lake,
                                                                  Warburg, Francisco, Summit,
                                                                  Trivest, Halifax, Shore
