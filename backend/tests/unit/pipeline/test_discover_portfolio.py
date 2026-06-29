@@ -579,6 +579,8 @@ class TestDeterministicRungs:
         assert details["portfolio_count"] == 2
         # Site-derived → verdict anchors to the firm page.
         assert details["discovery_verdict"]["site_source_url"] == "https://firm.com/portfolio"
+        # Recovered by the deterministic rungs (no heuristic/AI) → structured_endpoint.
+        assert details["discovery_verdict"]["delivery_mechanism"] == "structured_endpoint"
 
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
@@ -678,3 +680,37 @@ class TestFindNewCandidatesStatus:
             [{"name": "Acme", "url": "https://acme.com"}], [], source="web_search"
         )
         assert fresh[0]["status"] == ""
+
+
+class TestMechanismUsesSanitizedCounts:
+    """The delivery mechanism is classified from POST-sanitize counts, so junk
+    anchors that sanitize drops can't mislabel an empty result as static_listing."""
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_junk_anchors_do_not_label_static(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
+        # 8 raw heuristic anchors, ALL press/news links sanitize drops → 0 survive.
+        junk = [
+            {"name": f"Press {i}", "url": f"https://www.businesswire.com/news/{i}"}
+            for i in range(8)
+        ]
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "x",
+            {"companies": junk, "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = []
+        mock_sitemap.return_value = []
+
+        step = DiscoverPortfolio()  # no AI factory
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        details = step._request_executor.add_details.call_args[0][0]
+        # Raw heuristic_count=8 (>5) would have said static_listing; sanitized=0 must not.
+        assert details["portfolio_count"] == 0
+        assert details["discovery_verdict"]["delivery_mechanism"] != "static_listing"
+        assert details["discovery_verdict"]["delivery_mechanism"] == "opaque_shell"

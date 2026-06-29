@@ -23,6 +23,7 @@ from signalfield_core.pipeline.step import RequestStep
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
 from src.data_strategies.sitemap_strategy import discover_via_sitemap
 from src.data_strategies.wp_json_strategy import discover_via_wp_json
+from src.pipeline.pipeline_steps.delivery_mechanism import classify_delivery_mechanism
 from src.pipeline.pipeline_steps.portfolio_extract import extract_companies_from_scrape
 from src.pipeline.pipeline_steps.portfolio_merge import (
     build_verdict,
@@ -141,6 +142,7 @@ class DiscoverPortfolio(RequestStep):
         # factory). New candidates enter needs_validation only, so a wp-json CPT
         # that includes exited companies still gets AI-validated downstream.
         in_html_total = len(auto_included) + len(needs_validation)
+        rung_count = 0  # companies the deterministic rungs contributed (for mechanism)
         if is_pe_firm and in_html_total <= _DETERMINISTIC_RUNG_THRESHOLD:
             parsed = urlparse(url if url.startswith("http") else f"https://{url}")
             base_origin = f"{parsed.scheme}://{parsed.netloc}"
@@ -150,8 +152,9 @@ class DiscoverPortfolio(RequestStep):
             fresh = find_new_candidates(
                 rung_candidates, [*auto_included, *needs_validation], source="site"
             )
+            rung_count = len(fresh)
             if fresh:
-                logger.info("Deterministic rungs added %d companies for %s", len(fresh), url)
+                logger.info("Deterministic rungs added %d companies for %s", rung_count, url)
                 needs_validation = [*needs_validation, *fresh]
 
         # Site-first, fallback-on-low-yield: when the firm's own site yields too
@@ -198,6 +201,22 @@ class DiscoverPortfolio(RequestStep):
             len(needs_validation),
         )
 
+        # How the firm delivered its list — carried on the verdict so a thin/empty
+        # result can be explained (CSR shell vs genuinely small) rather than guessed.
+        # Sanitized counts so the mechanism is consistent with site_total (which
+        # is post-sanitize): a firm whose anchors are all junk that sanitize drops
+        # must not be labeled static_listing on an otherwise-empty result.
+        mechanism = classify_delivery_mechanism(
+            heuristic_count=len(sanitize_candidates(heuristic_companies)),
+            ai_count=len(sanitize_candidates(ai_companies)),
+            rung_count=rung_count,
+            script_present=bool(metadata.get("script_text")),
+            page_text_length=len(metadata.get("page_text", "")),
+            site_fetch_failed=bool(metadata.get("site_fetch_failed")),
+            site_total=site_total,
+        )
+        logger.info("Delivery mechanism for %s: %s", url, mechanism)
+
         # ``portfolio_companies`` carries only the remainder that needs AI
         # validation. ``portfolio_auto_included`` is merged back in by
         # ``ValidatePortfolioCompanies`` after validation completes.
@@ -206,6 +225,7 @@ class DiscoverPortfolio(RequestStep):
             total=total,
             site_fetch_failed=bool(metadata.get("site_fetch_failed")),
             fallback_ran=fallback_ran,
+            mechanism=mechanism,
             # The page we read — only meaningful when the site actually yielded
             # companies; the UI shows it as the reliable-source anchor.
             # Anchor to the page only if site-derived companies actually survived
