@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
+    from src.repositories.dynamodb.discovery_cache_repository import DiscoveryCacheRepository
 
 
 class PortfolioScanFactory(PipelineFactory):
@@ -32,17 +33,22 @@ class PortfolioScanFactory(PipelineFactory):
         tenant_id: str | None = None,
         request_id: str = "",
         scan_id: str = "",
+        discovery_cache_repo: DiscoveryCacheRepository | None = None,
     ) -> None:
         self._entity_accessor = entity_accessor
         self._ai_client_factory = ai_client_factory
         self._tenant_id = tenant_id
         self._request_id = request_id
         self._scan_id = scan_id
+        self._discovery_cache_repo = discovery_cache_repo
 
     def get_pipeline(self) -> list[RequestStep]:
         """Return the ordered list of pipeline steps for portfolio scanning."""
         return [
-            DiscoverPortfolio(ai_client_factory=self._ai_client_factory),
+            DiscoverPortfolio(
+                ai_client_factory=self._ai_client_factory,
+                discovery_cache_repo=self._discovery_cache_repo,
+            ),
             ValidatePortfolioCompanies(ai_client_factory=self._ai_client_factory),
         ]
 

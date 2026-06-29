@@ -33,12 +33,14 @@ from src.pipeline.pipeline_steps.portfolio_merge import (
 )
 from src.pipeline.pipeline_steps.portfolio_names import sanitize_candidates
 from src.pipeline.pipeline_steps.portfolio_websearch import run_web_search_discovery
+from src.repositories.dynamodb.discovery_cache_repository import FAST_PATH_MIN_COUNT
 
 if TYPE_CHECKING:
     from signalfield_core.services.ai_client_factory import AIClientFactory
 
     from src.facades.company_accessor import CompanyAccessor
     from src.pipeline.request_executor import Sc0redServicesRequestExecutor
+    from src.repositories.dynamodb.discovery_cache_repository import DiscoveryCacheRepository
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +74,23 @@ _FALLBACK_THRESHOLD = 5
 _DETERMINISTIC_RUNG_THRESHOLD = _FALLBACK_THRESHOLD
 
 
+def _origin_of(url: str) -> str:
+    """Scheme+host origin for the structured rungs (e.g. ``https://www.firm.com``)."""
+    parsed = urlparse(url if url.startswith("http") else f"https://{url}")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 class DiscoverPortfolio(RequestStep):
     """Discovers portfolio companies using heuristic + AI extraction paths."""
 
-    def __init__(self, ai_client_factory: AIClientFactory | None = None) -> None:
+    def __init__(
+        self,
+        ai_client_factory: AIClientFactory | None = None,
+        discovery_cache_repo: DiscoveryCacheRepository | None = None,
+    ) -> None:
         super().__init__()
         self._ai_client_factory = ai_client_factory
+        self._discovery_cache_repo = discovery_cache_repo
 
     def _require_ai_factory(self) -> AIClientFactory:
         """Return the AI client factory, failing fast if absent.
@@ -98,6 +111,75 @@ class DiscoverPortfolio(RequestStep):
         progress, label = phase
         executor.report_progress(progress, label)
 
+    def _run_cached_rung(self, source: str, url: str) -> list[dict[str, str]]:
+        """Run the single structured rung a prior scan proved serves this domain."""
+        origin = _origin_of(url)
+        if source == "wp_json":
+            candidates = discover_via_wp_json(origin)
+        elif source == "sitemap":
+            candidates = discover_via_sitemap(origin)
+        else:
+            return []
+        # source="site" matches the normal rung path; the fast-path verdict sets
+        # site_source_url unconditionally, so every record anchors to the firm page.
+        return find_new_candidates(sanitize_candidates(candidates), [], source="site")
+
+    def _try_cached_fast_path(self, url: str) -> bool:  # noqa: NAMING001  returns "handled?", not an is_ predicate
+        """Fast path: re-run the proven structured rung first; skip the rest on a hit.
+
+        When a prior scan recorded that a deterministic rung (wp-json / sitemap)
+        serves this domain, run just that rung. If it still yields a healthy list
+        the firm's portfolio is read directly — no scrape, no AI extraction, no
+        web search. Returns True when it handled the scan. Self-healing: a stale
+        entry yields too few companies, so we return False and let the caller run
+        full discovery (which re-records the cache).
+        """
+        if self._discovery_cache_repo is None:
+            return False
+        cached = self._discovery_cache_repo.get_proven_path(url)
+        if not cached:
+            return False
+        self._report_phase(_PHASE_STRUCTURED)
+        fast = self._run_cached_rung(cached["source"], url)
+        if len(fast) <= FAST_PATH_MIN_COUNT:
+            logger.info(
+                "Discovery cache stale for %s (source=%s, got %d) — full rediscovery",
+                url,
+                cached["source"],
+                len(fast),
+            )
+            return False
+        logger.info(
+            "Discovery cache hit for %s via %s (%d companies) — skipping scrape/AI/web-search",
+            url,
+            cached["source"],
+            len(fast),
+        )
+        verdict = build_verdict(
+            site_total=len(fast),
+            total=len(fast),
+            site_fetch_failed=False,
+            fallback_ran=False,
+            mechanism="structured_endpoint",
+            site_source_url=url,
+        )
+        self.request_executor.add_details(
+            {
+                "portfolio_companies": fast,
+                "portfolio_auto_included": [],
+                "portfolio_companies_json": json.dumps(fast),
+                "portfolio_count": len(fast),
+                "portfolio_diagnostic": "",
+                "discovery_verdict": verdict,
+            }
+        )
+        # Refresh the TTL + count so an actively re-scanned firm stays cached.
+        self._discovery_cache_repo.put_proven_path(
+            url, source=cached["source"], count=len(fast), mechanism="structured_endpoint"
+        )
+        self.request_executor.mark_question_complete("discover_portfolio")
+        return True
+
     def execute(self) -> None:
         """Run heuristic + AI discovery and merge results."""
         accessor = cast("CompanyAccessor", self.entity_accessor)
@@ -106,6 +188,11 @@ class DiscoverPortfolio(RequestStep):
         if not url:
             message = "No URL provided for portfolio discovery"
             raise ValueError(message)
+
+        # A prior scan may have proved a deterministic structured rung serves this
+        # domain — run it first and skip the costly full ladder when it still hits.
+        if self._try_cached_fast_path(url):
+            return
 
         # Path 1: Heuristic discovery (also captures page text + links)
         self._report_phase(_PHASE_READING)
@@ -161,20 +248,35 @@ class DiscoverPortfolio(RequestStep):
         # that includes exited companies still gets AI-validated downstream.
         in_html_total = len(auto_included) + len(needs_validation)
         rung_count = 0  # companies the deterministic rungs contributed (for mechanism)
+        proven_source = ""  # which rung carried the result (for the per-domain cache)
         if is_pe_firm and in_html_total <= _DETERMINISTIC_RUNG_THRESHOLD:
             self._report_phase(_PHASE_STRUCTURED)
-            parsed = urlparse(url if url.startswith("http") else f"https://{url}")
-            base_origin = f"{parsed.scheme}://{parsed.netloc}"
-            rung_candidates = sanitize_candidates(
-                [*discover_via_wp_json(base_origin), *discover_via_sitemap(base_origin)]
+            base_origin = _origin_of(url)
+            # Run the rungs separately so we can attribute which one carried the
+            # result — that's what the per-domain cache records to fast-path the
+            # next re-scan. Sitemap dedups against wp-json's fresh hits.
+            existing = [*auto_included, *needs_validation]
+            wp_fresh = find_new_candidates(
+                sanitize_candidates(discover_via_wp_json(base_origin)), existing, source="site"
             )
-            fresh = find_new_candidates(
-                rung_candidates, [*auto_included, *needs_validation], source="site"
+            sitemap_fresh = find_new_candidates(
+                sanitize_candidates(discover_via_sitemap(base_origin)),
+                [*existing, *wp_fresh],
+                source="site",
             )
+            fresh = [*wp_fresh, *sitemap_fresh]
             rung_count = len(fresh)
             if fresh:
                 logger.info("Deterministic rungs added %d companies for %s", rung_count, url)
                 needs_validation = [*needs_validation, *fresh]
+            # Only cache a SINGLE-rung result. If both rungs carried distinct
+            # companies, fast-pathing one of them on a re-scan would silently drop
+            # the other's exclusive companies — so the mixed case is left
+            # un-cached (proven_source ""), and re-scans run the full ladder.
+            if wp_fresh and not sitemap_fresh:
+                proven_source = "wp_json"
+            elif sitemap_fresh and not wp_fresh:
+                proven_source = "sitemap"
 
         # Site-first, fallback-on-low-yield: when the firm's own site yields too
         # few companies (opaque / client-side-only / non-embedding), recover the
@@ -264,4 +366,16 @@ class DiscoverPortfolio(RequestStep):
                 "discovery_verdict": verdict,
             }
         )
+        # Record the proven structured rung so a re-scan of this domain fast-paths
+        # straight to it. Only cache a substantial deterministic yield — a thin
+        # rung result isn't a reliable fast path (put_proven_path also ignores
+        # non-structured sources). No-op without a cache repo (local dev / tests).
+        if (
+            self._discovery_cache_repo is not None
+            and proven_source
+            and rung_count > FAST_PATH_MIN_COUNT
+        ):
+            self._discovery_cache_repo.put_proven_path(
+                url, source=proven_source, count=rung_count, mechanism=mechanism
+            )
         self.request_executor.mark_question_complete("discover_portfolio")
