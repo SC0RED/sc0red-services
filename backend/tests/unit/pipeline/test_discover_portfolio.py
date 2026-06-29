@@ -534,3 +534,125 @@ class TestDiscoveryVerdictEmitted:
         details = step._request_executor.add_details.call_args[0][0]
         assert details["portfolio_companies"][0]["source"] == "web_search"
         assert details["discovery_verdict"]["site_source_url"] == ""
+
+
+def _empty_strategy():
+    """A PortfolioDiscoveryStrategy mock whose scrape yields no companies."""
+    strategy = MagicMock()
+    strategy.execute.return_value = (
+        "[]",
+        {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+    )
+    return strategy
+
+
+def _company(name: str, url: str) -> dict[str, str]:
+    return {"name": name, "url": url, "description": "", "source": "site"}
+
+
+class TestDeterministicRungs:
+    """wp-json + sitemap rungs run additively before the web-search fallback."""
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_rungs_run_when_in_html_thin_no_ai(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
+        # In-HTML scrape finds nothing AND there's no AI factory — the deterministic
+        # rungs must still run (they're browser-free and AI-free) and populate the list.
+        mock_strategy_cls.return_value = _empty_strategy()
+        mock_wpjson.return_value = [_company("Acme", "https://acme.com")]
+        mock_sitemap.return_value = [_company("Beta", "https://beta.com")]
+
+        step = DiscoverPortfolio()  # no AI factory
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com/portfolio"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        mock_wpjson.assert_called_once_with("https://firm.com")
+        mock_sitemap.assert_called_once_with("https://firm.com")
+        details = step._request_executor.add_details.call_args[0][0]
+        assert {c["name"] for c in details["portfolio_companies"]} == {"Acme", "Beta"}
+        assert details["portfolio_count"] == 2
+        # Site-derived → verdict anchors to the firm page.
+        assert details["discovery_verdict"]["site_source_url"] == "https://firm.com/portfolio"
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_rungs_skipped_when_in_html_rich(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
+        # Scrape already found a real list (> threshold) → don't pay for the rungs.
+        rich = [_company(f"Co{i}", f"https://co{i}.com") for i in range(6)]
+        strategy = MagicMock()
+        strategy.execute.return_value = ("x", {"companies": rich})
+        mock_strategy_cls.return_value = strategy
+
+        step = DiscoverPortfolio()
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com/portfolio"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        mock_wpjson.assert_not_called()
+        mock_sitemap.assert_not_called()
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_rung_results_deduped_against_scrape(
+        self, mock_strategy_cls, mock_wpjson, mock_sitemap
+    ):
+        # Scrape found Acme; wp-json returns Acme (dup) + Gamma → only Gamma is added.
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "x",
+            {"companies": [_company("Acme", "https://acme.com")]},
+        )
+        mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = [
+            _company("Acme", "https://acme.com"),
+            _company("Gamma", "https://gamma.com"),
+        ]
+        mock_sitemap.return_value = []
+
+        step = DiscoverPortfolio()
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com/portfolio"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        details = step._request_executor.add_details.call_args[0][0]
+        names = [c["name"] for c in details["portfolio_companies"]]
+        assert names.count("Acme") == 1
+        assert "Gamma" in names
+        assert details["portfolio_count"] == 2
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_rungs_skipped_for_non_pe_firm(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
+        # Thin scrape but the AI extractor says it's not a PE/VC firm → don't probe
+        # its structured sources (a law firm's wp-json isn't a portfolio).
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "x",
+            {"companies": [], "page_text": "skeleton", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = strategy
+
+        def _not_pe(*, user_prompt: str, **_: object):
+            return (
+                "extract_portfolio",
+                {"is_pe_firm": False, "firm_type_description": "law firm", "companies": []},
+                0.0,
+                TokenCounts(input_tokens=1, output_tokens=1, cached_input_tokens=0),
+            )
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://lawfirm.com"))
+        step._request_executor = MagicMock()
+        with patch(
+            "src.pipeline.pipeline_steps.portfolio_extract.run_structured_ai_call",
+            side_effect=_not_pe,
+        ):
+            step.execute()
+
+        mock_wpjson.assert_not_called()
+        mock_sitemap.assert_not_called()
