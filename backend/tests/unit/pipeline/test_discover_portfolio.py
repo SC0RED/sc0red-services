@@ -8,7 +8,11 @@ from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_steps.ai_call import TokenCounts
 from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
-from src.pipeline.pipeline_steps.portfolio_merge import build_verdict, merge_fallback
+from src.pipeline.pipeline_steps.portfolio_merge import (
+    build_verdict,
+    find_new_candidates,
+    merge_fallback,
+)
 
 
 def _grounded(companies: list[dict[str, str]]):
@@ -656,3 +660,21 @@ class TestDeterministicRungs:
 
         mock_wpjson.assert_not_called()
         mock_sitemap.assert_not_called()
+
+
+class TestFindNewCandidatesStatus:
+    """find_new_candidates carries the current/realized status the wp-json rung sets."""
+
+    def test_preserves_status_when_present(self):
+        fresh = find_new_candidates(
+            [{"name": "OldCo", "url": "https://oldco.com", "status": "realized"}],
+            [],
+            source="site",
+        )
+        assert fresh[0]["status"] == "realized"
+
+    def test_defaults_status_empty_when_absent(self):
+        fresh = find_new_candidates(
+            [{"name": "Acme", "url": "https://acme.com"}], [], source="web_search"
+        )
+        assert fresh[0]["status"] == ""

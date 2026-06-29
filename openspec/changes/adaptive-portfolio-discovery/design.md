@@ -275,6 +275,41 @@ to a deterministic/plain-GET rung:
    `__NEXT_DATA__`, `_next/data`, Algolia/CMS keys we can hit directly (Tier-2
    rescue without a browser).
 
+## Known limitation — egress-IP blocking (from live staging verification, 2026-06-29)
+
+Increment 1 (wp-json + sitemap rungs, PR #461) was spot-checked live on the
+deployed staging worker:
+
+| Firm | Rung | Local | Staging (deployed) |
+|------|------|-------|--------------------|
+| Kohlberg | wp-json `company` | 55 | **55 ✅** |
+| Riverside | sitemap `/investment-portfolio/<slug>` | 400 | **400 ✅** |
+| Audax | sitemap `/portfolio/<slug>` | 165 | **5 (in-HTML only) ⚠️** |
+
+Both rungs are confirmed working end-to-end on the deployed arm64 worker. But
+**Audax returned 0 from the sitemap rung on staging despite 165 locally** — the
+rung code is correct (re-verified locally), and the worker *can* reach Audax (the
+scrape pulled 5 `/portfolio/` anchors), yet `audaxprivateequity.com/sitemap.xml`
+yields nothing from the **AWS datacenter egress IP**. Same class as Webster and
+Wind Point, which refused even plain curl: **some firms' CDNs (Cloudflare/Akamai)
+block or challenge requests from datacenter/AWS IP ranges**, per-site and
+sometimes per-path. This is infrastructure-level, NOT a rung defect — the rungs
+correctly fail soft, and it affects all our fetch paths (scrape included), not
+just these rungs. The local 19-firm harness can't catch it (residential IP); only
+a deployed scan can.
+
+Follow-up options (not in this change's current scope):
+- **Egress proxy / residential-IP proxy** for the fetch transport so the worker
+  presents a non-datacenter IP to CDNs that block AWS ranges. Highest coverage,
+  but adds a paid dependency + per-request cost + an SSRF-review of the proxy hop.
+- **Stronger TLS impersonation / header profile** — may recover some sites, won't
+  beat IP-range blocks.
+- **Lean on the existing customer escalations** (upload-list / provide-source-URL)
+  for IP-blocked firms — already shipped, zero new infra; the verdict should flag
+  "we couldn't reach this firm's site" so the customer is routed there.
+Recommend the last as the default and the proxy as a measured future option once
+we see how often real customer firms hit this.
+
 ## Related, separate
 
 - `render-site-headless` implements the Tier-3/4 engine; this change is the router
