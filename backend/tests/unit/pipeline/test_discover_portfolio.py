@@ -768,6 +768,154 @@ class TestBackgroundProgressMessages:
         assert phases == [_PHASE_READING]
 
 
+class TestDiscoveryCacheFastPath:
+    """Task 8: a proven structured rung fast-paths a re-scan, skipping the ladder."""
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_cache_hit_skips_scrape_ai_and_websearch(self, mock_strategy_cls, mock_wpjson):
+        # Cached wp_json path → run that rung, skip everything else.
+        mock_wpjson.return_value = [
+            {"name": f"Co{i}", "url": f"https://co{i}.com"} for i in range(8)
+        ]
+        cache = MagicMock()
+        cache.get_proven_path.return_value = {
+            "source": "wp_json",
+            "count": 8,
+            "mechanism": "structured_endpoint",
+        }
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock(), discovery_cache_repo=cache)
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        # The scrape strategy was never even constructed.
+        mock_strategy_cls.assert_not_called()
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_count"] == 8
+        assert details["discovery_verdict"]["delivery_mechanism"] == "structured_endpoint"
+        # TTL refreshed for the actively re-scanned firm.
+        cache.put_proven_path.assert_called_once()
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_stale_cache_falls_through_to_full_discovery(
+        self, mock_strategy_cls, mock_wpjson, mock_sitemap
+    ):
+        # Cached path now yields too few (firm changed CMS) → full ladder runs.
+        cache = MagicMock()
+        cache.get_proven_path.return_value = {
+            "source": "wp_json",
+            "count": 50,
+            "mechanism": "structured_endpoint",
+        }
+        # First call (fast path) returns a thin result; the full-discovery rung
+        # call also returns nothing — so the scrape strategy must run.
+        mock_wpjson.return_value = []
+        mock_sitemap.return_value = []
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "x",
+            {"companies": [{"name": "Real", "url": "https://real.com"}]},
+        )
+        mock_strategy_cls.return_value = strategy
+
+        step = DiscoverPortfolio(discovery_cache_repo=cache)  # no AI factory
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        mock_strategy_cls.assert_called_once()  # fell through to the scrape
+        details = step._request_executor.add_details.call_args[0][0]
+        assert {c["url"] for c in details["portfolio_companies"]} == {"https://real.com"}
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_structured_yield_is_cached_for_next_rescan(
+        self, mock_strategy_cls, mock_wpjson, mock_sitemap
+    ):
+        # First scan: thin in-HTML, wp-json rescues 8 → record wp_json for the domain.
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = [
+            {"name": f"Co{i}", "url": f"https://co{i}.com"} for i in range(8)
+        ]
+        mock_sitemap.return_value = []
+        cache = MagicMock()
+        cache.get_proven_path.return_value = None  # first scan, nothing cached
+
+        step = DiscoverPortfolio(discovery_cache_repo=cache)
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        cache.put_proven_path.assert_called_once()
+        kwargs = cache.put_proven_path.call_args.kwargs
+        assert kwargs["source"] == "wp_json"
+        assert kwargs["count"] == 8
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_mixed_rung_result_is_not_cached(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
+        # BOTH rungs carry distinct companies. Caching a single source would drop
+        # the other rung's exclusive companies on a re-scan, so the mixed case must
+        # NOT be cached — the next scan runs the full ladder and finds them all.
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = [{"name": f"W{i}", "url": f"https://w{i}.com"} for i in range(6)]
+        mock_sitemap.return_value = [
+            {"name": f"S{i}", "url": f"https://s{i}.com"} for i in range(4)
+        ]
+        cache = MagicMock()
+        cache.get_proven_path.return_value = None
+
+        step = DiscoverPortfolio(discovery_cache_repo=cache)
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        # All 10 distinct companies are in the result, but nothing is cached.
+        details = step._request_executor.add_details.call_args[0][0]
+        assert details["portfolio_count"] == 10
+        cache.put_proven_path.assert_not_called()
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_thin_rung_yield_is_not_cached(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
+        # A 2-company rung yield is below FAST_PATH_MIN_COUNT → not a reliable
+        # fast path, so nothing is cached.
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = [{"name": "A", "url": "https://a.com"}]
+        mock_sitemap.return_value = [{"name": "B", "url": "https://b.com"}]
+        cache = MagicMock()
+        cache.get_proven_path.return_value = None
+
+        step = DiscoverPortfolio(discovery_cache_repo=cache)
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        cache.put_proven_path.assert_not_called()
+
+
 class TestMechanismUsesSanitizedCounts:
     """The delivery mechanism is classified from POST-sanitize counts, so junk
     anchors that sanitize drops can't mislabel an empty result as static_listing."""
