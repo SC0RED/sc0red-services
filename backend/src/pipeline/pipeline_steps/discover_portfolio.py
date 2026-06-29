@@ -203,9 +203,12 @@ class DiscoverPortfolio(RequestStep):
 
         # How the firm delivered its list — carried on the verdict so a thin/empty
         # result can be explained (CSR shell vs genuinely small) rather than guessed.
+        # Sanitized counts so the mechanism is consistent with site_total (which
+        # is post-sanitize): a firm whose anchors are all junk that sanitize drops
+        # must not be labeled static_listing on an otherwise-empty result.
         mechanism = classify_delivery_mechanism(
-            heuristic_count=len(heuristic_companies),
-            ai_count=len(ai_companies),
+            heuristic_count=len(sanitize_candidates(heuristic_companies)),
+            ai_count=len(sanitize_candidates(ai_companies)),
             rung_count=rung_count,
             script_present=bool(metadata.get("script_text")),
             page_text_length=len(metadata.get("page_text", "")),
