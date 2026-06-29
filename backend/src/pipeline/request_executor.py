@@ -218,6 +218,33 @@ class Sc0redServicesRequestExecutor:
 
     # ── Progress reporting ───────────────────────────────────────────
 
+    def report_progress(self, progress: int, label: str) -> None:
+        """Push an interim, free-text progress update for the current scan.
+
+        Long-running steps (portfolio discovery) call this to narrate their
+        sub-phases — "Reading the firm's portfolio page…", "Querying the firm's
+        data sources…", "Searching public sources…" — between the coarse
+        step-completion markers in ``_PROGRESS_MAP``. Real-time only (AppSync),
+        consistent with ``_report_progress``: the scan record is not written, so
+        DynamoDB polling still reports the canonical phase boundaries (5% start,
+        20% awaiting). No-op when there is no scan (standalone runs, tests).
+
+        Uses ``status="discovering"`` because the only caller runs inside the
+        discovery window; the frontend realtime hook passes such company-less
+        events straight through to the progress label.
+        """
+        if not self.scan_id:
+            return
+        from src.pipeline.appsync_notifier import notify_progress
+
+        notify_progress(
+            scan_id=self.scan_id,
+            progress=progress,
+            label=label,
+            status="discovering",
+            company_id=self.request_id,
+        )
+
     def _report_progress(self, question_key: str) -> None:
         """Write pipeline progress to DynamoDB and push to AppSync.
 

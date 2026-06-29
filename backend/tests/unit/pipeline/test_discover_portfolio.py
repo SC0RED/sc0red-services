@@ -7,7 +7,12 @@ import pytest
 from src.facades.company_accessor import CompanyAccessor
 from src.models.model_company import Company
 from src.pipeline.pipeline_steps.ai_call import TokenCounts
-from src.pipeline.pipeline_steps.discover_portfolio import DiscoverPortfolio
+from src.pipeline.pipeline_steps.discover_portfolio import (
+    _PHASE_READING,
+    _PHASE_STRUCTURED,
+    _PHASE_WEB_SEARCH,
+    DiscoverPortfolio,
+)
 from src.pipeline.pipeline_steps.portfolio_merge import (
     build_verdict,
     find_new_candidates,
@@ -680,6 +685,87 @@ class TestFindNewCandidatesStatus:
             [{"name": "Acme", "url": "https://acme.com"}], [], source="web_search"
         )
         assert fresh[0]["status"] == ""
+
+
+class TestBackgroundProgressMessages:
+    """Task 7: discovery narrates its sub-phases on the scan's real-time channel."""
+
+    @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_emits_phase_messages_in_order(
+        self, mock_strategy_cls, mock_wpjson, mock_sitemap, mock_grounded
+    ):
+        # Thin site → all three phases fire: read page, query structured sources,
+        # then web search (rungs + fallback both gated on a thin in-HTML yield).
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = []
+        mock_sitemap.return_value = []
+        mock_grounded.return_value = _grounded([{"name": "Jamf", "url": "https://jamf.com"}])
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        # Assert the full (progress, label) tuples — pins both the wording AND
+        # that the percentages rise monotonically (the bar never jumps backwards).
+        phases = [call.args for call in step._request_executor.report_progress.call_args_list]
+        assert phases == [_PHASE_READING, _PHASE_STRUCTURED, _PHASE_WEB_SEARCH]
+        assert [p[0] for p in phases] == sorted(p[0] for p in phases)
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_structured_rescue_skips_web_search_phase(
+        self, mock_strategy_cls, mock_wpjson, mock_sitemap
+    ):
+        # The wp-json rung rescues enough companies (the spike's motivating path:
+        # Vista/Insight/GA/Kohlberg) to push site_total past the fallback
+        # threshold, so the web-search phase must NOT be narrated.
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "[]",
+            {"companies": [], "page_text": "", "script_text": "", "all_links": []},
+        )
+        mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = [
+            {"name": f"Co{i}", "url": f"https://co{i}.com"} for i in range(6)
+        ]
+        mock_sitemap.return_value = []
+
+        step = DiscoverPortfolio(ai_client_factory=MagicMock())
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        phases = [call.args for call in step._request_executor.report_progress.call_args_list]
+        assert phases == [_PHASE_READING, _PHASE_STRUCTURED]
+
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
+    def test_reads_page_phase_always_fires(self, mock_strategy_cls):
+        # A clean full listing skips the structured/web-search rungs, but the
+        # customer should still see the "reading the page" message.
+        strategy = MagicMock()
+        strategy.execute.return_value = (
+            "x",
+            {"companies": [{"name": f"Co{i}", "url": f"https://co{i}.com"} for i in range(8)]},
+        )
+        mock_strategy_cls.return_value = strategy
+
+        step = DiscoverPortfolio()  # no AI factory → no fallback
+        step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
+        step._request_executor = MagicMock()
+        step.execute()
+
+        phases = [call.args for call in step._request_executor.report_progress.call_args_list]
+        assert phases == [_PHASE_READING]
 
 
 class TestMechanismUsesSanitizedCounts:
