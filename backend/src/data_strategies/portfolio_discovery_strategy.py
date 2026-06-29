@@ -22,26 +22,9 @@ from src.data_strategies.web_scraper_strategy import (
     MIN_NAME_LENGTH,
     extract_name_from_url,
     fetch_page_html,
+    name_from_url_slug,
     scrape_url,
-    title_case_tokens,
 )
-
-
-def _name_from_detail_slug(url: str) -> str:
-    """Derive a company name from an internal detail-page URL's last path segment.
-
-    Anchor-link portfolios (e.g. Francisco Partners' ``/investments/{slug}``) put
-    the company name in the slug while the link text is a description. The slug is
-    title-cased (``aeries-software`` -> ``Aeries Software``); returns "" if the
-    result is out of the shared name-length bounds.
-    """
-    slug = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
-    name = title_case_tokens(slug)
-    # Strict upper bound to match the downstream length filter (drops >= MAX).
-    if MIN_NAME_LENGTH < len(name) < MAX_NAME_LENGTH:
-        return name
-    return ""
-
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +232,7 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 if is_internal_portfolio and not (
                     _MIN_COMPANY_NAME_LENGTH < len(company_name) < _MAX_COMPANY_NAME_LENGTH
                 ):
-                    slug_name = _name_from_detail_slug(full_url)
+                    slug_name = name_from_url_slug(full_url)
                     if slug_name:
                         company_name = slug_name
 

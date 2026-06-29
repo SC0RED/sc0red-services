@@ -14,6 +14,7 @@ from src.data_strategies.web_scraper_strategy import (
     _extract_embedded_companies,
     _extract_name_from_img_src,
     extract_name_from_url,
+    name_from_url_slug,
     normalize_url,
     scrape_url,
 )
@@ -434,3 +435,18 @@ class TestExtractContextNameImgSrcFallback:
         </article>
         """
         assert _extract_context_name(self._anchor(html)) == ""
+
+
+class TestNameFromUrlSlug:
+    def test_derives_title_cased_name_from_last_segment(self):
+        assert name_from_url_slug("https://x.com/investments/aeries-software") == "Aeries Software"
+
+    def test_ignores_trailing_slash(self):
+        assert name_from_url_slug("https://x.com/portfolio/acme-corp/") == "Acme Corp"
+
+    def test_returns_empty_when_slug_too_short(self):
+        # Single-char stem is below the shared MIN_NAME_LENGTH bound.
+        assert name_from_url_slug("https://x.com/portfolio/a") == ""
+
+    def test_returns_empty_for_no_path(self):
+        assert name_from_url_slug("https://x.com") == ""

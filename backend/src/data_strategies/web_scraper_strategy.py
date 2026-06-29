@@ -115,6 +115,23 @@ def extract_name_from_url(url: str) -> str:
     return name
 
 
+def name_from_url_slug(url: str) -> str:  # noqa: NAMING001  (transform util, not a verb)
+    """Derive a company name from a detail-page URL's last path segment.
+
+    Anchor-link and sitemap-enumerated portfolios (e.g. Francisco Partners'
+    ``/investments/{slug}``, Audax's ``/portfolio/{slug}``) carry the company
+    name in the slug. ``/investments/aeries-software`` -> ``Aeries Software``;
+    returns "" when the title-cased slug is out of the shared name-length bounds.
+    """
+    slug = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
+    name = title_case_tokens(slug)
+    # Strict upper bound (drops names >= MAX) to match the discovery length
+    # filter; the wp-json/sitemap rungs share this convention via this helper.
+    if MIN_NAME_LENGTH < len(name) < MAX_NAME_LENGTH:
+        return name
+    return ""
+
+
 def _extract_context_name(anchor: Any) -> str:
     """Extract a company name from the context around a link.
 

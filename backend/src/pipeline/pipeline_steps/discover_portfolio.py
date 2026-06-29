@@ -16,13 +16,17 @@ from __future__ import annotations
 import json
 import logging
 from typing import TYPE_CHECKING, cast
+from urllib.parse import urlparse
 
 from signalfield_core.pipeline.step import RequestStep
 
 from src.data_strategies.portfolio_discovery_strategy import PortfolioDiscoveryStrategy
+from src.data_strategies.sitemap_strategy import discover_via_sitemap
+from src.data_strategies.wp_json_strategy import discover_via_wp_json
 from src.pipeline.pipeline_steps.portfolio_extract import extract_companies_from_scrape
 from src.pipeline.pipeline_steps.portfolio_merge import (
     build_verdict,
+    find_new_candidates,
     merge_fallback,
     merge_results,
 )
@@ -44,6 +48,16 @@ logger = logging.getLogger(__name__)
 # portfolios and clean full listings don't pay the web-search cost; everything
 # above this relies on the always-available customer-triggered "Search deeper".
 _FALLBACK_THRESHOLD = 5
+
+# When the in-HTML paths (links + AI + embedded JSON) find this many companies OR
+# FEWER, try the deterministic structured-source rungs (WordPress wp-json portfolio
+# CPT + sitemap enumeration) before the web-search fallback. These are browser-free
+# and authoritative — they rescue client-side-rendered shells the scrape can't see
+# (the adaptive-portfolio-discovery spike: Vista/Insight/General Atlantic/Alpine/
+# Kohlberg via wp-json, Riverside/Audax via sitemap). Same low-water mark as the
+# web-search fallback: a firm whose site already yielded a real list doesn't need
+# them, and they run before (and usually obviate) the costlier web search.
+_DETERMINISTIC_RUNG_THRESHOLD = _FALLBACK_THRESHOLD
 
 
 class DiscoverPortfolio(RequestStep):
@@ -119,6 +133,26 @@ class DiscoverPortfolio(RequestStep):
         # and login-junk shouldn't count toward site_total).
         auto_included = sanitize_candidates(auto_included)
         needs_validation = sanitize_candidates(needs_validation)
+
+        # Deterministic structured-source rungs: when the in-HTML paths come up
+        # thin, try the firm's own structured sources — a WordPress wp-json
+        # portfolio CPT and sitemap enumeration — before paying for web search.
+        # Both are browser-free and authoritative (and run even without an AI
+        # factory). New candidates enter needs_validation only, so a wp-json CPT
+        # that includes exited companies still gets AI-validated downstream.
+        in_html_total = len(auto_included) + len(needs_validation)
+        if is_pe_firm and in_html_total <= _DETERMINISTIC_RUNG_THRESHOLD:
+            parsed = urlparse(url if url.startswith("http") else f"https://{url}")
+            base_origin = f"{parsed.scheme}://{parsed.netloc}"
+            rung_candidates = sanitize_candidates(
+                [*discover_via_wp_json(base_origin), *discover_via_sitemap(base_origin)]
+            )
+            fresh = find_new_candidates(
+                rung_candidates, [*auto_included, *needs_validation], source="site"
+            )
+            if fresh:
+                logger.info("Deterministic rungs added %d companies for %s", len(fresh), url)
+                needs_validation = [*needs_validation, *fresh]
 
         # Site-first, fallback-on-low-yield: when the firm's own site yields too
         # few companies (opaque / client-side-only / non-embedding), recover the
