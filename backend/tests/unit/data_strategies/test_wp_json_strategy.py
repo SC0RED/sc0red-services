@@ -124,3 +124,123 @@ class TestDiscoverViaWpJson:
     def test_request_exception_on_types_is_soft(self):
         with patch.object(wp_json_strategy, "fetch_page_html", side_effect=RequestException("x")):
             assert discover_via_wp_json("https://firm.com") == []
+
+
+class TestStatusTagging:
+    """wp-json tags current/realized from a status taxonomy (best-effort, fail-open)."""
+
+    def _fake(self):
+        def fake(url):
+            if url.endswith("/wp-json/wp/v2/types"):
+                return json.dumps(_TYPES_WITH_COMPANY)
+            if "/wp-json/wp/v2/status-company?" in url:  # taxonomy terms
+                return json.dumps([{"id": 25, "name": "Current"}, {"id": 26, "name": "Realized"}])
+            if "/wp-json/wp/v2/company?" in url:
+                page = int(url.split("&page=")[1])
+                if page == 1:
+                    return json.dumps(
+                        [
+                            {
+                                "title": {"rendered": "Acme"},
+                                "link": "https://acme.com",
+                                "status-company": [25],
+                            },
+                            {
+                                "title": {"rendered": "OldCo"},
+                                "link": "https://oldco.com",
+                                "status-company": [26],
+                            },
+                        ]
+                    )
+                return json.dumps([])
+            return json.dumps([])
+
+        return fake
+
+    def test_tags_current_and_realized(self):
+        with patch.object(wp_json_strategy, "fetch_page_html", side_effect=self._fake()):
+            out = discover_via_wp_json("https://firm.com")
+        by_name = {c["name"]: c["status"] for c in out}
+        assert by_name == {"Acme": "current", "OldCo": "realized"}
+
+    def test_no_status_taxonomy_leaves_status_empty(self):
+        # A non-status taxonomy (sector) whose terms carry no realized/current
+        # keyword must NOT be treated as the status taxonomy → status "".
+        def fake(url):
+            if url.endswith("/wp-json/wp/v2/types"):
+                return json.dumps(_TYPES_WITH_COMPANY)
+            if "/wp-json/wp/v2/sector?" in url:
+                return json.dumps([{"id": 7, "name": "Healthcare"}, {"id": 8, "name": "Software"}])
+            if "/wp-json/wp/v2/company?" in url:
+                page = int(url.split("&page=")[1])
+                if page == 1:
+                    return json.dumps(
+                        [{"title": {"rendered": "Acme"}, "link": "https://acme.com", "sector": [7]}]
+                    )
+                return json.dumps([])
+            return json.dumps([])
+
+        with patch.object(wp_json_strategy, "fetch_page_html", side_effect=fake):
+            out = discover_via_wp_json("https://firm.com")
+        assert out[0]["status"] == ""
+
+    def test_requires_both_current_and_realized(self):
+        # A taxonomy with a stray realized-ish word but no current term must NOT
+        # be chosen as the status taxonomy (e.g. a "Former Industries" sector).
+        def fake(url):
+            if url.endswith("/wp-json/wp/v2/types"):
+                return json.dumps(_TYPES_WITH_COMPANY)
+            if "/wp-json/wp/v2/stage?" in url:
+                return json.dumps(
+                    [{"id": 1, "name": "Former Industries"}, {"id": 2, "name": "Healthcare"}]
+                )
+            if "/wp-json/wp/v2/company?" in url:
+                page = int(url.split("&page=")[1])
+                if page == 1:
+                    return json.dumps(
+                        [{"title": {"rendered": "Acme"}, "link": "https://acme.com", "stage": [1]}]
+                    )
+                return json.dumps([])
+            return json.dumps([])
+
+        with patch.object(wp_json_strategy, "fetch_page_html", side_effect=fake):
+            out = discover_via_wp_json("https://firm.com")
+        assert out[0]["status"] == ""  # not mis-tagged realized
+
+    def test_probes_taxonomy_once_not_per_page(self):
+        # Regression: a no-status firm with a multi-page CPT must probe its
+        # taxonomies exactly once (on page 1), not on every page.
+        calls = {"sector": 0}
+
+        def fake(url):
+            if url.endswith("/wp-json/wp/v2/types"):
+                return json.dumps(_TYPES_WITH_COMPANY)
+            if "/wp-json/wp/v2/sector?" in url:
+                calls["sector"] += 1
+                return json.dumps([{"id": 7, "name": "Healthcare"}])
+            if "/wp-json/wp/v2/company?" in url:
+                page = int(url.split("&page=")[1])
+                if page <= 2:  # two full pages (per_page patched to 2)
+                    return json.dumps(
+                        [
+                            {
+                                "title": {"rendered": f"C{page}a"},
+                                "link": f"https://c{page}a.com",
+                                "sector": [7],
+                            },
+                            {
+                                "title": {"rendered": f"C{page}b"},
+                                "link": f"https://c{page}b.com",
+                                "sector": [7],
+                            },
+                        ]
+                    )
+                return json.dumps([])
+            return json.dumps([])
+
+        with (
+            patch.object(wp_json_strategy, "_PER_PAGE", 2),
+            patch.object(wp_json_strategy, "fetch_page_html", side_effect=fake),
+        ):
+            discover_via_wp_json("https://firm.com")
+        assert calls["sector"] == 1

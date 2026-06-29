@@ -19,6 +19,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import re
 from typing import Any
 
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
@@ -58,6 +59,93 @@ _PORTFOLIO_CPT_HINTS = ("portfolio", "compan", "investment", "holding", "our-")
 _PER_PAGE = 100  # WordPress REST hard cap
 _MAX_PAGES = 20  # safety cap → ≤2000 companies, far beyond any real portfolio
 
+# Status detection: many firms model current-vs-realized as a WordPress taxonomy
+# (e.g. Kohlberg's ``status-company`` → terms "Current"/"Realized"). We detect such
+# a taxonomy and tag each company so the UI can default-deselect exited holdings.
+# Heterogeneous across firms and absent on many (e.g. General Atlantic exposes no
+# status), so this is best-effort and fail-open: no taxonomy ⇒ every company is
+# tagged "" (treated as current/selectable, unchanged behaviour).
+# Whole-WORD matched (not substring) so "performer" can't match "former",
+# "inactive" can't match "active", "priority" can't match "prior".
+_STATUS_REALIZED_WORDS = frozenset(
+    {"realized", "realised", "exited", "exit", "divested", "former", "prior", "past", "sold"}
+)
+_STATUS_CURRENT_WORDS = frozenset({"current", "active"})
+_STATUS_TAXONOMY_NAME_HINTS = ("status", "stage", "state")
+_MAX_TAXONOMY_PROBES = 5  # cap taxonomy-term fetches when locating the status one
+_WORD_RE = re.compile(r"[a-z]+")
+
+
+def _classify_status_term(name: str) -> str:
+    """Map a taxonomy term name to ``"realized"``/``"current"``/``""`` (whole-word)."""
+    words = set(_WORD_RE.findall(name.lower()))
+    if words & _STATUS_REALIZED_WORDS:
+        return "realized"
+    if words & _STATUS_CURRENT_WORDS:
+        return "current"
+    return ""
+
+
+def _candidate_taxonomies(item: dict[str, Any]) -> list[str]:
+    """Taxonomy REST bases on an item (top-level keys holding term-id lists).
+
+    Status-named taxonomies are probed first so the common case costs one fetch.
+    """
+    keys = [
+        key
+        for key, value in item.items()
+        if isinstance(value, list) and value and all(isinstance(term_id, int) for term_id in value)
+    ]
+    keys.sort(key=lambda k: 0 if any(h in k.lower() for h in _STATUS_TAXONOMY_NAME_HINTS) else 1)
+    return keys[:_MAX_TAXONOMY_PROBES]
+
+
+def _build_status_map(base_origin: str, sample_item: dict[str, Any]) -> tuple[str, dict[int, str]]:
+    """Locate the firm's current/realized taxonomy and map its term ids → status.
+
+    Returns ``(taxonomy_rest_base, {term_id: status})``, or ``("", {})`` when the
+    firm exposes no status taxonomy (fail-open). A taxonomy qualifies only if its
+    terms include BOTH a "realized"-like AND a "current"-like name — a true
+    current/realized taxonomy distinguishes the two, whereas a sector/year
+    taxonomy that happens to contain one stray word (e.g. a "Former Industries"
+    sector) won't have both, so it's correctly rejected.
+    """
+    for taxonomy in _candidate_taxonomies(sample_item):
+        try:
+            terms = json.loads(
+                fetch_page_html(f"{base_origin}/wp-json/wp/v2/{taxonomy}?per_page=100")
+            )
+        except ImpersonateError:
+            raise
+        except (HTTPError, RequestException, UnsafeUrlError, ValueError):
+            continue
+        if not isinstance(terms, list):
+            continue
+        status_map = {
+            term["id"]: _classify_status_term(str(term.get("name", "")))
+            for term in terms
+            if isinstance(term, dict) and isinstance(term.get("id"), int)
+        }
+        status_map = {term_id: status for term_id, status in status_map.items() if status}
+        statuses = set(status_map.values())
+        if "realized" in statuses and "current" in statuses:
+            return taxonomy, status_map
+    return "", {}
+
+
+def _status_for(item: dict[str, Any], taxonomy: str, status_map: dict[int, str]) -> str:
+    """Status of one item from its term ids in the detected status taxonomy."""
+    if not taxonomy:
+        return ""
+    statuses = {
+        status_map.get(tid, "") for tid in (item.get(taxonomy) or []) if isinstance(tid, int)
+    }
+    if "realized" in statuses:
+        return "realized"
+    if "current" in statuses:
+        return "current"
+    return ""
+
 
 def _portfolio_rest_bases(types: dict[str, Any]) -> list[str]:
     """Return the REST bases of portfolio-like custom post types.
@@ -77,7 +165,7 @@ def _portfolio_rest_bases(types: dict[str, Any]) -> list[str]:
     return bases
 
 
-def _to_company(item: Any) -> dict[str, str] | None:
+def _to_company(item: Any, taxonomy: str, status_map: dict[int, str]) -> dict[str, str] | None:
     """Map a WP REST item to a company record, or ``None`` if unusable."""
     if not isinstance(item, dict):
         return None
@@ -90,12 +178,26 @@ def _to_company(item: Any) -> dict[str, str] | None:
         return None
     # ``source="site"`` — this is the firm's own structured data, so it anchors the
     # discovery verdict's reliable-source URL exactly like the scraped listing.
-    return {"name": name, "url": url, "description": "", "source": "site"}
+    # ``status`` is "current"/"realized"/"" (best-effort; see _build_status_map) so
+    # the UI can default-deselect exited holdings.
+    return {
+        "name": name,
+        "url": url,
+        "description": "",
+        "source": "site",
+        "status": _status_for(item, taxonomy, status_map),
+    }
 
 
 def _fetch_cpt(base_origin: str, rest_base: str, seen: set[str]) -> list[dict[str, str]]:
     """Fetch one CPT, paginating until a short/empty page or a transport stop."""
     companies: list[dict[str, str]] = []
+    # Detected once from the first item, reused for the whole CPT. ``probed`` (not
+    # a falsy ``taxonomy``) gates the one-time probe — otherwise a firm with NO
+    # status taxonomy (taxonomy stays "") would re-probe on every page.
+    taxonomy: str = ""
+    status_map: dict[int, str] = {}
+    probed = False
     for page in range(1, _MAX_PAGES + 1):
         cpt_url = f"{base_origin}/wp-json/wp/v2/{rest_base}?per_page={_PER_PAGE}&page={page}"
         try:
@@ -108,8 +210,11 @@ def _fetch_cpt(base_origin: str, rest_base: str, seen: set[str]) -> list[dict[st
             break
         if not isinstance(items, list) or not items:
             break
+        if not probed and isinstance(items[0], dict):
+            taxonomy, status_map = _build_status_map(base_origin, items[0])
+            probed = True
         for item in items:
-            record = _to_company(item)
+            record = _to_company(item, taxonomy, status_map)
             if record and record["url"] not in seen:
                 seen.add(record["url"])
                 companies.append(record)
@@ -132,8 +237,9 @@ def discover_via_wp_json(base_origin: str) -> list[dict[str, str]]:
     """Discover portfolio companies via a WordPress ``wp-json`` portfolio CPT.
 
     ``base_origin`` is the scheme+host (e.g. ``https://www.kohlberg.com``). Returns
-    company records ``{name, url, description, source}`` or ``[]`` when the site is
-    not a WordPress portfolio. Never raises (fail-soft additive rung).
+    company records ``{name, url, description, source, status}`` (``status`` is
+    "current"/"realized"/"") or ``[]`` when the site is not a WordPress portfolio.
+    Never raises (fail-soft additive rung).
     """
     types_url = f"{base_origin}/wp-json/wp/v2/types"
     try:

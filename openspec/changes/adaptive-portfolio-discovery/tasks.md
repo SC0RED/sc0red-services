@@ -8,12 +8,12 @@ Build order below reflects what the spike proved: the two deterministic rungs
   Result: 0/17 reachable firms needed a browser; `wp-json` CPT discovery + `sitemap`
   enumeration + in-HTML extraction covered everything. Full table in design.md.
 
-- [ ] 1. **`wp-json` CPT discovery rung** (highest ROI). Probe `/wp-json/wp/v2/types`,
-  pick the portfolio-like CPT, fetch it **paginated** (`per_page=100`, loop on
-  `X-WP-Total`/`page`), map to {name, url}. SSRF-guarded; via `curl_cffi`.
-- [ ] 2. **`sitemap.xml` enumeration rung.** Fetch sitemap(s), filter
-  `/(portfolio|companies|investments|investment-portfolio|holdings)/<slug>`,
-  derive names from slugs (reuse `_name_from_detail_slug`).
+- [x] 1. **`wp-json` CPT discovery rung** (highest ROI). Done (PR #461). Probe
+  `/wp-json/wp/v2/types`, pick the portfolio-like CPT, fetch paginated, map to
+  {name, url}. SSRF-guarded; via `curl_cffi`. Verified live: Kohlberg 55.
+- [x] 2. **`sitemap.xml` enumeration rung.** Done (PR #461). Fetch sitemap(s),
+  follow an index one level, filter `/<section>/<slug>`, derive names via the
+  shared `name_from_url_slug`. Verified live: Riverside 400.
 - [ ] 3. **Triage routine.** Heuristic signature detection on the first fetched HTML
   → `delivery_mechanism` + confidence (catalog in design.md); LLM only for the
   ambiguous residue. Routes/prunes the ladder; never hard-gates.
@@ -29,6 +29,13 @@ Build order below reflects what the spike proved: the two deterministic rungs
 - [ ] 8. **Per-domain classification cache** so re-scans skip triage → proven path.
 - [ ] 9. Tests (signature detection, both rungs incl. pagination, routing,
   mechanism-aware verdict, fail-soft, cache) + E2E + PR.
+
+- [ ] 10. **Egress-IP-blocking mitigation** (surfaced by live staging verification —
+  see design.md "Known limitation"). Audax/Webster/Wind Point are unreachable from
+  the AWS datacenter egress IP (their CDNs block datacenter ranges). Default:
+  verdict should flag "couldn't reach the firm's site" and route to upload /
+  source-URL (already shipped). Future option: a residential/egress proxy for the
+  fetch transport (paid + SSRF review). Measure real-customer hit rate first.
 
 - [ ] (deferred / speculative) Integrate `render-site-headless` as the last
   router-selected rung — only if real traffic surfaces firms the rungs above miss.

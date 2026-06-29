@@ -155,7 +155,8 @@ def find_new_candidates(
     ``candidates``), so the trusted source wins and ``acme.com`` / ``acme.in``
     twins collapse. A trusted entry is never dropped — only lower-confidence
     candidates are filtered. Each kept entry is emitted as
-    ``{name, url, description, source}``.
+    ``{name, url, description, source, status}`` (``status`` carried from the
+    candidate when set — the wp-json rung's current/realized tag — else "").
 
     The trusted index uses ``.get`` (a malformed trusted entry just doesn't
     contribute to dedup — graceful, never crashes the merge), while candidates
@@ -187,7 +188,15 @@ def find_new_candidates(
         if name_key:
             seen_names.add(name_key)
         fresh.append(
-            {"name": company["name"], "url": company["url"], "description": "", "source": source}
+            {
+                "name": company["name"],
+                "url": company["url"],
+                "description": "",
+                "source": source,
+                # Preserve current/realized status when the source set it (wp-json
+                # rung); "" for sources that don't (web search, sitemap, scrape).
+                "status": company.get("status", ""),
+            }
         )
     return fresh
 

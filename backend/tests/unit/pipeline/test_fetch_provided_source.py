@@ -63,6 +63,7 @@ class TestFetchProvidedSource:
                 "url": "https://fresh.com",
                 "description": "",
                 "source": "provided_url",
+                "status": "",
             }
         ]
         assert details["portfolio_count"] == 2
@@ -111,6 +112,7 @@ class TestFetchProvidedSource:
                 "url": "https://acme.com",
                 "description": "",
                 "source": "provided_url",
+                "status": "",
             }
         ]
         assert details["portfolio_count"] == 1
