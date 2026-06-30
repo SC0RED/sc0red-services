@@ -200,11 +200,18 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 is_generic_cta = any(cta in text_lower for cta in _GENERIC_CTA_PATTERNS)
 
                 if is_generic_cta or not text:
-                    # CTA link — prefer a context name from the surrounding
-                    # card (heading / img alt / img filename). As a last
-                    # resort, derive from the target URL's hostname so we
-                    # keep the candidate rather than dropping it entirely.
-                    if context_name:
+                    # No usable anchor text. For an internal detail link
+                    # (/section/<slug>) the slug IS the company identity, so it
+                    # beats a context name — a context label can be a shared or
+                    # decorative card element repeated across every card (e.g.
+                    # warburgpincus.com renders an empty anchor plus a common
+                    # "Border Green" label, which would otherwise name all 177
+                    # companies "Border Green"). Fall back to the context name,
+                    # then the target URL's hostname, only when the slug is unusable.
+                    slug_name = name_from_url_slug(full_url) if is_internal_portfolio else ""
+                    if slug_name:
+                        company_name = slug_name
+                    elif context_name:
                         company_name = context_name
                         logger.info(
                             "Using context name '%s' for CTA link → %s", context_name, full_url

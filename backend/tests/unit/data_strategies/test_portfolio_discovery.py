@@ -186,6 +186,43 @@ class TestPortfolioDiscoveryStrategy:
         assert "Mega Corp" in names
         assert "Beta Labs" in names
 
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_internal_detail_links_prefer_slug_over_shared_context(self, mock_scrape):
+        # warburgpincus.com renders empty anchors plus a shared decorative
+        # "Border Green" context label on every card. The slug is the real
+        # identity and must win, so each company gets a distinct name, not three
+        # rows all named "Border Green".
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {
+                    "text": "",
+                    "href": "https://pefirm.com/investments/infoblox",
+                    "context_name": "Border Green",
+                },
+                {
+                    "text": "",
+                    "href": "https://pefirm.com/investments/intrafi-network",
+                    "context_name": "Border Green",
+                },
+                {
+                    "text": "",
+                    "href": "https://pefirm.com/investments/insilico-medicine",
+                    "context_name": "Border Green",
+                },
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = {c["name"] for c in meta["companies"]}
+        assert names == {"Infoblox", "Intrafi Network", "Insilico Medicine"}
+        assert "Border Green" not in names
+
     def test_execute_adds_https_if_missing(self):
         with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url") as mock_scrape:
             mock_scrape.return_value = {
