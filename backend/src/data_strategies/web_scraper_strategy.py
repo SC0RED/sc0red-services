@@ -36,6 +36,10 @@ _MIN_SCRIPT_JSON_PAIRS = 5  # skip code/analytics scripts with little JSON struc
 
 _LOGO_SUFFIX_RE = re.compile(r"[-_ ]?logo$", re.IGNORECASE)
 _FILENAME_TOKEN_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|[-_.\s]+")
+# A lowercase letter at the start of the string or right after whitespace — the
+# only positions an apostrophe-safe title-case capitalises (so "harry's" stays
+# "Harry's", not "Harry'S" the way ``str.title()`` would render it).
+_WORD_INITIAL_RE = re.compile(r"(?:^|\s)[a-z]")
 # Matches a structured company record embedded as JSON in a hydration script:
 # an adjacent ``"name":"…","slug":"…"`` pair, in both plain JSON and the
 # escaped/stringified form SSR frameworks emit (``\"name\":\"…\"``). Requiring
@@ -58,6 +62,20 @@ def title_case_tokens(raw: str) -> str:  # noqa: NAMING001  (transform util, not
     if not tokens:
         return ""
     return " ".join(t.capitalize() for t in tokens)
+
+
+def _titlecase_words(raw: str) -> str:  # noqa: NAMING001  (transform util, not a verb)
+    """Normalise an img-``alt`` label's casing for use as a company name.
+
+    Already-mixed-case alt is human-cased — trust it as-is (``"Harry's Fresh
+    Foods"``, ``"AT&T"``). Only ALL-CAPS / all-lowercase labels are re-cased, and
+    that re-casing is apostrophe-safe: it upper-cases a letter only at the start
+    or after whitespace, so ``"HARRY'S FRESH FOODS"`` → ``"Harry's Fresh Foods"``
+    (not ``"Harry'S …"`` the way ``str.title()`` would render it).
+    """
+    if raw != raw.upper() and raw != raw.lower():
+        return raw
+    return _WORD_INITIAL_RE.sub(lambda match: match.group().upper(), raw.lower())
 
 
 def _extract_name_from_img_src(src: str) -> str:
@@ -161,7 +179,7 @@ def _extract_context_name(anchor: Any) -> str:
             if img:
                 alt = (img.get("alt") or "").strip()
                 if alt and len(alt) > 2:  # noqa: PLR2004
-                    return alt.title()
+                    return _titlecase_words(alt)
                 src_name = _extract_name_from_img_src(img.get("src") or "")
                 if src_name:
                     return src_name

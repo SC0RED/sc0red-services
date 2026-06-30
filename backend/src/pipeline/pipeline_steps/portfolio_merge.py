@@ -222,8 +222,9 @@ def build_verdict(
     - ``web_search_exhausted`` — a deepen round added nothing new; web search is
       tapped out, so point the customer at upload for completeness
     - ``genuinely_empty`` — nothing found anywhere
-    - ``full_site_list`` — reserved for results we have positive reason to believe
-      are complete; not emitted by the current signals (kept for legacy verdicts)
+    - ``full_site_list`` — results we have positive reason to believe are complete:
+      a ``structured_endpoint`` mechanism (the wp-json CPT / sitemap enumerated the
+      firm's whole portfolio). A plain scrape is never inferred complete.
 
     A non-zero site scrape is NOT inferred to be complete — escalation
     (search_deeper + upload_list) stays available for every completeness except a
@@ -239,6 +240,11 @@ def build_verdict(
         completeness, method = "web_search_exhausted", "web_search"
     elif fallback_ran and total > 0:
         completeness, method = "web_search_subset", "web_search"
+    elif mechanism == "structured_endpoint" and site_total > 0:
+        # A structured source (wp-json CPT / sitemap) enumerates the firm's WHOLE
+        # portfolio, so this is the authoritative full list — not a partial scrape
+        # we have to caveat. (Includes realized holdings, which the UI deselects.)
+        completeness, method = "full_site_list", "site"
     elif site_total > 0:
         completeness, method = "partial_site_list", "site"
     else:

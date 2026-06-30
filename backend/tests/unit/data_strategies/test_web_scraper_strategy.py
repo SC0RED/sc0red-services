@@ -436,6 +436,27 @@ class TestExtractContextNameImgSrcFallback:
         """
         assert _extract_context_name(self._anchor(html)) == ""
 
+    def test_all_caps_alt_is_apostrophe_safe_title_cased(self):
+        # ALL-CAPS alt is re-cased, but NOT with str.title() (which would yield
+        # "Harry'S"). The apostrophe-safe normaliser keeps the trailing s lowercase.
+        html = """
+        <article>
+          <img alt="HARRY'S FRESH FOODS" src="/img/x.png">
+          <a href="https://harrys.com">LEARN MORE</a>
+        </article>
+        """
+        assert _extract_context_name(self._anchor(html)) == "Harry's Fresh Foods"
+
+    def test_mixed_case_alt_is_left_untouched(self):
+        # Already human-cased alt is trusted verbatim (no "Harry's" → "Harry'S").
+        html = """
+        <article>
+          <img alt="Harry's Fresh Foods" src="/img/x.png">
+          <a href="https://harrys.com">LEARN MORE</a>
+        </article>
+        """
+        assert _extract_context_name(self._anchor(html)) == "Harry's Fresh Foods"
+
 
 class TestNameFromUrlSlug:
     def test_derives_title_cased_name_from_last_segment(self):

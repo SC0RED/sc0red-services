@@ -174,6 +174,28 @@ structured data, so they join `auto_included` and skip the per-company AI
 validation that exists to filter web-search/nav-link junk. This also avoids
 hundreds of validation calls for large-CPT firms (GA 405, Insight 847).
 
+Also fixed in this pass: a `structured_endpoint` result now reads as
+`full_site_list` (was always `partial_site_list` "may be incomplete"), and
+img-`alt` context names are normalised apostrophe-safely ("Harry's", not the
+`str.title()` artifact "Harry'S").
+
+### Deferred minor name-extraction edge cases (low priority, ~1 row each)
+
+Surfaced during the 2026-06-30 corpus verification; left for a later pass because
+each is a single-row cosmetic issue with no clean fix, and AI validation / the
+confirm screen absorb them:
+
+- **Very short detail-link slugs.** `warburgpincus.com/investments/aa/` →
+  `name_from_url_slug` returns `""` (below the 2-char floor), so the empty-anchor
+  path falls back to the shared "Border Green" context label. Special-casing
+  2-char slugs would let real junk through; the link is itself likely junk and AI
+  validation drops it.
+- **Context heading grabbed the wrong element.** One Sun Capital card
+  (`/portfolio/clinicalcare/`) yields blob text "Clinical CareServicesFlorida"
+  with `context_name="Services"` (wrong) and an unsplittable slug "Clinicalcare",
+  so neither the prefix rule nor the slug recovers "Clinical Care". No reliable
+  signal to split the blob.
+
 ## Pipeline placement
 
 A routine at the front of `DiscoverPortfolio` (or a thin `ClassifyDeliveryStep`
