@@ -4,11 +4,14 @@ Runs two sequential discovery paths on the same scraped data:
 1. Heuristic: scrape + filter links with context-aware CTA handling
 2. AI extraction: send page text to LLM for structured company extraction
 
-Results merged by normalized URL key (host + path): intersection auto-included,
-remainder passed to downstream validation step. When the site yields too few
-companies, a web-search fallback recovers the portfolio. Merge/verdict logic
-lives in ``portfolio_merge`` and the web-search calls in ``portfolio_websearch``
-(both shared with the customer-triggered ``DeepenPortfolio`` step).
+Results merged by normalized URL key (host + path). The trusted ``auto_included``
+tier (passed straight through downstream validation) holds both the heuristic∩AI
+intersection AND companies from the firm's own structured sources — the wp-json
+CPT and sitemap rungs, which always run for a PE firm; the remainder (single-path
+in-HTML hits) goes to the validation tier. When the site yields too few companies,
+a web-search fallback recovers the portfolio. Merge/verdict logic lives in
+``portfolio_merge`` and the web-search calls in ``portfolio_websearch`` (both
+shared with the customer-triggered ``DeepenPortfolio`` step).
 """
 
 from __future__ import annotations
@@ -62,16 +65,6 @@ _PHASE_WEB_SEARCH = (9, "Searching public sources…")
 # portfolios and clean full listings don't pay the web-search cost; everything
 # above this relies on the always-available customer-triggered "Search deeper".
 _FALLBACK_THRESHOLD = 5
-
-# When the in-HTML paths (links + AI + embedded JSON) find this many companies OR
-# FEWER, try the deterministic structured-source rungs (WordPress wp-json portfolio
-# CPT + sitemap enumeration) before the web-search fallback. These are browser-free
-# and authoritative — they rescue client-side-rendered shells the scrape can't see
-# (the adaptive-portfolio-discovery spike: Vista/Insight/General Atlantic/Alpine/
-# Kohlberg via wp-json, Riverside/Audax via sitemap). Same low-water mark as the
-# web-search fallback: a firm whose site already yielded a real list doesn't need
-# them, and they run before (and usually obviate) the costlier web search.
-_DETERMINISTIC_RUNG_THRESHOLD = _FALLBACK_THRESHOLD
 
 
 def _origin_of(url: str) -> str:
@@ -163,10 +156,13 @@ class DiscoverPortfolio(RequestStep):
             mechanism="structured_endpoint",
             site_source_url=url,
         )
+        # Trusted tier: the proven rung is the firm's own structured data, so these
+        # join auto_included and skip per-company AI validation (same as the
+        # full-discovery rung path below).
         self.request_executor.add_details(
             {
-                "portfolio_companies": fast,
-                "portfolio_auto_included": [],
+                "portfolio_companies": [],
+                "portfolio_auto_included": fast,
                 "portfolio_companies_json": json.dumps(fast),
                 "portfolio_count": len(fast),
                 "portfolio_diagnostic": "",
@@ -240,16 +236,20 @@ class DiscoverPortfolio(RequestStep):
         auto_included = sanitize_candidates(auto_included)
         needs_validation = sanitize_candidates(needs_validation)
 
-        # Deterministic structured-source rungs: when the in-HTML paths come up
-        # thin, try the firm's own structured sources — a WordPress wp-json
-        # portfolio CPT and sitemap enumeration — before paying for web search.
-        # Both are browser-free and authoritative (and run even without an AI
-        # factory). New candidates enter needs_validation only, so a wp-json CPT
-        # that includes exited companies still gets AI-validated downstream.
-        in_html_total = len(auto_included) + len(needs_validation)
+        # Deterministic structured-source rungs: ALWAYS query the firm's own
+        # structured sources — a WordPress wp-json portfolio CPT and sitemap
+        # enumeration — for a PE firm, not just when the in-HTML scrape is thin.
+        # A firm can server-render a PARTIAL list (e.g. General Atlantic shows ~19
+        # rotating companies of an `investment` CPT that holds 406); gating these
+        # rungs on a low in-HTML yield would skip the authoritative full list. They
+        # are browser-free, authoritative, and additive (deduped against what the
+        # scrape already found), so they can only ADD the firm's own data. They run
+        # even without an AI factory. Trusted tier: a wp-json/sitemap company is the
+        # firm's OWN structured data, so it joins auto_included and skips the
+        # per-company AI validation that exists to filter web-search/nav-link junk.
         rung_count = 0  # companies the deterministic rungs contributed (for mechanism)
         proven_source = ""  # which rung carried the result (for the per-domain cache)
-        if is_pe_firm and in_html_total <= _DETERMINISTIC_RUNG_THRESHOLD:
+        if is_pe_firm:
             self._report_phase(_PHASE_STRUCTURED)
             base_origin = _origin_of(url)
             # Run the rungs separately so we can attribute which one carried the
@@ -268,7 +268,7 @@ class DiscoverPortfolio(RequestStep):
             rung_count = len(fresh)
             if fresh:
                 logger.info("Deterministic rungs added %d companies for %s", rung_count, url)
-                needs_validation = [*needs_validation, *fresh]
+                auto_included = [*auto_included, *fresh]
             # Only cache a SINGLE-rung result. If both rungs carried distinct
             # companies, fast-pathing one of them on a re-scan would silently drop
             # the other's exclusive companies — so the mixed case is left
