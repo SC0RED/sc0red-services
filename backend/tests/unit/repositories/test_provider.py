@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
 from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
+from src.repositories.dynamodb.discovery_cache_repository import DiscoveryCacheRepository
 from src.repositories.dynamodb.provider import DynamoDBStorageProvider
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 from src.repositories.dynamodb.user_repository import (
@@ -47,3 +48,9 @@ class TestDynamoDBStorageProvider:
         provider = DynamoDBStorageProvider(table=mock_table)
         repo = provider.create_organization_repository()
         assert isinstance(repo, DynamoDBOrganizationRepository)
+
+    def test_create_discovery_cache_repository(self):
+        mock_table = MagicMock()
+        provider = DynamoDBStorageProvider(table=mock_table)
+        repo = provider.create_discovery_cache_repository()
+        assert isinstance(repo, DiscoveryCacheRepository)

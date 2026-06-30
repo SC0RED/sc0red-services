@@ -43,9 +43,10 @@ class ValidatePortfolioCompanies(RequestStep):
         """Validate remainder companies and merge with auto-included high-confidence ones.
 
         ``portfolio_companies`` from ``DiscoverPortfolio`` contains only the
-        remainder (found by one discovery path). ``portfolio_auto_included``
-        contains the intersection (found by both paths) — these skip AI
-        validation to save time and cost.
+        remainder (single-path in-HTML hits). ``portfolio_auto_included`` holds the
+        companies that skip AI validation to save time and cost — either found by
+        BOTH discovery paths (heuristic∩AI, high confidence) or sourced from the
+        firm's own structured data (wp-json / sitemap rungs).
         """
         details = self.request_executor.details
         candidates = cast("list[dict[str, Any]]", details.get("portfolio_companies", []))

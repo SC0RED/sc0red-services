@@ -40,4 +40,26 @@ describe('withDefaultSelection', () => {
         const c = withDefaultSelection({ name: 'NoUrl Co', url: '', description: '', source: 'site' })
         expect(c.selected).toBe(false)
     })
+
+    it('does NOT pre-select a realized (exited) company', () => {
+        const c = withDefaultSelection({
+            name: 'Exited Co',
+            url: 'https://exited.com',
+            description: '',
+            source: 'site',
+            status: 'realized',
+        })
+        expect(c.selected).toBe(false)
+    })
+
+    it('pre-selects a current company (status set, not realized)', () => {
+        const c = withDefaultSelection({
+            name: 'Active Co',
+            url: 'https://active.com',
+            description: '',
+            source: 'site',
+            status: 'current',
+        })
+        expect(c.selected).toBe(true)
+    })
 })
