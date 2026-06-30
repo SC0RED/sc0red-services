@@ -31,6 +31,15 @@ class TestClassifyDeliveryMechanism:
         # ≤5 stray anchors but a rung recovered the real list → structured.
         assert _classify(heuristic_count=2, rung_count=149, site_total=149) == "structured_endpoint"
 
+    def test_rung_wins_over_substantial_heuristic(self):
+        # General Atlantic: server-renders ~19 partial anchors (heuristic > the
+        # substantial-listing threshold) AND a wp-json rung holds the full 406. The
+        # authoritative rung must win — not be short-circuited to static_listing.
+        assert (
+            _classify(heuristic_count=19, rung_count=400, site_total=419)
+            == "structured_endpoint"
+        )
+
     def test_embedded_json_when_ai_read_a_script(self):
         assert _classify(ai_count=10, script_present=True, site_total=10) == "embedded_json"
 

@@ -46,10 +46,15 @@ def classify_delivery_mechanism(
     """
     if site_fetch_failed and site_total == 0:
         return "unreachable"
-    if heuristic_count > _SUBSTANTIAL_LISTING:
-        return "static_listing"
+    # A structured rung (wp-json CPT / sitemap) is the most authoritative signal:
+    # it enumerates the firm's whole portfolio, so it wins even when the page ALSO
+    # server-renders a partial anchor list (e.g. General Atlantic renders ~19 of an
+    # `investment` CPT holding 406 — that's structured_endpoint, not static_listing).
+    # Checked before the heuristic-count branch since the rungs now ALWAYS run.
     if rung_count > 0:
         return "structured_endpoint"
+    if heuristic_count > _SUBSTANTIAL_LISTING:
+        return "static_listing"
     if ai_count > 0:
         return "embedded_json" if script_present else "ai_extracted"
     if heuristic_count > 0:
