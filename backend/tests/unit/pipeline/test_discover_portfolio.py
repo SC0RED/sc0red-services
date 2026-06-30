@@ -295,11 +295,16 @@ class TestDiscoverPortfolio:
 
         assert "known to include" not in captured["prompt"].lower()
 
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
     @patch("src.pipeline.pipeline_steps.portfolio_websearch.run_grounded_ai_call")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
-    def test_healthy_site_skips_fallback(self, mock_strategy_cls, mock_grounded):
+    def test_healthy_site_skips_fallback(
+        self, mock_strategy_cls, mock_grounded, mock_wpjson, mock_sitemap
+    ):
         # A "healthy" site must exceed _FALLBACK_THRESHOLD (5) to skip the
-        # web-search fallback — thin scrapes (≤5) now auto-augment.
+        # web-search fallback — thin scrapes (≤5) now auto-augment. The structured
+        # rungs still run (always), so they're mocked to empty here for hermeticity.
         companies = [{"name": f"Co{i}", "url": f"https://co{i}.com"} for i in range(6)]
         mock_strategy = MagicMock()
         mock_strategy.execute.return_value = (
@@ -312,12 +317,17 @@ class TestDiscoverPortfolio:
             },
         )
         mock_strategy_cls.return_value = mock_strategy
+        mock_wpjson.return_value = []
+        mock_sitemap.return_value = []
 
         step = DiscoverPortfolio(ai_client_factory=MagicMock())
         step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
         step._request_executor = MagicMock()
         step.execute()
 
+        # Rungs always run for a PE firm (never gated out by a healthy in-HTML yield).
+        mock_wpjson.assert_called_once_with("https://firm.com")
+        mock_sitemap.assert_called_once_with("https://firm.com")
         mock_grounded.assert_not_called()
         assert step._request_executor.add_details.call_args[0][0]["portfolio_count"] == 6
 
@@ -580,7 +590,9 @@ class TestDeterministicRungs:
         mock_wpjson.assert_called_once_with("https://firm.com")
         mock_sitemap.assert_called_once_with("https://firm.com")
         details = step._request_executor.add_details.call_args[0][0]
-        assert {c["name"] for c in details["portfolio_companies"]} == {"Acme", "Beta"}
+        # Site-structured data is trusted → auto_included (skips per-company AI validation).
+        assert {c["name"] for c in details["portfolio_auto_included"]} == {"Acme", "Beta"}
+        assert details["portfolio_companies"] == []
         assert details["portfolio_count"] == 2
         # Site-derived → verdict anchors to the firm page.
         assert details["discovery_verdict"]["site_source_url"] == "https://firm.com/portfolio"
@@ -590,20 +602,29 @@ class TestDeterministicRungs:
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
-    def test_rungs_skipped_when_in_html_rich(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
-        # Scrape already found a real list (> threshold) → don't pay for the rungs.
+    def test_rungs_run_even_when_in_html_rich(self, mock_strategy_cls, mock_wpjson, mock_sitemap):
+        # Even when the scrape rendered a list, the structured rungs still run: a
+        # firm can server-render a PARTIAL list while its wp-json CPT holds the full
+        # one (e.g. General Atlantic 19 rendered vs 406 in the CPT). The rung's fresh
+        # companies are added (deduped) — never gated out by a non-thin in-HTML yield.
         rich = [_company(f"Co{i}", f"https://co{i}.com") for i in range(6)]
         strategy = MagicMock()
         strategy.execute.return_value = ("x", {"companies": rich})
         mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = [_company(f"Cpt{i}", f"https://cpt{i}.com") for i in range(20)]
+        mock_sitemap.return_value = []
 
         step = DiscoverPortfolio()
         step._entity_accessor = CompanyAccessor(Company(url="https://firm.com/portfolio"))
         step._request_executor = MagicMock()
         step.execute()
 
-        mock_wpjson.assert_not_called()
-        mock_sitemap.assert_not_called()
+        mock_wpjson.assert_called_once_with("https://firm.com")
+        mock_sitemap.assert_called_once_with("https://firm.com")
+        details = step._request_executor.add_details.call_args[0][0]
+        # 6 rendered (single-path → needs validation) + 20 from the CPT (trusted) = 26.
+        assert details["portfolio_count"] == 26
+        assert {c["name"] for c in details["portfolio_auto_included"]} >= {"Cpt0", "Cpt19"}
 
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
@@ -630,9 +651,14 @@ class TestDeterministicRungs:
         step.execute()
 
         details = step._request_executor.add_details.call_args[0][0]
-        names = [c["name"] for c in details["portfolio_companies"]]
-        assert names.count("Acme") == 1
-        assert "Gamma" in names
+        # Acme (scrape, single-path) stays in needs-validation; Gamma (rung, trusted)
+        # joins auto_included. The duplicate Acme from wp-json is deduped out.
+        all_names = [
+            c["name"]
+            for c in (*details["portfolio_companies"], *details["portfolio_auto_included"])
+        ]
+        assert all_names.count("Acme") == 1
+        assert "Gamma" in all_names
         assert details["portfolio_count"] == 2
 
     @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
@@ -748,16 +774,22 @@ class TestBackgroundProgressMessages:
         phases = [call.args for call in step._request_executor.report_progress.call_args_list]
         assert phases == [_PHASE_READING, _PHASE_STRUCTURED]
 
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_sitemap")
+    @patch("src.pipeline.pipeline_steps.discover_portfolio.discover_via_wp_json")
     @patch("src.pipeline.pipeline_steps.discover_portfolio.PortfolioDiscoveryStrategy")
-    def test_reads_page_phase_always_fires(self, mock_strategy_cls):
-        # A clean full listing skips the structured/web-search rungs, but the
-        # customer should still see the "reading the page" message.
+    def test_clean_listing_reads_then_queries_structured(
+        self, mock_strategy_cls, mock_wpjson, mock_sitemap
+    ):
+        # A clean full listing still queries the structured sources (they always run
+        # for a PE firm), but a rich result means the web-search phase never fires.
         strategy = MagicMock()
         strategy.execute.return_value = (
             "x",
             {"companies": [{"name": f"Co{i}", "url": f"https://co{i}.com"} for i in range(8)]},
         )
         mock_strategy_cls.return_value = strategy
+        mock_wpjson.return_value = []
+        mock_sitemap.return_value = []
 
         step = DiscoverPortfolio()  # no AI factory → no fallback
         step._entity_accessor = CompanyAccessor(Company(url="https://firm.com"))
@@ -765,7 +797,7 @@ class TestBackgroundProgressMessages:
         step.execute()
 
         phases = [call.args for call in step._request_executor.report_progress.call_args_list]
-        assert phases == [_PHASE_READING]
+        assert phases == [_PHASE_READING, _PHASE_STRUCTURED]
 
 
 class TestDiscoveryCacheFastPath:
@@ -794,6 +826,9 @@ class TestDiscoveryCacheFastPath:
         mock_strategy_cls.assert_not_called()
         details = step._request_executor.add_details.call_args[0][0]
         assert details["portfolio_count"] == 8
+        # Site-structured → trusted tier, skips per-company validation.
+        assert details["portfolio_auto_included"] != []
+        assert details["portfolio_companies"] == []
         assert details["discovery_verdict"]["delivery_mechanism"] == "structured_endpoint"
         # TTL refreshed for the actively re-scanned firm.
         cache.put_proven_path.assert_called_once()

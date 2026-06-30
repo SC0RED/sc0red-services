@@ -156,6 +156,24 @@ escalations (deepen / upload-list / provide-source-URL) remain the rungs offered
 **only when automation comes up short** — the mechanism routing itself is never a
 customer decision.
 
+## Structured rungs always run + trust the firm's own data (revised 2026-06-29)
+
+The deterministic rungs (wp-json CPT + sitemap) were initially gated behind a
+low in-HTML yield (`<= 5`) — the assumption being "the scrape already found the
+real list." That assumption broke on **General Atlantic**: it server-renders a
+*partial, rotating* ~19-company list while its `investment` CPT holds **406**, so
+the gate skipped the authoritative source and discovery returned 19. **Fix: the
+structured rungs ALWAYS run for a PE firm** (they are browser-free, authoritative,
+and additive — deduped against the scrape — so they can only ADD the firm's own
+data; cost is 1–2 cheap deterministic probes per scan, fast-pathed on re-scan by
+the per-domain cache). The web-search fallback keeps its low-yield gate (it is the
+expensive/hallucination-prone rung).
+
+Corollary: **wp-json/sitemap companies are TRUSTED** — they are the firm's own
+structured data, so they join `auto_included` and skip the per-company AI
+validation that exists to filter web-search/nav-link junk. This also avoids
+hundreds of validation calls for large-CPT firms (GA 405, Insight 847).
+
 ## Pipeline placement
 
 A routine at the front of `DiscoverPortfolio` (or a thin `ClassifyDeliveryStep`
