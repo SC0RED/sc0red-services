@@ -16,13 +16,15 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
-from src.data_strategies.url_safety import UnsafeUrlError
-from src.data_strategies.web_scraper_strategy import (
+from src.data_strategies.scraper_names import (
     MAX_NAME_LENGTH,
     MIN_NAME_LENGTH,
     extract_name_from_url,
-    fetch_page_html,
     name_from_url_slug,
+)
+from src.data_strategies.url_safety import UnsafeUrlError
+from src.data_strategies.web_scraper_strategy import (
+    fetch_page_html,
     scrape_url,
 )
 
@@ -52,8 +54,8 @@ _STARTS_WITH_SKIP = re.compile(
     r"^(the|our|a|an|login|sign|contact|about|terms|privacy)\b", re.IGNORECASE
 )
 
-# Name-length bounds live in ``web_scraper_strategy`` as the single source of
-# truth — both discovery and extraction apply the same thresholds.
+# Name-length bounds live in ``scraper_names`` as the single source of truth —
+# both discovery and extraction apply the same thresholds.
 _MIN_COMPANY_NAME_LENGTH = MIN_NAME_LENGTH
 _MAX_COMPANY_NAME_LENGTH = MAX_NAME_LENGTH
 

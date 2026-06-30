@@ -30,6 +30,33 @@ def _grounded(companies: list[dict[str, str]]):
     )
 
 
+class TestBuildVerdictCompleteness:
+    def test_structured_endpoint_is_full_site_list(self):
+        # An authoritative wp-json/sitemap rung enumerates the whole portfolio, so
+        # the verdict reads "complete" (not "may be incomplete") and drops the
+        # search-deeper escalation.
+        verdict = build_verdict(
+            site_total=419,
+            total=419,
+            site_fetch_failed=False,
+            fallback_ran=False,
+            mechanism="structured_endpoint",
+        )
+        assert verdict["completeness"] == "full_site_list"
+        assert "search_deeper" not in verdict["available_actions"]
+
+    def test_plain_scrape_stays_partial(self):
+        # A non-structured scrape is never inferred complete.
+        verdict = build_verdict(
+            site_total=12,
+            total=12,
+            site_fetch_failed=False,
+            fallback_ran=False,
+            mechanism="static_listing",
+        )
+        assert verdict["completeness"] == "partial_site_list"
+
+
 class TestMergeFallback:
     def test_adds_new_candidates_to_needs_validation(self):
         out = merge_fallback(
