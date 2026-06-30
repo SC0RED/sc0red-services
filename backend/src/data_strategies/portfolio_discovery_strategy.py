@@ -233,6 +233,19 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                             )
                             continue
 
+                # Internal detail-card text is often the heading concatenated with
+                # sector/location segments ("AclaraIndustrials & DistributionMissouri"
+                # on suncappart.com). When the card's context heading is a clean
+                # prefix of that blob, it's the real name — prefer it (it also keeps
+                # original casing/accents the slug would lose, e.g. "Albéa").
+                if (
+                    is_internal_portfolio
+                    and context_name
+                    and len(company_name) > len(context_name)
+                    and company_name.lower().startswith(context_name.lower())
+                ):
+                    company_name = context_name
+
                 # Internal detail links (/section/{slug}) carry the name in the
                 # slug while the anchor text is often a description. When the
                 # text-derived name is unusable (out of bounds), prefer the slug.
