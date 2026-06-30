@@ -8,13 +8,15 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests.exceptions import ConnectionError as CurlConnectionError
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError
 
+from src.data_strategies.scraper_names import (
+    extract_name_from_img_src,
+    extract_name_from_url,
+    name_from_url_slug,
+)
 from src.data_strategies.web_scraper_strategy import (
     WebScraperStrategy,
     _extract_context_name,
     _extract_embedded_companies,
-    _extract_name_from_img_src,
-    extract_name_from_url,
-    name_from_url_slug,
     normalize_url,
     scrape_url,
 )
@@ -316,46 +318,46 @@ class TestWebScraperStrategy:
 class TestNameFromImgSrc:
     def test_hyphenated_filename(self):
         assert (
-            _extract_name_from_img_src("https://cdn/access-healthcare.png") == "Access Healthcare"
+            extract_name_from_img_src("https://cdn/access-healthcare.png") == "Access Healthcare"
         )
 
     def test_underscored_filename(self):
-        assert _extract_name_from_img_src("access_healthcare.png") == "Access Healthcare"
+        assert extract_name_from_img_src("access_healthcare.png") == "Access Healthcare"
 
     def test_camel_case_filename(self):
-        assert _extract_name_from_img_src("accessHealthcare.png") == "Access Healthcare"
+        assert extract_name_from_img_src("accessHealthcare.png") == "Access Healthcare"
 
     def test_single_lowercase_token(self):
         # No separators → can't split; title-cased single token (imperfect but surfaced).
-        assert _extract_name_from_img_src("accesshealthcare.png") == "Accesshealthcare"
+        assert extract_name_from_img_src("accesshealthcare.png") == "Accesshealthcare"
 
     def test_strips_logo_suffix(self):
-        assert _extract_name_from_img_src("fold-health-logo.png") == "Fold Health"
-        assert _extract_name_from_img_src("fold-health_logo.png") == "Fold Health"
-        assert _extract_name_from_img_src("fold-healthlogo.png") == "Fold Health"
+        assert extract_name_from_img_src("fold-health-logo.png") == "Fold Health"
+        assert extract_name_from_img_src("fold-health_logo.png") == "Fold Health"
+        assert extract_name_from_img_src("fold-healthlogo.png") == "Fold Health"
 
     def test_handles_full_url_with_path(self):
         src = "https://perotjain.com/wp-content/uploads/2022/09/accesshealthcare.png"
-        assert _extract_name_from_img_src(src) == "Accesshealthcare"
+        assert extract_name_from_img_src(src) == "Accesshealthcare"
 
     def test_handles_query_string_and_fragment(self):
-        assert _extract_name_from_img_src("/img/access-healthcare.png?v=2") == "Access Healthcare"
+        assert extract_name_from_img_src("/img/access-healthcare.png?v=2") == "Access Healthcare"
         assert (
-            _extract_name_from_img_src("/img/access-healthcare.png#anchor") == "Access Healthcare"
+            extract_name_from_img_src("/img/access-healthcare.png#anchor") == "Access Healthcare"
         )
 
     def test_no_extension(self):
-        assert _extract_name_from_img_src("/img/access-healthcare") == "Access Healthcare"
+        assert extract_name_from_img_src("/img/access-healthcare") == "Access Healthcare"
 
     def test_empty_returns_empty(self):
-        assert _extract_name_from_img_src("") == ""
+        assert extract_name_from_img_src("") == ""
 
     def test_short_result_rejected(self):
         # Single char → below min length
-        assert _extract_name_from_img_src("/img/a.png") == ""
+        assert extract_name_from_img_src("/img/a.png") == ""
 
     def test_too_long_result_rejected(self):
-        assert _extract_name_from_img_src(f"/img/{'a' * 80}.png") == ""
+        assert extract_name_from_img_src(f"/img/{'a' * 80}.png") == ""
 
 
 class TestNameFromUrl:

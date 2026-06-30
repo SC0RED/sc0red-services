@@ -24,9 +24,9 @@ from typing import Any
 
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 
+from src.data_strategies.scraper_names import MAX_NAME_LENGTH, MIN_NAME_LENGTH
 from src.data_strategies.scraper_transport import fetch_page_html
 from src.data_strategies.url_safety import UnsafeUrlError
-from src.data_strategies.web_scraper_strategy import MAX_NAME_LENGTH, MIN_NAME_LENGTH
 
 logger = logging.getLogger(__name__)
 
