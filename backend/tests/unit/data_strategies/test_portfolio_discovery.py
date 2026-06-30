@@ -223,6 +223,43 @@ class TestPortfolioDiscoveryStrategy:
         assert names == {"Infoblox", "Intrafi Network", "Insilico Medicine"}
         assert "Border Green" not in names
 
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_internal_detail_blob_text_uses_context_heading(self, mock_scrape):
+        # suncappart.com card text is the heading concatenated with sector +
+        # location ("AclaraIndustrials & DistributionMissouri"); the clean heading
+        # is captured as context_name. The heading (a prefix of the blob) wins —
+        # case-insensitively, so "ALSCO Metals Corporation…" → "Alsco Metals
+        # Corporation" — and accents are preserved (slug would lose them).
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {
+                    "text": "AclaraIndustrials & DistributionMissouri",
+                    "href": "https://pefirm.com/portfolio/aclara",
+                    "context_name": "Aclara",
+                },
+                {
+                    "text": "AlbéaPackagingFrance",
+                    "href": "https://pefirm.com/portfolio/albea",
+                    "context_name": "Albéa",
+                },
+                {
+                    "text": "ALSCO Metals CorporationBuilding ProductsOhio",
+                    "href": "https://pefirm.com/portfolio/alsco-metals-corporation",
+                    "context_name": "Alsco Metals Corporation",
+                },
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = {c["name"] for c in meta["companies"]}
+        assert names == {"Aclara", "Albéa", "Alsco Metals Corporation"}
+
     def test_execute_adds_https_if_missing(self):
         with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url") as mock_scrape:
             mock_scrape.return_value = {
