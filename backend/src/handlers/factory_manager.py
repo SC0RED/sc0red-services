@@ -18,6 +18,7 @@ class FactoryManager:
         self._factories_factory = Sc0redServicesFactoriesFactory(
             company_repo=self._storage.create_company_repository(),
             assessment_repo=self._storage.create_assessment_repository(),
+            discovery_cache_repo=self._storage.create_discovery_cache_repository(),
         )
 
     @property

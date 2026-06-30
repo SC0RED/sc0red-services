@@ -16,32 +16,17 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests.exceptions import HTTPError, ImpersonateError, RequestException
 from signalfield_core.data.strategy import DataStrategyExecutor
 
-from src.data_strategies.url_safety import UnsafeUrlError
-from src.data_strategies.web_scraper_strategy import (
+from src.data_strategies.scraper_names import (
     MAX_NAME_LENGTH,
     MIN_NAME_LENGTH,
     extract_name_from_url,
+    name_from_url_slug,
+)
+from src.data_strategies.url_safety import UnsafeUrlError
+from src.data_strategies.web_scraper_strategy import (
     fetch_page_html,
     scrape_url,
-    title_case_tokens,
 )
-
-
-def _name_from_detail_slug(url: str) -> str:
-    """Derive a company name from an internal detail-page URL's last path segment.
-
-    Anchor-link portfolios (e.g. Francisco Partners' ``/investments/{slug}``) put
-    the company name in the slug while the link text is a description. The slug is
-    title-cased (``aeries-software`` -> ``Aeries Software``); returns "" if the
-    result is out of the shared name-length bounds.
-    """
-    slug = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
-    name = title_case_tokens(slug)
-    # Strict upper bound to match the downstream length filter (drops >= MAX).
-    if MIN_NAME_LENGTH < len(name) < MAX_NAME_LENGTH:
-        return name
-    return ""
-
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +54,8 @@ _STARTS_WITH_SKIP = re.compile(
     r"^(the|our|a|an|login|sign|contact|about|terms|privacy)\b", re.IGNORECASE
 )
 
-# Name-length bounds live in ``web_scraper_strategy`` as the single source of
-# truth — both discovery and extraction apply the same thresholds.
+# Name-length bounds live in ``scraper_names`` as the single source of truth —
+# both discovery and extraction apply the same thresholds.
 _MIN_COMPANY_NAME_LENGTH = MIN_NAME_LENGTH
 _MAX_COMPANY_NAME_LENGTH = MAX_NAME_LENGTH
 
@@ -217,11 +202,18 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                 is_generic_cta = any(cta in text_lower for cta in _GENERIC_CTA_PATTERNS)
 
                 if is_generic_cta or not text:
-                    # CTA link — prefer a context name from the surrounding
-                    # card (heading / img alt / img filename). As a last
-                    # resort, derive from the target URL's hostname so we
-                    # keep the candidate rather than dropping it entirely.
-                    if context_name:
+                    # No usable anchor text. For an internal detail link
+                    # (/section/<slug>) the slug IS the company identity, so it
+                    # beats a context name — a context label can be a shared or
+                    # decorative card element repeated across every card (e.g.
+                    # warburgpincus.com renders an empty anchor plus a common
+                    # "Border Green" label, which would otherwise name all 177
+                    # companies "Border Green"). Fall back to the context name,
+                    # then the target URL's hostname, only when the slug is unusable.
+                    slug_name = name_from_url_slug(full_url) if is_internal_portfolio else ""
+                    if slug_name:
+                        company_name = slug_name
+                    elif context_name:
                         company_name = context_name
                         logger.info(
                             "Using context name '%s' for CTA link → %s", context_name, full_url
@@ -243,13 +235,26 @@ class PortfolioDiscoveryStrategy(DataStrategyExecutor):
                             )
                             continue
 
+                # Internal detail-card text is often the heading concatenated with
+                # sector/location segments ("AclaraIndustrials & DistributionMissouri"
+                # on suncappart.com). When the card's context heading is a clean
+                # prefix of that blob, it's the real name — prefer it (it also keeps
+                # original casing/accents the slug would lose, e.g. "Albéa").
+                if (
+                    is_internal_portfolio
+                    and context_name
+                    and len(company_name) > len(context_name)
+                    and company_name.lower().startswith(context_name.lower())
+                ):
+                    company_name = context_name
+
                 # Internal detail links (/section/{slug}) carry the name in the
                 # slug while the anchor text is often a description. When the
                 # text-derived name is unusable (out of bounds), prefer the slug.
                 if is_internal_portfolio and not (
                     _MIN_COMPANY_NAME_LENGTH < len(company_name) < _MAX_COMPANY_NAME_LENGTH
                 ):
-                    slug_name = _name_from_detail_slug(full_url)
+                    slug_name = name_from_url_slug(full_url)
                     if slug_name:
                         company_name = slug_name
 

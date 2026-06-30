@@ -14,7 +14,7 @@ at two points:
 
 from __future__ import annotations
 
-from src.data_strategies.web_scraper_strategy import extract_name_from_url
+from src.data_strategies.scraper_names import extract_name_from_url
 
 # Names that must never reach a downstream AI prompt or the stored record.
 _PLACEHOLDER_NAMES = frozenset({"unknown", "n/a", "none", "null", "untitled"})

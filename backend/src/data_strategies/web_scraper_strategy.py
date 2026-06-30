@@ -17,6 +17,16 @@ from signalfield_core.data.strategy import DataStrategyExecutor
 
 from src.data_strategies.logo_grid_extractor import extract_logo_companies
 
+# Name-derivation helpers live in scraper_names (split out for file size); the
+# embedded-record parser below uses the shared length bounds, and the context
+# extractor uses the alt-label + img-filename helpers.
+from src.data_strategies.scraper_names import (
+    MAX_NAME_LENGTH,
+    MIN_NAME_LENGTH,
+    extract_name_from_img_src,
+    titlecase_words,
+)
+
 # Re-exported: the browser-impersonating transport (with retry) lives in
 # scraper_transport; callers/tests still reference it via this module.
 from src.data_strategies.scraper_transport import fetch_page_html
@@ -34,8 +44,6 @@ _MAX_TEXT_LENGTH = 20_000
 _MAX_SCRIPT_TEXT_LENGTH = 200_000
 _MIN_SCRIPT_JSON_PAIRS = 5  # skip code/analytics scripts with little JSON structure
 
-_LOGO_SUFFIX_RE = re.compile(r"[-_ ]?logo$", re.IGNORECASE)
-_FILENAME_TOKEN_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|[-_.\s]+")
 # Matches a structured company record embedded as JSON in a hydration script:
 # an adjacent ``"name":"…","slug":"…"`` pair, in both plain JSON and the
 # escaped/stringified form SSR frameworks emit (``\"name\":\"…\"``). Requiring
@@ -46,73 +54,6 @@ _FILENAME_TOKEN_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|[-_.\s]+")
 _EMBEDDED_RECORD_RE = re.compile(
     r'\\?"name\\?"\s*:\s*\\?"([^"\\]+)\\?"\s*,\s*\\?"slug\\?"\s*:\s*\\?"([^"\\]+)\\?"'
 )
-# Public — imported by :mod:`portfolio_discovery_strategy` so both the
-# discovery heuristic and the AI-derived name fallbacks apply identical bounds.
-MIN_NAME_LENGTH = 2
-MAX_NAME_LENGTH = 60
-
-
-def title_case_tokens(raw: str) -> str:  # noqa: NAMING001  (transform util, not a verb)
-    """Split a slug-like string on separators / camelCase and title-case."""
-    tokens = [t for t in _FILENAME_TOKEN_SPLIT_RE.split(raw) if t]
-    if not tokens:
-        return ""
-    return " ".join(t.capitalize() for t in tokens)
-
-
-def _extract_name_from_img_src(src: str) -> str:
-    """Derive a company name from an image URL's filename.
-
-    Best-effort: works well for kebab-case / snake_case / camelCase filenames
-    (``access-healthcare.png`` → ``Access Healthcare``). Single-token
-    lowercase filenames cannot be split and are returned title-cased as-is
-    (``accesshealthcare.png`` → ``Accesshealthcare``) — imperfect, but the
-    AI validation step and the user confirmation screen recover from this.
-    """
-    if not src:
-        return ""
-    # Strip query string / fragment and path, take basename
-    path = src.split("?", 1)[0].split("#", 1)[0]
-    basename = path.rsplit("/", 1)[-1]
-    # Drop extension
-    stem = basename.rsplit(".", 1)[0] if "." in basename else basename
-    # Strip trailing '-logo' / '_logo' / 'logo'
-    stem = _LOGO_SUFFIX_RE.sub("", stem)
-    name = title_case_tokens(stem)
-    if not (MIN_NAME_LENGTH < len(name) <= MAX_NAME_LENGTH):
-        return ""
-    return name
-
-
-def extract_name_from_url(url: str) -> str:
-    """Derive a company name from the target URL's hostname as a last resort.
-
-    Used by :mod:`portfolio_discovery_strategy` as the final fallback when
-    HTML offers no name signal at all.
-
-    ``https://www.endurancelift.com/`` → ``Endurancelift``.
-    Same single-token limitation as :func:`_extract_name_from_img_src`.
-    """
-    if not url:
-        return ""
-    parsed = urlparse(url if url.startswith("http") else f"https://{url}")
-    try:
-        host = (parsed.hostname or "").lower()
-    except ValueError:
-        # Malformed IPv6 literal (e.g., "https://[::1]:99999") — `.hostname`
-        # can raise on such inputs even though ``urlparse`` itself does not.
-        return ""
-    if not host:
-        return ""
-    if host.startswith("www."):
-        host = host[4:]
-    # Drop TLD (last dotted segment)
-    parts = host.rsplit(".", 1)
-    stem = parts[0] if len(parts) > 1 else host
-    name = title_case_tokens(stem)
-    if not (MIN_NAME_LENGTH < len(name) <= MAX_NAME_LENGTH):
-        return ""
-    return name
 
 
 def _extract_context_name(anchor: Any) -> str:
@@ -144,8 +85,8 @@ def _extract_context_name(anchor: Any) -> str:
             if img:
                 alt = (img.get("alt") or "").strip()
                 if alt and len(alt) > 2:  # noqa: PLR2004
-                    return alt.title()
-                src_name = _extract_name_from_img_src(img.get("src") or "")
+                    return titlecase_words(alt)
+                src_name = extract_name_from_img_src(img.get("src") or "")
                 if src_name:
                     return src_name
 

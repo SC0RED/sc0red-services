@@ -15,13 +15,15 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from src.data_strategies.scraper_names import MAX_NAME_LENGTH, MIN_NAME_LENGTH
+
 if TYPE_CHECKING:
     from bs4 import BeautifulSoup
 
-# Mirror MIN_NAME_LENGTH / MAX_NAME_LENGTH in web_scraper_strategy.py (duplicated
-# here to avoid a circular import — keep in sync if those bounds change).
-_MIN_LOGO_NAME = 2
-_MAX_LOGO_NAME = 60
+# Shared name-length bounds — single-sourced in scraper_names (a leaf module, so
+# no circular import). The same thresholds every discovery path applies.
+_MIN_LOGO_NAME = MIN_NAME_LENGTH
+_MAX_LOGO_NAME = MAX_NAME_LENGTH
 
 # "Logo of [the] [<descriptor words>] company {Name}" — the precise, high-signal
 # form. Allows multi-word descriptors ("cloud software company …"). Requiring the

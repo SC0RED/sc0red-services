@@ -176,7 +176,9 @@ class TestRequestExecutorAppSyncIntegration:
         )
 
     @patch("src.pipeline.appsync_notifier.notify_progress")
-    def test_mark_question_complete_skips_notify_for_unknown_key(self, mock_notify: MagicMock) -> None:
+    def test_mark_question_complete_skips_notify_for_unknown_key(
+        self, mock_notify: MagicMock
+    ) -> None:
         """Unknown question keys should not trigger notify_progress."""
         executor = Sc0redServicesRequestExecutor(
             tenant_id="tenant-1",
@@ -190,7 +192,9 @@ class TestRequestExecutorAppSyncIntegration:
         mock_notify.assert_not_called()
 
     @patch("src.pipeline.appsync_notifier.notify_progress")
-    def test_mark_question_complete_skips_notify_without_scan_id(self, mock_notify: MagicMock) -> None:
+    def test_mark_question_complete_skips_notify_without_scan_id(
+        self, mock_notify: MagicMock
+    ) -> None:
         """When scan_id is empty, notify_progress should not be called."""
         company_repo = MagicMock()
         executor = Sc0redServicesRequestExecutor(
@@ -233,6 +237,41 @@ class TestRequestExecutorAppSyncIntegration:
         mock_notify.assert_called_once()
         company_repo.update.assert_called_once()
         assert executor.is_question_complete("generate_strategy_map") is True
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_report_progress_pushes_interim_label(self, mock_notify: MagicMock) -> None:
+        """Interim free-text progress rides the AppSync channel with status=discovering."""
+        executor = Sc0redServicesRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            scan_id="scan-1",
+        )
+
+        executor.report_progress(8, "Querying the firm's data sources…")
+
+        mock_notify.assert_called_once_with(
+            scan_id="scan-1",
+            progress=8,
+            label="Querying the firm's data sources…",
+            status="discovering",
+            company_id="company-1",
+        )
+
+    @patch("src.pipeline.appsync_notifier.notify_progress")
+    def test_report_progress_noop_without_scan_id(self, mock_notify: MagicMock) -> None:
+        """No scan (standalone run / tests) → no push, and the scan record is
+        never the canonical source for these transient labels anyway."""
+        executor = Sc0redServicesRequestExecutor(
+            tenant_id="tenant-1",
+            request_id="company-1",
+            pipeline=[],
+            scan_id="",
+        )
+
+        executor.report_progress(6, "Reading the firm's portfolio page…")
+
+        mock_notify.assert_not_called()
 
 
 class TestFormatTimingValue:

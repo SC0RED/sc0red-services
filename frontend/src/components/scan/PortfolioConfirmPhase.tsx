@@ -4,7 +4,7 @@ import AddCompanyForm from '@/components/scan/AddCompanyForm'
 import CompanyListUpload from '@/components/scan/CompanyListUpload'
 import DiscoveryVerdictBanner from '@/components/scan/DiscoveryVerdictBanner'
 import ProvideSourceUrlForm from '@/components/scan/ProvideSourceUrlForm'
-import type { Company, CompanySource, DiscoveryVerdict } from '@/lib/types/scan'
+import type { Company, CompanySource, CompanyStatus, DiscoveryVerdict } from '@/lib/types/scan'
 import { hasAnalyzableUrl } from '@/lib/types/scan'
 
 interface PortfolioConfirmPhaseProps {
@@ -136,6 +136,7 @@ export default function PortfolioConfirmPhase({
                                 >
                                     {company.name}
                                     <SourceBadge source={company.source} />
+                                    <StatusBadge status={company.status} />
                                 </div>
                                 <div
                                     style={{
@@ -226,6 +227,28 @@ function SourceBadge({ source }: { source?: CompanySource }) {
         )
     }
     return null
+}
+
+// "Realized" (exited) holdings are surfaced but default-deselected (the analysis
+// targets the current portfolio). The badge explains why the row starts unchecked.
+function StatusBadge({ status }: { status?: CompanyStatus }) {
+    if (status !== 'realized') {
+        return null
+    }
+    return (
+        <span
+            style={{
+                fontSize: '0.6875rem',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0 0.375rem',
+                whiteSpace: 'nowrap',
+            }}
+        >
+            realized — exited
+        </span>
+    )
 }
 
 // Shown for scans with no persisted verdict (e.g. records created before the

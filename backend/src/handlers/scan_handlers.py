@@ -194,8 +194,8 @@ def _verdict_response(verdict: dict[str, Any] | None) -> dict[str, Any] | None:
     Returns ``None`` for scans created before the verdict existed. The first
     four keys are guaranteed by ``portfolio_merge.build_verdict``, so they are
     accessed directly — a missing key is a bug, not a default-to-empty case.
-    ``site_source_url`` is newer, so it is read with a default for verdicts
-    persisted before it existed.
+    ``site_source_url`` and ``delivery_mechanism`` are newer, so they are read
+    with a default for verdicts persisted before they existed.
     """
     if not verdict:
         return None
@@ -205,6 +205,9 @@ def _verdict_response(verdict: dict[str, Any] | None) -> dict[str, Any] | None:
         "completeness": verdict["completeness"],
         "availableActions": verdict["available_actions"],
         "siteSourceUrl": verdict.get("site_source_url", ""),
+        # How the firm delivered its list (newer; default for older verdicts).
+        # Lets the UI explain a thin/empty result. See classify_delivery_mechanism.
+        "deliveryMechanism": verdict.get("delivery_mechanism", ""),
     }
 
 

@@ -155,7 +155,8 @@ def find_new_candidates(
     ``candidates``), so the trusted source wins and ``acme.com`` / ``acme.in``
     twins collapse. A trusted entry is never dropped — only lower-confidence
     candidates are filtered. Each kept entry is emitted as
-    ``{name, url, description, source}``.
+    ``{name, url, description, source, status}`` (``status`` carried from the
+    candidate when set — the wp-json rung's current/realized tag — else "").
 
     The trusted index uses ``.get`` (a malformed trusted entry just doesn't
     contribute to dedup — graceful, never crashes the merge), while candidates
@@ -187,7 +188,15 @@ def find_new_candidates(
         if name_key:
             seen_names.add(name_key)
         fresh.append(
-            {"name": company["name"], "url": company["url"], "description": "", "source": source}
+            {
+                "name": company["name"],
+                "url": company["url"],
+                "description": "",
+                "source": source,
+                # Preserve current/realized status when the source set it (wp-json
+                # rung); "" for sources that don't (web search, sitemap, scrape).
+                "status": company.get("status", ""),
+            }
         )
     return fresh
 
@@ -200,6 +209,7 @@ def build_verdict(
     fallback_ran: bool,
     deepen_added: int | None = None,
     site_source_url: str = "",
+    mechanism: str = "",
 ) -> dict[str, Any]:
     """Summarise how discovery went, for a customer-facing message + next actions.
 
@@ -212,8 +222,9 @@ def build_verdict(
     - ``web_search_exhausted`` — a deepen round added nothing new; web search is
       tapped out, so point the customer at upload for completeness
     - ``genuinely_empty`` — nothing found anywhere
-    - ``full_site_list`` — reserved for results we have positive reason to believe
-      are complete; not emitted by the current signals (kept for legacy verdicts)
+    - ``full_site_list`` — results we have positive reason to believe are complete:
+      a ``structured_endpoint`` mechanism (the wp-json CPT / sitemap enumerated the
+      firm's whole portfolio). A plain scrape is never inferred complete.
 
     A non-zero site scrape is NOT inferred to be complete — escalation
     (search_deeper + upload_list) stays available for every completeness except a
@@ -229,6 +240,11 @@ def build_verdict(
         completeness, method = "web_search_exhausted", "web_search"
     elif fallback_ran and total > 0:
         completeness, method = "web_search_subset", "web_search"
+    elif mechanism == "structured_endpoint" and site_total > 0:
+        # A structured source (wp-json CPT / sitemap) enumerates the firm's WHOLE
+        # portfolio, so this is the authoritative full list — not a partial scrape
+        # we have to caveat. (Includes realized holdings, which the UI deselects.)
+        completeness, method = "full_site_list", "site"
     elif site_total > 0:
         completeness, method = "partial_site_list", "site"
     else:
@@ -248,4 +264,8 @@ def build_verdict(
         # The firm page we read site-derived companies from — the group-level
         # trust anchor the UI shows ("read from <site_source_url>").
         "site_source_url": site_source_url,
+        # How the firm delivered its list (see classify_delivery_mechanism) — lets
+        # the UI explain a thin/empty result (e.g. "renders client-side"). "" on
+        # deepen verdicts and legacy records.
+        "delivery_mechanism": mechanism,
     }

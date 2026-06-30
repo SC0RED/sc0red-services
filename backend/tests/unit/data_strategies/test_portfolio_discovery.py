@@ -186,6 +186,80 @@ class TestPortfolioDiscoveryStrategy:
         assert "Mega Corp" in names
         assert "Beta Labs" in names
 
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_internal_detail_links_prefer_slug_over_shared_context(self, mock_scrape):
+        # warburgpincus.com renders empty anchors plus a shared decorative
+        # "Border Green" context label on every card. The slug is the real
+        # identity and must win, so each company gets a distinct name, not three
+        # rows all named "Border Green".
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {
+                    "text": "",
+                    "href": "https://pefirm.com/investments/infoblox",
+                    "context_name": "Border Green",
+                },
+                {
+                    "text": "",
+                    "href": "https://pefirm.com/investments/intrafi-network",
+                    "context_name": "Border Green",
+                },
+                {
+                    "text": "",
+                    "href": "https://pefirm.com/investments/insilico-medicine",
+                    "context_name": "Border Green",
+                },
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = {c["name"] for c in meta["companies"]}
+        assert names == {"Infoblox", "Intrafi Network", "Insilico Medicine"}
+        assert "Border Green" not in names
+
+    @patch("src.data_strategies.portfolio_discovery_strategy.scrape_url")
+    def test_internal_detail_blob_text_uses_context_heading(self, mock_scrape):
+        # suncappart.com card text is the heading concatenated with sector +
+        # location ("AclaraIndustrials & DistributionMissouri"); the clean heading
+        # is captured as context_name. The heading (a prefix of the blob) wins —
+        # case-insensitively, so "ALSCO Metals Corporation…" → "Alsco Metals
+        # Corporation" — and accents are preserved (slug would lose them).
+        mock_scrape.return_value = {
+            "text": "content",
+            "title": "title",
+            "description": "",
+            "links": [
+                {
+                    "text": "AclaraIndustrials & DistributionMissouri",
+                    "href": "https://pefirm.com/portfolio/aclara",
+                    "context_name": "Aclara",
+                },
+                {
+                    "text": "AlbéaPackagingFrance",
+                    "href": "https://pefirm.com/portfolio/albea",
+                    "context_name": "Albéa",
+                },
+                {
+                    "text": "ALSCO Metals CorporationBuilding ProductsOhio",
+                    "href": "https://pefirm.com/portfolio/alsco-metals-corporation",
+                    "context_name": "Alsco Metals Corporation",
+                },
+            ],
+            "meta_keywords": "",
+        }
+
+        strategy = PortfolioDiscoveryStrategy(config={"url": "https://pefirm.com"})
+        _, meta = strategy.execute()
+
+        names = {c["name"] for c in meta["companies"]}
+        assert names == {"Aclara", "Albéa", "Alsco Metals Corporation"}
+
     def test_execute_adds_https_if_missing(self):
         with patch("src.data_strategies.portfolio_discovery_strategy.scrape_url") as mock_scrape:
             mock_scrape.return_value = {

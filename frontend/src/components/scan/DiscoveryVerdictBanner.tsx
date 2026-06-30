@@ -1,4 +1,9 @@
-import type { DiscoveryAction, DiscoveryCompleteness, DiscoveryVerdict } from '@/lib/types/scan'
+import type {
+    DeliveryMechanism,
+    DiscoveryAction,
+    DiscoveryCompleteness,
+    DiscoveryVerdict,
+} from '@/lib/types/scan'
 
 interface DiscoveryVerdictBannerProps {
     verdict: DiscoveryVerdict
@@ -57,6 +62,21 @@ const PRESENTATION: Record<DiscoveryCompleteness, VerdictPresentation> = {
     },
 }
 
+// delivery mechanism → an optional "why" hint, shown beneath the main message
+// for results the completeness taxonomy alone can't fully explain. Only the
+// mechanisms that change what the customer should *do* get a hint — the
+// self-evident successes (static_listing, structured_endpoint, embedded_json,
+// ai_extracted, site_listing) are already covered by the completeness message
+// and the siteSourceUrl anchor, so they're intentionally absent here.
+const MECHANISM_HINT: Partial<Record<DeliveryMechanism, string>> = {
+    opaque_shell:
+        'This firm appears to render its portfolio in the browser, so we couldn’t read it directly. Uploading the list or pointing us at the page that lists it works best here.',
+    unreachable:
+        'The firm’s site blocked our request this run, so anything below came from a web search and may be incomplete.',
+    no_portfolio_found:
+        'We loaded the page but found no portfolio section on it — the list may live on another page you can point us to.',
+}
+
 const ACTION_LABEL: Record<DiscoveryAction, string> = {
     upload_list: 'Upload a list',
     search_deeper: 'Search deeper',
@@ -75,6 +95,7 @@ export default function DiscoveryVerdictBanner({
     uploadOpen,
 }: DiscoveryVerdictBannerProps) {
     const presentation = PRESENTATION[verdict.completeness]
+    const mechanismHint = verdict.deliveryMechanism ? MECHANISM_HINT[verdict.deliveryMechanism] : undefined
     const positive = presentation.tone === 'positive'
     const accent = positive ? 'var(--risk-low)' : 'var(--risk-medium)'
     const accentBg = positive ? 'var(--risk-low-bg)' : 'var(--risk-medium-bg)'
@@ -110,6 +131,17 @@ export default function DiscoveryVerdictBanner({
                     >
                         {presentation.message(currentCount)}
                     </div>
+                    {mechanismHint && (
+                        <div
+                            style={{
+                                color: 'var(--text-secondary)',
+                                fontSize: '0.8125rem',
+                                marginTop: '0.5rem',
+                            }}
+                        >
+                            {mechanismHint}
+                        </div>
+                    )}
                     {verdict.siteSourceUrl && (
                         <div
                             style={{

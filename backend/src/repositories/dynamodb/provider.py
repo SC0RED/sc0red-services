@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.repositories.dynamodb.assessment_repository import DynamoDBAssessmentRepository
 from src.repositories.dynamodb.client import DynamoDBTable
 from src.repositories.dynamodb.company_repository import DynamoDBCompanyRepository
+from src.repositories.dynamodb.discovery_cache_repository import DiscoveryCacheRepository
 from src.repositories.dynamodb.scan_repository import DynamoDBScanRepository
 from src.repositories.dynamodb.user_repository import (
     DynamoDBInvitationRepository,
@@ -35,6 +36,10 @@ class DynamoDBStorageProvider:
     def create_scan_repository(self) -> DynamoDBScanRepository:
         """Return a new DynamoDBScanRepository backed by the shared table."""
         return DynamoDBScanRepository(self._table)
+
+    def create_discovery_cache_repository(self) -> DiscoveryCacheRepository:
+        """Return a new DiscoveryCacheRepository backed by the shared table."""
+        return DiscoveryCacheRepository(self._table)
 
     def create_user_repository(self) -> DynamoDBUserRepository:
         """Return a new DynamoDBUserRepository backed by the shared table."""
