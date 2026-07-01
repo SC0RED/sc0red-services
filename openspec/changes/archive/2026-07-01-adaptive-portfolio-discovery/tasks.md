@@ -1,8 +1,21 @@
 # Tasks — Adaptive portfolio discovery (classifier + routing)
 
-**Status: backlog / not scheduled.** Task 0 (spike) is **done** — see design.md.
-Build order below reflects what the spike proved: the two deterministic rungs
-(wp-json CPT + sitemap) carry nearly all firms; headless is a speculative tail.
+**Status: SHIPPED to production 2026-06-30, archived 2026-07-01.** Delivered via
+PRs #460–#473; live in dev/testing/production; smoke-tested on dev + testing (GA
+19→~419, Insight 847, Kohlberg 55 read `full_site_list`; names clean). The
+checkboxes below predate delivery and are left as-authored — final state:
+- Tasks 1, 2 (wp-json + sitemap rungs), 5 (mechanism-aware verdict), 6 (realized
+  filter), 7 (background progress), 8 (per-domain cache), 9 (tests + E2E) — **DONE**.
+- Tasks 3, 4 (a separate triage routine + self-classifying ladder) — **superseded**:
+  rather than a pre-fetch classifier, the shipped design ALWAYS runs the deterministic
+  structured rungs for a PE firm (additive, deduped) and classifies the mechanism
+  *post-hoc* from which path bore fruit. Simpler and covers the spike corpus; no
+  separate triage router was needed.
+- Task 10 (egress-IP mitigation) — **deferred** (measure-first; the verdict already
+  routes IP-blocked firms to upload/source-URL). Carry forward as future work.
+
+Original build order below reflects what the spike proved: the two deterministic
+rungs (wp-json CPT + sitemap) carry nearly all firms; headless is a speculative tail.
 
 - [x] 0. **Spike: empirical mechanism distribution.** Done (n=19 PE/VC firms).
   Result: 0/17 reachable firms needed a browser; `wp-json` CPT discovery + `sitemap`
