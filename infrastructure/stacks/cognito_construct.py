@@ -139,7 +139,21 @@ class CognitoConstruct(Construct):
             account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
             # MFA — off for now, designed for future TOTP enablement
             mfa=cognito.Mfa.OFF,
-            # Email configuration — use Cognito default (SES for production later)
+            # Email configuration — Cognito default sender for now. The default
+            # (no-reply@verificationemail.com) lands in spam for many recipients,
+            # which breaks the forgot-password flow (SPE-2150). The fix is to send
+            # via SES from a DKIM'd sc0red.com address, e.g.:
+            #     email=cognito.UserPoolEmail.with_ses(
+            #         from_email="no-reply@sc0red.com",
+            #         from_name="sc0red Services",
+            #         ses_region="us-east-2",
+            #         ses_verified_domain="sc0red.com",
+            #     )
+            # BLOCKED: the production account (950743373172) is still in the SES
+            # sandbox — switching to SES there would only deliver to verified
+            # addresses, breaking resets for everyone else. Enable once SES
+            # production access is granted (same in-flight case as the trial
+            # check-in emails); the sc0red.com identity is already DKIM-verified.
             user_verification=cognito.UserVerificationConfig(
                 email_subject="sc0red Services — Verify your email",
                 email_body="Your sc0red Services verification code is {####}",
