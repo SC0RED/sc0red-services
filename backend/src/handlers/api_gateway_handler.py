@@ -148,6 +148,10 @@ class APIGatewayHandler:
                 {
                     "appsyncEndpoint": os.environ.get("APPSYNC_ENDPOINT", ""),
                     "appsyncApiKey": os.environ.get("APPSYNC_API_KEY", ""),
+                    # The customer's MCP server URL, for the self-serve Connect
+                    # page. "" when no custom domain is configured (dev/local) →
+                    # the page shows its "unavailable" state.
+                    "mcpServerUrl": os.environ.get("MCP_SERVER_URL", ""),
                 }
             ),
         )
