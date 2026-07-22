@@ -1526,6 +1526,7 @@ class TestConfigEndpoint:
         {
             "APPSYNC_ENDPOINT": "https://appsync.example.com/graphql",
             "APPSYNC_API_KEY": "da2-fakekey123",
+            "MCP_SERVER_URL": "https://mcp.prod.services.sc0red.ai/mcp",
         },
     )
     def test_returns_appsync_config_from_env(self, mock_authentication):
@@ -1542,6 +1543,7 @@ class TestConfigEndpoint:
         body = json.loads(result["body"])
         assert body["appsyncEndpoint"] == "https://appsync.example.com/graphql"
         assert body["appsyncApiKey"] == "da2-fakekey123"
+        assert body["mcpServerUrl"] == "https://mcp.prod.services.sc0red.ai/mcp"
 
     @patch("src.handlers.api_gateway_handler.require_authentication")
     @patch.dict("os.environ", {}, clear=False)
@@ -1552,6 +1554,7 @@ class TestConfigEndpoint:
 
         os.environ.pop("APPSYNC_ENDPOINT", None)
         os.environ.pop("APPSYNC_API_KEY", None)
+        os.environ.pop("MCP_SERVER_URL", None)
 
         handler, _ = self._make_handler()
         result = handler.handle(
@@ -1565,6 +1568,7 @@ class TestConfigEndpoint:
         body = json.loads(result["body"])
         assert body["appsyncEndpoint"] == ""
         assert body["appsyncApiKey"] == ""
+        assert body["mcpServerUrl"] == ""
 
     def test_config_endpoint_requires_auth(self):
         handler, _ = self._make_handler()

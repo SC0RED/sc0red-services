@@ -245,6 +245,11 @@ class Sc0redServicesStack(Stack):
                 marketing_url=marketing_url,
             )
 
+        # `or ""` (not a str() coercion) so an explicit None stays falsy instead
+        # of becoming the truthy string "None". Single source of truth for the
+        # MCP host — reused below to expose the server URL to the web app.
+        mcp_domain = str(config.get("mcp_domain") or "")
+
         _mcp = MCPConstruct(
             self,
             "MCP",
@@ -257,10 +262,17 @@ class Sc0redServicesStack(Stack):
             cognito_client_id=cognito.app_client_id,
             analysis_queue=queue,
             frontend_domain=frontend_domain,
-            # `or ""` (not a str() coercion) so an explicit None stays falsy
-            # instead of becoming the truthy string "None".
-            mcp_domain=str(config.get("mcp_domain") or ""),
+            mcp_domain=mcp_domain,
             mcp_certificate_arn=str(config.get("mcp_certificate_arn") or ""),
+        )
+
+        # Surface the MCP server URL to the web app's /api/config so the Connect
+        # page can show the real per-environment address. Same mcp_domain that
+        # configures the custom domain above (no second, drifting value). Empty
+        # when no custom domain is configured → the page renders its "unavailable"
+        # state rather than a wrong endpoint.
+        api_handler.add_environment(
+            "MCP_SERVER_URL", f"https://{mcp_domain}/mcp" if mcp_domain else ""
         )
 
         worker_handler.add_event_source(

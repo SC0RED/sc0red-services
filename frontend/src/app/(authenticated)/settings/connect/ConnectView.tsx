@@ -1,24 +1,31 @@
 'use client'
 
-import Link from 'next/link'
 import { useState } from 'react'
 
 import { useToast } from '@/components/ui'
 import type { ConnectedApp } from '@/lib/types/api'
+import { isValidMcpUrl } from '@/lib/utils/mcp'
+
+import ClientSetup from './ClientSetup'
+import ServerAddress from './ServerAddress'
 
 /**
- * Connected Apps settings view — lists the AI assistants the user has connected
- * (their OAuth consents) and lets them disconnect one. Disconnect is optimistic
- * with an undo window (matching the team member-removal pattern); the actual
- * DELETE fires when the undo window closes.
- *
- * Revoking a connection removes the user's consent, so the app must re-approve
- * on its next connection. An already-issued access token keeps working until it
- * expires (within an hour).
+ * Connect page — one place to connect an AI assistant to sc0red Services over
+ * MCP and manage what's connected: address → set it up → manage. OAuth-only
+ * ("Sign in with sc0red"); there is no API-key path. Composes the server-address
+ * block and per-client setup, then the customer's OAuth-consent list with
+ * disconnect (optimistic + undo, matching the team member-removal pattern).
  */
-export default function ConnectedAppsView({ initialApps }: { initialApps: ConnectedApp[] }) {
+export default function ConnectView({
+    mcpServerUrl,
+    initialApps,
+}: {
+    mcpServerUrl: string
+    initialApps: ConnectedApp[]
+}) {
     const toast = useToast()
     const [apps, setApps] = useState(initialApps)
+    const available = isValidMcpUrl(mcpServerUrl)
 
     function handleDisconnect(clientId: string, clientName: string) {
         const target = apps.find((app) => app.client_id === clientId)
@@ -38,29 +45,28 @@ export default function ConnectedAppsView({ initialApps }: { initialApps: Connec
                     setApps((prev) => [...prev, target])
                 }
             },
-            onUndo: () => {
-                setApps((prev) => [...prev, target])
-            },
+            onUndo: () => setApps((prev) => [...prev, target]),
         })
     }
 
     return (
         <div style={{ maxWidth: '720px' }}>
             <header style={{ marginBottom: '2rem' }}>
-                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                    Connected Apps
-                </h1>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>Connect</h1>
                 <p style={{ color: 'var(--text-secondary)' }}>
-                    AI assistants you&rsquo;ve connected to sc0red Services. Disconnecting one requires it to
-                    ask for your approval again the next time it connects.
+                    Add sc0red Services as a tool in Claude Desktop, Cursor, or any MCP-compatible app —
+                    query your portfolio, scans, and risk analyses right from your assistant.
                 </p>
             </header>
 
-            <section className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <ServerAddress url={available ? mcpServerUrl : ''} available={available} />
+            <ClientSetup url={available ? mcpServerUrl : ''} available={available} />
+
+            <section className="card" style={{ padding: '1.5rem' }}>
+                <h2 style={SECTION_HEADING}>Connected apps</h2>
                 {apps.length === 0 ? (
                     <p style={{ color: 'var(--text-tertiary)', fontSize: '0.9375rem' }}>
-                        No connected apps yet. Connect an AI assistant to query your portfolio over MCP — see
-                        &ldquo;How to connect&rdquo; below.
+                        Nothing connected yet — follow the steps above, then your assistant appears here.
                     </p>
                 ) : (
                     <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -102,49 +108,19 @@ export default function ConnectedAppsView({ initialApps }: { initialApps: Connec
                         ))}
                     </ul>
                 )}
-            </section>
-
-            <section className="card" style={{ padding: '1.5rem' }}>
-                <h2
-                    style={{
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        marginBottom: '0.75rem',
-                    }}
-                >
-                    How to connect
-                </h2>
-                <ol
-                    style={{
-                        margin: 0,
-                        paddingLeft: '1.25rem',
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.9375rem',
-                        lineHeight: 1.7,
-                    }}
-                >
-                    <li>
-                        In your AI assistant, add an MCP server using the <strong>Streamable HTTP</strong>{' '}
-                        transport.
-                    </li>
-                    <li>
-                        Use your sc0red Services MCP server URL (ending in <code>/mcp</code>) — ask your
-                        administrator if you don&rsquo;t have it.
-                    </li>
-                    <li>
-                        Approve the connection on the consent screen. It will then appear in the list above,
-                        and you can disconnect it here any time.
-                    </li>
-                </ol>
-                <p style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
-                    <Link href="/settings" style={{ color: 'var(--accent)' }}>
-                        ← Back to settings
-                    </Link>
+                <p style={{ marginTop: '1rem', fontSize: '0.8125rem', color: 'var(--text-tertiary)' }}>
+                    Disconnecting an app requires it to ask for your approval again the next time it connects.
                 </p>
             </section>
         </div>
     )
+}
+
+const SECTION_HEADING = {
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    marginBottom: '0.75rem',
 }

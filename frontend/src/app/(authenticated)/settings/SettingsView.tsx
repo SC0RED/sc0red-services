@@ -123,7 +123,7 @@ export default function SettingsView() {
                 />
             </Section>
 
-            <Section title="Connected Apps">
+            <Section title="Connect">
                 <p
                     style={{
                         fontSize: '0.8125rem',
@@ -131,11 +131,11 @@ export default function SettingsView() {
                         marginBottom: '0.75rem',
                     }}
                 >
-                    Manage the AI assistants connected to sc0red Services over MCP — review what you&rsquo;ve
-                    connected and disconnect any you no longer use.
+                    Connect an AI assistant (Claude Desktop, Cursor, and more) to sc0red Services over MCP —
+                    get your server address and setup steps, and manage what&rsquo;s connected.
                 </p>
-                <Link href="/settings/connected-apps" className="btn btn-ghost btn-sm">
-                    Manage connected apps
+                <Link href="/settings/connect" className="btn btn-ghost btn-sm">
+                    Connect an assistant
                 </Link>
             </Section>
 
