@@ -2,7 +2,7 @@
 
 - [x] 1.1 **Single source of truth**: derive `mcpServerUrl` from the CDK output that already defines the branded MCP domain per environment (do NOT introduce a second, hand-maintained env var that could drift). Wire that one value into the config source `/api/config` reads.
 - [x] 1.2 Add `mcpServerUrl` to the `/api/config` response payload + its frontend config type.
-- [x] 1.3 Validate the value at the config boundary: assert it is an `https://…/mcp` URL and matches the expected `mcp.{dev,test,prod}.services.sc0red.ai/mcp` shape for the running environment; an unexpected/missing value surfaces as the unavailable state (task 2.2), never a wrong endpoint.
+- [x] 1.3 Validate the value at the page boundary (`isValidMcpUrl`): require a well-formed `https://…/mcp` URL; anything missing/empty/malformed surfaces as the unavailable state (task 2.2), never a wrong endpoint. (Host-pattern matching against `mcp.{dev,test,prod}.…` was intentionally NOT added — the value is single-sourced from the CDK `mcp_domain`, so the `https`+`/mcp` shape check is sufficient; a per-env host allowlist would just duplicate the CDK config.)
 - [x] 1.4 Tests: `/api/config` includes `mcpServerUrl`; per-environment mapping resolves the correct host; a missing/empty/non-`/mcp` value is treated as unavailable (drives the disabled-controls state), not rendered blank or as "ask an administrator".
 
 ## 2. Connect page shell + server-address section
@@ -29,7 +29,7 @@
 ## 5. Verify + ship
 
 - [x] 5.1 `cd frontend && npm run lint && npx tsc --noEmit && npm test` — all green; components within size limits.
-- [ ] 5.2 Backend (if config plumbing touches Python): `ruff check` + `ruff format` + naming validator + `pytest` ≥ 95%.
+- [x] 5.2 Backend (if config plumbing touches Python): `ruff check` + `ruff format` + naming validator + `pytest` ≥ 95%.
 - [ ] 5.3 Manually verify on dev: the page shows the dev address, Claude Desktop + Cursor walkthroughs connect via OAuth, the assistant appears in the connected list, and Disconnect revokes it.
 - [ ] 5.4 Branch → PR → E2E → merge approval (never commit to `development` directly).
 
