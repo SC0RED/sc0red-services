@@ -45,7 +45,7 @@ The page cannot exist without the frontend knowing the URL. Add a `mcpServerUrl`
 ### ChatGPT: hedged pointer, not a walkthrough (spike result)
 A spike (July 2026) confirmed custom remote MCP in ChatGPT **does work** — via **Developer Mode**, with OAuth and full read+write tool calling. But:
 1. It is **beta** (OpenAI and a Sep-2025 Auth0 walkthrough both label Developer Mode beta).
-2. It is **gated to Plus/Pro** (and Business/Enterprise) — not Free.
+2. It is **gated to paid plans** (Pro / Business / Enterprise / Edu — not Free), and the exact tier list has shifted over time, so we don't pin a specific set in the UI.
 3. The enable path is **UI-unstable**: OpenAI's docs say *Settings → Security and login*, the Auth0 walkthrough says *Settings → Connectors → Advanced*, and "connectors" was renamed "apps" in Dec 2025.
 
 A hard-coded step-by-step would go stale within a release or two and only helps paid users who flip a beta toggle — a poor fit for a page whose value is a clean, trustworthy walkthrough. **Decision:** ChatGPT gets a single honest sentence ("beta; on Plus/Pro enable Developer Mode, add the address above, sign in with sc0red") plus a link to OpenAI's Developer Mode guide. A full ChatGPT tab is a fast-follow once it exits beta / the UI settles.

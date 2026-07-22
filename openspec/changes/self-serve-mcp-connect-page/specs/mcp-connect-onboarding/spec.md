@@ -12,6 +12,10 @@ The web app SHALL provide an authenticated Connect page (under Settings) that di
 - **WHEN** the Connect page renders
 - **THEN** it shows the real configured `mcpServerUrl` and never instructs the customer to obtain the URL from an administrator
 
+#### Scenario: Missing or invalid configuration shows a clear unavailable state
+- **WHEN** `mcpServerUrl` is absent from `/api/config`, or is not a valid `https://…/mcp` URL
+- **THEN** the page renders a clear "server address unavailable" state, disables the URL-dependent controls (Copy, and any snippet whose value embeds the URL), and does NOT show a blank/broken address or fall back to "ask an administrator"
+
 ### Requirement: The Connect page provides per-client OAuth setup instructions
 
 The Connect page SHALL provide setup instructions grouped by AI-assistant client. Claude Desktop and Cursor SHALL each have a full walkthrough that uses the OAuth ("Sign in with sc0red") flow, and Cursor SHALL include a copy-able remote-MCP configuration snippet templated on the current `mcpServerUrl`. All instructions SHALL describe OAuth as the connection method; the page MUST NOT present an API-key or other long-lived-token method (unsupported).

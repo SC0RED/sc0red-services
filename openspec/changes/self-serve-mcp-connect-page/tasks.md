@@ -1,9 +1,9 @@
 ## 1. Surface the MCP server address (keystone)
 
-- [ ] 1.1 Add a per-environment `MCP_SERVER_URL` (or reuse the CDK output for the branded MCP domain) and wire it into the config source that `/api/config` reads.
+- [ ] 1.1 **Single source of truth**: derive `mcpServerUrl` from the CDK output that already defines the branded MCP domain per environment (do NOT introduce a second, hand-maintained env var that could drift). Wire that one value into the config source `/api/config` reads.
 - [ ] 1.2 Add `mcpServerUrl` to the `/api/config` response payload + its frontend config type.
-- [ ] 1.3 Confirm each environment (dev / testing / production) resolves its own correct address (`mcp.{dev,test,prod}.services.sc0red.ai/mcp`).
-- [ ] 1.4 Tests: `/api/config` includes `mcpServerUrl`; missing/empty value degrades gracefully (page still renders, address block shows a clear "unavailable" state rather than a blank).
+- [ ] 1.3 Validate the value at the config boundary: assert it is an `https://…/mcp` URL and matches the expected `mcp.{dev,test,prod}.services.sc0red.ai/mcp` shape for the running environment; an unexpected/missing value surfaces as the unavailable state (task 2.2), never a wrong endpoint.
+- [ ] 1.4 Tests: `/api/config` includes `mcpServerUrl`; per-environment mapping resolves the correct host; a missing/empty/non-`/mcp` value is treated as unavailable (drives the disabled-controls state), not rendered blank or as "ask an administrator".
 
 ## 2. Connect page shell + server-address section
 
