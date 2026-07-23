@@ -111,9 +111,11 @@ export default function ForgotPasswordPage() {
                                     fontSize: '0.875rem',
                                 }}
                             >
-                                Check your email for a verification code. If you do not see it
-                                within a minute, check your spam or junk folder — the code is sent
-                                from <strong>no-reply@verificationemail.com</strong>.
+                                If an account exists for this email, it will receive a
+                                verification code. If you do not see it within a minute, check
+                                your spam or junk folder — the code is sent from{' '}
+                                <strong>no-reply@verificationemail.com</strong> — and make sure
+                                you entered the email address you signed up with.
                             </p>
                             <div className="input-group" style={{ marginBottom: '1rem' }}>
                                 <label className="label" htmlFor="code">

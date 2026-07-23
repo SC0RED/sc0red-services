@@ -66,7 +66,10 @@ describe('GlobalError (error.tsx)', () => {
         const error = new Error('Token expired')
         render(<GlobalError error={error} reset={vi.fn()} />)
 
-        expect(screen.getByText('Session expired')).toBeInTheDocument()
+        // Honest copy: the boundary fires on ANY error while a session exists
+        // (backend outages included), so it must not diagnose "Session expired".
+        expect(screen.getByText('Something went wrong')).toBeInTheDocument()
+        expect(screen.getByText(/not\s+your password/i)).toBeInTheDocument()
         expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: '/login' })
 
         // Reset for other tests
