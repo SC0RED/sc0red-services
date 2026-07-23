@@ -1,10 +1,11 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import { CommandPalette } from '@/components/ui/CommandPalette'
 import { KeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal'
+import { useShortcutsUi } from '@/components/ui/ShortcutsUi'
 
 /**
  * Global keyboard shortcut handler — Tier 1 §5.
@@ -28,6 +29,7 @@ const NAV_CHORDS: Record<string, string> = {
     s: '/scan/new',
     t: '/team',
     c: '/settings',
+    i: '/connect',
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -41,8 +43,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export default function GlobalShortcuts() {
     const router = useRouter()
     const pathname = usePathname()
-    const [paletteOpen, setPaletteOpen] = useState(false)
-    const [shortcutsOpen, setShortcutsOpen] = useState(false)
+    // Open-state is shared via context so the sidebar footer affordance and the
+    // palette's "Keyboard shortcuts" action can open these too; this component
+    // still owns the key bindings, Esc precedence, and renders the modals.
+    const { paletteOpen, shortcutsOpen, setPaletteOpen, setShortcutsOpen } = useShortcutsUi()
 
     // `g`-prefix chord state. We use a ref instead of useState because
     // the keydown handler reads/writes from inside an event listener
@@ -65,7 +69,7 @@ export default function GlobalShortcuts() {
             // in an input (matches macOS/SaaS convention).
             if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
                 event.preventDefault()
-                setPaletteOpen((prev) => !prev)
+                setPaletteOpen(!paletteOpen)
                 return
             }
 
@@ -130,7 +134,7 @@ export default function GlobalShortcuts() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [paletteOpen, shortcutsOpen, pathname, router, resetChord])
+    }, [paletteOpen, shortcutsOpen, setPaletteOpen, setShortcutsOpen, pathname, router, resetChord])
 
     // Reset chord state on unmount (cleanup safety)
     useEffect(() => () => resetChord(), [resetChord])

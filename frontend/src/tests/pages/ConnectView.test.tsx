@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 import { renderWithProviders as render } from '@/tests/test-utils'
 
-import ConnectView from '@/app/(authenticated)/settings/connect/ConnectView'
+import ConnectView from '@/app/(authenticated)/connect/ConnectView'
 
 const URL = 'https://mcp.prod.services.sc0red.ai/mcp'
 // Names deliberately avoid the tab labels (Claude Desktop / Cursor) so getByText

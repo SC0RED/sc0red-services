@@ -3,11 +3,18 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
+import { useEffect, useState } from 'react'
 
 import ActivityPanel from '@/components/ActivityPanel'
 import navItems from '@/components/sidebar/navItems'
+import SidebarFooter from '@/components/sidebar/SidebarFooter'
 import { useMobileMenu } from '@/lib/hooks/useMobileMenu'
+
+// One-time "New" awareness pill on the Connect entry: shown until the user has
+// visited /connect once (per-device, via localStorage). A muted nudge that
+// doesn't nag — it clears on first visit and never returns on this device.
+export const CONNECT_SEEN_KEY = 'sc0red-services.connect-seen'
 
 // Per-env marketing site root, baked in at build time by the Amplify
 // branch env var (see infrastructure/stacks/sc0red_services_stack.py).
@@ -26,6 +33,18 @@ export default function DashboardSidebar() {
         hamburgerRef,
         closeRef,
     } = useMobileMenu()
+
+    // Show the Connect "New" pill until the user's first visit to /connect.
+    const [connectSeen, setConnectSeen] = useState(true) // assume seen until proven otherwise (no flash)
+    useEffect(() => {
+        setConnectSeen(localStorage.getItem(CONNECT_SEEN_KEY) === '1')
+    }, [])
+    useEffect(() => {
+        if (pathname.startsWith('/connect') && !connectSeen) {
+            localStorage.setItem(CONNECT_SEEN_KEY, '1')
+            setConnectSeen(true)
+        }
+    }, [pathname, connectSeen])
 
     return (
         <>
@@ -183,7 +202,23 @@ export default function DashboardSidebar() {
                                     }}
                                 >
                                     {item.icon}
-                                    {item.label}
+                                    <span style={{ flex: 1 }}>{item.label}</span>
+                                    {item.href === '/connect' && !connectSeen && (
+                                        <span
+                                            style={{
+                                                fontSize: '0.625rem',
+                                                fontWeight: 600,
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.04em',
+                                                padding: '0.05rem 0.35rem',
+                                                borderRadius: '999px',
+                                                color: 'var(--accent-blue)',
+                                                background: 'rgba(59,123,246,0.12)',
+                                            }}
+                                        >
+                                            New
+                                        </span>
+                                    )}
                                 </Link>
                             )
                         })}
@@ -230,74 +265,7 @@ export default function DashboardSidebar() {
                     </div>
                 </nav>
 
-                {/* User footer */}
-                <div style={{ padding: '0.75rem 0.5rem', borderTop: '1px solid var(--border-subtle)' }}>
-                    <div
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.625rem',
-                            padding: '0.5rem 0.75rem',
-                            borderRadius: 'var(--radius-md)',
-                        }}
-                    >
-                        <div
-                            style={{
-                                width: '30px',
-                                height: '30px',
-                                borderRadius: '50%',
-                                flexShrink: 0,
-                                background: 'linear-gradient(135deg, var(--accent-blue), var(--accent-cyan))',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                color: '#fff',
-                            }}
-                        >
-                            {session?.user?.name?.[0]?.toUpperCase() || 'U'}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <div className="truncate" style={{ fontSize: '0.8125rem', fontWeight: 500 }}>
-                                {session?.user?.name || 'User'}
-                            </div>
-                            <div
-                                className="truncate"
-                                style={{ fontSize: '0.6875rem', color: 'var(--text-tertiary)' }}
-                            >
-                                {session?.user?.email}
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => signOut({ callbackUrl: '/login' })}
-                            style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--text-tertiary)',
-                                cursor: 'pointer',
-                                padding: '4px',
-                            }}
-                            title="Sign out"
-                            aria-label="Sign out"
-                        >
-                            <svg
-                                width="15"
-                                height="15"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                                <polyline points="16 17 21 12 16 7" />
-                                <line x1="21" y1="12" x2="9" y2="12" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
+                <SidebarFooter />
             </aside>
         </>
     )
