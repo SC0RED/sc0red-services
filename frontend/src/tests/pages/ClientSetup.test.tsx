@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 import { renderWithProviders as render } from '@/tests/test-utils'
 
-import ClientSetup from '@/app/(authenticated)/settings/connect/ClientSetup'
+import ClientSetup from '@/app/(authenticated)/connect/ClientSetup'
 
 const URL = 'https://mcp.prod.services.sc0red.ai/mcp'
 

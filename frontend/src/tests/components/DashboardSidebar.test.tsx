@@ -1,5 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
+
+import { renderWithProviders as render } from '@/tests/test-utils'
 
 const mockSignOut = vi.fn()
 
@@ -14,11 +16,12 @@ vi.mock('next/navigation', () => ({
     usePathname: () => '/dashboard',
 }))
 
-import DashboardSidebar from '@/components/DashboardSidebar'
+import DashboardSidebar, { CONNECT_SEEN_KEY } from '@/components/DashboardSidebar'
 
 describe('DashboardSidebar', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        localStorage.clear()
     })
 
     it('renders navigation links', () => {
@@ -28,6 +31,24 @@ describe('DashboardSidebar', () => {
         expect(screen.getAllByText('New Scan').length).toBeGreaterThanOrEqual(1)
         expect(screen.getByText('Analyses')).toBeInTheDocument()
         expect(screen.getByText('Settings')).toBeInTheDocument()
+    })
+
+    it('has a top-level Connect AI entry linking to /connect', () => {
+        render(<DashboardSidebar />)
+        const link = screen.getByText('Connect AI').closest('a')
+        expect(link).toHaveAttribute('href', '/connect')
+    })
+
+    it('shows a "New" pill on Connect until it has been visited', async () => {
+        render(<DashboardSidebar />)
+        // localStorage empty → pill appears after the mount effect reads it.
+        expect(await screen.findByText('New')).toBeInTheDocument()
+    })
+
+    it('hides the "New" pill once /connect has been visited', () => {
+        localStorage.setItem(CONNECT_SEEN_KEY, '1')
+        render(<DashboardSidebar />)
+        expect(screen.queryByText('New')).not.toBeInTheDocument()
     })
 
     it('links have correct href values', () => {
