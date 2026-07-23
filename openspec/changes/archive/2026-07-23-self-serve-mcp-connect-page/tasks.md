@@ -30,8 +30,8 @@
 
 - [x] 5.1 `cd frontend && npm run lint && npx tsc --noEmit && npm test` — all green; components within size limits.
 - [x] 5.2 Backend (if config plumbing touches Python): `ruff check` + `ruff format` + naming validator + `pytest` ≥ 95%.
-- [ ] 5.3 Manually verify on dev: the page shows the dev address, Claude Desktop + Cursor walkthroughs connect via OAuth, the assistant appears in the connected list, and Disconnect revokes it.
-- [ ] 5.4 Branch → PR → E2E → merge approval (never commit to `development` directly).
+- [x] 5.3 Manually verify on dev: the page shows the dev address, Claude Desktop + Cursor walkthroughs connect via OAuth, the assistant appears in the connected list, and Disconnect revokes it.
+- [x] 5.4 Branch → PR → E2E → merge approval (never commit to `development` directly).
 
 ## 6. Future work (out of scope for this change)
 
