@@ -76,7 +76,13 @@ jobs:
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
-          AI_PROVIDER: openai
+          # AI_PROVIDER=openai took the production API down on every request:
+          # the PROD_OPENAI_API_KEY secret was never created, so the backend's
+          # fail-fast (OPENAI_API_KEY must be set when AI_PROVIDER=openai)
+          # 502'd all traffic from the 6/30 deploy until 7/23. Keep anthropic
+          # (its key exists and works) until a real PROD_OPENAI_API_KEY secret
+          # is created — only then flip this back to openai.
+          AI_PROVIDER: anthropic
         run: |
           cd infrastructure
           CDK_ENVIRONMENT=production \
