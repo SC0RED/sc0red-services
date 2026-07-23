@@ -34,12 +34,19 @@ export default function GlobalError({
                     padding: '2rem',
                 }}
             >
+                {/* Honest copy: this boundary fires on ANY page error while a
+                    session exists (including backend outages), so it must not
+                    diagnose "session expired" — that sent users chasing password
+                    resets during a 502 outage. State what we know: the page
+                    failed and we're signing out for a clean retry. */}
                 <div className="card" style={{ padding: '3rem', textAlign: 'center', maxWidth: '480px' }}>
                     <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                        Session expired
+                        Something went wrong
                     </h1>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
-                        Redirecting to login...
+                        We couldn&apos;t load this page. Redirecting to login so you can try
+                        again — if this keeps happening, the problem is on our side, not
+                        your password.
                     </p>
                 </div>
             </div>
