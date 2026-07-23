@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react'
 import type { AnalysisItem, ScanItem } from '@/lib/types/api'
 import { prettifyUrl } from '@/lib/utils/url'
 
+import { useShortcutsUi } from './ShortcutsUi'
+
 /**
  * Cmd-K command palette — Tier 1 §5.
  *
@@ -27,6 +29,7 @@ import { prettifyUrl } from '@/lib/utils/url'
  */
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     const router = useRouter()
+    const { openShortcuts } = useShortcutsUi()
     const [analyses, setAnalyses] = useState<AnalysisItem[]>([])
     const [scans, setScans] = useState<ScanItem[]>([])
     const [loaded, setLoaded] = useState(false)
@@ -148,9 +151,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                         />
                         <PaletteAction value="team" label="Team" onSelect={() => navigate('/team')} />
                         <PaletteAction
+                            value="connect ai mcp"
+                            label="Connect AI"
+                            hint="Connect an assistant over MCP"
+                            onSelect={() => navigate('/connect')}
+                        />
+                        <PaletteAction
                             value="settings"
                             label="Settings"
                             onSelect={() => navigate('/settings')}
+                        />
+                        <PaletteAction
+                            value="keyboard shortcuts help"
+                            label="Keyboard shortcuts"
+                            hint="?"
+                            onSelect={openShortcuts}
                         />
                     </Command.Group>
 

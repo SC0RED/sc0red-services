@@ -26,6 +26,7 @@ const SHORTCUT_GROUPS: Array<{ heading: string; items: Array<{ keys: string[]; l
             { keys: ['g', 's'], label: 'Go to New Scan' },
             { keys: ['g', 't'], label: 'Go to Team' },
             { keys: ['g', 'c'], label: 'Go to Settings' },
+            { keys: ['g', 'i'], label: 'Go to Connect' },
         ],
     },
     {

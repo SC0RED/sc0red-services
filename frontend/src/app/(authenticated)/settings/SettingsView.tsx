@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -121,22 +120,6 @@ export default function SettingsView() {
                         ) : null
                     }
                 />
-            </Section>
-
-            <Section title="Connect">
-                <p
-                    style={{
-                        fontSize: '0.8125rem',
-                        color: 'var(--text-tertiary)',
-                        marginBottom: '0.75rem',
-                    }}
-                >
-                    Connect an AI assistant (Claude Desktop, Cursor, and more) to sc0red Services over MCP —
-                    get your server address and setup steps, and manage what&rsquo;s connected.
-                </p>
-                <Link href="/settings/connect" className="btn btn-ghost btn-sm">
-                    Connect an assistant
-                </Link>
             </Section>
 
             <Section title="Appearance">

@@ -122,6 +122,13 @@ describe('GlobalShortcuts', () => {
             expect(mockPush).toHaveBeenCalledWith('/settings')
         })
 
+        it('g i navigates to /connect', () => {
+            renderWithProviders(<GlobalShortcuts />)
+            pressKey('g')
+            pressKey('i')
+            expect(mockPush).toHaveBeenCalledWith('/connect')
+        })
+
         it('chord resets after 1 second timeout', () => {
             vi.useFakeTimers()
             try {
