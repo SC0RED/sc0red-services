@@ -14,11 +14,17 @@ The webapp SHALL support `g`-prefix navigation chords on the authenticated app s
 | `g s` | `/scan/new` |
 | `g t` | `/team` |
 | `g c` | `/settings` |
+| `g i` | `/connect` |
 
 #### Scenario: User navigates to dashboard via chord
 
 - **WHEN** the user is on `/analyses` (no focused input) and presses `g` then `d` within 1 second
 - **THEN** the app navigates to `/dashboard`
+
+#### Scenario: User navigates to Connect via chord
+
+- **WHEN** the user (no focused input) presses `g` then `i` within 1 second
+- **THEN** the app navigates to `/connect`
 
 #### Scenario: Chord resets after timeout
 
@@ -71,3 +77,18 @@ On pages with a primary search field (currently `/analyses`), pressing `/` with 
 
 - **WHEN** the user is on `/dashboard` (no search field) and presses `/`
 - **THEN** no behavior change
+
+### Requirement: Keyboard shortcuts are discoverable without prior knowledge
+
+The shortcuts help SHALL be discoverable by a user who does not already know the `?` shortcut, and by mouse-only users. The authenticated sidebar SHALL show a persistent, unobtrusive (muted, small) affordance that opens the keyboard-shortcuts help modal on click — not merely a text hint to "press ?". The shortcuts help modal SHALL list the Connect navigation chord alongside the other `g`-chords.
+
+#### Scenario: A mouse user opens the shortcuts help from the sidebar
+
+- **WHEN** the user clicks the "shortcuts" affordance in the sidebar footer
+- **THEN** the keyboard-shortcuts help modal opens (the same modal the `?` key opens)
+
+#### Scenario: The Connect chord is listed in the help
+
+- **WHEN** the shortcuts help modal is open
+- **THEN** it lists the Connect navigation chord (`g i` → Connect) among the navigation shortcuts
+

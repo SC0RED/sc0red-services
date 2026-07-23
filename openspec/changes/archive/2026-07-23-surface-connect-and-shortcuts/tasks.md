@@ -18,5 +18,5 @@
 ## 3. Verify + ship
 
 - [x] 3.1 `cd frontend && npm run lint && npx tsc --noEmit && npm test` — all green; components within size limits.
-- [ ] 3.2 Manually verify on dev: "Connect AI" appears in the nav and opens the page; old `/settings/connect` + `/settings/connected-apps` redirect; footer affordance opens each modal on click; `g i` works; pill shows once then clears.
-- [ ] 3.3 Branch → PR → E2E → merge approval (never commit to `development` directly).
+- [x] 3.2 Manually verify on dev: "Connect AI" appears in the nav and opens the page; old `/settings/connect` + `/settings/connected-apps` redirect; footer affordance opens each modal on click; `g i` works; pill shows once then clears.
+- [x] 3.3 Branch → PR → E2E → merge approval (never commit to `development` directly).
