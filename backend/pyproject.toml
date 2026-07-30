@@ -33,7 +33,10 @@ dev = [
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
     "moto[dynamodb]>=5.0",
-    "ruff>=0.4",
+    # Pinned to the 0.15 line: 0.16.0 stabilized PLR0917 out of preview, which
+    # turned 16 pre-existing signatures into errors and blocked every deploy
+    # from 2026-07-23 with no code change. Widen only with a green lint run.
+    "ruff>=0.15.13,<0.16",
     "pyright>=1.1",
     "vulture>=2.11",
     "bandit>=1.7",
