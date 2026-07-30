@@ -23,7 +23,10 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn>=0.30",
     "aws-xray-sdk>=2.14",
-    "mcp>=1.27",
+    # Upper bound: mcp 2.0.0 removed mcp.server.fastmcp, which src/mcp/
+    # mcp_handler.py and tools_read.py import. Unbounded, pip took the 2.x
+    # major and broke test collection outright.
+    "mcp>=1.27,<2",
     "jsonschema>=4.26",
 ]
 
