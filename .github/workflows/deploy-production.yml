@@ -75,6 +75,10 @@ jobs:
           AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_DEPLOYMENT }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # PROD_OPENAI_API_KEY was missing until 2026-07-23, which made every
+          # backend invocation fail-fast (502) from the 6/30 deploy onward. The
+          # secret now exists, and lambda_factory.py fails the synth if openai
+          # is ever requested without a key again.
           OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
           AI_PROVIDER: openai
         run: |

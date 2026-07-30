@@ -151,6 +151,24 @@ def build_common_environment(
     # local-dev contexts where the stack region isn't set.
     region = cdk.Stack.of(scope).region or os.environ.get("AWS_REGION", "us-east-1")
 
+    # Fail at synth, not in production: deploying AI_PROVIDER=openai with an
+    # empty OPENAI_API_KEY makes the backend fail-fast on EVERY invocation
+    # (502s) — exactly what took the production API down 6/30–7/23/2026 when
+    # the PROD_OPENAI_API_KEY GitHub secret didn't exist. Same guard pattern
+    # as NEXTAUTH_SECRET in sc0red_services_stack.py. Only trips on the
+    # explicit misconfiguration (openai requested, no key), so keyless local
+    # synths/tests — which default to anthropic — are unaffected.
+    ai_provider = os.environ.get("AI_PROVIDER", "anthropic")
+    openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+    if ai_provider == "openai" and not openai_api_key:
+        message = (
+            "AI_PROVIDER=openai requires a non-empty OPENAI_API_KEY at deploy "
+            "time — the backend crashes on every request without it. Set the "
+            "environment's OpenAI key secret (e.g. PROD_OPENAI_API_KEY) or "
+            "deploy with AI_PROVIDER=anthropic."
+        )
+        raise ValueError(message)
+
     return {
         "DYNAMODB_TABLE": table.table_name,
         "ANALYSIS_QUEUE_URL": queue.queue_url,
