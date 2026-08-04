@@ -83,6 +83,7 @@ class Sc0redServicesStack(Stack):
             bundling=bundling,
             lambda_architecture=lambda_architecture,
             frontend_domain=frontend_domain,
+            ses_email_sender=bool(config["cognito_ses_email_sender"]),
         )
 
         common_environment = build_common_environment(
