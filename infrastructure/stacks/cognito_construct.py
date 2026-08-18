@@ -6,6 +6,7 @@ Creates a User Pool with:
 - Password policy (8+ chars, upper+lower+digits)
 - App Client configured for SPA (no secret, USER_PASSWORD_AUTH flow)
 - Custom Message Lambda for branded invitation emails
+- SES sender for outbound email where the account has SES production access
 """
 
 import aws_cdk as cdk
@@ -16,6 +17,15 @@ from aws_cdk import aws_logs as logs
 from constructs import Construct
 
 from stacks.lambda_factory import build_backend_code
+
+# SES sender for verification, invitation, and forgot-password emails. The
+# sc0red.com domain identity is DKIM-verified in us-east-2 in every account that
+# deploys this stack, and the user pool lives in us-east-2 as well — Cognito
+# requires the SES identity to be reachable from the user pool's region.
+SES_FROM_EMAIL = "no-reply@sc0red.com"
+SES_FROM_NAME = "sc0red Services"
+SES_REGION = "us-east-2"
+SES_VERIFIED_DOMAIN = "sc0red.com"
 
 
 class CognitoConstruct(Construct):
@@ -30,11 +40,13 @@ class CognitoConstruct(Construct):
         removal_policy: RemovalPolicy,
         bundling: cdk.BundlingOptions,
         lambda_architecture: lambda_.Architecture,
+        ses_email_sender: bool,
         frontend_domain: str = "",
     ) -> None:
         super().__init__(scope, construct_id)
 
         self._environment = environment
+        self._ses_email_sender = ses_email_sender
 
         custom_message_lambda = self._create_custom_message_lambda(
             bundling, lambda_architecture, removal_policy, frontend_domain
@@ -139,21 +151,8 @@ class CognitoConstruct(Construct):
             account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
             # MFA — off for now, designed for future TOTP enablement
             mfa=cognito.Mfa.OFF,
-            # Email configuration — Cognito default sender for now. The default
-            # (no-reply@verificationemail.com) lands in spam for many recipients,
-            # which breaks the forgot-password flow (SPE-2150). The fix is to send
-            # via SES from a DKIM'd sc0red.com address, e.g.:
-            #     email=cognito.UserPoolEmail.with_ses(
-            #         from_email="no-reply@sc0red.com",
-            #         from_name="sc0red Services",
-            #         ses_region="us-east-2",
-            #         ses_verified_domain="sc0red.com",
-            #     )
-            # BLOCKED: the production account (950743373172) is still in the SES
-            # sandbox — switching to SES there would only deliver to verified
-            # addresses, breaking resets for everyone else. Enable once SES
-            # production access is granted (same in-flight case as the trial
-            # check-in emails); the sc0red.com identity is already DKIM-verified.
+            # Email configuration — see _build_email_configuration (SPE-2150)
+            email=self._build_email_configuration(),
             user_verification=cognito.UserVerificationConfig(
                 email_subject="sc0red Services — Verify your email",
                 email_body="Your sc0red Services verification code is {####}",
@@ -168,6 +167,32 @@ class CognitoConstruct(Construct):
         )
 
         return pool
+
+    def _build_email_configuration(self) -> cognito.UserPoolEmail:
+        """Return the sender configuration for user pool emails.
+
+        Cognito's built-in sender (no-reply@verificationemail.com) is an
+        unbranded shared address that corporate mail providers routinely spam
+        folder or quarantine outright, so users never receive their
+        forgot-password code (SPE-2150). Environments whose AWS account has SES
+        production access send from the sc0red.com domain instead. SES Easy DKIM
+        signs as d=sc0red.com, so the mail is DMARC-aligned on DKIM and is
+        attributable to us. SPF does not align (SES uses its own envelope
+        domain), which DMARC permits — an aligned DKIM pass is sufficient.
+
+        Environments still in the SES sandbox stay on the Cognito sender: SES
+        there refuses every recipient that is not a verified identity, which
+        would turn a deliverability problem into a hard failure.
+        """
+        if not self._ses_email_sender:
+            return cognito.UserPoolEmail.with_cognito()
+
+        return cognito.UserPoolEmail.with_ses(
+            from_email=SES_FROM_EMAIL,
+            from_name=SES_FROM_NAME,
+            ses_region=SES_REGION,
+            ses_verified_domain=SES_VERIFIED_DOMAIN,
+        )
 
     def _create_app_client(self) -> cognito.UserPoolClient:
         """Create the App Client for the frontend SPA."""
