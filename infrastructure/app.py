@@ -39,6 +39,10 @@ environment_config: dict[str, object] = {
         "lambda_architecture": "arm64",
         "api_rate_limit": 50,
         "api_burst_limit": 100,
+        # Account 484719706337 is still in the SES sandbox, where SES would
+        # refuse every unverified recipient. Cognito's own sender is worse for
+        # deliverability but at least reaches everyone. See SPE-2150.
+        "cognito_ses_email_sender": False,
     },
     "staging": {
         "removal_policy": cdk.RemovalPolicy.SNAPSHOT,
@@ -65,6 +69,8 @@ environment_config: dict[str, object] = {
             "arn:aws:acm:us-east-1:484719706337:certificate/"
             "b2a6308a-bb34-45e7-965c-b88f4689c969"
         ),
+        # Shares account 484719706337 with development — still SES-sandboxed.
+        "cognito_ses_email_sender": False,
     },
     "testing": {
         "removal_policy": cdk.RemovalPolicy.SNAPSHOT,
@@ -88,6 +94,9 @@ environment_config: dict[str, object] = {
             "arn:aws:acm:us-east-1:205293249227:certificate/"
             "66937018-f060-4eb3-9202-36f9457e53f3"
         ),
+        # Account 205293249227 has SES production access and a DKIM-verified
+        # sc0red.com identity in us-east-2, so auth email sends as sc0red.
+        "cognito_ses_email_sender": True,
     },
     "production": {
         "removal_policy": cdk.RemovalPolicy.RETAIN,
@@ -111,6 +120,10 @@ environment_config: dict[str, object] = {
             "arn:aws:acm:us-east-1:950743373172:certificate/"
             "5cb75da8-e14e-4b72-90ef-70ad0c843555"
         ),
+        # Account 950743373172 has SES production access (case 178396220500234)
+        # and a DKIM-verified sc0red.com identity in us-east-2. This is the fix
+        # for SPE-2150 — the Cognito sender was being spam-filtered.
+        "cognito_ses_email_sender": True,
     },
 }
 
